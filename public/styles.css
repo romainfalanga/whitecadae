@@ -372,7 +372,7 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
   animation: sel-bar-in 0.22s ease-out;
 }
 #install-banner[hidden] { display: none; }
-.install-icon { width: 46px; height: 46px; border-radius: 11px; flex-shrink: 0; }
+.install-icon { width: 46px; height: 46px; flex-shrink: 0; }
 .install-text { flex: 1; min-width: 0; line-height: 1.35; }
 .install-text strong { display: block; font-size: 0.95rem; }
 .install-text span { display: block; font-size: 0.8rem; color: var(--text-dim); }
