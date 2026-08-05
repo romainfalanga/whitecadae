@@ -585,6 +585,11 @@ function renderSelectionUI() {
   const narrow = window.matchMedia('(max-width: 900px)').matches;
   if (!isText || !narrow) {
     bar.hidden = true;
+    const install = document.getElementById('install-banner');
+    if (install && install.dataset.suspended === '1') {
+      delete install.dataset.suspended;
+      if (localStorage.getItem('wc_install_dismissed') !== '1') install.hidden = false;
+    }
     if (!isText) {
       state.sheetOpen = false;
       document.body.classList.remove('sheet-open');
@@ -606,6 +611,11 @@ function renderSelectionUI() {
     <button class="primary" id="sel-bar-go">✍ Interpréter</button>
     <button class="link-btn" id="sel-bar-clear" title="Annuler la sélection">✕</button>`;
   bar.hidden = false;
+  // les deux bandeaux occupent le bas de l'écran : l'invitation à installer
+  // s'efface tant qu'une sélection est en cours
+  const install = document.getElementById('install-banner');
+  if (install && !install.hidden) install.dataset.suspended = '1';
+  if (install) install.hidden = true;
 
   document.getElementById('sel-bar-clear').onclick = clearSelection;
   document.getElementById('sel-bar-go').onclick = () => openInterpretation();
@@ -1913,8 +1923,84 @@ async function pageAdmin() {
 
 /* ------------------------------------------------------------- démarrage */
 
+/* ------------------------------------------- installation de l'application */
+
+// Chrome/Android émettent `beforeinstallprompt` : on garde l'événement pour
+// déclencher l'installation au bon moment. iOS ne le fait pas : on y explique
+// le geste (Partager → Sur l'écran d'accueil).
+let deferredInstall = null;
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function isIOS() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+}
+
+function showInstallBanner(mode) {
+  const banner = document.getElementById('install-banner');
+  if (!banner) return;
+  if (localStorage.getItem('wc_install_dismissed') === '1') return;
+  const hint = document.getElementById('install-hint');
+  const go = document.getElementById('install-go');
+  if (mode === 'ios') {
+    hint.innerHTML = 'Appuyez sur <strong>Partager</strong> puis <strong>« Sur l’écran d’accueil »</strong>.';
+    go.hidden = true;
+  } else {
+    hint.textContent = 'Les textes sur votre écran d’accueil, même hors connexion.';
+    go.hidden = false;
+  }
+  banner.hidden = false;
+}
+
+function bindInstall() {
+  const banner = document.getElementById('install-banner');
+  if (!banner) return;
+
+  const close = document.getElementById('install-close');
+  close.onclick = () => {
+    banner.hidden = true;
+    localStorage.setItem('wc_install_dismissed', '1');
+  };
+
+  document.getElementById('install-go').onclick = async () => {
+    if (!deferredInstall) return;
+    banner.hidden = true;
+    deferredInstall.prompt();
+    const { outcome } = await deferredInstall.userChoice;
+    if (outcome === 'accepted') localStorage.setItem('wc_install_dismissed', '1');
+    deferredInstall = null;
+  };
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstall = e;
+    showInstallBanner('prompt');
+  });
+
+  window.addEventListener('appinstalled', () => {
+    banner.hidden = true;
+    localStorage.setItem('wc_install_dismissed', '1');
+  });
+
+  // iOS : pas d'événement, on propose le geste après quelques secondes
+  if (isIOS() && !isStandalone()) {
+    setTimeout(() => showInstallBanner('ios'), 2500);
+  }
+}
+
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => { /* sans incidence */ });
+  });
+}
+
 (async function init() {
   bindNavToggle();
+  bindInstall();
+  registerServiceWorker();
   try {
     const data = await api('/api/me');
     state.user = data.user;

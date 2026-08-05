@@ -4,9 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WhiteCadae</title>
-  <meta name="description" content="WhiteCadae : la plateforme d'explications des textes de White Cadae. Explorez les paroles, expliquez chaque phrase et chaque mot, reliez les chansons entre elles.">
+  <meta name="description" content="WhiteCadae : la plateforme d'interprétation des textes de White Cadae. Explorez les paroles, interprétez chaque passage, reliez les chansons entre elles.">
   <link rel="stylesheet" href="/styles.css">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%95%8A%3C/text%3E%3C/svg%3E">
+
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0d0d10">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="WhiteCadae">
+
+  <meta property="og:title" content="WhiteCadae">
+  <meta property="og:description" content="Les textes de White Cadae, interprétés par sa communauté.">
+  <meta property="og:image" content="/icons/social.jpg">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
   <header class="site-header">
@@ -22,6 +39,16 @@
   <main id="app">
     <div class="loading">Chargement…</div>
   </main>
+
+  <div id="install-banner" hidden>
+    <img src="/icons/icon-192.png" alt="" class="install-icon">
+    <div class="install-text">
+      <strong>Installer WhiteCadae</strong>
+      <span id="install-hint">Ajoutez l’application à votre écran d’accueil.</span>
+    </div>
+    <button class="primary" id="install-go">Installer</button>
+    <button class="link-btn" id="install-close" aria-label="Plus tard">✕</button>
+  </div>
 
   <script src="/app.js"></script>
 </body>
