@@ -44,6 +44,7 @@ async function handleApi(request, env, url) {
   if (route('GET', '/api/albums')) return listAlbums(env);
   if (route('GET', '/api/corpus')) return getCorpus(env);
   if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
+  if ((p = route('GET', '/api/users/:username'))) return getProfile(env, p[0]);
 
   // --- contributions (connecté)
   if (route('POST', '/api/annotations')) return createAnnotation(request, env);
@@ -183,14 +184,33 @@ function countWords(text) {
   return t ? t.split(/\s+/).length : 0;
 }
 
-// Valide la liste de références d'une interprétation.
+// Valide la liste de références d'une interprétation : libres (label + lien
+// optionnel) ou internes (passage d'un morceau : ref_line_id..ref_end_line_id).
 // Retourne un tableau normalisé, ou une Response d'erreur.
-function parseReferences(raw) {
+async function parseReferences(env, raw) {
   if (raw == null) return [];
   if (!Array.isArray(raw)) return json({ error: 'Références invalides.' }, 400);
   if (raw.length > 10) return json({ error: '10 références maximum par interprétation.' }, 400);
   const refs = [];
   for (const r of raw) {
+    if (r && r.ref_line_id != null) {
+      // référence interne vers un passage d'un morceau
+      const startId = Number(r.ref_line_id);
+      const endId = r.ref_end_line_id == null ? startId : Number(r.ref_end_line_id);
+      const start = await env.DB.prepare(
+        'SELECT l.id, l.text, l.line_number, l.song_id, s.title FROM lyric_lines l JOIN songs s ON s.id = l.song_id WHERE l.id = ?1'
+      ).bind(startId).first();
+      const end = startId === endId ? start : await env.DB.prepare(
+        'SELECT id, text, line_number, song_id FROM lyric_lines WHERE id = ?1'
+      ).bind(endId).first();
+      if (!start || !end) return json({ error: 'Passage référencé introuvable.' }, 400);
+      if (start.song_id !== end.song_id) return json({ error: 'Le passage référencé doit rester dans un même morceau.' }, 400);
+      if (end.line_number < start.line_number) return json({ error: 'Passage référencé invalide (fin avant le début).' }, 400);
+      const excerpt = start.text.length > 60 ? start.text.slice(0, 57) + '…' : start.text;
+      const label = `${start.title} — « ${excerpt}${endId !== startId ? ' […]' : ''} »`;
+      refs.push({ label, url: null, ref_song_id: start.song_id, ref_line_id: startId, ref_end_line_id: endId });
+      continue;
+    }
     const label = String((r && r.label) || '').trim();
     const url = String((r && r.url) || '').trim();
     if (!label) continue;
@@ -198,7 +218,7 @@ function parseReferences(raw) {
     if (url && (url.length > 600 || !/^https?:\/\//i.test(url))) {
       return json({ error: 'Lien de référence invalide (il doit commencer par http:// ou https://).' }, 400);
     }
-    refs.push({ label, url: url || null });
+    refs.push({ label, url: url || null, ref_song_id: null, ref_line_id: null, ref_end_line_id: null });
   }
   return refs;
 }
@@ -209,8 +229,10 @@ async function replaceReferences(env, annotationId, refs) {
   ];
   refs.forEach((r, i) => {
     statements.push(env.DB.prepare(
-      'INSERT INTO annotation_references (annotation_id, position, label, url) VALUES (?1, ?2, ?3, ?4)'
-    ).bind(annotationId, i, r.label, r.url));
+      `INSERT INTO annotation_references
+        (annotation_id, position, label, url, ref_song_id, ref_line_id, ref_end_line_id)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
+    ).bind(annotationId, i, r.label, r.url, r.ref_song_id || null, r.ref_line_id || null, r.ref_end_line_id || null));
   });
   await env.DB.batch(statements);
 }
@@ -337,8 +359,8 @@ async function getSong(env, request, slug) {
   ).bind(song.id).all()).results;
 
   const annotations = (await env.DB.prepare(
-    `SELECT a.id, a.user_id, a.target_type, a.line_id, a.word_start, a.word_end, a.content,
-            a.created_at, a.updated_at, u.username
+    `SELECT a.id, a.user_id, a.target_type, a.line_id, a.word_start, a.word_end, a.end_line_id,
+            a.content, a.created_at, a.updated_at, u.username
        FROM annotations a JOIN users u ON u.id = a.user_id
       WHERE a.song_id = ?1 ORDER BY a.created_at`
   ).bind(song.id).all()).results;
@@ -382,11 +404,14 @@ async function getSong(env, request, slug) {
   ).all()).results;
   for (const e of essays) e.links = essayLinks.filter((l) => l.essay_id === e.id);
 
-  // Références jointes aux interprétations.
+  // Références jointes aux interprétations (libres ou internes).
   const refs = (await env.DB.prepare(
-    `SELECT id, annotation_id, label, url FROM annotation_references
-      WHERE annotation_id IN (SELECT id FROM annotations WHERE song_id = ?1)
-      ORDER BY annotation_id, position`
+    `SELECT r.id, r.annotation_id, r.label, r.url,
+            r.ref_song_id, r.ref_line_id, r.ref_end_line_id, rs.slug AS ref_song_slug
+       FROM annotation_references r
+       LEFT JOIN songs rs ON rs.id = r.ref_song_id
+      WHERE r.annotation_id IN (SELECT id FROM annotations WHERE song_id = ?1)
+      ORDER BY r.annotation_id, r.position`
   ).bind(song.id).all()).results;
   for (const a of annotations) {
     a.references = refs.filter((r) => r.annotation_id === a.id);
@@ -432,6 +457,100 @@ async function attachSocial(env, viewer, kind, idSubquery, items) {
   }
 }
 
+/* ----------------------------------------------------- profils & le livre */
+
+// Profil public d'un membre : ses contributions assemblées en « livre »,
+// dans l'ordre des albums puis des morceaux puis de la position dans le texte.
+async function getProfile(env, username) {
+  const user = await env.DB.prepare(
+    'SELECT id, username, created_at, is_admin FROM users WHERE username = ?1 COLLATE NOCASE'
+  ).bind(username).first();
+  if (!user) return json({ error: 'Membre introuvable.' }, 404);
+
+  const annotations = (await env.DB.prepare(
+    `SELECT a.id, a.target_type, a.content, a.created_at, a.updated_at,
+            a.line_id, a.word_start, a.word_end, a.end_line_id,
+            s.id AS song_id, s.title AS song_title, s.slug AS song_slug,
+            s.track_number, s.duration_seconds,
+            COALESCE(al.position, 999) AS album_position, al.title AS album_title,
+            l.text AS line_text, l.line_number,
+            le.text AS end_line_text, le.line_number AS end_line_number
+       FROM annotations a
+       JOIN songs s ON s.id = a.song_id
+       LEFT JOIN albums al ON al.id = s.album_id
+       LEFT JOIN lyric_lines l ON l.id = a.line_id
+       LEFT JOIN lyric_lines le ON le.id = a.end_line_id
+      WHERE a.user_id = ?1
+      ORDER BY album_position, s.track_number,
+               CASE WHEN a.line_id IS NULL THEN 0 ELSE 1 END,
+               COALESCE(l.line_number, 0), COALESCE(a.word_start, -1), a.created_at`
+  ).bind(user.id).all()).results;
+
+  const refs = (await env.DB.prepare(
+    `SELECT r.id, r.annotation_id, r.label, r.url,
+            r.ref_song_id, rs.slug AS ref_song_slug
+       FROM annotation_references r
+       LEFT JOIN songs rs ON rs.id = r.ref_song_id
+      WHERE r.annotation_id IN (SELECT id FROM annotations WHERE user_id = ?1)
+      ORDER BY r.annotation_id, r.position`
+  ).bind(user.id).all()).results;
+  for (const a of annotations) a.references = refs.filter((r) => r.annotation_id === a.id);
+
+  const essays = (await env.DB.prepare(
+    `SELECT e.id, e.content, e.created_at, e.updated_at,
+            s.id AS song_id, s.title AS song_title, s.slug AS song_slug, s.track_number,
+            COALESCE(al.position, 999) AS album_position, al.title AS album_title
+       FROM essays e
+       JOIN songs s ON s.id = e.song_id
+       LEFT JOIN albums al ON al.id = s.album_id
+      WHERE e.user_id = ?1
+      ORDER BY album_position, s.track_number, e.created_at`
+  ).bind(user.id).all()).results;
+  const essayLinks = (await env.DB.prepare(
+    `SELECT el.essay_id, el.note,
+            el.from_word_start, el.from_word_end, el.to_word_start, el.to_word_end,
+            lf.text AS from_text, sf.title AS from_song_title,
+            lt.text AS to_text, st.title AS to_song_title
+       FROM essay_links el
+       JOIN lyric_lines lf ON lf.id = el.from_line_id
+       JOIN songs sf ON sf.id = lf.song_id
+       JOIN lyric_lines lt ON lt.id = el.to_line_id
+       JOIN songs st ON st.id = lt.song_id
+      WHERE el.essay_id IN (SELECT id FROM essays WHERE user_id = ?1)
+      ORDER BY el.essay_id, el.position`
+  ).bind(user.id).all()).results;
+  for (const e of essays) e.links = essayLinks.filter((l) => l.essay_id === e.id);
+
+  const connections = (await env.DB.prepare(
+    `SELECT c.id, c.explanation, c.created_at,
+            sa.title AS song_a_title, sa.slug AS song_a_slug,
+            sb.title AS song_b_title, sb.slug AS song_b_slug
+       FROM song_connections c
+       JOIN songs sa ON sa.id = c.song_a_id
+       JOIN songs sb ON sb.id = c.song_b_id
+      WHERE c.user_id = ?1 ORDER BY c.created_at`
+  ).bind(user.id).all()).results;
+
+  const stats = await env.DB.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM annotations WHERE user_id = ?1) AS annotations,
+       (SELECT COUNT(*) FROM essays WHERE user_id = ?1) AS essays,
+       (SELECT COUNT(*) FROM song_connections WHERE user_id = ?1) AS connections,
+       (SELECT COUNT(*) FROM comments WHERE user_id = ?1) AS comments,
+       (SELECT COUNT(*) FROM favorites f WHERE f.target_kind = 'annotation'
+          AND f.target_id IN (SELECT id FROM annotations WHERE user_id = ?1)) +
+       (SELECT COUNT(*) FROM favorites f WHERE f.target_kind = 'essay'
+          AND f.target_id IN (SELECT id FROM essays WHERE user_id = ?1)) +
+       (SELECT COUNT(*) FROM favorites f WHERE f.target_kind = 'connection'
+          AND f.target_id IN (SELECT id FROM song_connections WHERE user_id = ?1)) AS favorites_received`
+  ).bind(user.id).first();
+
+  return json({
+    user: { username: user.username, created_at: user.created_at, is_admin: !!user.is_admin },
+    stats, annotations, essays, connections,
+  });
+}
+
 /* ------------------------------------------------------------ annotations */
 
 async function createAnnotation(request, env) {
@@ -453,7 +572,29 @@ async function createAnnotation(request, env) {
   if (!song) return json({ error: 'Chanson introuvable.' }, 404);
 
   let targetType;
-  if (lineId != null) {
+  let endLineId = body.end_line_id == null ? null : Number(body.end_line_id);
+  if (lineId != null && endLineId != null && endLineId !== lineId) {
+    // passage multi-phrases : de (line_id, word_start) à (end_line_id, word_end)
+    const start = await env.DB.prepare(
+      'SELECT id, text, line_number FROM lyric_lines WHERE id = ?1 AND song_id = ?2'
+    ).bind(lineId, songId).first();
+    const end = await env.DB.prepare(
+      'SELECT id, text, line_number FROM lyric_lines WHERE id = ?1 AND song_id = ?2'
+    ).bind(endLineId, songId).first();
+    if (!start || !end) return json({ error: 'Ligne introuvable.' }, 404);
+    if (end.line_number <= start.line_number) return json({ error: 'Passage invalide (fin avant le début).' }, 400);
+    if (wordStart == null) wordStart = 0;
+    if (body.word_end == null) wordEnd = countWords(end.text) - 1;
+    if (
+      !Number.isInteger(wordStart) || !Number.isInteger(wordEnd) ||
+      wordStart < 0 || wordStart >= countWords(start.text) ||
+      wordEnd < 0 || wordEnd >= countWords(end.text)
+    ) {
+      return json({ error: 'Position de mot invalide.' }, 400);
+    }
+    targetType = 'passage';
+  } else if (lineId != null) {
+    endLineId = null;
     const line = await env.DB.prepare(
       'SELECT id, text FROM lyric_lines WHERE id = ?1 AND song_id = ?2'
     ).bind(lineId, songId).first();
@@ -474,16 +615,17 @@ async function createAnnotation(request, env) {
   } else {
     wordStart = null;
     wordEnd = null;
+    endLineId = null;
     targetType = ['song', 'title', 'duration'].includes(body.target_type) ? body.target_type : 'song';
   }
 
-  const refs = parseReferences(body.references);
+  const refs = await parseReferences(env, body.references);
   if (refs instanceof Response) return refs;
 
   const result = await env.DB.prepare(
-    `INSERT INTO annotations (user_id, song_id, target_type, line_id, word_start, word_end, content)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
-  ).bind(user.id, songId, targetType, lineId, wordStart, wordEnd, content).run();
+    `INSERT INTO annotations (user_id, song_id, target_type, line_id, word_start, word_end, end_line_id, content)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+  ).bind(user.id, songId, targetType, lineId, wordStart, wordEnd, endLineId, content).run();
 
   const annotationId = result.meta.last_row_id;
   if (refs.length) await replaceReferences(env, annotationId, refs);
@@ -504,7 +646,7 @@ async function updateAnnotation(request, env, id) {
   if (!ann) return json({ error: 'Annotation introuvable.' }, 404);
   if (ann.user_id !== user.id && !user.is_admin) return json({ error: 'Vous ne pouvez modifier que vos propres explications.' }, 403);
 
-  const refs = parseReferences(body.references);
+  const refs = await parseReferences(env, body.references);
   if (refs instanceof Response) return refs;
 
   await env.DB.prepare(

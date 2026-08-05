@@ -293,6 +293,46 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .comment-form textarea { margin-top: 0.4rem; min-height: 54px; font-size: 0.9rem; }
 .comment-form button { margin-top: 0.4rem; font-size: 0.85rem; padding: 0.3rem 0.8rem; }
 
+/* ---------------------------------------------------- passage flottant */
+
+#passage-float {
+  position: absolute;
+  z-index: 30;
+  background: var(--accent);
+  color: #17130a;
+  border: none;
+  font-weight: 600;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+}
+
+.lyrics { user-select: text; -webkit-user-select: text; }
+
+/* -------------------------------------------------- profils & le livre */
+
+.book-song {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+.book-album {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+.book-song h3 { font-family: var(--serif); font-weight: normal; font-size: 1.25rem; margin: 0.15rem 0 0.6rem; }
+.book-song h3 a { color: var(--accent); }
+.book-block { border-left: 2px solid var(--accent); padding: 0.4rem 0 0.4rem 0.9rem; margin-bottom: 0.9rem; }
+.book-passage { font-family: var(--serif); font-style: italic; color: var(--text-dim); font-size: 0.95rem; }
+.book-content { margin-top: 0.3rem; white-space: pre-wrap; font-size: 0.95rem; }
+.book-essay { border-left-color: var(--text-dim); }
+
+.ref-internal-row { flex-wrap: wrap; }
+.ref-internal-row select { flex: 1; min-width: 130px; font-size: 0.85rem; padding: 0.35rem 0.5rem; }
+.ref-fixed-label { font-size: 0.85rem; color: var(--text-dim); }
+
 /* ------------------------------------------ interprétations d'ensemble */
 
 .essay {

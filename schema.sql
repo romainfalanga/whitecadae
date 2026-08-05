@@ -57,6 +57,8 @@ CREATE INDEX IF NOT EXISTS idx_lines_song ON lyric_lines(song_id, line_number);
 --   - 'line'     : une ligne (phrase) — line_id renseigné, word_start NULL
 --   - 'word'     : un mot ou groupe de mots — line_id + word_start..word_end
 --     (indices de mots dans la ligne, en commençant à 0)
+--   - 'passage'  : de (line_id, word_start) à (end_line_id, word_end),
+--     le début et la fin pouvant tomber au milieu d'une phrase
 CREATE TABLE IF NOT EXISTS annotations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -65,6 +67,7 @@ CREATE TABLE IF NOT EXISTS annotations (
   line_id INTEGER REFERENCES lyric_lines(id) ON DELETE CASCADE,
   word_start INTEGER,
   word_end INTEGER,
+  end_line_id INTEGER REFERENCES lyric_lines(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT
@@ -74,13 +77,17 @@ CREATE INDEX IF NOT EXISTS idx_annotations_song ON annotations(song_id);
 CREATE INDEX IF NOT EXISTS idx_annotations_line ON annotations(line_id);
 
 -- Références jointes à une interprétation : ce à quoi le passage fait
--- référence selon l'auteur (artiste, texte, œuvre…), avec lien optionnel.
+-- référence selon l'auteur — libre (label + lien optionnel) ou interne
+-- (un passage d'un autre morceau : ref_song_id + ref_line_id..ref_end_line_id).
 CREATE TABLE IF NOT EXISTS annotation_references (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   annotation_id INTEGER NOT NULL REFERENCES annotations(id) ON DELETE CASCADE,
   position INTEGER NOT NULL DEFAULT 0,
   label TEXT NOT NULL,
-  url TEXT
+  url TEXT,
+  ref_song_id INTEGER REFERENCES songs(id) ON DELETE CASCADE,
+  ref_line_id INTEGER REFERENCES lyric_lines(id) ON DELETE CASCADE,
+  ref_end_line_id INTEGER REFERENCES lyric_lines(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_refs_annotation ON annotation_references(annotation_id);

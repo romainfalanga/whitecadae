@@ -86,7 +86,16 @@ async function route() {
   if (path === '/inscription') return pageRegister();
   if (path === '/admin') return pageAdmin();
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
+  if ((m = path.match(/^\/membre\/([^/]+)$/))) return pageProfile(decodeURIComponent(m[1]));
   app.innerHTML = '<h1>Page introuvable</h1><p><a href="/" data-link>Retour à l’accueil</a></p>';
+}
+
+function profileHref(username) {
+  return `/membre/${encodeURIComponent(username)}`;
+}
+
+function authorLink(username) {
+  return `<a class="annotation-author" href="${profileHref(username)}" data-link>${esc(username)}</a>`;
 }
 
 function renderNav() {
@@ -94,7 +103,7 @@ function renderNav() {
   nav.innerHTML = u
     ? `<a href="/" data-link>Accueil</a>
        ${u.is_admin ? '<a href="/admin" data-link>Administration</a>' : ''}
-       <span class="nav-user">${esc(u.username)}</span>
+       <a class="nav-user" href="${profileHref(u.username)}" data-link>${esc(u.username)}</a>
        <button class="link-btn" id="logout-btn">Se déconnecter</button>`
     : `<a href="/" data-link>Accueil</a>
        <a href="/connexion" data-link>Se connecter</a>
@@ -229,11 +238,89 @@ function lineHasNote(lineId) {
   return state.song.annotations.some((a) => a.target_type === 'line' && a.line_id === lineId);
 }
 
-function wordHasNote(lineId, idx) {
-  return state.song.annotations.some(
-    (a) => a.target_type === 'word' && a.line_id === lineId && idx >= a.word_start && idx <= a.word_end
-  );
+// Position ordonnée d'un mot dans le texte : (numéro de ligne, index de mot).
+function lineNumberOf(lineId) {
+  const l = state.song.lines.find((x) => x.id === lineId);
+  return l ? l.line_number : 0;
 }
+
+function posKey(lineId, idx) {
+  return lineNumberOf(lineId) * 1000 + (idx || 0);
+}
+
+function passageRange(a) {
+  return [posKey(a.line_id, a.word_start || 0), posKey(a.end_line_id, a.word_end == null ? 999 : a.word_end)];
+}
+
+function selPassageRange(sel) {
+  return [posKey(sel.startLine, sel.startIdx), posKey(sel.endLine, sel.endIdx)];
+}
+
+function wordHasNote(lineId, idx) {
+  const pos = posKey(lineId, idx);
+  return state.song.annotations.some((a) => {
+    if (a.target_type === 'word' && a.line_id === lineId) {
+      return idx >= a.word_start && idx <= a.word_end;
+    }
+    if (a.target_type === 'passage') {
+      const [s, e] = passageRange(a);
+      return pos >= s && pos <= e;
+    }
+    return false;
+  });
+}
+
+// Texte d'un passage : fin de la phrase de départ, phrases entières du
+// milieu, début de la phrase d'arrivée.
+function passageText(startLineId, startIdx, endLineId, endIdx) {
+  const lines = state.song.lines;
+  const s = lines.find((l) => l.id === startLineId);
+  const e = lines.find((l) => l.id === endLineId);
+  if (!s || !e) return '';
+  if (s.id === e.id) return tokens(s.text).slice(startIdx, endIdx + 1).join(' ');
+  const middle = lines.filter((l) =>
+    l.line_number > s.line_number && l.line_number < e.line_number &&
+    l.text !== '' && !/^\[[^\]]+\]$/.test(l.text));
+  return [
+    tokens(s.text).slice(startIdx).join(' '),
+    ...middle.map((l) => l.text),
+    tokens(e.text).slice(0, endIdx + 1).join(' '),
+  ].join(' / ');
+}
+
+// Déduit le passage sélectionné (glisser souris ou doigt) à partir de la
+// sélection native du navigateur.
+function passageFromSelection() {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  const words = [...document.querySelectorAll('.lyrics .w')].filter((w) => range.intersectsNode(w));
+  if (words.length < 2) return null;
+  const first = words[0];
+  const last = words[words.length - 1];
+  return {
+    startLine: Number(first.dataset.line), startIdx: Number(first.dataset.idx),
+    endLine: Number(last.dataset.line), endIdx: Number(last.dataset.idx),
+  };
+}
+
+// Bouton flottant « Interpréter ce passage » : suit la sélection en cours.
+let selectionDebounce = null;
+document.addEventListener('selectionchange', () => {
+  const btn = document.getElementById('passage-float');
+  if (!btn) return;
+  clearTimeout(selectionDebounce);
+  selectionDebounce = setTimeout(() => {
+    const info = passageFromSelection();
+    if (!info) { btn.hidden = true; return; }
+    try {
+      const rect = window.getSelection().getRangeAt(0).getBoundingClientRect();
+      btn.style.top = `${window.scrollY + rect.bottom + 10}px`;
+      btn.style.left = `${window.scrollX + Math.max(12, rect.left)}px`;
+      btn.hidden = false;
+    } catch { btn.hidden = true; }
+  }, 250);
+});
 
 function countFor(type) {
   return state.song.annotations.filter((a) => a.target_type === type).length;
@@ -244,6 +331,7 @@ function renderSongPage() {
   const sel = state.sel;
   const duration = mmss(song.duration_seconds);
 
+  const selRange = sel && sel.type === 'passage' ? selPassageRange(sel) : null;
   const lyricsHtml = lines.length
     ? `<div class="lyrics">${lines.map((line) => {
         if (line.text === '') return '<div class="stanza-gap"></div>';
@@ -253,23 +341,30 @@ function renderSongPage() {
         }
         const toks = tokens(line.text);
         const isSelLine = sel && sel.lineId === line.id;
+        let lineInPassage = false;
         const words = toks.map((tok, i) => {
           const classes = ['w'];
           if (wordHasNote(line.id, i)) classes.push('has-note');
           if (isSelLine && sel.type === 'word' && i >= sel.start && i <= sel.end) classes.push('selected-word');
+          if (selRange) {
+            const pos = line.line_number * 1000 + i;
+            if (pos >= selRange[0] && pos <= selRange[1]) { classes.push('selected-word'); lineInPassage = true; }
+          }
           return `<span class="${classes.join(' ')}" data-line="${line.id}" data-idx="${i}">${esc(tok)}</span>`;
         }).join(' ');
         const lineClasses = ['lyric-line'];
         if (lineHasNote(line.id)) lineClasses.push('has-line-note');
         if (isSelLine && sel.type === 'line') lineClasses.push('selected-line');
+        if (lineInPassage) lineClasses.push('selected-line');
         return `<div class="${lineClasses.join(' ')}" data-line-id="${line.id}">
           ${words}
           <button class="line-note-btn ${isSelLine && sel.type === 'line' ? 'active' : ''}"
                   data-line-btn="${line.id}" title="Interpréter cette phrase">&#128172;</button>
         </div>`;
       }).join('')}</div>
-      <p class="hint">Cliquez sur un mot pour l’interpréter (maintenez <strong>Maj</strong> pour sélectionner plusieurs mots
-      d’une même phrase), ou sur &#128172; pour interpréter la phrase entière.</p>`
+      <p class="hint">Cliquez sur un mot pour l’interpréter (Maj+clic pour un groupe de mots), sur &#128172; pour la phrase entière,
+      ou <strong>sélectionnez un passage au glisser</strong> (souris ou doigt), même à cheval sur plusieurs phrases.</p>
+      <button id="passage-float" hidden>&#128172; Interpréter ce passage</button>`
     : `<div class="no-lyrics">Les paroles de « ${esc(song.title)} » seront bientôt disponibles.</div>`;
 
   app.innerHTML = `
@@ -297,9 +392,28 @@ function renderSongPage() {
       <aside class="side-panel" id="panel"></aside>
     </div>`;
 
+  // Bouton flottant de sélection de passage
+  const floatBtn = document.getElementById('passage-float');
+  if (floatBtn) {
+    floatBtn.onpointerdown = (e) => {
+      e.preventDefault();
+      const info = passageFromSelection();
+      if (!info) { floatBtn.hidden = true; return; }
+      window.getSelection().removeAllRanges();
+      if (info.startLine === info.endLine) {
+        state.sel = { type: 'word', lineId: info.startLine, start: info.startIdx, end: info.endIdx };
+      } else {
+        state.sel = { type: 'passage', ...info };
+      }
+      renderSongPage();
+    };
+  }
+
   // Interactions sur les paroles
   app.querySelectorAll('.w').forEach((span) => {
     span.onclick = (e) => {
+      const nativeSel = window.getSelection();
+      if (nativeSel && !nativeSel.isCollapsed) return; // une sélection au glisser est en cours
       const lineId = Number(span.dataset.line);
       const idx = Number(span.dataset.idx);
       if (e.shiftKey && state.sel && state.sel.type === 'word' && state.sel.lineId === lineId) {
@@ -410,7 +524,7 @@ function essayCard(e) {
   const own = u && (u.id === e.user_id || u.is_admin);
   return `<div class="essay" data-essay="${e.id}">
     <div class="annotation-head">
-      <span class="annotation-author">${esc(e.username)}</span>
+      ${authorLink(e.username)}
       <span>${esc(formatDate(e.created_at))}${e.updated_at ? ' (modifié)' : ''}</span>
       ${own ? `<button class="link-btn" data-essay-edit="${e.id}">modifier</button>
                <button class="link-btn" data-essay-del="${e.id}">supprimer</button>` : ''}
@@ -699,7 +813,7 @@ function socialFooter(kind, item) {
     ${(item.comments || []).map((c) => `
       <div class="comment">
         <div class="comment-head">
-          <span class="annotation-author">${esc(c.username)}</span>
+          ${authorLink(c.username)}
           <span>${esc(formatDate(c.created_at))}</span>
           ${state.user && (state.user.id === c.user_id || state.user.is_admin)
             ? `<button class="link-btn" data-del-comment="${c.id}">supprimer</button>` : ''}
@@ -773,9 +887,14 @@ function bindSocial(container) {
 function referencesList(a) {
   if (!a.references || !a.references.length) return '';
   return `<ul class="ref-list">
-    ${a.references.map((r) => `<li>${r.url
-      ? `<a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.label)}</a>`
-      : esc(r.label)}</li>`).join('')}
+    ${a.references.map((r) => {
+      if (r.ref_song_slug) {
+        return `<li>♪ <a href="/chanson/${encodeURIComponent(r.ref_song_slug)}" data-link>${esc(r.label)}</a></li>`;
+      }
+      return `<li>${r.url
+        ? `<a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.label)}</a>`
+        : esc(r.label)}</li>`;
+    }).join('')}
   </ul>`;
 }
 
@@ -798,19 +917,74 @@ function bindReferenceRows(form) {
     zone.insertAdjacentHTML('beforeend', refRow());
     bindRemove();
   };
+  const internalBtn = form.querySelector('.add-ref-internal');
+  if (internalBtn) internalBtn.onclick = async () => {
+    await loadCorpus();
+    insertInternalRefRow(zone);
+  };
   bindRemove();
 }
 
 function collectReferences(form) {
-  return [...form.querySelectorAll('.ref-row')].map((row) => ({
-    label: row.querySelector('.ref-label').value.trim(),
-    url: row.querySelector('.ref-url').value.trim() || null,
-  })).filter((r) => r.label);
+  const out = [];
+  form.querySelectorAll('.ref-row').forEach((row) => {
+    if (row.dataset.internal) {
+      out.push(JSON.parse(row.dataset.internal));
+      return;
+    }
+    if (row.classList.contains('ref-internal-row')) {
+      const start = row.querySelector('.ref-start').value;
+      const end = row.querySelector('.ref-end').value || start;
+      if (start) out.push({ ref_line_id: Number(start), ref_end_line_id: Number(end) });
+      return;
+    }
+    const label = row.querySelector('.ref-label').value.trim();
+    if (label) out.push({ label, url: row.querySelector('.ref-url').value.trim() || null });
+  });
+  return out;
+}
+
+function fixedInternalRow(r) {
+  const payload = esc(JSON.stringify({ ref_line_id: r.ref_line_id, ref_end_line_id: r.ref_end_line_id }));
+  return `<div class="ref-row ref-fixed" data-internal="${payload}">
+    <span class="ref-fixed-label">♪ ${esc(r.label)}</span>
+    <button type="button" class="link-btn ref-remove" title="Retirer">✕</button>
+  </div>`;
 }
 
 function referencesFieldset(refs = []) {
-  return `<div class="refs-zone">${refs.map((r) => refRow(r.label, r.url || '')).join('')}</div>
-  <button type="button" class="link-btn add-ref">+ Ajouter une référence (artiste, texte, œuvre…)</button>`;
+  return `<div class="refs-zone">${refs.map((r) => r.ref_line_id
+    ? fixedInternalRow(r)
+    : refRow(r.label, r.url || '')).join('')}</div>
+  <button type="button" class="link-btn add-ref">+ Référence libre (artiste, texte, œuvre…)</button>
+  <button type="button" class="link-btn add-ref-internal">+ Référencer un passage d’un morceau</button>`;
+}
+
+// Ligne de sélection d'un passage interne : morceau → du vers → au vers.
+function insertInternalRefRow(zone) {
+  const row = document.createElement('div');
+  row.className = 'ref-row ref-internal-row';
+  row.innerHTML = `
+    <select class="ref-song"><option value="">— Morceau —</option>
+      ${state.corpus.songs.map((s) => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}
+    </select>
+    <select class="ref-start" disabled><option value="">— Du vers… —</option></select>
+    <select class="ref-end" disabled><option value="">— …au vers (optionnel) —</option></select>
+    <button type="button" class="link-btn ref-remove" title="Retirer">✕</button>`;
+  zone.appendChild(row);
+  row.querySelector('.ref-song').onchange = () => {
+    const songId = Number(row.querySelector('.ref-song').value);
+    const opts = state.corpus.lines.filter((l) => l.song_id === songId)
+      .map((l) => `<option value="${l.id}">${esc(l.text.length > 50 ? l.text.slice(0, 47) + '…' : l.text)}</option>`)
+      .join('');
+    const start = row.querySelector('.ref-start');
+    const end = row.querySelector('.ref-end');
+    start.innerHTML = '<option value="">— Du vers… —</option>' + opts;
+    end.innerHTML = '<option value="">— …au vers (optionnel) —</option>' + opts;
+    start.disabled = false;
+    end.disabled = false;
+  };
+  row.querySelector('.ref-remove').onclick = () => row.remove();
 }
 
 function annotationCard(a, targetQuote) {
@@ -818,7 +992,7 @@ function annotationCard(a, targetQuote) {
   const own = u && (u.id === a.user_id || u.is_admin);
   return `<div class="annotation" data-ann="${a.id}">
     <div class="annotation-head">
-      <span class="annotation-author">${esc(a.username)}</span>
+      ${authorLink(a.username)}
       <span>${esc(formatDate(a.created_at))}${a.updated_at ? ' (modifié)' : ''}</span>
       ${own ? `<button class="link-btn" data-edit="${a.id}">modifier</button>
                <button class="link-btn" data-del="${a.id}">supprimer</button>` : ''}
@@ -910,7 +1084,29 @@ function renderPanel() {
   let html = '';
   const forms = []; // [id, payload]
 
-  if (sel && (sel.type === 'word' || sel.type === 'line')) {
+  if (sel && sel.type === 'passage') {
+    const quote = passageText(sel.startLine, sel.startIdx, sel.endLine, sel.endIdx);
+    const [s0, s1] = selPassageRange(sel);
+    const passAnns = annotationsFor((a) => {
+      if (a.target_type !== 'passage') return false;
+      const [a0, a1] = passageRange(a);
+      return a0 <= s1 && s0 <= a1;
+    });
+    html += `<div class="panel-card">
+      <h3>Le passage</h3>
+      <div class="panel-target">« ${esc(quote)} »</div>
+      ${passAnns.map((a) => annotationCard(
+        a,
+        `« ${esc(passageText(a.line_id, a.word_start || 0, a.end_line_id, a.word_end == null ? 0 : a.word_end))} »`
+      )).join('') || '<p class="empty-note">Aucune interprétation de passage ici pour l’instant.</p>'}
+      ${annotationForm('passage-ann-form', 'Que raconte ce passage ?', 'Interpréter ce passage')}
+    </div>
+    <button class="link-btn" id="clear-sel">← Revenir à la chanson</button>`;
+    forms.push(['passage-ann-form', {
+      song_id: song.id, line_id: sel.startLine, end_line_id: sel.endLine,
+      word_start: sel.startIdx, word_end: sel.endIdx,
+    }]);
+  } else if (sel && (sel.type === 'word' || sel.type === 'line')) {
     const line = lines.find((l) => l.id === sel.lineId);
     const toks = line ? tokens(line.text) : [];
 
@@ -968,6 +1164,17 @@ function renderPanel() {
       ${annotationForm('song-ann-form', `Le sens général de « ${song.title} »…`, 'Interpréter la chanson')}
     </div>`;
     forms.push(['song-ann-form', { song_id: song.id, target_type: 'song' }]);
+
+    const passAnns = annotationsFor((a) => a.target_type === 'passage');
+    if (passAnns.length) {
+      html += `<div class="panel-card">
+        <h3>Passages interprétés</h3>
+        ${passAnns.map((a) => annotationCard(
+          a,
+          `« ${esc(passageText(a.line_id, a.word_start || 0, a.end_line_id, a.word_end == null ? 0 : a.word_end))} »`
+        )).join('')}
+      </div>`;
+    }
   }
 
   panel.innerHTML = html;
@@ -996,7 +1203,7 @@ function renderConnections() {
         <a href="/chanson/${encodeURIComponent(otherSlug)}" data-link>${esc(otherTitle)}</a>
       </div>
       <div class="connection-body">${esc(c.explanation)}</div>
-      <div class="connection-meta">par <strong>${esc(c.username)}</strong>, ${esc(formatDate(c.created_at))}
+      <div class="connection-meta">par ${authorLink(c.username)}, ${esc(formatDate(c.created_at))}
         ${own ? `<button class="link-btn" data-del-conn="${c.id}">supprimer</button>` : ''}
       </div>
       ${socialFooter('connection', c)}
@@ -1048,6 +1255,116 @@ function renderConnections() {
   };
 
   bindSocial(container);
+}
+
+/* --------------------------------------------------- profils & le livre */
+
+function bookPassageLabel(a) {
+  if (a.target_type === 'song') return 'À propos du morceau';
+  if (a.target_type === 'title') return 'Le titre';
+  if (a.target_type === 'duration') return `La durée${a.duration_seconds ? ` (${mmss(a.duration_seconds)})` : ''}`;
+  if (a.target_type === 'passage') {
+    const from = tokens(a.line_text || '').slice(a.word_start || 0).join(' ');
+    const to = tokens(a.end_line_text || '').slice(0, (a.word_end == null ? -1 : a.word_end) + 1).join(' ');
+    const gap = (a.end_line_number || 0) - (a.line_number || 0) > 1 ? ' […] ' : ' / ';
+    return `« ${from}${gap}${to} »`;
+  }
+  if (a.target_type === 'word') {
+    return `« ${tokens(a.line_text || '').slice(a.word_start, a.word_end + 1).join(' ')} » — dans « ${a.line_text || ''} »`;
+  }
+  return `« ${a.line_text || ''} »`;
+}
+
+// Le livre d'un membre : ses interprétations assemblées dans l'ordre des
+// albums et des morceaux, chaque bloc citant le passage interprété.
+async function pageProfile(username) {
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  let data;
+  try {
+    data = await api(`/api/users/${encodeURIComponent(username)}`);
+  } catch {
+    if (!stale(epoch)) app.innerHTML = '<h1>Membre introuvable</h1><p><a href="/" data-link>Retour à l’accueil</a></p>';
+    return;
+  }
+  if (stale(epoch)) return;
+
+  const { user, stats, annotations, essays, connections } = data;
+
+  // sections par morceau, dans l'ordre livré par le serveur (albums, pistes)
+  const sections = [];
+  const bySlug = new Map();
+  const sectionFor = (item) => {
+    if (!bySlug.has(item.song_slug)) {
+      const sec = {
+        slug: item.song_slug, title: item.song_title, album: item.album_title,
+        pos: [item.album_position, item.track_number || 0],
+        blocks: [], essays: [],
+      };
+      bySlug.set(item.song_slug, sec);
+      sections.push(sec);
+    }
+    return bySlug.get(item.song_slug);
+  };
+  annotations.forEach((a) => sectionFor(a).blocks.push(a));
+  essays.forEach((e) => sectionFor(e).essays.push(e));
+  sections.sort((x, y) => x.pos[0] - y.pos[0] || x.pos[1] - y.pos[1]);
+
+  const isMe = state.user && state.user.username === user.username;
+  const total = stats.annotations + stats.essays;
+
+  const bookHtml = sections.length
+    ? sections.map((sec) => `
+      <section class="book-song">
+        ${sec.album ? `<div class="book-album">${esc(sec.album)}</div>` : ''}
+        <h3><a href="/chanson/${encodeURIComponent(sec.slug)}" data-link>${esc(sec.title)}</a></h3>
+        ${sec.blocks.map((a) => `
+          <div class="book-block">
+            <div class="book-passage">${esc(bookPassageLabel(a))}</div>
+            <div class="book-content">${esc(a.content)}</div>
+            ${referencesList(a)}
+          </div>`).join('')}
+        ${sec.essays.map((e) => `
+          <div class="book-block book-essay">
+            <div class="book-passage">Interprétation d’ensemble</div>
+            <div class="book-content">${esc(e.content)}</div>
+            ${e.links.length ? `<div class="essay-links-title">Connexions</div>
+              ${e.links.map((l) => `<div class="essay-link">
+                <div class="essay-link-blocks">
+                  <span class="excerpt">« ${esc(excerptOf(l.from_text, l.from_word_start, l.from_word_end))} »</span>
+                  <span class="link-song">(${esc(l.from_song_title)})</span>
+                  <span class="arrow">⟷</span>
+                  <span class="excerpt">« ${esc(excerptOf(l.to_text, l.to_word_start, l.to_word_end))} »</span>
+                  <span class="link-song">(${esc(l.to_song_title)})</span>
+                </div>
+                <div class="essay-link-note">${esc(l.note)}</div>
+              </div>`).join('')}` : ''}
+          </div>`).join('')}
+      </section>`).join('')
+    : `<p class="empty-note">${isMe
+        ? 'Ton livre est encore vierge : va sur un morceau et écris ta première interprétation.'
+        : 'Ce membre n’a pas encore écrit d’interprétation.'}</p>`;
+
+  app.innerHTML = `
+    <h1>${esc(user.username)}${user.is_admin ? ' <span class="album-date">— artiste</span>' : ''}</h1>
+    <p class="subtitle">Membre depuis ${esc(formatDate(user.created_at))} ·
+      ${stats.annotations} interprétation${stats.annotations > 1 ? 's' : ''} ·
+      ${stats.essays} interprétation${stats.essays > 1 ? 's' : ''} d’ensemble ·
+      ${stats.connections} connexion${stats.connections > 1 ? 's' : ''} ·
+      ♥ ${stats.favorites_received} reçu${stats.favorites_received > 1 ? 's' : ''}</p>
+    <h2>Le livre ${isMe ? 'que tu écris' : `de ${esc(user.username)}`}</h2>
+    <p class="hint">${total} bloc${total > 1 ? 's' : ''} d’interprétation, dans l’ordre des albums et des morceaux :
+    le passage interprété, puis la lecture qu’${isMe ? 'en fais-tu' : `en fait ${esc(user.username)}`}.</p>
+    ${bookHtml}
+    ${connections.length ? `<h2>Ses connexions entre morceaux</h2>
+      ${connections.map((c) => `<div class="connection">
+        <div class="connection-songs">
+          <a href="/chanson/${encodeURIComponent(c.song_a_slug)}" data-link>${esc(c.song_a_title)}</a>
+          <span class="arrow">⟷</span>
+          <a href="/chanson/${encodeURIComponent(c.song_b_slug)}" data-link>${esc(c.song_b_title)}</a>
+        </div>
+        <div class="connection-body">${esc(c.explanation)}</div>
+      </div>`).join('')}` : ''}`;
 }
 
 /* ---------------------------------------------------------------- admin */
