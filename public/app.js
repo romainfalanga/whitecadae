@@ -422,6 +422,11 @@ function commitSelection() {
     ? { type: 'word', lineId: a.lineId, start: a.idx, end: b.idx }
     : { type: 'passage', startLine: a.lineId, startIdx: a.idx, endLine: b.lineId, endIdx: b.idx };
   renderSongPage();
+  // sur grand écran, on amène le panneau sous les yeux s'il est hors de vue
+  if (!window.matchMedia('(max-width: 900px)').matches) {
+    const panel = document.getElementById('panel');
+    if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 }
 
 function clearSelection() {
@@ -546,9 +551,17 @@ function renderSelectionUI() {
   }
   const sel = state.sel;
   const isText = sel && ['word', 'line', 'passage'].includes(sel.type);
-  if (!isText) {
+  // Sur grand écran, le panneau de droite montre déjà la sélection et son
+  // formulaire : la barre flottante serait redondante et masquerait le bas
+  // de la page. Elle est réservée aux écrans où le panneau est hors de vue.
+  const narrow = window.matchMedia('(max-width: 900px)').matches;
+  if (!isText || !narrow) {
     bar.hidden = true;
-    document.body.classList.remove('sheet-open');
+    if (!isText) {
+      state.sheetOpen = false;
+      document.body.classList.remove('sheet-open');
+      ensureSheetChrome();
+    }
     return;
   }
 
