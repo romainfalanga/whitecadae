@@ -415,6 +415,49 @@ function bindSocial(container) {
 
 /* --------- panneau latéral : interprétations de la sélection en cours ---- */
 
+function referencesList(a) {
+  if (!a.references || !a.references.length) return '';
+  return `<ul class="ref-list">
+    ${a.references.map((r) => `<li>${r.url
+      ? `<a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.label)}</a>`
+      : esc(r.label)}</li>`).join('')}
+  </ul>`;
+}
+
+function refRow(label = '', url = '') {
+  return `<div class="ref-row">
+    <input class="ref-label" placeholder="Référence (artiste, texte, œuvre…)" maxlength="300" value="${esc(label)}">
+    <input class="ref-url" placeholder="Lien (optionnel)" maxlength="600" value="${esc(url)}">
+    <button type="button" class="link-btn ref-remove" title="Retirer">✕</button>
+  </div>`;
+}
+
+// Zone « références » d'un formulaire d'interprétation : lignes dynamiques.
+function bindReferenceRows(form) {
+  const zone = form.querySelector('.refs-zone');
+  if (!zone) return;
+  const bindRemove = () => zone.querySelectorAll('.ref-remove').forEach((b) => {
+    b.onclick = () => { b.closest('.ref-row').remove(); };
+  });
+  form.querySelector('.add-ref').onclick = () => {
+    zone.insertAdjacentHTML('beforeend', refRow());
+    bindRemove();
+  };
+  bindRemove();
+}
+
+function collectReferences(form) {
+  return [...form.querySelectorAll('.ref-row')].map((row) => ({
+    label: row.querySelector('.ref-label').value.trim(),
+    url: row.querySelector('.ref-url').value.trim() || null,
+  })).filter((r) => r.label);
+}
+
+function referencesFieldset(refs = []) {
+  return `<div class="refs-zone">${refs.map((r) => refRow(r.label, r.url || '')).join('')}</div>
+  <button type="button" class="link-btn add-ref">+ Ajouter une référence (artiste, texte, œuvre…)</button>`;
+}
+
 function annotationCard(a, targetQuote) {
   const u = state.user;
   const own = u && (u.id === a.user_id || u.is_admin);
@@ -427,6 +470,7 @@ function annotationCard(a, targetQuote) {
     </div>
     ${targetQuote ? `<div class="annotation-target-quote">${targetQuote}</div>` : ''}
     <div class="annotation-body">${esc(a.content)}</div>
+    ${referencesList(a)}
     ${socialFooter('annotation', a)}
   </div>`;
 }
@@ -437,6 +481,7 @@ function annotationForm(id, placeholder, buttonLabel) {
   }
   return `<form class="annotation-form" id="${id}">
     <textarea placeholder="${esc(placeholder)}" required maxlength="5000"></textarea>
+    ${referencesFieldset()}
     <div class="error-msg"></div>
     <button type="submit" class="primary">${esc(buttonLabel)}</button>
   </form>`;
@@ -445,13 +490,14 @@ function annotationForm(id, placeholder, buttonLabel) {
 function bindAnnotationForm(id, payloadBase) {
   const form = document.getElementById(id);
   if (!form) return;
+  bindReferenceRows(form);
   form.onsubmit = async (e) => {
     e.preventDefault();
     const textarea = form.querySelector('textarea');
     try {
       await api('/api/annotations', {
         method: 'POST',
-        body: { ...payloadBase, content: textarea.value },
+        body: { ...payloadBase, content: textarea.value, references: collectReferences(form) },
       });
       await pageSong(state.song.song.slug, true);
     } catch (err) {
@@ -477,18 +523,20 @@ function bindAnnotationActions(container) {
       if (!card || !ann) return;
       card.innerHTML = `<form class="annotation-form">
         <textarea required maxlength="5000">${esc(ann.content)}</textarea>
+        ${referencesFieldset(ann.references || [])}
         <div class="error-msg"></div>
         <button type="submit" class="primary">Enregistrer</button>
         <button type="button" class="link-btn cancel">Annuler</button>
       </form>`;
       const form = card.querySelector('form');
+      bindReferenceRows(form);
       form.querySelector('.cancel').onclick = () => renderSongPage();
       form.onsubmit = async (e) => {
         e.preventDefault();
         try {
           await api(`/api/annotations/${ann.id}`, {
             method: 'PUT',
-            body: { content: form.querySelector('textarea').value },
+            body: { content: form.querySelector('textarea').value, references: collectReferences(form) },
           });
           await pageSong(state.song.song.slug, true);
         } catch (err) {

@@ -179,6 +179,38 @@ function countWords(text) {
   return t ? t.split(/\s+/).length : 0;
 }
 
+// Valide la liste de références d'une interprétation.
+// Retourne un tableau normalisé, ou une Response d'erreur.
+function parseReferences(raw) {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) return json({ error: 'Références invalides.' }, 400);
+  if (raw.length > 10) return json({ error: '10 références maximum par interprétation.' }, 400);
+  const refs = [];
+  for (const r of raw) {
+    const label = String((r && r.label) || '').trim();
+    const url = String((r && r.url) || '').trim();
+    if (!label) continue;
+    if (label.length > 300) return json({ error: 'Référence trop longue (300 caractères max).' }, 400);
+    if (url && (url.length > 600 || !/^https?:\/\//i.test(url))) {
+      return json({ error: 'Lien de référence invalide (il doit commencer par http:// ou https://).' }, 400);
+    }
+    refs.push({ label, url: url || null });
+  }
+  return refs;
+}
+
+async function replaceReferences(env, annotationId, refs) {
+  const statements = [
+    env.DB.prepare('DELETE FROM annotation_references WHERE annotation_id = ?1').bind(annotationId),
+  ];
+  refs.forEach((r, i) => {
+    statements.push(env.DB.prepare(
+      'INSERT INTO annotation_references (annotation_id, position, label, url) VALUES (?1, ?2, ?3, ?4)'
+    ).bind(annotationId, i, r.label, r.url));
+  });
+  await env.DB.batch(statements);
+}
+
 /* ------------------------------------------------------------------- auth */
 
 async function register(request, env) {
@@ -310,6 +342,16 @@ async function getSong(env, request, slug) {
     'SELECT id, title, slug FROM songs ORDER BY title'
   ).all()).results;
 
+  // Références jointes aux interprétations.
+  const refs = (await env.DB.prepare(
+    `SELECT id, annotation_id, label, url FROM annotation_references
+      WHERE annotation_id IN (SELECT id FROM annotations WHERE song_id = ?1)
+      ORDER BY annotation_id, position`
+  ).bind(song.id).all()).results;
+  for (const a of annotations) {
+    a.references = refs.filter((r) => r.annotation_id === a.id);
+  }
+
   // Données sociales : favoris et commentaires des interprétations et connexions.
   const viewer = await getUser(request, env);
   await attachSocial(env, viewer, 'annotation',
@@ -393,12 +435,18 @@ async function createAnnotation(request, env) {
     targetType = ['song', 'title', 'duration'].includes(body.target_type) ? body.target_type : 'song';
   }
 
+  const refs = parseReferences(body.references);
+  if (refs instanceof Response) return refs;
+
   const result = await env.DB.prepare(
     `INSERT INTO annotations (user_id, song_id, target_type, line_id, word_start, word_end, content)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
   ).bind(user.id, songId, targetType, lineId, wordStart, wordEnd, content).run();
 
-  return json({ id: result.meta.last_row_id }, 201);
+  const annotationId = result.meta.last_row_id;
+  if (refs.length) await replaceReferences(env, annotationId, refs);
+
+  return json({ id: annotationId }, 201);
 }
 
 async function updateAnnotation(request, env, id) {
@@ -414,9 +462,13 @@ async function updateAnnotation(request, env, id) {
   if (!ann) return json({ error: 'Annotation introuvable.' }, 404);
   if (ann.user_id !== user.id && !user.is_admin) return json({ error: 'Vous ne pouvez modifier que vos propres explications.' }, 403);
 
+  const refs = parseReferences(body.references);
+  if (refs instanceof Response) return refs;
+
   await env.DB.prepare(
     `UPDATE annotations SET content = ?1, updated_at = datetime('now') WHERE id = ?2`
   ).bind(content, id).run();
+  if (body.references !== undefined) await replaceReferences(env, id, refs);
   return json({ ok: true });
 }
 

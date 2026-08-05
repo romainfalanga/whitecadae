@@ -239,6 +239,24 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .annotation-form textarea { margin-top: 0.5rem; }
 .annotation-form button { margin-top: 0.6rem; }
 
+/* ------------------------------------------------------------- références */
+
+.ref-list {
+  list-style: none;
+  margin-top: 0.45rem;
+  padding-left: 0.2rem;
+  font-size: 0.85rem;
+}
+.ref-list li { color: var(--text-dim); padding: 0.1rem 0; }
+.ref-list li::before { content: '→ '; color: var(--accent); }
+
+.refs-zone { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.ref-row { display: flex; gap: 0.4rem; align-items: center; }
+.ref-row input { font-size: 0.85rem; padding: 0.35rem 0.6rem; }
+.ref-row .ref-label { flex: 3; }
+.ref-row .ref-url { flex: 2; }
+.add-ref { align-self: flex-start; margin-top: 0.35rem; }
+
 /* --------------------------------------------------- favoris/commentaires */
 
 .social-footer { display: flex; gap: 0.5rem; margin-top: 0.5rem; }

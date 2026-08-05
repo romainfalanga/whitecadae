@@ -73,6 +73,18 @@ CREATE TABLE IF NOT EXISTS annotations (
 CREATE INDEX IF NOT EXISTS idx_annotations_song ON annotations(song_id);
 CREATE INDEX IF NOT EXISTS idx_annotations_line ON annotations(line_id);
 
+-- Références jointes à une interprétation : ce à quoi le passage fait
+-- référence selon l'auteur (artiste, texte, œuvre…), avec lien optionnel.
+CREATE TABLE IF NOT EXISTS annotation_references (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  annotation_id INTEGER NOT NULL REFERENCES annotations(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL DEFAULT 0,
+  label TEXT NOT NULL,
+  url TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_refs_annotation ON annotation_references(annotation_id);
+
 -- Connexion entre deux chansons, avec l'explication du lien.
 CREATE TABLE IF NOT EXISTS song_connections (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
