@@ -52,6 +52,12 @@ async function api(path, options = {}) {
 
 /* ---------------------------------------------------------------- routage */
 
+// Jeton de navigation : un rendu asynchrone lancé avant un changement de page
+// est abandonné à son réveil au lieu d'écraser la page courante.
+let renderEpoch = 0;
+function newEpoch() { return ++renderEpoch; }
+function stale(epoch) { return epoch !== renderEpoch; }
+
 function navigate(path) {
   history.pushState(null, '', path);
   route();
@@ -101,8 +107,10 @@ function renderNav() {
 /* ---------------------------------------------------------------- accueil */
 
 async function pageHome() {
+  const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
   const data = await api('/api/albums');
+  if (stale(epoch)) return;
   const albums = data.albums.map((al) => `
     <section class="album-card">
       <div class="album-head">
@@ -190,17 +198,23 @@ function pageRegister() {
 /* ---------------------------------------------------------------- chanson */
 
 async function pageSong(slug, keepSelection = false) {
+  const epoch = newEpoch();
   if (!keepSelection) {
     app.innerHTML = '<div class="loading">Chargement…</div>';
     state.sel = null;
     state.openComments = new Set();
   }
+  let data;
   try {
-    state.song = await api(`/api/songs/${encodeURIComponent(slug)}`);
+    data = await api(`/api/songs/${encodeURIComponent(slug)}`);
   } catch (err) {
-    app.innerHTML = `<h1>Chanson introuvable</h1><p><a href="/" data-link>Retour à l’accueil</a></p>`;
+    if (!stale(epoch)) {
+      app.innerHTML = `<h1>Chanson introuvable</h1><p><a href="/" data-link>Retour à l’accueil</a></p>`;
+    }
     return;
   }
+  if (stale(epoch)) return;
+  state.song = data;
   renderSongPage();
 }
 
@@ -640,8 +654,10 @@ async function pageAdmin() {
     app.innerHTML = '<h1>Administration</h1><p class="empty-note">Cette page est réservée à l’administrateur.</p>';
     return;
   }
+  const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
   const data = await api('/api/albums');
+  if (stale(epoch)) return;
   const albums = data.albums;
   const allSongs = albums.flatMap((al) => al.songs.map((s) => ({ ...s, album_title: al.title }))).concat(data.orphans || []);
 
