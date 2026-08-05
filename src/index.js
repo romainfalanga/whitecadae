@@ -42,6 +42,7 @@ async function handleApi(request, env, url) {
 
   // --- lecture publique
   if (route('GET', '/api/albums')) return listAlbums(env);
+  if (route('GET', '/api/corpus')) return getCorpus(env);
   if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
 
   // --- contributions (connecté)
@@ -50,6 +51,9 @@ async function handleApi(request, env, url) {
   if ((p = route('DELETE', '/api/annotations/:id'))) return deleteAnnotation(request, env, +p[0]);
   if (route('POST', '/api/connections')) return createConnection(request, env);
   if ((p = route('DELETE', '/api/connections/:id'))) return deleteConnection(request, env, +p[0]);
+  if (route('POST', '/api/essays')) return createEssay(request, env);
+  if ((p = route('PUT', '/api/essays/:id'))) return updateEssay(request, env, +p[0]);
+  if ((p = route('DELETE', '/api/essays/:id'))) return deleteEssay(request, env, +p[0]);
   if (route('POST', '/api/favorites')) return toggleFavorite(request, env);
   if (route('POST', '/api/comments')) return createComment(request, env);
   if ((p = route('DELETE', '/api/comments/:id'))) return deleteComment(request, env, +p[0]);
@@ -287,6 +291,20 @@ async function me(request, env) {
 
 /* ---------------------------------------------------------------- lecture */
 
+// Toutes les phrases de tous les morceaux (hors balises de section et
+// lignes vides) : sert au constructeur d'interprétations d'ensemble et
+// au moteur de suggestions d'échos.
+async function getCorpus(env) {
+  const songs = (await env.DB.prepare(
+    'SELECT id, title, slug FROM songs ORDER BY title'
+  ).all()).results;
+  const lines = (await env.DB.prepare(
+    `SELECT id, song_id, line_number, text FROM lyric_lines
+      WHERE text <> '' AND text NOT LIKE '[%' ORDER BY song_id, line_number`
+  ).all()).results;
+  return json({ songs, lines });
+}
+
 async function listAlbums(env) {
   const albums = (await env.DB.prepare(
     'SELECT id, title, slug, release_date, is_single FROM albums ORDER BY position, release_date'
@@ -342,6 +360,28 @@ async function getSong(env, request, slug) {
     'SELECT id, title, slug FROM songs ORDER BY title'
   ).all()).results;
 
+  // Interprétations d'ensemble et leurs connexions entre blocs.
+  const essays = (await env.DB.prepare(
+    `SELECT e.id, e.user_id, e.content, e.created_at, e.updated_at, u.username
+       FROM essays e JOIN users u ON u.id = e.user_id
+      WHERE e.song_id = ?1 ORDER BY e.created_at`
+  ).bind(song.id).all()).results;
+  const essayLinks = (await env.DB.prepare(
+    `SELECT el.id, el.essay_id, el.note,
+            el.from_line_id, el.from_word_start, el.from_word_end,
+            el.to_line_id, el.to_word_start, el.to_word_end,
+            lf.text AS from_text, sf.id AS from_song_id, sf.title AS from_song_title, sf.slug AS from_song_slug,
+            lt.text AS to_text, st.id AS to_song_id, st.title AS to_song_title, st.slug AS to_song_slug
+       FROM essay_links el
+       JOIN lyric_lines lf ON lf.id = el.from_line_id
+       JOIN songs sf ON sf.id = lf.song_id
+       JOIN lyric_lines lt ON lt.id = el.to_line_id
+       JOIN songs st ON st.id = lt.song_id
+      WHERE el.essay_id IN (SELECT id FROM essays WHERE song_id = ${song.id})
+      ORDER BY el.essay_id, el.position`
+  ).all()).results;
+  for (const e of essays) e.links = essayLinks.filter((l) => l.essay_id === e.id);
+
   // Références jointes aux interprétations.
   const refs = (await env.DB.prepare(
     `SELECT id, annotation_id, label, url FROM annotation_references
@@ -358,8 +398,10 @@ async function getSong(env, request, slug) {
     `SELECT id FROM annotations WHERE song_id = ${song.id}`, annotations);
   await attachSocial(env, viewer, 'connection',
     `SELECT id FROM song_connections WHERE song_a_id = ${song.id} OR song_b_id = ${song.id}`, connections);
+  await attachSocial(env, viewer, 'essay',
+    `SELECT id FROM essays WHERE song_id = ${song.id}`, essays);
 
-  return json({ song, lines, annotations, connections, allSongs });
+  return json({ song, lines, annotations, connections, essays, allSongs });
 }
 
 // Ajoute favorite_count, my_favorite et comments[] à chaque élément.
@@ -531,9 +573,130 @@ async function deleteConnection(request, env, id) {
   return json({ ok: true });
 }
 
+/* -------------------------------------------- interprétations d'ensemble */
+
+// Valide les connexions entre blocs d'une interprétation d'ensemble.
+// Retourne un tableau normalisé, ou une Response d'erreur.
+async function parseEssayLinks(env, raw) {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) return json({ error: 'Connexions invalides.' }, 400);
+  if (raw.length > 20) return json({ error: '20 connexions maximum par interprétation.' }, 400);
+  const links = [];
+  for (const l of raw) {
+    const note = String((l && l.note) || '').trim();
+    if (!note) return json({ error: 'Chaque connexion doit être expliquée.' }, 400);
+    if (note.length > 1000) return json({ error: 'Explication de connexion trop longue (1000 caractères max).' }, 400);
+    const spec = { note };
+    for (const side of ['from', 'to']) {
+      const lineId = Number(l && l[side + '_line_id']);
+      const line = await env.DB.prepare('SELECT id, text FROM lyric_lines WHERE id = ?1').bind(lineId).first();
+      if (!line) return json({ error: 'Phrase introuvable dans une connexion.' }, 400);
+      let ws = l[side + '_word_start'] == null ? null : Number(l[side + '_word_start']);
+      let we = l[side + '_word_end'] == null ? ws : Number(l[side + '_word_end']);
+      if (ws != null) {
+        const n = countWords(line.text);
+        if (!Number.isInteger(ws) || !Number.isInteger(we) || ws < 0 || we < ws || we >= n) {
+          return json({ error: 'Position de mot invalide dans une connexion.' }, 400);
+        }
+      } else {
+        we = null;
+      }
+      spec[side] = { line_id: lineId, ws, we };
+    }
+    if (spec.from.line_id === spec.to.line_id &&
+        spec.from.ws === spec.to.ws && spec.from.we === spec.to.we) {
+      return json({ error: 'Une connexion doit relier deux blocs différents.' }, 400);
+    }
+    links.push(spec);
+  }
+  return links;
+}
+
+async function replaceEssayLinks(env, essayId, links) {
+  const statements = [
+    env.DB.prepare('DELETE FROM essay_links WHERE essay_id = ?1').bind(essayId),
+  ];
+  links.forEach((l, i) => {
+    statements.push(env.DB.prepare(
+      `INSERT INTO essay_links
+        (essay_id, position, from_line_id, from_word_start, from_word_end,
+         to_line_id, to_word_start, to_word_end, note)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
+    ).bind(essayId, i, l.from.line_id, l.from.ws, l.from.we, l.to.line_id, l.to.ws, l.to.we, l.note));
+  });
+  await env.DB.batch(statements);
+}
+
+async function createEssay(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const body = await readJson(request);
+  if (!body) return json({ error: 'Requête invalide.' }, 400);
+  const songId = Number(body.song_id);
+  const content = String(body.content || '').trim();
+  if (!content) return json({ error: 'L’interprétation ne peut pas être vide.' }, 400);
+  if (content.length > 10000) return json({ error: 'Interprétation trop longue (10 000 caractères max).' }, 400);
+
+  const song = await env.DB.prepare('SELECT id FROM songs WHERE id = ?1').bind(songId).first();
+  if (!song) return json({ error: 'Chanson introuvable.' }, 404);
+
+  const links = await parseEssayLinks(env, body.links);
+  if (links instanceof Response) return links;
+
+  const result = await env.DB.prepare(
+    'INSERT INTO essays (song_id, user_id, content) VALUES (?1, ?2, ?3)'
+  ).bind(songId, user.id, content).run();
+  const essayId = result.meta.last_row_id;
+  if (links.length) await replaceEssayLinks(env, essayId, links);
+  return json({ id: essayId }, 201);
+}
+
+async function updateEssay(request, env, id) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const essay = await env.DB.prepare('SELECT id, user_id FROM essays WHERE id = ?1').bind(id).first();
+  if (!essay) return json({ error: 'Interprétation introuvable.' }, 404);
+  if (essay.user_id !== user.id && !user.is_admin) {
+    return json({ error: 'Vous ne pouvez modifier que vos propres interprétations.' }, 403);
+  }
+
+  const body = await readJson(request);
+  const content = String((body && body.content) || '').trim();
+  if (!content) return json({ error: 'L’interprétation ne peut pas être vide.' }, 400);
+  if (content.length > 10000) return json({ error: 'Interprétation trop longue (10 000 caractères max).' }, 400);
+
+  const links = await parseEssayLinks(env, body.links);
+  if (links instanceof Response) return links;
+
+  await env.DB.prepare(
+    `UPDATE essays SET content = ?1, updated_at = datetime('now') WHERE id = ?2`
+  ).bind(content, id).run();
+  if (body.links !== undefined) await replaceEssayLinks(env, id, links);
+  return json({ ok: true });
+}
+
+async function deleteEssay(request, env, id) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const essay = await env.DB.prepare('SELECT id, user_id FROM essays WHERE id = ?1').bind(id).first();
+  if (!essay) return json({ error: 'Interprétation introuvable.' }, 404);
+  if (essay.user_id !== user.id && !user.is_admin) {
+    return json({ error: 'Vous ne pouvez supprimer que vos propres interprétations.' }, 403);
+  }
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM favorites WHERE target_kind = 'essay' AND target_id = ?1`).bind(id),
+    env.DB.prepare(`DELETE FROM comments WHERE target_kind = 'essay' AND target_id = ?1`).bind(id),
+    env.DB.prepare('DELETE FROM essays WHERE id = ?1').bind(id),
+  ]);
+  return json({ ok: true });
+}
+
 /* ------------------------------------------------- favoris & commentaires */
 
-const FAVORITE_KINDS = { annotation: 'annotations', connection: 'song_connections' };
+const FAVORITE_KINDS = { annotation: 'annotations', connection: 'song_connections', essay: 'essays' };
 
 async function targetExists(env, kind, id) {
   const table = FAVORITE_KINDS[kind];
@@ -691,6 +854,12 @@ async function adminDeleteSong(request, env, id) {
     env.DB.prepare(
       `DELETE FROM comments WHERE target_kind = 'connection'
         AND target_id IN (SELECT id FROM song_connections WHERE song_a_id = ?1 OR song_b_id = ?1)`).bind(id),
+    env.DB.prepare(
+      `DELETE FROM favorites WHERE target_kind = 'essay'
+        AND target_id IN (SELECT id FROM essays WHERE song_id = ?1)`).bind(id),
+    env.DB.prepare(
+      `DELETE FROM comments WHERE target_kind = 'essay'
+        AND target_id IN (SELECT id FROM essays WHERE song_id = ?1)`).bind(id),
     env.DB.prepare('DELETE FROM songs WHERE id = ?1').bind(id),
   ]);
   return json({ ok: true });

@@ -8,6 +8,9 @@ const state = {
   song: null, // données de la page chanson en cours
   sel: null, // sélection : {type:'line'|'word'|'title'|'duration', lineId?, start?, end?}
   openComments: new Set(), // espaces commentaires ouverts, clés "kind:id"
+  corpus: null, // {songs, lines} : toutes les phrases de tous les morceaux
+  corpusDf: null, // fréquence documentaire des mots (moteur d'échos)
+  builder: null, // constructeur d'interprétation d'ensemble en cours
 };
 
 /* ------------------------------------------------------------------ utils */
@@ -115,7 +118,6 @@ async function pageHome() {
     <section class="album-card">
       <div class="album-head">
         <h2>${esc(al.title)}</h2>
-        ${al.release_date ? `<span class="album-date">${esc(formatDate(al.release_date))}</span>` : ''}
       </div>
       <ol class="song-list">
         ${al.songs.map((s) => `
@@ -203,6 +205,7 @@ async function pageSong(slug, keepSelection = false) {
     app.innerHTML = '<div class="loading">Chargement…</div>';
     state.sel = null;
     state.openComments = new Set();
+    state.builder = null;
   }
   let data;
   try {
@@ -284,6 +287,10 @@ function renderSongPage() {
     <div class="song-layout">
       <div>
         ${lyricsHtml}
+        <h2>Interprétations d’ensemble</h2>
+        <p class="hint">Une lecture globale du morceau, justifiée par des connexions entre phrases —
+        y compris avec les phrases d’autres morceaux.</p>
+        <div id="essays"></div>
         <h2>Connexions avec d’autres chansons</h2>
         <div id="connections"></div>
       </div>
@@ -326,7 +333,351 @@ function renderSongPage() {
   };
 
   renderPanel();
+  renderEssays();
   renderConnections();
+}
+
+/* ----------------------------------- interprétations d'ensemble (essais) */
+
+function excerptOf(text, ws, we) {
+  if (ws == null) return text;
+  return tokens(text).slice(ws, we + 1).join(' ');
+}
+
+async function loadCorpus() {
+  if (state.corpus) return state.corpus;
+  state.corpus = await api('/api/corpus');
+  // fréquence documentaire de chaque mot significatif (pour les échos)
+  const df = new Map();
+  for (const line of state.corpus.lines) {
+    for (const w of new Set(sigWords(line.text))) df.set(w, (df.get(w) || 0) + 1);
+  }
+  state.corpusDf = df;
+  return state.corpus;
+}
+
+const STOPWORDS = new Set(('dans pour avec tout tous toute toutes plus mais comme quand elle elles ils il sont suis etre cette leur leurs vers fait fais faire meme bien rien sans deux notre votre ton les des une est que qui quoi pas sur par aux ces nos vos ont aussi tres trop deja alors donc ainsi entre chaque encore toujours jamais peux peut veux veut vois voit mon mes tes ses son cest jai tas quon nest plus').split(' '));
+
+function sigWords(text) {
+  return tokens(text)
+    .map((w) => w.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''))
+    .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+}
+
+// Cherche dans tout le répertoire les phrases qui font écho au bloc donné :
+// mots significatifs partagés, pondérés par leur rareté dans l'œuvre.
+function echoSuggestions(text, excludeLineId, max = 5) {
+  const words = new Set(sigWords(text));
+  if (!words.size || !state.corpus) return [];
+  const scored = [];
+  for (const line of state.corpus.lines) {
+    if (line.id === excludeLineId) continue;
+    let score = 0;
+    const lineWords = new Set(sigWords(line.text));
+    for (const w of words) {
+      if (lineWords.has(w)) score += 1 / (state.corpusDf.get(w) || 1);
+    }
+    if (score > 0) scored.push([score, line]);
+  }
+  scored.sort((a, b) => b[0] - a[0]);
+  return scored.slice(0, max).map(([, line]) => line);
+}
+
+function corpusLine(id) {
+  return state.corpus && state.corpus.lines.find((l) => l.id === id);
+}
+
+function corpusSong(id) {
+  return state.corpus && state.corpus.songs.find((s) => s.id === id);
+}
+
+function essayLinkHtml(fromText, fromWs, fromWe, fromTitle, toText, toWs, toWe, toTitle, note, removeBtn = '') {
+  const currentTitle = state.song.song.title;
+  const tag = (t) => (t && t !== currentTitle) ? ` <span class="link-song">(${esc(t)})</span>` : '';
+  return `<div class="essay-link">
+    <div class="essay-link-blocks">
+      <span class="excerpt">« ${esc(excerptOf(fromText, fromWs, fromWe))} »</span>${tag(fromTitle)}
+      <span class="arrow">⟷</span>
+      <span class="excerpt">« ${esc(excerptOf(toText, toWs, toWe))} »</span>${tag(toTitle)}
+      ${removeBtn}
+    </div>
+    <div class="essay-link-note">${esc(note)}</div>
+  </div>`;
+}
+
+function essayCard(e) {
+  const u = state.user;
+  const own = u && (u.id === e.user_id || u.is_admin);
+  return `<div class="essay" data-essay="${e.id}">
+    <div class="annotation-head">
+      <span class="annotation-author">${esc(e.username)}</span>
+      <span>${esc(formatDate(e.created_at))}${e.updated_at ? ' (modifié)' : ''}</span>
+      ${own ? `<button class="link-btn" data-essay-edit="${e.id}">modifier</button>
+               <button class="link-btn" data-essay-del="${e.id}">supprimer</button>` : ''}
+    </div>
+    <div class="essay-body">${esc(e.content)}</div>
+    ${e.links.length ? `<div class="essay-links-title">Connexions justificatives</div>
+      ${e.links.map((l) => essayLinkHtml(
+        l.from_text, l.from_word_start, l.from_word_end, l.from_song_title,
+        l.to_text, l.to_word_start, l.to_word_end, l.to_song_title, l.note)).join('')}` : ''}
+    ${socialFooter('essay', e)}
+  </div>`;
+}
+
+function blockPickerHtml(side) {
+  const b = state.builder.blocs[side];
+  const songs = state.corpus.songs;
+  const lines = b.song_id ? state.corpus.lines.filter((l) => l.song_id === b.song_id) : [];
+  const line = b.line_id ? corpusLine(b.line_id) : null;
+  let wordsHtml = '';
+  if (line) {
+    wordsHtml = `<div class="eb-words">${tokens(line.text).map((tok, i) => {
+      const selected = b.ws != null && i >= b.ws && i <= b.we;
+      return `<span class="w ${selected ? 'selected-word' : ''}" data-eb-word="${side}:${i}">${esc(tok)}</span>`;
+    }).join(' ')}</div>
+    <div class="hint">${b.ws == null
+      ? 'Toute la phrase est sélectionnée — cliquez sur un mot pour restreindre (Maj+clic pour étendre).'
+      : `Mots ${b.ws + 1} à ${b.we + 1} — <button class="link-btn" data-eb-whole="${side}">reprendre toute la phrase</button>`}</div>`;
+  }
+  return `<div class="eb-block">
+    <h4>Bloc ${side}</h4>
+    <select data-eb-song="${side}">
+      <option value="">— Choisir un morceau —</option>
+      ${songs.map((s) => `<option value="${s.id}" ${s.id === b.song_id ? 'selected' : ''}>${esc(s.title)}</option>`).join('')}
+    </select>
+    <select data-eb-line="${side}" ${b.song_id ? '' : 'disabled'}>
+      <option value="">— Choisir une phrase —</option>
+      ${lines.map((l) => `<option value="${l.id}" ${l.id === b.line_id ? 'selected' : ''}>${esc(l.text.length > 60 ? l.text.slice(0, 57) + '…' : l.text)}</option>`).join('')}
+    </select>
+    ${wordsHtml}
+  </div>`;
+}
+
+function renderEssays() {
+  const container = document.getElementById('essays');
+  if (!container) return;
+  const { essays } = state.song;
+  const u = state.user;
+
+  let html = essays.map(essayCard).join('') ||
+    '<p class="empty-note">Aucune interprétation d’ensemble pour l’instant.</p>';
+
+  if (state.builder) {
+    html += renderEssayBuilderHtml();
+  } else if (u) {
+    html += `<button class="btn" id="essay-new">✍ Écrire une interprétation d’ensemble</button>`;
+  } else {
+    html += `<p class="empty-note"><a href="/connexion" data-link>Connectez-vous</a> pour écrire une interprétation d’ensemble.</p>`;
+  }
+
+  container.innerHTML = html;
+  bindEssays(container);
+}
+
+function renderEssayBuilderHtml() {
+  const b = state.builder;
+  const A = b.blocs.A, B = b.blocs.B;
+  const lineA = A.line_id ? corpusLine(A.line_id) : null;
+
+  // suggestions d'échos pour le bloc B, à partir du bloc A choisi
+  let suggestions = '';
+  if (lineA && !B.line_id) {
+    const sugg = echoSuggestions(excerptOf(lineA.text, A.ws, A.we), A.line_id);
+    if (sugg.length) {
+      suggestions = `<div class="eb-suggestions">
+        <div class="essay-links-title">Échos trouvés dans l’œuvre — cliquez pour remplir le bloc B :</div>
+        ${sugg.map((l) => {
+          const s = corpusSong(l.song_id);
+          return `<button type="button" class="eb-suggestion" data-eb-suggest="${l.id}">
+            « ${esc(l.text.length > 70 ? l.text.slice(0, 67) + '…' : l.text)} »
+            <span class="link-song">(${esc(s ? s.title : '')})</span>
+          </button>`;
+        }).join('')}
+      </div>`;
+    }
+  }
+
+  return `<div class="panel-card essay-builder" id="essay-builder">
+    <h3>${b.essayId ? 'Modifier l’interprétation d’ensemble' : 'Nouvelle interprétation d’ensemble'}</h3>
+    <label>Ton interprétation du morceau</label>
+    <textarea id="eb-content" maxlength="10000" placeholder="Ce que raconte ce morceau dans son ensemble, selon toi…">${esc(b.content)}</textarea>
+    ${b.links.length ? `<div class="essay-links-title">Connexions ajoutées</div>
+      ${b.links.map((l, i) => {
+        const lf = corpusLine(l.from_line_id), lt = corpusLine(l.to_line_id);
+        const sf = lf && corpusSong(lf.song_id), st = lt && corpusSong(lt.song_id);
+        return essayLinkHtml(
+          lf ? lf.text : '?', l.from_word_start, l.from_word_end, sf && sf.title,
+          lt ? lt.text : '?', l.to_word_start, l.to_word_end, st && st.title,
+          l.note, `<button class="link-btn" data-eb-remove="${i}">✕</button>`);
+      }).join('')}` : ''}
+    <div class="essay-links-title">Ajouter une connexion justificative</div>
+    <div class="eb-blocks">${blockPickerHtml('A')}${blockPickerHtml('B')}</div>
+    ${suggestions}
+    <textarea id="eb-note" maxlength="1000" placeholder="En quoi ces deux blocs se répondent-ils ?">${esc(b.note)}</textarea>
+    <button type="button" id="eb-add-link">+ Ajouter cette connexion</button>
+    <div class="error-msg" id="eb-error"></div>
+    <div class="eb-actions">
+      <button type="button" class="primary" id="eb-publish">${b.essayId ? 'Enregistrer' : 'Publier l’interprétation'}</button>
+      <button type="button" class="link-btn" id="eb-cancel">Annuler</button>
+    </div>
+  </div>`;
+}
+
+function saveBuilderInputs() {
+  const c = document.getElementById('eb-content');
+  const n = document.getElementById('eb-note');
+  if (c) state.builder.content = c.value;
+  if (n) state.builder.note = n.value;
+}
+
+function bindEssays(container) {
+  const newBtn = document.getElementById('essay-new');
+  if (newBtn) newBtn.onclick = async () => {
+    await loadCorpus();
+    state.builder = {
+      essayId: null, content: '', note: '',
+      links: [],
+      blocs: {
+        A: { song_id: state.song.song.id, line_id: null, ws: null, we: null },
+        B: { song_id: null, line_id: null, ws: null, we: null },
+      },
+    };
+    renderEssays();
+  };
+
+  container.querySelectorAll('[data-essay-edit]').forEach((btn) => {
+    btn.onclick = async () => {
+      await loadCorpus();
+      const e = state.song.essays.find((x) => x.id === Number(btn.dataset.essayEdit));
+      if (!e) return;
+      state.builder = {
+        essayId: e.id, content: e.content, note: '',
+        links: e.links.map((l) => ({
+          from_line_id: l.from_line_id, from_word_start: l.from_word_start, from_word_end: l.from_word_end,
+          to_line_id: l.to_line_id, to_word_start: l.to_word_start, to_word_end: l.to_word_end,
+          note: l.note,
+        })),
+        blocs: {
+          A: { song_id: state.song.song.id, line_id: null, ws: null, we: null },
+          B: { song_id: null, line_id: null, ws: null, we: null },
+        },
+      };
+      renderEssays();
+    };
+  });
+
+  container.querySelectorAll('[data-essay-del]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm('Supprimer cette interprétation d’ensemble ?')) return;
+      try {
+        await api(`/api/essays/${btn.dataset.essayDel}`, { method: 'DELETE' });
+        await pageSong(state.song.song.slug, true);
+      } catch (err) { alert(err.message); }
+    };
+  });
+
+  bindSocial(container);
+  if (!state.builder) return;
+
+  // --- constructeur
+  container.querySelectorAll('[data-eb-song]').forEach((sel) => {
+    sel.onchange = () => {
+      saveBuilderInputs();
+      const side = sel.dataset.ebSong;
+      state.builder.blocs[side] = { song_id: Number(sel.value) || null, line_id: null, ws: null, we: null };
+      renderEssays();
+    };
+  });
+  container.querySelectorAll('[data-eb-line]').forEach((sel) => {
+    sel.onchange = () => {
+      saveBuilderInputs();
+      const side = sel.dataset.ebLine;
+      const b = state.builder.blocs[side];
+      b.line_id = Number(sel.value) || null;
+      b.ws = null; b.we = null;
+      renderEssays();
+    };
+  });
+  container.querySelectorAll('[data-eb-word]').forEach((span) => {
+    span.onclick = (ev) => {
+      saveBuilderInputs();
+      const [side, idxStr] = span.dataset.ebWord.split(':');
+      const idx = Number(idxStr);
+      const b = state.builder.blocs[side];
+      if (ev.shiftKey && b.ws != null) {
+        b.ws = Math.min(b.ws, idx); b.we = Math.max(b.we, idx);
+      } else {
+        b.ws = idx; b.we = idx;
+      }
+      renderEssays();
+    };
+  });
+  container.querySelectorAll('[data-eb-whole]').forEach((btn) => {
+    btn.onclick = () => {
+      saveBuilderInputs();
+      const b = state.builder.blocs[btn.dataset.ebWhole];
+      b.ws = null; b.we = null;
+      renderEssays();
+    };
+  });
+  container.querySelectorAll('[data-eb-suggest]').forEach((btn) => {
+    btn.onclick = () => {
+      saveBuilderInputs();
+      const line = corpusLine(Number(btn.dataset.ebSuggest));
+      if (!line) return;
+      state.builder.blocs.B = { song_id: line.song_id, line_id: line.id, ws: null, we: null };
+      renderEssays();
+    };
+  });
+  container.querySelectorAll('[data-eb-remove]').forEach((btn) => {
+    btn.onclick = () => {
+      saveBuilderInputs();
+      state.builder.links.splice(Number(btn.dataset.ebRemove), 1);
+      renderEssays();
+    };
+  });
+
+  const addLink = document.getElementById('eb-add-link');
+  if (addLink) addLink.onclick = () => {
+    saveBuilderInputs();
+    const b = state.builder;
+    const A = b.blocs.A, B = b.blocs.B;
+    const err = document.getElementById('eb-error');
+    if (!A.line_id || !B.line_id) { err.textContent = 'Choisissez une phrase pour chaque bloc.'; return; }
+    if (!b.note.trim()) { err.textContent = 'Expliquez en quoi ces deux blocs se répondent.'; return; }
+    if (b.links.length >= 20) { err.textContent = '20 connexions maximum.'; return; }
+    b.links.push({
+      from_line_id: A.line_id, from_word_start: A.ws, from_word_end: A.we,
+      to_line_id: B.line_id, to_word_start: B.ws, to_word_end: B.we,
+      note: b.note.trim(),
+    });
+    b.note = '';
+    b.blocs.B = { song_id: null, line_id: null, ws: null, we: null };
+    err.textContent = '';
+    renderEssays();
+  };
+
+  const publish = document.getElementById('eb-publish');
+  if (publish) publish.onclick = async () => {
+    saveBuilderInputs();
+    const b = state.builder;
+    const err = document.getElementById('eb-error');
+    try {
+      const payload = { content: b.content, links: b.links };
+      if (b.essayId) {
+        await api(`/api/essays/${b.essayId}`, { method: 'PUT', body: payload });
+      } else {
+        await api('/api/essays', { method: 'POST', body: { ...payload, song_id: state.song.song.id } });
+      }
+      state.builder = null;
+      await pageSong(state.song.song.slug, true);
+    } catch (e2) {
+      err.textContent = e2.message;
+    }
+  };
+
+  const cancel = document.getElementById('eb-cancel');
+  if (cancel) cancel.onclick = () => { state.builder = null; renderEssays(); };
 }
 
 /* ------------------------------------ favoris & commentaires (partagé) --- */
