@@ -16,7 +16,7 @@ INSERT INTO songs (album_id, title, slug, track_number) VALUES
   ((SELECT id FROM albums WHERE slug = '18-juillet-2019'), 'Rendors-toi', 'rendors-toi', 5),
   ((SELECT id FROM albums WHERE slug = '57'), '13h20', '13h20', 1),
   ((SELECT id FROM albums WHERE slug = '57'), '30 vins divins', '30-vins-divins', 2),
-  ((SELECT id FROM albums WHERE slug = '57'), 'Sans indice dans les dés', 'sans-indice-dans-les-des', 3),
+  ((SELECT id FROM albums WHERE slug = '57'), 'Sans indices dans les dés', 'sans-indice-dans-les-des', 3),
   ((SELECT id FROM albums WHERE slug = '57'), 'Orange', 'orange', 4),
   ((SELECT id FROM albums WHERE slug = 'multivers'), 'Multivers', 'multivers', 1),
   ((SELECT id FROM albums WHERE slug = 'multivers'), 'Galaxies vivantes', 'galaxies-vivantes', 2),
