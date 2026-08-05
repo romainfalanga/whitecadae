@@ -21,7 +21,7 @@ INSERT INTO songs (album_id, title, slug, track_number) VALUES
   ((SELECT id FROM albums WHERE slug = 'multivers'), 'Multivers', 'multivers', 1),
   ((SELECT id FROM albums WHERE slug = 'multivers'), 'Galaxies vivantes', 'galaxies-vivantes', 2),
   ((SELECT id FROM albums WHERE slug = 'multivers'), 'Le cœur d''une galaxie', 'le-coeur-d-une-galaxie', 3),
-  ((SELECT id FROM albums WHERE slug = '114'), 'La matière dense', 'la-matiere-dense', 1),
+  ((SELECT id FROM albums WHERE slug = '114'), 'La matière danse', 'la-matiere-dense', 1),
   ((SELECT id FROM albums WHERE slug = '114'), 'Les probabilités', 'les-probabilites', 2),
   ((SELECT id FROM albums WHERE slug = '114'), 'Fais mieux', 'fais-mieux', 3),
   ((SELECT id FROM albums WHERE slug = 'double-sens'), 'Double sens', 'double-sens', 1),
