@@ -11,6 +11,7 @@ const state = {
   corpus: null, // {songs, lines} : toutes les phrases de tous les morceaux
   corpusDf: null, // fréquence documentaire des mots (moteur d'échos)
   builder: null, // constructeur d'interprétation d'ensemble en cours
+  sheetOpen: false, // feuille du bas ouverte (mobile)
 };
 
 /* ------------------------------------------------------------------ utils */
@@ -79,6 +80,13 @@ window.addEventListener('popstate', route);
 async function route() {
   window.scrollTo(0, 0);
   const path = location.pathname;
+  // toute navigation ferme la sélection en cours
+  state.sheetOpen = false;
+  document.body.classList.remove('sheet-open');
+  const bar = document.getElementById('sel-bar');
+  if (bar) bar.hidden = true;
+  const backdrop = document.getElementById('sheet-backdrop');
+  if (backdrop) backdrop.hidden = true;
   renderNav();
   let m;
   if (path === '/' || path === '') return pageHome();
@@ -215,6 +223,8 @@ async function pageSong(slug, keepSelection = false) {
     state.sel = null;
     state.openComments = new Set();
     state.builder = null;
+    state.sheetOpen = false;
+    document.body.classList.remove('sheet-open');
   }
   let data;
   try {
@@ -288,38 +298,316 @@ function passageText(startLineId, startIdx, endLineId, endIdx) {
   ].join(' / ');
 }
 
-// Déduit le passage sélectionné (glisser souris ou doigt) à partir de la
-// sélection native du navigateur.
-function passageFromSelection() {
-  const sel = window.getSelection();
-  if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
-  const range = sel.getRangeAt(0);
-  const words = [...document.querySelectorAll('.lyrics .w')].filter((w) => range.intersectsNode(w));
-  if (words.length < 2) return null;
-  const first = words[0];
-  const last = words[words.length - 1];
-  return {
-    startLine: Number(first.dataset.line), startIdx: Number(first.dataset.idx),
-    endLine: Number(last.dataset.line), endIdx: Number(last.dataset.idx),
-  };
+/* ------------------------------------------------- moteur de sélection ---
+   Sélection maison (aucune sélection native du navigateur) : on peint
+   directement les mots. Sur mobile, aucun menu système ne s'interpose, et
+   deux poignées permettent d'ajuster le début et la fin au mot près.       */
+
+const SEL = {
+  dragging: false,
+  anchor: null, // extrémité fixe {el, lineId, idx, pos}
+  focus: null, // extrémité qui suit le doigt / la souris
+  words: [], // index des mots affichés
+  painted: null, // dernière plage peinte, pour éviter les repeints inutiles
+  edgeTimer: null, // défilement automatique près des bords
+  edgeSpeed: 0,
+  edgeX: 0,
+  edgeY: 0,
+};
+
+function indexWords() {
+  SEL.words = [...document.querySelectorAll('.lyrics .w')].map((el) => ({
+    el,
+    lineId: Number(el.dataset.line),
+    idx: Number(el.dataset.idx),
+    pos: Number(el.dataset.pos),
+  }));
 }
 
-// Bouton flottant « Interpréter ce passage » : suit la sélection en cours.
-let selectionDebounce = null;
-document.addEventListener('selectionchange', () => {
-  const btn = document.getElementById('passage-float');
-  if (!btn) return;
-  clearTimeout(selectionDebounce);
-  selectionDebounce = setTimeout(() => {
-    const info = passageFromSelection();
-    if (!info) { btn.hidden = true; return; }
-    try {
-      const rect = window.getSelection().getRangeAt(0).getBoundingClientRect();
-      btn.style.top = `${window.scrollY + rect.bottom + 10}px`;
-      btn.style.left = `${window.scrollX + Math.max(12, rect.left)}px`;
-      btn.hidden = false;
-    } catch { btn.hidden = true; }
-  }, 250);
+function wordOf(el) {
+  return SEL.words.find((o) => o.el === el) || null;
+}
+
+// Mot sous le pointeur ; à défaut, le mot le plus proche — glisser dans une
+// marge ou un interligne continue d'étendre la sélection.
+function wordAtPoint(x, y) {
+  const el = document.elementFromPoint(x, y);
+  const hit = el && el.closest ? el.closest('.lyrics .w') : null;
+  if (hit) return wordOf(hit);
+  let best = null;
+  let bestDist = Infinity;
+  for (const o of SEL.words) {
+    const r = o.el.getBoundingClientRect();
+    const dx = x < r.left ? r.left - x : (x > r.right ? x - r.right : 0);
+    const dy = y < r.top ? r.top - y : (y > r.bottom ? y - r.bottom : 0);
+    const d = dy * 5 + dx; // la proximité verticale prime
+    if (d < bestDist) { bestDist = d; best = o; }
+  }
+  return best;
+}
+
+function paintLive() {
+  if (!SEL.anchor || !SEL.focus) return;
+  const lo = Math.min(SEL.anchor.pos, SEL.focus.pos);
+  const hi = Math.max(SEL.anchor.pos, SEL.focus.pos);
+  if (SEL.painted && SEL.painted[0] === lo && SEL.painted[1] === hi) return;
+  SEL.painted = [lo, hi];
+  for (const o of SEL.words) o.el.classList.toggle('sel-live', o.pos >= lo && o.pos <= hi);
+  positionHandles('.sel-live');
+}
+
+function clearLive() {
+  SEL.painted = null;
+  for (const o of SEL.words) o.el.classList.remove('sel-live');
+}
+
+// Défilement automatique quand on glisse près d'un bord : indispensable
+// pour sélectionner un passage plus long que l'écran.
+function edgeScroll(y) {
+  const MARGIN = 90;
+  const speed = y < MARGIN ? -(MARGIN - y) / 5
+    : (y > window.innerHeight - MARGIN ? (y - (window.innerHeight - MARGIN)) / 5 : 0);
+  if (!speed) { stopEdgeScroll(); return; }
+  SEL.edgeSpeed = speed;
+  SEL.edgeY = y;
+  if (SEL.edgeTimer) return;
+  SEL.edgeTimer = setInterval(() => {
+    if (!SEL.dragging) { stopEdgeScroll(); return; }
+    window.scrollBy(0, SEL.edgeSpeed);
+    const w = wordAtPoint(SEL.edgeX, SEL.edgeY);
+    if (w) { SEL.focus = w; paintLive(); }
+  }, 16);
+}
+
+function stopEdgeScroll() {
+  if (SEL.edgeTimer) { clearInterval(SEL.edgeTimer); SEL.edgeTimer = null; }
+}
+
+// Place les deux poignées aux extrémités des mots portant `selector`.
+function positionHandles(selector) {
+  const lyrics = document.querySelector('.lyrics');
+  const h1 = document.getElementById('sel-handle-start');
+  const h2 = document.getElementById('sel-handle-end');
+  if (!lyrics || !h1 || !h2) return;
+  const els = [...lyrics.querySelectorAll(selector)];
+  if (!els.length) { h1.hidden = true; h2.hidden = true; return; }
+  const base = lyrics.getBoundingClientRect();
+  const a = els[0].getBoundingClientRect();
+  const b = els[els.length - 1].getBoundingClientRect();
+  h1.style.left = `${a.left - base.left}px`;
+  h1.style.top = `${a.top - base.top}px`;
+  h1.style.height = `${a.height}px`;
+  h2.style.left = `${b.right - base.left}px`;
+  h2.style.top = `${b.top - base.top}px`;
+  h2.style.height = `${b.height}px`;
+  h1.hidden = false;
+  h2.hidden = false;
+}
+
+// Extrémités de la sélection validée, dans l'ordre du texte.
+function committedEnds() {
+  const els = [...document.querySelectorAll('.lyrics .selected-word')];
+  if (!els.length) return null;
+  const a = wordOf(els[0]);
+  const b = wordOf(els[els.length - 1]);
+  return a && b ? { a, b } : null;
+}
+
+function commitSelection() {
+  if (!SEL.anchor || !SEL.focus) return;
+  const [a, b] = SEL.anchor.pos <= SEL.focus.pos
+    ? [SEL.anchor, SEL.focus]
+    : [SEL.focus, SEL.anchor];
+  state.sel = a.lineId === b.lineId
+    ? { type: 'word', lineId: a.lineId, start: a.idx, end: b.idx }
+    : { type: 'passage', startLine: a.lineId, startIdx: a.idx, endLine: b.lineId, endIdx: b.idx };
+  renderSongPage();
+}
+
+function clearSelection() {
+  state.sel = null;
+  state.sheetOpen = false;
+  document.body.classList.remove('sheet-open');
+  renderSongPage();
+}
+
+function bindLyricsSelection() {
+  const lyrics = document.querySelector('.lyrics');
+  if (!lyrics) return;
+  indexWords();
+
+  const startFrom = (w, extend) => {
+    if (extend) {
+      const ends = committedEnds();
+      if (ends) {
+        // on garde l'extrémité la plus éloignée comme ancre
+        SEL.anchor = Math.abs(ends.a.pos - w.pos) >= Math.abs(ends.b.pos - w.pos) ? ends.a : ends.b;
+      } else {
+        SEL.anchor = w;
+      }
+    } else {
+      SEL.anchor = w;
+    }
+    SEL.focus = w;
+    SEL.painted = null;
+    SEL.dragging = true;
+    paintLive();
+  };
+
+  lyrics.addEventListener('pointerdown', (e) => {
+    const el = e.target.closest && e.target.closest('.w');
+    if (!el) return;
+    const w = wordOf(el);
+    if (!w) return;
+    if (e.pointerType !== 'touch') {
+      e.preventDefault();
+      try { lyrics.setPointerCapture(e.pointerId); } catch { /* ignoré */ }
+    }
+    startFrom(w, e.shiftKey);
+  });
+
+  lyrics.addEventListener('pointermove', (e) => {
+    if (!SEL.dragging) return;
+    SEL.edgeX = e.clientX;
+    edgeScroll(e.clientY);
+    const w = wordAtPoint(e.clientX, e.clientY);
+    if (w) { SEL.focus = w; paintLive(); }
+  });
+
+  const finish = () => {
+    stopEdgeScroll();
+    if (!SEL.dragging) return;
+    SEL.dragging = false;
+    commitSelection();
+  };
+  lyrics.addEventListener('pointerup', finish);
+  lyrics.addEventListener('pointercancel', () => {
+    stopEdgeScroll();
+    SEL.dragging = false;
+    clearLive();
+    positionHandles('.selected-word');
+  });
+
+  // double-clic / double-tap : toute la phrase
+  lyrics.addEventListener('dblclick', (e) => {
+    const el = e.target.closest && e.target.closest('.w');
+    if (!el) return;
+    state.sel = { type: 'line', lineId: Number(el.dataset.line) };
+    renderSongPage();
+  });
+
+  // poignées d'ajustement
+  for (const side of ['start', 'end']) {
+    const h = document.getElementById(`sel-handle-${side}`);
+    if (!h) continue;
+    h.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const ends = committedEnds();
+      if (!ends) return;
+      SEL.anchor = side === 'start' ? ends.b : ends.a;
+      SEL.focus = side === 'start' ? ends.a : ends.b;
+      SEL.painted = null;
+      SEL.dragging = true;
+      try { h.setPointerCapture(e.pointerId); } catch { /* ignoré */ }
+      paintLive();
+    });
+    h.addEventListener('pointermove', (e) => {
+      if (!SEL.dragging) return;
+      SEL.edgeX = e.clientX;
+      edgeScroll(e.clientY);
+      const w = wordAtPoint(e.clientX, e.clientY);
+      if (w) { SEL.focus = w; paintLive(); }
+    });
+    h.addEventListener('pointerup', finish);
+  }
+}
+
+/* ------------------------------------- barre d'action et feuille du bas */
+
+function selectionQuote() {
+  const sel = state.sel;
+  if (!sel) return '';
+  if (sel.type === 'passage') return passageText(sel.startLine, sel.startIdx, sel.endLine, sel.endIdx);
+  const line = state.song.lines.find((l) => l.id === sel.lineId);
+  if (!line) return '';
+  if (sel.type === 'line') return line.text;
+  return tokens(line.text).slice(sel.start, sel.end + 1).join(' ');
+}
+
+function renderSelectionUI() {
+  positionHandles('.selected-word');
+
+  let bar = document.getElementById('sel-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'sel-bar';
+    document.body.appendChild(bar);
+  }
+  const sel = state.sel;
+  const isText = sel && ['word', 'line', 'passage'].includes(sel.type);
+  if (!isText) {
+    bar.hidden = true;
+    document.body.classList.remove('sheet-open');
+    return;
+  }
+
+  const quote = selectionQuote();
+  const short = quote.length > 90 ? quote.slice(0, 87) + '…' : quote;
+  const nWords = sel.type === 'line' ? 0 : quote.split(/\s+/).length;
+  const label = sel.type === 'line' ? 'Phrase'
+    : (sel.type === 'passage' ? 'Passage' : (nWords > 1 ? `${nWords} mots` : 'Mot'));
+  bar.innerHTML = `
+    <div class="sel-bar-text">
+      <span class="sel-bar-kind">${esc(label)}</span>
+      <span class="sel-bar-quote">« ${esc(short)} »</span>
+    </div>
+    <button class="primary" id="sel-bar-go">✍ Interpréter</button>
+    <button class="link-btn" id="sel-bar-clear" title="Annuler la sélection">✕</button>`;
+  bar.hidden = false;
+
+  document.getElementById('sel-bar-clear').onclick = clearSelection;
+  document.getElementById('sel-bar-go').onclick = () => openInterpretation();
+
+  if (state.sheetOpen) document.body.classList.add('sheet-open');
+  ensureSheetChrome();
+}
+
+function openInterpretation() {
+  const panel = document.getElementById('panel');
+  if (!panel) return;
+  if (window.matchMedia('(max-width: 900px)').matches) {
+    state.sheetOpen = true;
+    document.body.classList.add('sheet-open');
+    ensureSheetChrome();
+  } else {
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  const ta = panel.querySelector('textarea');
+  if (ta) setTimeout(() => ta.focus({ preventScroll: true }), 120);
+}
+
+function ensureSheetChrome() {
+  let backdrop = document.getElementById('sheet-backdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'sheet-backdrop';
+    backdrop.onclick = () => {
+      state.sheetOpen = false;
+      document.body.classList.remove('sheet-open');
+      renderSelectionUI();
+    };
+    document.body.appendChild(backdrop);
+  }
+  backdrop.hidden = !state.sheetOpen;
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && state.sel) clearSelection();
+});
+
+window.addEventListener('resize', () => {
+  if (state.song && state.sel) positionHandles('.selected-word');
 });
 
 function countFor(type) {
@@ -350,7 +638,7 @@ function renderSongPage() {
             const pos = line.line_number * 1000 + i;
             if (pos >= selRange[0] && pos <= selRange[1]) { classes.push('selected-word'); lineInPassage = true; }
           }
-          return `<span class="${classes.join(' ')}" data-line="${line.id}" data-idx="${i}">${esc(tok)}</span>`;
+          return `<span class="${classes.join(' ')}" data-line="${line.id}" data-idx="${i}" data-pos="${line.line_number * 1000 + i}">${esc(tok)}</span>`;
         }).join(' ');
         const lineClasses = ['lyric-line'];
         if (lineHasNote(line.id)) lineClasses.push('has-line-note');
@@ -361,10 +649,13 @@ function renderSongPage() {
           <button class="line-note-btn ${isSelLine && sel.type === 'line' ? 'active' : ''}"
                   data-line-btn="${line.id}" title="Interpréter cette phrase">&#128172;</button>
         </div>`;
-      }).join('')}</div>
-      <p class="hint">Cliquez sur un mot pour l’interpréter (Maj+clic pour un groupe de mots), sur &#128172; pour la phrase entière,
-      ou <strong>sélectionnez un passage au glisser</strong> (souris ou doigt), même à cheval sur plusieurs phrases.</p>
-      <button id="passage-float" hidden>&#128172; Interpréter ce passage</button>`
+      }).join('')}
+        <span id="sel-handle-start" class="sel-handle sel-handle-start" hidden></span>
+        <span id="sel-handle-end" class="sel-handle sel-handle-end" hidden></span>
+      </div>
+      <p class="hint">Appuyez sur un mot, puis <strong>faites glisser les poignées</strong> pour étendre la sélection
+      au passage exact — même à cheval sur plusieurs phrases. Glisser directement sur le texte fonctionne aussi,
+      et un double-clic sélectionne toute la phrase.</p>`
     : `<div class="no-lyrics">Les paroles de « ${esc(song.title)} » seront bientôt disponibles.</div>`;
 
   app.innerHTML = `
@@ -392,48 +683,8 @@ function renderSongPage() {
       <aside class="side-panel" id="panel"></aside>
     </div>`;
 
-  // Bouton flottant de sélection de passage
-  const floatBtn = document.getElementById('passage-float');
-  if (floatBtn) {
-    floatBtn.onpointerdown = (e) => {
-      e.preventDefault();
-      const info = passageFromSelection();
-      if (!info) { floatBtn.hidden = true; return; }
-      window.getSelection().removeAllRanges();
-      if (info.startLine === info.endLine) {
-        state.sel = { type: 'word', lineId: info.startLine, start: info.startIdx, end: info.endIdx };
-      } else {
-        state.sel = { type: 'passage', ...info };
-      }
-      renderSongPage();
-    };
-  }
+  bindLyricsSelection();
 
-  // Interactions sur les paroles
-  app.querySelectorAll('.w').forEach((span) => {
-    span.onclick = (e) => {
-      const nativeSel = window.getSelection();
-      if (nativeSel && !nativeSel.isCollapsed) {
-        // Maj+clic étend la sélection native : on l'efface et on garde le
-        // comportement mot-à-mot ; un vrai glisser, lui, est laissé au
-        // bouton flottant « Interpréter ce passage ».
-        if (e.shiftKey) nativeSel.removeAllRanges();
-        else return;
-      }
-      const lineId = Number(span.dataset.line);
-      const idx = Number(span.dataset.idx);
-      if (e.shiftKey && state.sel && state.sel.type === 'word' && state.sel.lineId === lineId) {
-        state.sel = {
-          type: 'word', lineId,
-          start: Math.min(state.sel.start, idx),
-          end: Math.max(state.sel.end, idx),
-        };
-      } else {
-        state.sel = { type: 'word', lineId, start: idx, end: idx };
-      }
-      renderSongPage();
-    };
-  });
   app.querySelectorAll('[data-line-btn]').forEach((btn) => {
     btn.onclick = () => {
       const lineId = Number(btn.dataset.lineBtn);
@@ -455,6 +706,7 @@ function renderSongPage() {
   renderPanel();
   renderEssays();
   renderConnections();
+  renderSelectionUI();
 }
 
 /* ----------------------------------- interprétations d'ensemble (essais) */
@@ -1186,7 +1438,7 @@ function renderPanel() {
   panel.innerHTML = html;
   for (const [id, payload] of forms) bindAnnotationForm(id, payload);
   const clear = document.getElementById('clear-sel');
-  if (clear) clear.onclick = () => { state.sel = null; renderSongPage(); };
+  if (clear) clear.onclick = clearSelection;
   bindAnnotationActions(panel);
   bindSocial(panel);
 }

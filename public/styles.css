@@ -293,19 +293,147 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .comment-form textarea { margin-top: 0.4rem; min-height: 54px; font-size: 0.9rem; }
 .comment-form button { margin-top: 0.4rem; font-size: 0.85rem; padding: 0.3rem 0.8rem; }
 
-/* ---------------------------------------------------- passage flottant */
+/* ------------------------------------------------ sélection de passages */
 
-#passage-float {
-  position: absolute;
-  z-index: 30;
-  background: var(--accent);
-  color: #17130a;
-  border: none;
-  font-weight: 600;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+.lyrics {
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: pan-y; /* le défilement vertical reste naturel */
 }
 
-.lyrics { user-select: text; -webkit-user-select: text; }
+.w { cursor: text; }
+
+/* mots peints pendant le glisser */
+.w.sel-live {
+  background: var(--accent);
+  color: #17130a;
+  border-radius: 3px;
+}
+
+/* poignées d'ajustement (début / fin) */
+.sel-handle {
+  position: absolute;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 2px;
+  z-index: 15;
+  touch-action: none; /* la poignée ne fait jamais défiler la page */
+  cursor: ew-resize;
+}
+.sel-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+}
+.sel-handle-start::after { top: -22px; }
+.sel-handle-end::after { bottom: -22px; }
+/* cible tactile élargie, invisible */
+.sel-handle::before {
+  content: '';
+  position: absolute;
+  left: -18px;
+  right: -18px;
+  top: -26px;
+  bottom: -26px;
+}
+
+/* ------------------------------------------------------- barre d'action */
+
+#sel-bar {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  width: min(680px, calc(100vw - 1.5rem));
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 0.7rem 0.9rem;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.6);
+  animation: sel-bar-in 0.16s ease-out;
+}
+@keyframes sel-bar-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+#sel-bar[hidden] { display: none; }
+.sel-bar-text { flex: 1; min-width: 0; }
+.sel-bar-kind {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+.sel-bar-quote {
+  display: block;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.92rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#sel-bar button { white-space: nowrap; }
+#sel-bar .primary { padding: 0.5rem 1rem; }
+
+/* ------------------------------------------------- feuille du bas (mobile) */
+
+#sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 65;
+}
+#sheet-backdrop[hidden] { display: none; }
+
+@media (max-width: 900px) {
+  body.sheet-open .side-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 70;
+    max-height: 78vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--bg-soft);
+    border-top: 1px solid var(--accent);
+    border-radius: 18px 18px 0 0;
+    padding: 1.5rem 1rem calc(1.25rem + env(safe-area-inset-bottom));
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.7);
+    animation: sheet-in 0.2s ease-out;
+  }
+  body.sheet-open .side-panel::before {
+    content: '';
+    position: absolute;
+    top: 0.6rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 42px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+  }
+  @keyframes sheet-in {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  body.sheet-open #sel-bar { display: none; }
+  #sel-bar { bottom: calc(0.75rem + env(safe-area-inset-bottom)); }
+}
 
 /* -------------------------------------------------- profils & le livre */
 
