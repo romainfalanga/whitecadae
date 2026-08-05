@@ -44,7 +44,8 @@ async function handleApi(request, env, url) {
   if (route('GET', '/api/albums')) return listAlbums(env);
   if (route('GET', '/api/corpus')) return getCorpus(env);
   if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
-  if ((p = route('GET', '/api/users/:username'))) return getProfile(env, p[0]);
+  if ((p = route('GET', '/api/users/:username/avatar'))) return getAvatar(env, p[0]);
+  if ((p = route('GET', '/api/users/:username'))) return getProfile(env, request, p[0]);
 
   // --- contributions (connecté)
   if (route('POST', '/api/annotations')) return createAnnotation(request, env);
@@ -58,6 +59,10 @@ async function handleApi(request, env, url) {
   if (route('POST', '/api/favorites')) return toggleFavorite(request, env);
   if (route('POST', '/api/comments')) return createComment(request, env);
   if ((p = route('DELETE', '/api/comments/:id'))) return deleteComment(request, env, +p[0]);
+  if (route('POST', '/api/profile/publish')) return publishVersion(request, env);
+  if (route('PUT', '/api/account/username')) return updateUsername(request, env);
+  if (route('PUT', '/api/account/password')) return updatePassword(request, env);
+  if (route('POST', '/api/account/avatar')) return updateAvatar(request, env);
 
   // --- administration
   if (route('POST', '/api/admin/albums')) return adminCreateAlbum(request, env);
@@ -125,6 +130,13 @@ async function verifyPassword(password, stored) {
 
 function newToken() {
   return toHex(crypto.getRandomValues(new Uint8Array(32)));
+}
+
+function fromBase64(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
 }
 
 function getCookie(request, name) {
@@ -326,14 +338,15 @@ async function getCorpus(env) {
   ).all()).results;
 
   // Nombre d'interprétations couvrant chaque phrase : une référence interne
-  // ne peut viser qu'un passage déjà interprété.
+  // ne peut viser qu'un passage déjà interprété — et publié, puisqu'une
+  // référence relie une lecture publique à une autre lecture publique.
   const spans = (await env.DB.prepare(
     `SELECT a.song_id, ls.line_number AS from_no,
             COALESCE(le.line_number, ls.line_number) AS to_no
        FROM annotations a
        JOIN lyric_lines ls ON ls.id = a.line_id
        LEFT JOIN lyric_lines le ON le.id = a.end_line_id
-      WHERE a.line_id IS NOT NULL`
+      WHERE a.line_id IS NOT NULL AND a.is_published = 1`
   ).all()).results;
 
   // tableau de différences par morceau : O(phrases + interprétations)
@@ -390,6 +403,11 @@ async function listAlbums(env) {
 }
 
 async function getSong(env, request, slug) {
+  // Une interprétation non publiée n'est visible que par son auteur : le
+  // reste du monde ne voit que ce qui a été intégré à une version publiée.
+  const viewer = await getUser(request, env);
+  const viewerId = viewer ? viewer.id : 0;
+
   const song = await env.DB.prepare(
     `SELECT s.id, s.title, s.slug, s.track_number, s.youtube_url, s.duration_seconds, s.album_id,
             al.title AS album_title, al.slug AS album_slug
@@ -404,10 +422,11 @@ async function getSong(env, request, slug) {
 
   const annotations = (await env.DB.prepare(
     `SELECT a.id, a.user_id, a.target_type, a.line_id, a.word_start, a.word_end, a.end_line_id,
-            a.content, a.created_at, a.updated_at, u.username
+            a.content, a.created_at, a.updated_at, a.is_published, u.username
        FROM annotations a JOIN users u ON u.id = a.user_id
-      WHERE a.song_id = ?1 ORDER BY a.created_at`
-  ).bind(song.id).all()).results;
+      WHERE a.song_id = ?1 AND (a.is_published = 1 OR a.user_id = ?2)
+      ORDER BY a.created_at`
+  ).bind(song.id, viewerId).all()).results;
 
   const connections = (await env.DB.prepare(
     `SELECT c.id, c.song_a_id, c.song_b_id, c.explanation, c.created_at, c.user_id,
@@ -429,7 +448,7 @@ async function getSong(env, request, slug) {
   // Grilles de lecture venues d'autres morceaux : les interprétations
   // écrites ailleurs qui référencent un passage de ce morceau-ci.
   const inbound = (await env.DB.prepare(
-    `SELECT a.id, a.user_id, a.content, a.created_at, a.updated_at, u.username,
+    `SELECT a.id, a.user_id, a.content, a.created_at, a.updated_at, a.is_published, u.username,
             a.target_type, a.word_start, a.word_end,
             r.ref_line_id, r.ref_end_line_id,
             rl.text AS ref_text, rl.line_number AS ref_line_number,
@@ -444,16 +463,17 @@ async function getSong(env, request, slug) {
        LEFT JOIN lyric_lines rle ON rle.id = r.ref_end_line_id
        LEFT JOIN lyric_lines sl ON sl.id = a.line_id
        LEFT JOIN lyric_lines sle ON sle.id = a.end_line_id
-      WHERE r.ref_song_id = ?1 AND a.song_id <> ?1
+      WHERE r.ref_song_id = ?1 AND a.song_id <> ?1 AND (a.is_published = 1 OR a.user_id = ?2)
       ORDER BY a.created_at`
-  ).bind(song.id).all()).results;
+  ).bind(song.id, viewerId).all()).results;
 
   // Interprétations d'ensemble et leurs connexions entre blocs.
   const essays = (await env.DB.prepare(
-    `SELECT e.id, e.user_id, e.content, e.created_at, e.updated_at, u.username
+    `SELECT e.id, e.user_id, e.content, e.created_at, e.updated_at, e.is_published, u.username
        FROM essays e JOIN users u ON u.id = e.user_id
-      WHERE e.song_id = ?1 ORDER BY e.created_at`
-  ).bind(song.id).all()).results;
+      WHERE e.song_id = ?1 AND (e.is_published = 1 OR e.user_id = ?2)
+      ORDER BY e.created_at`
+  ).bind(song.id, viewerId).all()).results;
   const essayLinks = (await env.DB.prepare(
     `SELECT el.id, el.essay_id, el.note,
             el.from_line_id, el.from_word_start, el.from_word_end,
@@ -484,7 +504,6 @@ async function getSong(env, request, slug) {
   }
 
   // Données sociales : favoris et commentaires des interprétations et connexions.
-  const viewer = await getUser(request, env);
   await attachSocial(env, viewer, 'annotation',
     `SELECT id FROM annotations WHERE song_id = ${song.id}`, annotations);
   await attachSocial(env, viewer, 'connection',
@@ -529,16 +548,21 @@ async function attachSocial(env, viewer, kind, idSubquery, items) {
 
 /* ----------------------------------------------------- profils & le livre */
 
-// Profil public d'un membre : ses contributions assemblées en « livre »,
-// dans l'ordre des albums puis des morceaux puis de la position dans le texte.
-async function getProfile(env, username) {
+// Profil public d'un membre : ses contributions assemblées morceau par
+// morceau, dans l'ordre des albums puis des morceaux puis de la position
+// dans le texte. Un visiteur ne voit que ce que le membre a publié ; le
+// membre lui-même voit aussi ses brouillons en attente de publication.
+async function getProfile(env, request, username) {
   const user = await env.DB.prepare(
     'SELECT id, username, created_at, is_admin FROM users WHERE username = ?1 COLLATE NOCASE'
   ).bind(username).first();
   if (!user) return json({ error: 'Membre introuvable.' }, 404);
 
+  const viewer = await getUser(request, env);
+  const isOwner = viewer && viewer.id === user.id ? 1 : 0;
+
   const annotations = (await env.DB.prepare(
-    `SELECT a.id, a.target_type, a.content, a.created_at, a.updated_at,
+    `SELECT a.id, a.target_type, a.content, a.created_at, a.updated_at, a.is_published,
             a.line_id, a.word_start, a.word_end, a.end_line_id,
             s.id AS song_id, s.title AS song_title, s.slug AS song_slug,
             s.track_number, s.duration_seconds,
@@ -550,11 +574,11 @@ async function getProfile(env, username) {
        LEFT JOIN albums al ON al.id = s.album_id
        LEFT JOIN lyric_lines l ON l.id = a.line_id
        LEFT JOIN lyric_lines le ON le.id = a.end_line_id
-      WHERE a.user_id = ?1
+      WHERE a.user_id = ?1 AND (a.is_published = 1 OR ?2 = 1)
       ORDER BY album_position, s.track_number,
                CASE WHEN a.line_id IS NULL THEN 0 ELSE 1 END,
                COALESCE(l.line_number, 0), COALESCE(a.word_start, -1), a.created_at`
-  ).bind(user.id).all()).results;
+  ).bind(user.id, isOwner).all()).results;
 
   const refs = (await env.DB.prepare(
     `SELECT r.id, r.annotation_id, r.label, r.url,
@@ -567,15 +591,15 @@ async function getProfile(env, username) {
   for (const a of annotations) a.references = refs.filter((r) => r.annotation_id === a.id);
 
   const essays = (await env.DB.prepare(
-    `SELECT e.id, e.content, e.created_at, e.updated_at,
+    `SELECT e.id, e.content, e.created_at, e.updated_at, e.is_published,
             s.id AS song_id, s.title AS song_title, s.slug AS song_slug, s.track_number,
             COALESCE(al.position, 999) AS album_position, al.title AS album_title
        FROM essays e
        JOIN songs s ON s.id = e.song_id
        LEFT JOIN albums al ON al.id = s.album_id
-      WHERE e.user_id = ?1
+      WHERE e.user_id = ?1 AND (e.is_published = 1 OR ?2 = 1)
       ORDER BY album_position, s.track_number, e.created_at`
-  ).bind(user.id).all()).results;
+  ).bind(user.id, isOwner).all()).results;
   const essayLinks = (await env.DB.prepare(
     `SELECT el.essay_id, el.note,
             el.from_word_start, el.from_word_end, el.to_word_start, el.to_word_end,
@@ -601,12 +625,16 @@ async function getProfile(env, username) {
       WHERE c.user_id = ?1 ORDER BY c.created_at`
   ).bind(user.id).all()).results;
 
+  // Les compteurs publics ne portent que sur ce qui a été publié ; le nombre
+  // de brouillons en attente est renvoyé à part (n'a de sens que pour l'auteur).
   const stats = await env.DB.prepare(
     `SELECT
-       (SELECT COUNT(*) FROM annotations WHERE user_id = ?1) AS annotations,
-       (SELECT COUNT(*) FROM essays WHERE user_id = ?1) AS essays,
+       (SELECT COUNT(*) FROM annotations WHERE user_id = ?1 AND is_published = 1) AS annotations,
+       (SELECT COUNT(*) FROM essays WHERE user_id = ?1 AND is_published = 1) AS essays,
        (SELECT COUNT(*) FROM song_connections WHERE user_id = ?1) AS connections,
        (SELECT COUNT(*) FROM comments WHERE user_id = ?1) AS comments,
+       (SELECT COUNT(*) FROM annotations WHERE user_id = ?1 AND is_published = 0) +
+       (SELECT COUNT(*) FROM essays WHERE user_id = ?1 AND is_published = 0) AS draft_count,
        (SELECT COUNT(*) FROM favorites f WHERE f.target_kind = 'annotation'
           AND f.target_id IN (SELECT id FROM annotations WHERE user_id = ?1)) +
        (SELECT COUNT(*) FROM favorites f WHERE f.target_kind = 'essay'
@@ -615,9 +643,18 @@ async function getProfile(env, username) {
           AND f.target_id IN (SELECT id FROM song_connections WHERE user_id = ?1)) AS favorites_received`
   ).bind(user.id).first();
 
+  // Historique des publications : les versions successives, la plus récente
+  // en tête, avec le nombre de blocs qu'elle a rendus publics.
+  const versions = (await env.DB.prepare(
+    `SELECT v.id, v.number, v.published_at,
+            (SELECT COUNT(*) FROM annotations WHERE version_id = v.id) +
+            (SELECT COUNT(*) FROM essays WHERE version_id = v.id) AS item_count
+       FROM versions v WHERE v.user_id = ?1 ORDER BY v.number DESC`
+  ).bind(user.id).all()).results;
+
   return json({
     user: { username: user.username, created_at: user.created_at, is_admin: !!user.is_admin },
-    stats, annotations, essays, connections,
+    stats, annotations, essays, connections, versions,
   });
 }
 
@@ -692,9 +729,11 @@ async function createAnnotation(request, env) {
   const refs = await parseReferences(env, body.references);
   if (refs instanceof Response) return refs;
 
+  // Toute nouvelle interprétation naît en brouillon privé : elle ne devient
+  // visible des autres que lorsque son auteur publie une nouvelle version.
   const result = await env.DB.prepare(
-    `INSERT INTO annotations (user_id, song_id, target_type, line_id, word_start, word_end, end_line_id, content)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+    `INSERT INTO annotations (user_id, song_id, target_type, line_id, word_start, word_end, end_line_id, content, is_published, version_id)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, NULL)`
   ).bind(user.id, songId, targetType, lineId, wordStart, wordEnd, endLineId, content).run();
 
   const annotationId = result.meta.last_row_id;
@@ -719,8 +758,10 @@ async function updateAnnotation(request, env, id) {
   const refs = await parseReferences(env, body.references);
   if (refs instanceof Response) return refs;
 
+  // Toute modification repasse l'interprétation en brouillon : elle
+  // redevient invisible pour les autres jusqu'à la prochaine publication.
   await env.DB.prepare(
-    `UPDATE annotations SET content = ?1, updated_at = datetime('now') WHERE id = ?2`
+    `UPDATE annotations SET content = ?1, updated_at = datetime('now'), is_published = 0, version_id = NULL WHERE id = ?2`
   ).bind(content, id).run();
   if (body.references !== undefined) await replaceReferences(env, id, refs);
   return json({ ok: true });
@@ -857,7 +898,7 @@ async function createEssay(request, env) {
   if (links instanceof Response) return links;
 
   const result = await env.DB.prepare(
-    'INSERT INTO essays (song_id, user_id, content) VALUES (?1, ?2, ?3)'
+    'INSERT INTO essays (song_id, user_id, content, is_published, version_id) VALUES (?1, ?2, ?3, 0, NULL)'
   ).bind(songId, user.id, content).run();
   const essayId = result.meta.last_row_id;
   if (links.length) await replaceEssayLinks(env, essayId, links);
@@ -883,7 +924,7 @@ async function updateEssay(request, env, id) {
   if (links instanceof Response) return links;
 
   await env.DB.prepare(
-    `UPDATE essays SET content = ?1, updated_at = datetime('now') WHERE id = ?2`
+    `UPDATE essays SET content = ?1, updated_at = datetime('now'), is_published = 0, version_id = NULL WHERE id = ?2`
   ).bind(content, id).run();
   if (body.links !== undefined) await replaceEssayLinks(env, id, links);
   return json({ ok: true });
@@ -904,6 +945,119 @@ async function deleteEssay(request, env, id) {
     env.DB.prepare('DELETE FROM essays WHERE id = ?1').bind(id),
   ]);
   return json({ ok: true });
+}
+
+/* ------------------------------------------------------------- publication */
+
+// Rend publiques toutes les interprétations et interprétations d'ensemble
+// actuellement en brouillon pour ce membre, regroupées en une nouvelle version.
+async function publishVersion(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const pending = await env.DB.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM annotations WHERE user_id = ?1 AND is_published = 0) +
+       (SELECT COUNT(*) FROM essays WHERE user_id = ?1 AND is_published = 0) AS n`
+  ).bind(user.id).first();
+  if (!pending.n) return json({ error: 'Aucune modification en attente de publication.' }, 400);
+
+  const last = await env.DB.prepare(
+    'SELECT COALESCE(MAX(number), 0) AS n FROM versions WHERE user_id = ?1'
+  ).bind(user.id).first();
+  const number = last.n + 1;
+
+  const result = await env.DB.prepare(
+    'INSERT INTO versions (user_id, number) VALUES (?1, ?2)'
+  ).bind(user.id, number).run();
+  const versionId = result.meta.last_row_id;
+
+  await env.DB.batch([
+    env.DB.prepare(
+      'UPDATE annotations SET is_published = 1, version_id = ?1 WHERE user_id = ?2 AND is_published = 0'
+    ).bind(versionId, user.id),
+    env.DB.prepare(
+      'UPDATE essays SET is_published = 1, version_id = ?1 WHERE user_id = ?2 AND is_published = 0'
+    ).bind(versionId, user.id),
+  ]);
+
+  const version = await env.DB.prepare(
+    'SELECT id, number, published_at FROM versions WHERE id = ?1'
+  ).bind(versionId).first();
+  return json({ version, count: pending.n }, 201);
+}
+
+/* ------------------------------------------------------------------ compte */
+
+async function updateUsername(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const body = await readJson(request);
+  const username = String((body && body.username) || '').trim();
+  if (!/^[\p{L}\p{N} _.-]{3,30}$/u.test(username)) {
+    return json({ error: 'Le pseudo doit faire entre 3 et 30 caractères (lettres, chiffres, espaces, . _ -).' }, 400);
+  }
+  if (username === user.username) return json({ ok: true, username });
+
+  const existing = await env.DB.prepare(
+    'SELECT id FROM users WHERE username = ?1 COLLATE NOCASE AND id <> ?2'
+  ).bind(username, user.id).first();
+  if (existing) return json({ error: 'Ce pseudo est déjà pris.' }, 409);
+
+  await env.DB.prepare('UPDATE users SET username = ?1 WHERE id = ?2').bind(username, user.id).run();
+  return json({ ok: true, username });
+}
+
+async function updatePassword(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const body = await readJson(request);
+  const current = String((body && body.current_password) || '');
+  const next = String((body && body.new_password) || '');
+  if (next.length < 8) return json({ error: 'Le nouveau mot de passe doit faire au moins 8 caractères.' }, 400);
+
+  const row = await env.DB.prepare('SELECT password_hash FROM users WHERE id = ?1').bind(user.id).first();
+  if (!row || !(await verifyPassword(current, row.password_hash))) {
+    return json({ error: 'Mot de passe actuel incorrect.' }, 401);
+  }
+
+  const hash = await hashPassword(next);
+  await env.DB.prepare('UPDATE users SET password_hash = ?1 WHERE id = ?2').bind(hash, user.id).run();
+  return json({ ok: true });
+}
+
+// La photo est recadrée en carré et compressée côté client avant l'envoi :
+// on ne stocke jamais un fichier brut potentiellement lourd.
+async function updateAvatar(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const body = await readJson(request);
+  const dataUrl = String((body && body.data) || '');
+  const m = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,([a-zA-Z0-9+/=]+)$/);
+  if (!m) return json({ error: 'Image invalide.' }, 400);
+  const [, mime, base64] = m;
+  if (base64.length > 1_500_000) return json({ error: 'Image trop lourde.' }, 400);
+
+  await env.DB.prepare(
+    'UPDATE users SET avatar_data = ?1, avatar_mime = ?2 WHERE id = ?3'
+  ).bind(base64, mime, user.id).run();
+  return json({ ok: true });
+}
+
+async function getAvatar(env, username) {
+  const user = await env.DB.prepare(
+    'SELECT avatar_data, avatar_mime FROM users WHERE username = ?1 COLLATE NOCASE'
+  ).bind(username).first();
+  if (!user || !user.avatar_data) return new Response('', { status: 404 });
+  return new Response(fromBase64(user.avatar_data), {
+    headers: {
+      'Content-Type': user.avatar_mime || 'image/jpeg',
+      'Cache-Control': 'public, max-age=600',
+    },
+  });
 }
 
 /* ------------------------------------------------- favoris & commentaires */

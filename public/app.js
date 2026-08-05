@@ -115,6 +115,7 @@ async function route() {
   if (bar) bar.hidden = true;
   const backdrop = document.getElementById('sheet-backdrop');
   if (backdrop) backdrop.hidden = true;
+  closeSettings();
   renderNav();
   let m;
   if (path === '/' || path === '') return pageHome();
@@ -132,6 +133,197 @@ function profileHref(username) {
 
 function authorLink(username) {
   return `<a class="annotation-author" href="${profileHref(username)}" data-link>${esc(username)}</a>`;
+}
+
+/* -------------------------------------------------------------- compte --- */
+
+function avatarHref(username) {
+  return `/api/users/${encodeURIComponent(username)}/avatar`;
+}
+
+const DEFAULT_AVATAR = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+  '<rect width="100" height="100" fill="#23232b"/>' +
+  '<circle cx="50" cy="40" r="18" fill="#4c4c56"/>' +
+  '<rect x="18" y="64" width="64" height="32" rx="16" fill="#4c4c56"/></svg>'
+);
+
+function avatarImg(username, className) {
+  return `<img class="${className}" src="${avatarHref(username)}" alt=""
+    onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}'">`;
+}
+
+// Recadre l'image en carré (centré) et la compresse en JPEG avant l'envoi :
+// on ne transmet jamais un fichier brut potentiellement lourd au serveur.
+function resizeImageToDataUrl(file, size, quality) {
+  return new Promise((resolve, reject) => {
+    if (!file.type || !file.type.startsWith('image/')) {
+      reject(new Error('Choisissez un fichier image.'));
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      reject(new Error('Image trop lourde (8 Mo maximum).'));
+      return;
+    }
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const side = Math.min(img.width, img.height);
+      const sx = (img.width - side) / 2;
+      const sy = (img.height - side) / 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image invalide.')); };
+    img.src = url;
+  });
+}
+
+function ensureSettingsChrome() {
+  let backdrop = document.getElementById('settings-backdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'settings-backdrop';
+    backdrop.className = 'modal-backdrop';
+    backdrop.hidden = true;
+    backdrop.onclick = closeSettings;
+    document.body.appendChild(backdrop);
+  }
+  let modal = document.getElementById('settings-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'settings-modal';
+    modal.className = 'modal';
+    modal.hidden = true;
+    document.body.appendChild(modal);
+  }
+  return { backdrop, modal };
+}
+
+function closeSettings() {
+  const backdrop = document.getElementById('settings-backdrop');
+  const modal = document.getElementById('settings-modal');
+  if (backdrop) backdrop.hidden = true;
+  if (modal) modal.hidden = true;
+}
+
+function openSettings() {
+  const user = state.user;
+  if (!user) return;
+  const { backdrop, modal } = ensureSettingsChrome();
+
+  modal.innerHTML = `
+    <button type="button" class="link-btn modal-close" id="settings-close" aria-label="Fermer">✕</button>
+    <h2>Paramètres du compte</h2>
+
+    <section class="settings-section">
+      <h3>Photo de profil</h3>
+      <div class="settings-avatar-row">
+        ${avatarImg(user.username, 'settings-avatar-preview')}
+        <label class="btn" for="avatar-input">Changer la photo</label>
+        <input type="file" id="avatar-input" accept="image/*" hidden>
+      </div>
+      <div class="error-msg" id="avatar-error"></div>
+    </section>
+
+    <section class="settings-section">
+      <h3>Pseudo</h3>
+      <form id="username-form">
+        <input id="username-input" value="${esc(user.username)}" required minlength="3" maxlength="30">
+        <div class="error-msg" id="username-error"></div>
+        <div class="success-msg" id="username-success"></div>
+        <button type="submit" class="primary">Enregistrer</button>
+      </form>
+    </section>
+
+    <section class="settings-section">
+      <h3>Mot de passe</h3>
+      <form id="password-form">
+        <label for="pwd-current">Mot de passe actuel</label>
+        <input type="password" id="pwd-current" required autocomplete="current-password">
+        <label for="pwd-new">Nouveau mot de passe <small>(8 caractères minimum)</small></label>
+        <input type="password" id="pwd-new" required minlength="8" autocomplete="new-password">
+        <div class="error-msg" id="password-error"></div>
+        <div class="success-msg" id="password-success"></div>
+        <button type="submit" class="primary">Changer le mot de passe</button>
+      </form>
+    </section>
+
+    <section class="settings-section">
+      <button type="button" class="link-btn danger" id="settings-logout">Se déconnecter</button>
+    </section>`;
+
+  backdrop.hidden = false;
+  modal.hidden = false;
+
+  document.getElementById('settings-close').onclick = closeSettings;
+
+  document.getElementById('avatar-input').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const errBox = document.getElementById('avatar-error');
+    errBox.textContent = '';
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 480, 0.85);
+      await api('/api/account/avatar', { method: 'POST', body: { data: dataUrl } });
+      document.getElementById('settings-modal').querySelector('.settings-avatar-preview').src = dataUrl;
+    } catch (err) {
+      errBox.textContent = err.message;
+    }
+  };
+
+  document.getElementById('username-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const errBox = document.getElementById('username-error');
+    const okBox = document.getElementById('username-success');
+    errBox.textContent = '';
+    okBox.textContent = '';
+    const newName = document.getElementById('username-input').value.trim();
+    try {
+      await api('/api/account/username', { method: 'PUT', body: { username: newName } });
+      const oldName = state.user.username;
+      state.user.username = newName;
+      okBox.textContent = 'Pseudo mis à jour.';
+      renderNav();
+      closeSettings();
+      if (newName !== oldName) navigate(profileHref(newName));
+    } catch (err) {
+      errBox.textContent = err.message;
+    }
+  };
+
+  document.getElementById('password-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const errBox = document.getElementById('password-error');
+    const okBox = document.getElementById('password-success');
+    errBox.textContent = '';
+    okBox.textContent = '';
+    try {
+      await api('/api/account/password', {
+        method: 'PUT',
+        body: {
+          current_password: document.getElementById('pwd-current').value,
+          new_password: document.getElementById('pwd-new').value,
+        },
+      });
+      okBox.textContent = 'Mot de passe changé.';
+      e.target.reset();
+    } catch (err) {
+      errBox.textContent = err.message;
+    }
+  };
+
+  document.getElementById('settings-logout').onclick = async () => {
+    await api('/api/logout', { method: 'POST' });
+    state.user = null;
+    closeSettings();
+    navigate('/');
+  };
 }
 
 function renderNav() {
@@ -654,7 +846,10 @@ function ensureSheetChrome() {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && state.sel) clearSelection();
+  if (e.key !== 'Escape') return;
+  const modal = document.getElementById('settings-modal');
+  if (modal && !modal.hidden) { closeSettings(); return; }
+  if (state.sel) clearSelection();
 });
 
 window.addEventListener('resize', () => {
@@ -808,6 +1003,7 @@ function renderInbound() {
         <div class="annotation-head">
           ${authorLink(r.username)}
           <span>${esc(formatDate(r.created_at))}${r.updated_at ? ' (modifié)' : ''}</span>
+          ${!r.is_published ? '<span class="draft-badge" title="Visible seulement par vous, tant qu’une nouvelle version n’a pas été publiée">Brouillon</span>' : ''}
         </div>
         ${socialFooter('annotation', r)}
       </div>`).join('')}`;
@@ -890,6 +1086,7 @@ function essayCard(e) {
     <div class="annotation-head">
       ${authorLink(e.username)}
       <span>${esc(formatDate(e.created_at))}${e.updated_at ? ' (modifié)' : ''}</span>
+      ${!e.is_published ? '<span class="draft-badge" title="Visible seulement par vous, tant qu’une nouvelle version n’a pas été publiée">Brouillon</span>' : ''}
       ${own ? `<button class="link-btn" data-essay-edit="${e.id}">modifier</button>
                <button class="link-btn" data-essay-del="${e.id}">supprimer</button>` : ''}
     </div>
@@ -1375,6 +1572,7 @@ function annotationCard(a, targetQuote) {
     <div class="annotation-head">
       ${authorLink(a.username)}
       <span>${esc(formatDate(a.created_at))}${a.updated_at ? ' (modifié)' : ''}</span>
+      ${!a.is_published ? '<span class="draft-badge" title="Visible seulement par vous, tant qu’une nouvelle version n’a pas été publiée">Brouillon</span>' : ''}
       ${own ? `<button class="link-btn" data-edit="${a.id}">modifier</button>
                <button class="link-btn" data-del="${a.id}">supprimer</button>` : ''}
     </div>
@@ -1671,7 +1869,7 @@ async function pageProfile(username) {
   }
   if (stale(epoch)) return;
 
-  const { user, stats, annotations, essays, connections } = data;
+  const { user, stats, annotations, essays, connections, versions } = data;
 
   // sections par morceau, dans l'ordre livré par le serveur (albums, pistes)
   const sections = [];
@@ -1701,14 +1899,16 @@ async function pageProfile(username) {
         ${sec.album ? `<div class="book-album">${esc(sec.album)}</div>` : ''}
         <h3><a href="/chanson/${encodeURIComponent(sec.slug)}" data-link>${esc(sec.title)}</a></h3>
         ${sec.blocks.map((a) => `
-          <div class="book-block">
-            <div class="book-passage">${esc(bookPassageLabel(a))}</div>
+          <div class="book-block ${a.is_published ? '' : 'book-draft'}">
+            <div class="book-passage">${esc(bookPassageLabel(a))}
+              ${!a.is_published ? '<span class="draft-badge">Brouillon</span>' : ''}</div>
             <div class="book-content">${esc(a.content)}</div>
             ${referencesList(a)}
           </div>`).join('')}
         ${sec.essays.map((e) => `
-          <div class="book-block book-essay">
-            <div class="book-passage">Interprétation d’ensemble</div>
+          <div class="book-block book-essay ${e.is_published ? '' : 'book-draft'}">
+            <div class="book-passage">Interprétation d’ensemble
+              ${!e.is_published ? '<span class="draft-badge">Brouillon</span>' : ''}</div>
             <div class="book-content">${esc(e.content)}</div>
             ${e.links.length ? `<div class="essay-links-title">Connexions</div>
               ${e.links.map((l) => `<div class="essay-link">
@@ -1727,13 +1927,39 @@ async function pageProfile(username) {
         ? 'Tu n’as pas encore écrit d’interprétation : va sur un morceau pour commencer.'
         : 'Ce membre n’a pas encore écrit d’interprétation.'}</p>`;
 
+  const versionsHtml = `
+    <h2>Historique des publications</h2>
+    ${isMe ? `
+      <div class="publish-box">
+        ${stats.draft_count
+          ? `<p>${stats.draft_count} modification${stats.draft_count > 1 ? 's' : ''} en attente,
+             non visible${stats.draft_count > 1 ? 's' : ''} pour les autres membres tant que tu n’as pas publié.</p>
+             <button type="button" class="primary" id="publish-btn">Publier une nouvelle version</button>`
+          : `<p class="empty-note">Aucune modification en attente : tout ce que tu as écrit est déjà publié.</p>`}
+        <div class="error-msg" id="publish-error"></div>
+      </div>` : ''}
+    ${versions.length
+      ? `<ul class="version-list">
+          ${versions.map((v) => `
+            <li><strong>Version ${v.number}</strong> — publiée le ${esc(formatDate(v.published_at))}
+              <span class="version-count">(${v.item_count} bloc${v.item_count > 1 ? 's' : ''})</span></li>`).join('')}
+        </ul>`
+      : `<p class="empty-note">Aucune version publiée pour l’instant.</p>`}`;
+
   app.innerHTML = `
-    <h1>${esc(user.username)}${user.is_admin ? ' <span class="album-date">— artiste</span>' : ''}</h1>
-    <p class="subtitle">Membre depuis ${esc(formatDate(user.created_at))} ·
-      ${stats.annotations} interprétation${stats.annotations > 1 ? 's' : ''} ·
-      ${stats.essays} interprétation${stats.essays > 1 ? 's' : ''} d’ensemble ·
-      ${stats.connections} connexion${stats.connections > 1 ? 's' : ''} ·
-      ♥ ${stats.favorites_received} reçu${stats.favorites_received > 1 ? 's' : ''}</p>
+    <div class="profile-head">
+      ${avatarImg(user.username, 'profile-avatar')}
+      <div class="profile-head-text">
+        <h1>${esc(user.username)}${user.is_admin ? ' <span class="album-date">— artiste</span>' : ''}</h1>
+        <p class="subtitle">Membre depuis ${esc(formatDate(user.created_at))} ·
+          ${stats.annotations} interprétation${stats.annotations > 1 ? 's' : ''} ·
+          ${stats.essays} interprétation${stats.essays > 1 ? 's' : ''} d’ensemble ·
+          ${stats.connections} connexion${stats.connections > 1 ? 's' : ''} ·
+          ♥ ${stats.favorites_received} reçu${stats.favorites_received > 1 ? 's' : ''}</p>
+      </div>
+      ${isMe ? `<button type="button" class="icon-btn" id="settings-btn" title="Paramètres du compte" aria-label="Paramètres du compte">⚙</button>` : ''}
+    </div>
+    ${versionsHtml}
     <h2>${isMe ? 'Tes interprétations' : `Les interprétations de ${esc(user.username)}`}</h2>
     <p class="hint">${total} bloc${total > 1 ? 's' : ''} d’interprétation, classé${total > 1 ? 's' : ''} morceau par morceau
     dans l’ordre chronologique des sorties : le passage interprété, puis la lecture qu’${isMe ? 'en fais-tu' : `en fait ${esc(user.username)}`}.</p>
@@ -1747,6 +1973,21 @@ async function pageProfile(username) {
         </div>
         <div class="connection-body">${esc(c.explanation)}</div>
       </div>`).join('')}` : ''}`;
+
+  if (isMe) {
+    document.getElementById('settings-btn').onclick = () => openSettings();
+    const publishBtn = document.getElementById('publish-btn');
+    if (publishBtn) publishBtn.onclick = async () => {
+      publishBtn.disabled = true;
+      try {
+        await api('/api/profile/publish', { method: 'POST' });
+        await pageProfile(username);
+      } catch (err) {
+        document.getElementById('publish-error').textContent = err.message;
+        publishBtn.disabled = false;
+      }
+    };
+  }
 }
 
 /* ---------------------------------------------------------------- admin */

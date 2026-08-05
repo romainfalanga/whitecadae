@@ -6,7 +6,11 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   is_admin INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- Photo de profil : recadrée/compressée côté client, stockée en base et
+  -- servie via /api/users/:username/avatar.
+  avatar_data TEXT,
+  avatar_mime TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -50,6 +54,17 @@ CREATE TABLE IF NOT EXISTS lyric_lines (
 
 CREATE INDEX IF NOT EXISTS idx_lines_song ON lyric_lines(song_id, line_number);
 
+-- Une version regroupe, à un instant donné, l'ensemble des brouillons qu'un
+-- membre choisit de rendre publics (annotations + interprétations d'ensemble).
+CREATE TABLE IF NOT EXISTS versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  number INTEGER NOT NULL,
+  published_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_versions_user ON versions(user_id, number);
+
 -- Une annotation (interprétation) cible, selon target_type :
 --   - 'song'     : la chanson entière (line_id NULL)
 --   - 'title'    : le titre de la chanson (line_id NULL)
@@ -70,7 +85,12 @@ CREATE TABLE IF NOT EXISTS annotations (
   end_line_id INTEGER REFERENCES lyric_lines(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT
+  updated_at TEXT,
+  -- Système de versions : une nouvelle interprétation (ou une modification)
+  -- est un brouillon privé (is_published = 0) jusqu'à ce que son auteur
+  -- publie une nouvelle version depuis sa page profil.
+  is_published INTEGER NOT NULL DEFAULT 0,
+  version_id INTEGER REFERENCES versions(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_annotations_song ON annotations(song_id);
@@ -114,7 +134,9 @@ CREATE TABLE IF NOT EXISTS essays (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT
+  updated_at TEXT,
+  is_published INTEGER NOT NULL DEFAULT 0,
+  version_id INTEGER REFERENCES versions(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_essays_song ON essays(song_id);
