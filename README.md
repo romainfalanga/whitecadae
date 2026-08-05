@@ -4,15 +4,21 @@ Plateforme communautaire d'explications des textes de **White Cadae**
 ([chaîne YouTube](https://www.youtube.com/@WhiteCadae)).
 
 Les utilisateurs créent un compte, lisent les paroles et proposent des
-explications à trois niveaux :
+interprétations à cinq niveaux :
 
 - **la chanson entière** (sens général),
+- **le titre** de la chanson,
+- **la durée** de la chanson (les chiffres en minutes et secondes),
 - **une phrase** (une ligne du texte),
 - **un mot ou un groupe de mots** dans une phrase — un mot peut avoir sa
-  propre explication *en plus* de celle de sa phrase.
+  propre interprétation *en plus* de celle de sa phrase.
 
 Chaque chanson peut aussi être **connectée à une autre chanson**, avec une
 explication du lien entre les deux.
+
+Dimension sociale : tout est public en lecture, et chaque interprétation
+ou connexion peut recevoir des **favoris (♥)** et des **commentaires**
+des autres membres.
 
 ## Architecture
 

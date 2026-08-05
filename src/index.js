@@ -50,6 +50,9 @@ async function handleApi(request, env, url) {
   if ((p = route('DELETE', '/api/annotations/:id'))) return deleteAnnotation(request, env, +p[0]);
   if (route('POST', '/api/connections')) return createConnection(request, env);
   if ((p = route('DELETE', '/api/connections/:id'))) return deleteConnection(request, env, +p[0]);
+  if (route('POST', '/api/favorites')) return toggleFavorite(request, env);
+  if (route('POST', '/api/comments')) return createComment(request, env);
+  if ((p = route('DELETE', '/api/comments/:id'))) return deleteComment(request, env, +p[0]);
 
   // --- administration
   if (route('POST', '/api/admin/albums')) return adminCreateAlbum(request, env);
@@ -59,6 +62,7 @@ async function handleApi(request, env, url) {
   if ((p = route('PUT', '/api/admin/songs/:id'))) return adminUpdateSong(request, env, +p[0]);
   if ((p = route('DELETE', '/api/admin/songs/:id'))) return adminDeleteSong(request, env, +p[0]);
   if ((p = route('PUT', '/api/admin/songs/:id/lyrics'))) return adminSetLyrics(request, env, +p[0]);
+  if ((p = route('PUT', '/api/admin/songs/:id/duration'))) return adminSetDuration(request, env, +p[0]);
 
   return json({ error: 'Route introuvable.' }, 404);
 }
@@ -224,6 +228,8 @@ async function login(request, env) {
 }
 
 async function openSession(env, user) {
+  // Nettoyage opportuniste des sessions expirées.
+  await env.DB.prepare(`DELETE FROM sessions WHERE expires_at <= datetime('now')`).run();
   const token = newToken();
   const maxAge = SESSION_DAYS * 24 * 3600;
   await env.DB.prepare(
@@ -269,7 +275,7 @@ async function listAlbums(env) {
 
 async function getSong(env, request, slug) {
   const song = await env.DB.prepare(
-    `SELECT s.id, s.title, s.slug, s.track_number, s.youtube_url, s.album_id,
+    `SELECT s.id, s.title, s.slug, s.track_number, s.youtube_url, s.duration_seconds, s.album_id,
             al.title AS album_title, al.slug AS album_slug
        FROM songs s LEFT JOIN albums al ON al.id = s.album_id
       WHERE s.slug = ?1`
@@ -281,7 +287,7 @@ async function getSong(env, request, slug) {
   ).bind(song.id).all()).results;
 
   const annotations = (await env.DB.prepare(
-    `SELECT a.id, a.user_id, a.line_id, a.word_start, a.word_end, a.content,
+    `SELECT a.id, a.user_id, a.target_type, a.line_id, a.word_start, a.word_end, a.content,
             a.created_at, a.updated_at, u.username
        FROM annotations a JOIN users u ON u.id = a.user_id
       WHERE a.song_id = ?1 ORDER BY a.created_at`
@@ -304,7 +310,42 @@ async function getSong(env, request, slug) {
     'SELECT id, title, slug FROM songs ORDER BY title'
   ).all()).results;
 
+  // Données sociales : favoris et commentaires des interprétations et connexions.
+  const viewer = await getUser(request, env);
+  await attachSocial(env, viewer, 'annotation',
+    `SELECT id FROM annotations WHERE song_id = ${song.id}`, annotations);
+  await attachSocial(env, viewer, 'connection',
+    `SELECT id FROM song_connections WHERE song_a_id = ${song.id} OR song_b_id = ${song.id}`, connections);
+
   return json({ song, lines, annotations, connections, allSongs });
+}
+
+// Ajoute favorite_count, my_favorite et comments[] à chaque élément.
+async function attachSocial(env, viewer, kind, idSubquery, items) {
+  const counts = (await env.DB.prepare(
+    `SELECT target_id, COUNT(*) AS n FROM favorites
+      WHERE target_kind = ?1 AND target_id IN (${idSubquery}) GROUP BY target_id`
+  ).bind(kind).all()).results;
+  const mine = viewer
+    ? (await env.DB.prepare(
+        `SELECT target_id FROM favorites
+          WHERE user_id = ?1 AND target_kind = ?2 AND target_id IN (${idSubquery})`
+      ).bind(viewer.id, kind).all()).results.map((r) => r.target_id)
+    : [];
+  const comments = (await env.DB.prepare(
+    `SELECT c.id, c.target_id, c.user_id, c.content, c.created_at, u.username
+       FROM comments c JOIN users u ON u.id = c.user_id
+      WHERE c.target_kind = ?1 AND c.target_id IN (${idSubquery})
+      ORDER BY c.created_at`
+  ).bind(kind).all()).results;
+
+  const countMap = new Map(counts.map((r) => [r.target_id, r.n]));
+  const mineSet = new Set(mine);
+  for (const item of items) {
+    item.favorite_count = countMap.get(item.id) || 0;
+    item.my_favorite = mineSet.has(item.id);
+    item.comments = comments.filter((c) => c.target_id === item.id);
+  }
 }
 
 /* ------------------------------------------------------------ annotations */
@@ -327,6 +368,7 @@ async function createAnnotation(request, env) {
   const song = await env.DB.prepare('SELECT id FROM songs WHERE id = ?1').bind(songId).first();
   if (!song) return json({ error: 'Chanson introuvable.' }, 404);
 
+  let targetType;
   if (lineId != null) {
     const line = await env.DB.prepare(
       'SELECT id, text FROM lyric_lines WHERE id = ?1 AND song_id = ?2'
@@ -340,18 +382,21 @@ async function createAnnotation(request, env) {
       ) {
         return json({ error: 'Position de mot invalide.' }, 400);
       }
+      targetType = 'word';
     } else {
       wordEnd = null;
+      targetType = 'line';
     }
   } else {
     wordStart = null;
     wordEnd = null;
+    targetType = ['song', 'title', 'duration'].includes(body.target_type) ? body.target_type : 'song';
   }
 
   const result = await env.DB.prepare(
-    `INSERT INTO annotations (user_id, song_id, line_id, word_start, word_end, content)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
-  ).bind(user.id, songId, lineId, wordStart, wordEnd, content).run();
+    `INSERT INTO annotations (user_id, song_id, target_type, line_id, word_start, word_end, content)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
+  ).bind(user.id, songId, targetType, lineId, wordStart, wordEnd, content).run();
 
   return json({ id: result.meta.last_row_id }, 201);
 }
@@ -383,7 +428,11 @@ async function deleteAnnotation(request, env, id) {
   if (!ann) return json({ error: 'Annotation introuvable.' }, 404);
   if (ann.user_id !== user.id && !user.is_admin) return json({ error: 'Vous ne pouvez supprimer que vos propres explications.' }, 403);
 
-  await env.DB.prepare('DELETE FROM annotations WHERE id = ?1').bind(id).run();
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM favorites WHERE target_kind = 'annotation' AND target_id = ?1`).bind(id),
+    env.DB.prepare(`DELETE FROM comments WHERE target_kind = 'annotation' AND target_id = ?1`).bind(id),
+    env.DB.prepare('DELETE FROM annotations WHERE id = ?1').bind(id),
+  ]);
   return json({ ok: true });
 }
 
@@ -422,7 +471,83 @@ async function deleteConnection(request, env, id) {
   if (!conn) return json({ error: 'Connexion introuvable.' }, 404);
   if (conn.user_id !== user.id && !user.is_admin) return json({ error: 'Vous ne pouvez supprimer que vos propres connexions.' }, 403);
 
-  await env.DB.prepare('DELETE FROM song_connections WHERE id = ?1').bind(id).run();
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM favorites WHERE target_kind = 'connection' AND target_id = ?1`).bind(id),
+    env.DB.prepare(`DELETE FROM comments WHERE target_kind = 'connection' AND target_id = ?1`).bind(id),
+    env.DB.prepare('DELETE FROM song_connections WHERE id = ?1').bind(id),
+  ]);
+  return json({ ok: true });
+}
+
+/* ------------------------------------------------- favoris & commentaires */
+
+const FAVORITE_KINDS = { annotation: 'annotations', connection: 'song_connections' };
+
+async function targetExists(env, kind, id) {
+  const table = FAVORITE_KINDS[kind];
+  if (!table || !Number.isInteger(id) || id <= 0) return false;
+  return !!(await env.DB.prepare(`SELECT id FROM ${table} WHERE id = ?1`).bind(id).first());
+}
+
+// Ajoute le favori s'il n'existe pas, le retire sinon.
+async function toggleFavorite(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const body = await readJson(request);
+  const kind = body && body.target_kind;
+  const targetId = body && Number(body.target_id);
+  if (!(await targetExists(env, kind, targetId))) return json({ error: 'Cible introuvable.' }, 404);
+
+  const existing = await env.DB.prepare(
+    'SELECT 1 AS x FROM favorites WHERE user_id = ?1 AND target_kind = ?2 AND target_id = ?3'
+  ).bind(user.id, kind, targetId).first();
+
+  if (existing) {
+    await env.DB.prepare(
+      'DELETE FROM favorites WHERE user_id = ?1 AND target_kind = ?2 AND target_id = ?3'
+    ).bind(user.id, kind, targetId).run();
+  } else {
+    await env.DB.prepare(
+      'INSERT INTO favorites (user_id, target_kind, target_id) VALUES (?1, ?2, ?3)'
+    ).bind(user.id, kind, targetId).run();
+  }
+
+  const count = await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM favorites WHERE target_kind = ?1 AND target_id = ?2'
+  ).bind(kind, targetId).first();
+  return json({ favorited: !existing, count: count.n });
+}
+
+async function createComment(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const body = await readJson(request);
+  const kind = body && body.target_kind;
+  const targetId = body && Number(body.target_id);
+  const content = String((body && body.content) || '').trim();
+
+  if (!content) return json({ error: 'Le commentaire ne peut pas être vide.' }, 400);
+  if (content.length > 2000) return json({ error: 'Commentaire trop long (2000 caractères max).' }, 400);
+  if (!(await targetExists(env, kind, targetId))) return json({ error: 'Cible introuvable.' }, 404);
+
+  const result = await env.DB.prepare(
+    'INSERT INTO comments (target_kind, target_id, user_id, content) VALUES (?1, ?2, ?3, ?4)'
+  ).bind(kind, targetId, user.id, content).run();
+  return json({ id: result.meta.last_row_id }, 201);
+}
+
+async function deleteComment(request, env, id) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const comment = await env.DB.prepare('SELECT id, user_id FROM comments WHERE id = ?1').bind(id).first();
+  if (!comment) return json({ error: 'Commentaire introuvable.' }, 404);
+  if (comment.user_id !== user.id && !user.is_admin) {
+    return json({ error: 'Vous ne pouvez supprimer que vos propres commentaires.' }, 403);
+  }
+  await env.DB.prepare('DELETE FROM comments WHERE id = ?1').bind(id).run();
   return json({ ok: true });
 }
 
@@ -501,8 +626,41 @@ async function adminUpdateSong(request, env, id) {
 
 async function adminDeleteSong(request, env, id) {
   try { await requireAdmin(request, env); } catch (resp) { return resp; }
-  await env.DB.prepare('DELETE FROM songs WHERE id = ?1').bind(id).run();
+  await env.DB.batch([
+    env.DB.prepare(
+      `DELETE FROM favorites WHERE target_kind = 'annotation'
+        AND target_id IN (SELECT id FROM annotations WHERE song_id = ?1)`).bind(id),
+    env.DB.prepare(
+      `DELETE FROM comments WHERE target_kind = 'annotation'
+        AND target_id IN (SELECT id FROM annotations WHERE song_id = ?1)`).bind(id),
+    env.DB.prepare(
+      `DELETE FROM favorites WHERE target_kind = 'connection'
+        AND target_id IN (SELECT id FROM song_connections WHERE song_a_id = ?1 OR song_b_id = ?1)`).bind(id),
+    env.DB.prepare(
+      `DELETE FROM comments WHERE target_kind = 'connection'
+        AND target_id IN (SELECT id FROM song_connections WHERE song_a_id = ?1 OR song_b_id = ?1)`).bind(id),
+    env.DB.prepare('DELETE FROM songs WHERE id = ?1').bind(id),
+  ]);
   return json({ ok: true });
+}
+
+// Durée de la chanson, au format "m:ss" ou en secondes.
+async function adminSetDuration(request, env, id) {
+  try { await requireAdmin(request, env); } catch (resp) { return resp; }
+  const body = await readJson(request);
+  const song = await env.DB.prepare('SELECT id FROM songs WHERE id = ?1').bind(id).first();
+  if (!song) return json({ error: 'Chanson introuvable.' }, 404);
+
+  const raw = String((body && body.duration) || '').trim();
+  let seconds = null;
+  if (raw !== '') {
+    const m = raw.match(/^(\d+):([0-5]?\d)$/);
+    if (m) seconds = Number(m[1]) * 60 + Number(m[2]);
+    else if (/^\d+$/.test(raw)) seconds = Number(raw);
+    else return json({ error: 'Format de durée invalide (utilisez m:ss, par exemple 3:57).' }, 400);
+  }
+  await env.DB.prepare('UPDATE songs SET duration_seconds = ?1 WHERE id = ?2').bind(seconds, id).run();
+  return json({ ok: true, duration_seconds: seconds });
 }
 
 // Remplace l'intégralité du texte d'une chanson. Attention : les
@@ -518,7 +676,15 @@ async function adminSetLyrics(request, env, id) {
   while (lines.length && lines[lines.length - 1] === '') lines.pop();
   while (lines.length && lines[0] === '') lines.shift();
 
-  const statements = [env.DB.prepare('DELETE FROM lyric_lines WHERE song_id = ?1').bind(id)];
+  const statements = [
+    env.DB.prepare(
+      `DELETE FROM favorites WHERE target_kind = 'annotation'
+        AND target_id IN (SELECT id FROM annotations WHERE song_id = ?1 AND line_id IS NOT NULL)`).bind(id),
+    env.DB.prepare(
+      `DELETE FROM comments WHERE target_kind = 'annotation'
+        AND target_id IN (SELECT id FROM annotations WHERE song_id = ?1 AND line_id IS NOT NULL)`).bind(id),
+    env.DB.prepare('DELETE FROM lyric_lines WHERE song_id = ?1').bind(id),
+  ];
   lines.forEach((line, i) => {
     statements.push(
       env.DB.prepare('INSERT INTO lyric_lines (song_id, line_number, text) VALUES (?1, ?2, ?3)').bind(id, i + 1, line)

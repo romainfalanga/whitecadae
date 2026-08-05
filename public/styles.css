@@ -149,6 +149,20 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 
 /* -------------------------------------------------------------- chanson */
 
+.song-targets { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 0.6rem 0 0.4rem; }
+.target-chip {
+  font-size: 0.85rem;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-dim);
+  border-radius: 99px;
+  padding: 0.3rem 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+.target-chip:hover { border-color: var(--accent); color: var(--text); text-decoration: none; }
+.target-chip.active { background: var(--accent); border-color: var(--accent); color: #17130a; font-weight: 600; }
+
 .song-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 2rem; }
 @media (max-width: 900px) { .song-layout { grid-template-columns: 1fr; } }
 
@@ -224,6 +238,32 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 
 .annotation-form textarea { margin-top: 0.5rem; }
 .annotation-form button { margin-top: 0.6rem; }
+
+/* --------------------------------------------------- favoris/commentaires */
+
+.social-footer { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+.social-btn {
+  border: none;
+  background: none;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  border-radius: var(--radius);
+}
+.social-btn:hover { color: var(--text); border-color: transparent; background: var(--accent-soft); }
+.social-btn.active { color: var(--accent); }
+.fav-btn.active { color: #e0808f; }
+
+.comments-block {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0 0.2rem 0.9rem;
+  border-left: 2px solid var(--border);
+}
+.comment { padding: 0.4rem 0; }
+.comment-head { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; font-size: 0.78rem; color: var(--text-dim); }
+.comment-body { font-size: 0.9rem; white-space: pre-wrap; }
+.comment-form textarea { margin-top: 0.4rem; min-height: 54px; font-size: 0.9rem; }
+.comment-form button { margin-top: 0.4rem; font-size: 0.85rem; padding: 0.3rem 0.8rem; }
 
 /* ----------------------------------------------------------- connexions */
 

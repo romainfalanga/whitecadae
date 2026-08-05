@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS songs (
   title TEXT NOT NULL,
   slug TEXT NOT NULL UNIQUE,
   track_number INTEGER,
-  youtube_url TEXT
+  youtube_url TEXT,
+  duration_seconds INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_songs_album ON songs(album_id);
@@ -49,15 +50,18 @@ CREATE TABLE IF NOT EXISTS lyric_lines (
 
 CREATE INDEX IF NOT EXISTS idx_lines_song ON lyric_lines(song_id, line_number);
 
--- Une annotation cible :
---   - la chanson entière : line_id NULL
---   - une ligne (phrase)  : line_id renseigné, word_start NULL
---   - un mot ou un groupe de mots : line_id + word_start..word_end
+-- Une annotation (interprétation) cible, selon target_type :
+--   - 'song'     : la chanson entière (line_id NULL)
+--   - 'title'    : le titre de la chanson (line_id NULL)
+--   - 'duration' : la durée de la chanson (line_id NULL)
+--   - 'line'     : une ligne (phrase) — line_id renseigné, word_start NULL
+--   - 'word'     : un mot ou groupe de mots — line_id + word_start..word_end
 --     (indices de mots dans la ligne, en commençant à 0)
 CREATE TABLE IF NOT EXISTS annotations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   song_id INTEGER NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  target_type TEXT NOT NULL DEFAULT 'song',
   line_id INTEGER REFERENCES lyric_lines(id) ON DELETE CASCADE,
   word_start INTEGER,
   word_end INTEGER,
@@ -81,3 +85,26 @@ CREATE TABLE IF NOT EXISTS song_connections (
 
 CREATE INDEX IF NOT EXISTS idx_connections_a ON song_connections(song_a_id);
 CREATE INDEX IF NOT EXISTS idx_connections_b ON song_connections(song_b_id);
+
+-- Favoris (♥) sur une interprétation ('annotation') ou une connexion ('connection').
+CREATE TABLE IF NOT EXISTS favorites (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  target_kind TEXT NOT NULL,
+  target_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, target_kind, target_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_favorites_target ON favorites(target_kind, target_id);
+
+-- Commentaires sous une interprétation ou une connexion.
+CREATE TABLE IF NOT EXISTS comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_kind TEXT NOT NULL,
+  target_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_target ON comments(target_kind, target_id);
