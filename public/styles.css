@@ -114,7 +114,6 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-7px) rotate
 }
 .site-nav a { color: var(--text-dim); }
 .site-nav a:hover { color: var(--text); text-decoration: none; }
-.site-nav .nav-user { color: var(--accent); }
 
 main {
   flex: 1;

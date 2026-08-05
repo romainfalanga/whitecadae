@@ -139,7 +139,7 @@ function renderNav() {
   nav.innerHTML = u
     ? `<a href="/" data-link>Accueil</a>
        ${u.is_admin ? '<a href="/admin" data-link>Administration</a>' : ''}
-       <a class="nav-user" href="${profileHref(u.username)}" data-link>${esc(u.username)}</a>
+       <a href="${profileHref(u.username)}" data-link>Mon profil</a>
        <button class="link-btn" id="logout-btn">Se déconnecter</button>`
     : `<a href="/" data-link>Accueil</a>
        <a href="/connexion" data-link>Se connecter</a>
@@ -1656,8 +1656,9 @@ function bookPassageLabel(a) {
   return `« ${a.line_text || ''} »`;
 }
 
-// Le livre d'un membre : ses interprétations assemblées dans l'ordre des
-// albums et des morceaux, chaque bloc citant le passage interprété.
+// Les interprétations d'un membre, regroupées morceau par morceau et
+// classées dans l'ordre chronologique des sorties (albums puis pistes),
+// chaque bloc citant le passage interprété.
 async function pageProfile(username) {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
@@ -1723,7 +1724,7 @@ async function pageProfile(username) {
           </div>`).join('')}
       </section>`).join('')
     : `<p class="empty-note">${isMe
-        ? 'Ton livre est encore vierge : va sur un morceau et écris ta première interprétation.'
+        ? 'Tu n’as pas encore écrit d’interprétation : va sur un morceau pour commencer.'
         : 'Ce membre n’a pas encore écrit d’interprétation.'}</p>`;
 
   app.innerHTML = `
@@ -1733,9 +1734,9 @@ async function pageProfile(username) {
       ${stats.essays} interprétation${stats.essays > 1 ? 's' : ''} d’ensemble ·
       ${stats.connections} connexion${stats.connections > 1 ? 's' : ''} ·
       ♥ ${stats.favorites_received} reçu${stats.favorites_received > 1 ? 's' : ''}</p>
-    <h2>Le livre ${isMe ? 'que tu écris' : `de ${esc(user.username)}`}</h2>
-    <p class="hint">${total} bloc${total > 1 ? 's' : ''} d’interprétation, dans l’ordre des albums et des morceaux :
-    le passage interprété, puis la lecture qu’${isMe ? 'en fais-tu' : `en fait ${esc(user.username)}`}.</p>
+    <h2>${isMe ? 'Tes interprétations' : `Les interprétations de ${esc(user.username)}`}</h2>
+    <p class="hint">${total} bloc${total > 1 ? 's' : ''} d’interprétation, classé${total > 1 ? 's' : ''} morceau par morceau
+    dans l’ordre chronologique des sorties : le passage interprété, puis la lecture qu’${isMe ? 'en fais-tu' : `en fait ${esc(user.username)}`}.</p>
     ${bookHtml}
     ${connections.length ? `<h2>Ses connexions entre morceaux</h2>
       ${connections.map((c) => `<div class="connection">
