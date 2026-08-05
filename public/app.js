@@ -99,7 +99,6 @@ async function pageHome() {
     <section class="album-card">
       <div class="album-head">
         <h2>${esc(al.title)}</h2>
-        ${al.is_single ? '<span class="album-badge">Single</span>' : ''}
         ${al.release_date ? `<span class="album-date">${esc(formatDate(al.release_date))}</span>` : ''}
       </div>
       <ol class="song-list">
@@ -112,12 +111,7 @@ async function pageHome() {
       </ol>
     </section>`).join('');
 
-  app.innerHTML = `
-    <h1>Les textes de White Cadae, expliqués ensemble</h1>
-    <p class="subtitle">Explorez les paroles, proposez une explication pour une chanson, une phrase ou un mot,
-    et découvrez les fils qui relient les chansons entre elles.
-    ${state.user ? '' : '<a href="/inscription" data-link>Créez un compte</a> pour participer.'}</p>
-    ${albums || '<p class="empty-note">Aucun album pour le moment.</p>'}`;
+  app.innerHTML = albums || '<p class="empty-note">Aucun album pour le moment.</p>';
 }
 
 /* ------------------------------------------------------- connexion/compte */

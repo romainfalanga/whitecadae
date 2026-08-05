@@ -65,14 +65,6 @@ main {
   padding: 2rem 1.5rem 4rem;
 }
 
-.site-footer {
-  border-top: 1px solid var(--border);
-  padding: 1.25rem 1.5rem;
-  text-align: center;
-  color: var(--text-dim);
-  font-size: 0.85rem;
-}
-
 .loading { color: var(--text-dim); text-align: center; padding: 3rem 0; }
 
 /* ------------------------------------------------------------ éléments */
@@ -141,16 +133,6 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .album-head { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
 .album-head h2 { margin: 0; }
 .album-date { color: var(--text-dim); font-size: 0.85rem; }
-.album-badge {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 99px;
-  padding: 0.05rem 0.6rem;
-}
-
 .song-list { list-style: none; margin-top: 1rem; }
 .song-list li {
   display: flex;
