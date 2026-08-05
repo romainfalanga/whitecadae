@@ -413,7 +413,13 @@ function renderSongPage() {
   app.querySelectorAll('.w').forEach((span) => {
     span.onclick = (e) => {
       const nativeSel = window.getSelection();
-      if (nativeSel && !nativeSel.isCollapsed) return; // une sélection au glisser est en cours
+      if (nativeSel && !nativeSel.isCollapsed) {
+        // Maj+clic étend la sélection native : on l'efface et on garde le
+        // comportement mot-à-mot ; un vrai glisser, lui, est laissé au
+        // bouton flottant « Interpréter ce passage ».
+        if (e.shiftKey) nativeSel.removeAllRanges();
+        else return;
+      }
       const lineId = Number(span.dataset.line);
       const idx = Number(span.dataset.idx);
       if (e.shiftKey && state.sel && state.sel.type === 'word' && state.sel.lineId === lineId) {
