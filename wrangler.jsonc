@@ -1,0 +1,21 @@
+{
+  "name": "whitecadae",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "whitecadae-db",
+      "database_id": "94a4fab8-be1e-41be-8ef1-df5aa32835f3"
+    }
+  ],
+  "vars": {
+    // Les comptes créés avec ces emails deviennent automatiquement administrateurs.
+    "ADMIN_EMAILS": "romainfalanga83@gmail.com"
+  }
+}

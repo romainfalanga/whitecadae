@@ -1,0 +1,270 @@
+/* WhiteCadae — feuille de style */
+
+:root {
+  --bg: #0d0d10;
+  --bg-soft: #15151a;
+  --bg-card: #1a1a21;
+  --border: #2a2a33;
+  --text: #ececf1;
+  --text-dim: #9b9ba8;
+  --accent: #d8c07a;
+  --accent-soft: rgba(216, 192, 122, 0.14);
+  --danger: #e07a7a;
+  --radius: 10px;
+  --serif: Georgia, 'Times New Roman', serif;
+  --sans: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  line-height: 1.6;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ------------------------------------------------------------ en-tête */
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(13, 13, 16, 0.92);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(8px);
+}
+
+.brand { font-size: 1.5rem; letter-spacing: 0.04em; font-family: var(--serif); }
+.brand:hover { text-decoration: none; }
+.brand-white { color: var(--text); }
+.brand-cadae { color: var(--accent); }
+
+.site-nav { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.site-nav a { color: var(--text-dim); }
+.site-nav a:hover { color: var(--text); text-decoration: none; }
+.site-nav .nav-user { color: var(--accent); }
+
+main {
+  flex: 1;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  padding: 1.25rem 1.5rem;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.loading { color: var(--text-dim); text-align: center; padding: 3rem 0; }
+
+/* ------------------------------------------------------------ éléments */
+
+h1 { font-family: var(--serif); font-weight: normal; font-size: 2rem; margin-bottom: 0.5rem; }
+h2 { font-family: var(--serif); font-weight: normal; font-size: 1.4rem; margin: 2rem 0 0.75rem; color: var(--accent); }
+h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+
+.subtitle { color: var(--text-dim); margin-bottom: 2rem; }
+
+button, .btn {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  padding: 0.45rem 1rem;
+  border-radius: var(--radius);
+  transition: border-color 0.15s, background 0.15s;
+}
+button:hover, .btn:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: #17130a; border-color: var(--accent); font-weight: 600; }
+button.primary:hover { filter: brightness(1.08); }
+button.danger { color: var(--danger); }
+button.link-btn { border: none; background: none; padding: 0.2rem 0.4rem; color: var(--text-dim); font-size: 0.82rem; }
+button.link-btn:hover { color: var(--text); }
+button:disabled { opacity: 0.5; cursor: default; }
+
+input, textarea, select {
+  font: inherit;
+  width: 100%;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius);
+}
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+textarea { resize: vertical; min-height: 90px; }
+label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-size: 0.9rem; }
+
+.form-card {
+  max-width: 420px;
+  margin: 2rem auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2rem;
+}
+.form-card h1 { text-align: center; }
+.form-card button[type="submit"] { width: 100%; margin-top: 1.4rem; }
+.form-footer { text-align: center; margin-top: 1rem; color: var(--text-dim); font-size: 0.9rem; }
+
+.error-msg { color: var(--danger); margin-top: 0.9rem; font-size: 0.9rem; }
+.success-msg { color: #8fce8f; margin-top: 0.9rem; font-size: 0.9rem; }
+
+/* ------------------------------------------------------------- accueil */
+
+.album-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.album-head { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
+.album-head h2 { margin: 0; }
+.album-date { color: var(--text-dim); font-size: 0.85rem; }
+.album-badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 99px;
+  padding: 0.05rem 0.6rem;
+}
+
+.song-list { list-style: none; margin-top: 1rem; }
+.song-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.55rem 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.song-list li:last-child { border-bottom: none; }
+.song-num { color: var(--text-dim); width: 1.4rem; text-align: right; font-variant-numeric: tabular-nums; }
+.song-list a { color: var(--text); font-family: var(--serif); font-size: 1.05rem; }
+.song-list a:hover { color: var(--accent); }
+.song-meta { margin-left: auto; color: var(--text-dim); font-size: 0.8rem; white-space: nowrap; }
+
+/* -------------------------------------------------------------- chanson */
+
+.song-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 2rem; }
+@media (max-width: 900px) { .song-layout { grid-template-columns: 1fr; } }
+
+.breadcrumb { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 0.75rem; }
+
+.lyrics {
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  line-height: 2.1;
+  margin-top: 1.5rem;
+}
+.lyric-line { padding-left: 0.75rem; border-left: 2px solid transparent; }
+.lyric-line.has-line-note { border-left-color: var(--accent); }
+.lyric-line.selected-line { background: var(--accent-soft); border-radius: 4px; }
+.stanza-gap { height: 1.4rem; }
+
+.w { cursor: pointer; border-radius: 3px; padding: 0.05rem 0.1rem; }
+.w:hover { background: var(--accent-soft); }
+.w.has-note { border-bottom: 1px dotted var(--accent); }
+.w.selected-word { background: var(--accent); color: #17130a; }
+
+.line-note-btn {
+  border: none; background: none; cursor: pointer;
+  color: transparent; font-size: 0.85rem; padding: 0 0.35rem;
+}
+.lyric-line:hover .line-note-btn { color: var(--text-dim); }
+.lyric-line .line-note-btn.active, .lyric-line.has-line-note .line-note-btn { color: var(--accent); }
+
+.no-lyrics {
+  color: var(--text-dim);
+  font-style: italic;
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 2rem;
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.hint { color: var(--text-dim); font-size: 0.85rem; margin-top: 0.75rem; }
+
+/* --------------------------------------------------- panneau d'annotation */
+
+.side-panel { position: sticky; top: 5rem; align-self: start; }
+
+.panel-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.panel-card h3 { color: var(--accent); font-family: var(--serif); font-weight: normal; font-size: 1.05rem; }
+.panel-target {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--text-dim);
+  margin: 0.4rem 0 0.8rem;
+  font-size: 0.95rem;
+}
+
+.annotation {
+  border-top: 1px solid var(--border);
+  padding: 0.75rem 0;
+}
+.annotation:first-of-type { border-top: none; }
+.annotation-head { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; font-size: 0.8rem; color: var(--text-dim); }
+.annotation-author { color: var(--accent); font-weight: 600; }
+.annotation-body { margin-top: 0.3rem; white-space: pre-wrap; font-size: 0.95rem; }
+.annotation-target-quote { font-family: var(--serif); font-style: italic; color: var(--text-dim); font-size: 0.85rem; margin-top: 0.2rem; }
+
+.empty-note { color: var(--text-dim); font-size: 0.9rem; font-style: italic; }
+
+.annotation-form textarea { margin-top: 0.5rem; }
+.annotation-form button { margin-top: 0.6rem; }
+
+/* ----------------------------------------------------------- connexions */
+
+.connection {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.9rem;
+}
+.connection-songs { font-family: var(--serif); font-size: 1.05rem; }
+.connection-songs .arrow { color: var(--accent); margin: 0 0.4rem; }
+.connection-body { margin-top: 0.4rem; white-space: pre-wrap; font-size: 0.95rem; }
+.connection-meta { margin-top: 0.4rem; font-size: 0.8rem; color: var(--text-dim); }
+
+/* ---------------------------------------------------------------- admin */
+
+.admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+.admin-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; }
+.admin-card h2 { margin-top: 0; }
+.admin-card button[type="submit"] { margin-top: 1rem; }
+.admin-list { list-style: none; margin-top: 0.75rem; }
+.admin-list li { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.admin-list li:last-child { border-bottom: none; }
+.admin-list .spacer { flex: 1; }
+.lyrics-editor textarea { min-height: 320px; font-family: var(--serif); }
