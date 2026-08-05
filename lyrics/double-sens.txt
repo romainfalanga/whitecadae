@@ -1,8 +1,5 @@
-[Verse]
-
-[Verse]
-Tous les jours j'invente un nouvel univers
-Toujours plus de connexions dans mon multivers
+Tous les jours j'invente un nouvel univers.
+Toujours plus de connexions dans mon multivers.
 Le temps a plusieurs directions
 C'est pas nouveau pour moi
 Il grandit par opposition
@@ -11,7 +8,7 @@ La flèche du temps des galaxies
 Va à l'inverse de celle des humains
 Leur trou noir super massif
 Dans ce schéma n'avale plus rien
-Il ne fait qu'expulser de la nouvelle matière
+Ils ne font qu'expulser de la nouvelle matière
 En fonction de ce qui compose leur galaxie
 Elles semblent aller vers l'arrière
 Ya pas que le temps même le futur est relatif
