@@ -244,6 +244,10 @@ function renderSongPage() {
   const lyricsHtml = lines.length
     ? `<div class="lyrics">${lines.map((line) => {
         if (line.text === '') return '<div class="stanza-gap"></div>';
+        // [Couplet], [Refrain]… : en-tête de section, non annotable
+        if (/^\[[^\]]+\]$/.test(line.text)) {
+          return `<div class="section-tag">${esc(line.text.slice(1, -1))}</div>`;
+        }
         const toks = tokens(line.text);
         const isSelLine = sel && sel.lineId === line.id;
         const words = toks.map((tok, i) => {

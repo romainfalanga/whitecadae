@@ -179,6 +179,16 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .lyric-line.selected-line { background: var(--accent-soft); border-radius: 4px; }
 .stanza-gap { height: 1.4rem; }
 
+.section-tag {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  margin: 0.5rem 0 0.1rem;
+  padding-left: 0.75rem;
+}
+
 .w { cursor: pointer; border-radius: 3px; padding: 0.05rem 0.1rem; }
 .w:hover { background: var(--accent-soft); }
 .w.has-note { border-bottom: 1px dotted var(--accent); }
