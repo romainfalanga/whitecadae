@@ -324,6 +324,50 @@ async function getCorpus(env) {
     `SELECT id, song_id, line_number, text FROM lyric_lines
       WHERE text <> '' AND text NOT LIKE '[%' ORDER BY song_id, line_number`
   ).all()).results;
+
+  // Nombre d'interprétations couvrant chaque phrase : une référence interne
+  // ne peut viser qu'un passage déjà interprété.
+  const spans = (await env.DB.prepare(
+    `SELECT a.song_id, ls.line_number AS from_no,
+            COALESCE(le.line_number, ls.line_number) AS to_no
+       FROM annotations a
+       JOIN lyric_lines ls ON ls.id = a.line_id
+       LEFT JOIN lyric_lines le ON le.id = a.end_line_id
+      WHERE a.line_id IS NOT NULL`
+  ).all()).results;
+
+  // tableau de différences par morceau : O(phrases + interprétations)
+  const deltas = new Map();
+  for (const s of spans) {
+    if (!deltas.has(s.song_id)) deltas.set(s.song_id, new Map());
+    const d = deltas.get(s.song_id);
+    const lo = Math.min(s.from_no, s.to_no);
+    const hi = Math.max(s.from_no, s.to_no);
+    d.set(lo, (d.get(lo) || 0) + 1);
+    d.set(hi + 1, (d.get(hi + 1) || 0) - 1);
+  }
+  // Les balises de section créent des trous dans la numérotation : on
+  // applique tous les deltas jusqu'au numéro de phrase courant.
+  let currentSong = null;
+  let running = 0;
+  let keys = [];
+  let dmap = null;
+  let ki = 0;
+  for (const line of lines) {
+    if (line.song_id !== currentSong) {
+      currentSong = line.song_id;
+      running = 0;
+      ki = 0;
+      dmap = deltas.get(currentSong) || null;
+      keys = dmap ? [...dmap.keys()].sort((a, b) => a - b) : [];
+    }
+    while (ki < keys.length && keys[ki] <= line.line_number) {
+      running += dmap.get(keys[ki]);
+      ki++;
+    }
+    line.interp = running;
+  }
+
   return json({ songs, lines });
 }
 
@@ -382,6 +426,28 @@ async function getSong(env, request, slug) {
     'SELECT id, title, slug FROM songs ORDER BY title'
   ).all()).results;
 
+  // Grilles de lecture venues d'autres morceaux : les interprétations
+  // écrites ailleurs qui référencent un passage de ce morceau-ci.
+  const inbound = (await env.DB.prepare(
+    `SELECT a.id, a.user_id, a.content, a.created_at, a.updated_at, u.username,
+            a.target_type, a.word_start, a.word_end,
+            r.ref_line_id, r.ref_end_line_id,
+            rl.text AS ref_text, rl.line_number AS ref_line_number,
+            rle.text AS ref_end_text, rle.line_number AS ref_end_number,
+            src.title AS source_title, src.slug AS source_slug,
+            sl.text AS source_line_text, sle.text AS source_end_text
+       FROM annotation_references r
+       JOIN annotations a ON a.id = r.annotation_id
+       JOIN users u ON u.id = a.user_id
+       JOIN songs src ON src.id = a.song_id
+       LEFT JOIN lyric_lines rl ON rl.id = r.ref_line_id
+       LEFT JOIN lyric_lines rle ON rle.id = r.ref_end_line_id
+       LEFT JOIN lyric_lines sl ON sl.id = a.line_id
+       LEFT JOIN lyric_lines sle ON sle.id = a.end_line_id
+      WHERE r.ref_song_id = ?1 AND a.song_id <> ?1
+      ORDER BY a.created_at`
+  ).bind(song.id).all()).results;
+
   // Interprétations d'ensemble et leurs connexions entre blocs.
   const essays = (await env.DB.prepare(
     `SELECT e.id, e.user_id, e.content, e.created_at, e.updated_at, u.username
@@ -425,8 +491,12 @@ async function getSong(env, request, slug) {
     `SELECT id FROM song_connections WHERE song_a_id = ${song.id} OR song_b_id = ${song.id}`, connections);
   await attachSocial(env, viewer, 'essay',
     `SELECT id FROM essays WHERE song_id = ${song.id}`, essays);
+  if (inbound.length) {
+    await attachSocial(env, viewer, 'annotation',
+      `SELECT annotation_id AS id FROM annotation_references WHERE ref_song_id = ${song.id}`, inbound);
+  }
 
-  return json({ song, lines, annotations, connections, essays, allSongs });
+  return json({ song, lines, annotations, connections, essays, inbound, allSongs });
 }
 
 // Ajoute favorite_count, my_favorite et comments[] à chaque élément.

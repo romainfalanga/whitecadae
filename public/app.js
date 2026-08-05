@@ -77,8 +77,36 @@ document.addEventListener('click', (e) => {
 
 window.addEventListener('popstate', route);
 
+function closeNav() {
+  document.body.classList.remove('nav-open');
+  const t = document.getElementById('nav-toggle');
+  if (t) t.setAttribute('aria-expanded', 'false');
+}
+
+function bindNavToggle() {
+  const toggle = document.getElementById('nav-toggle');
+  if (!toggle) return;
+  toggle.onclick = (e) => {
+    e.stopPropagation();
+    const open = !document.body.classList.contains('nav-open');
+    document.body.classList.toggle('nav-open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Fermer le menu' : 'Ouvrir le menu');
+  };
+  // un clic hors de l'en-tête referme le menu
+  document.addEventListener('click', (e) => {
+    if (!document.body.classList.contains('nav-open')) return;
+    if (e.target.closest && e.target.closest('.site-header')) return;
+    closeNav();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeNav();
+  });
+}
+
 async function route() {
   window.scrollTo(0, 0);
+  closeNav();
   const path = location.pathname;
   // toute navigation ferme la sélection en cours
   state.sheetOpen = false;
@@ -686,6 +714,7 @@ function renderSongPage() {
     <div class="song-layout">
       <div>
         ${lyricsHtml}
+        <div id="inbound"></div>
         <h2>Interprétations d’ensemble</h2>
         <p class="hint">Une lecture globale du morceau, justifiée par des connexions entre phrases —
         y compris avec les phrases d’autres morceaux.</p>
@@ -717,9 +746,63 @@ function renderSongPage() {
   };
 
   renderPanel();
+  renderInbound();
   renderEssays();
   renderConnections();
   renderSelectionUI();
+}
+
+/* ------------------------- grilles de lecture venues d'autres morceaux ---
+   Quand une interprétation écrite sur un autre morceau référence un passage
+   de celui-ci, elle s'affiche ici en bloc inversé : c'est une grille de
+   lecture supplémentaire, apportée depuis une autre chanson.              */
+
+function inboundAnchorText(r) {
+  if (!r.ref_text) return '';
+  if (!r.ref_end_text || r.ref_end_number === r.ref_line_number) return r.ref_text;
+  return `${r.ref_text} […] ${r.ref_end_text}`;
+}
+
+function inboundSourceLabel(r) {
+  if (r.target_type === 'title') return 'le titre';
+  if (r.target_type === 'duration') return 'la durée';
+  if (r.target_type === 'song' || !r.source_line_text) return 'le morceau entier';
+  if (r.target_type === 'word') {
+    return `« ${tokens(r.source_line_text).slice(r.word_start, r.word_end + 1).join(' ')} »`;
+  }
+  if (r.target_type === 'passage' && r.source_end_text) {
+    const from = tokens(r.source_line_text).slice(r.word_start || 0).join(' ');
+    const to = tokens(r.source_end_text).slice(0, (r.word_end == null ? 0 : r.word_end) + 1).join(' ');
+    return `« ${from} […] ${to} »`;
+  }
+  return `« ${r.source_line_text} »`;
+}
+
+function renderInbound() {
+  const container = document.getElementById('inbound');
+  if (!container) return;
+  const inbound = state.song.inbound || [];
+  if (!inbound.length) { container.innerHTML = ''; return; }
+
+  container.innerHTML = `
+    <h2>Grilles de lecture venues d’autres morceaux</h2>
+    <p class="hint">Des interprétations écrites sur d’autres chansons qui renvoient à un passage de celle-ci.</p>
+    ${inbound.map((r) => `
+      <div class="inbound" data-ann="${r.id}">
+        <div class="inbound-from">
+          ↩ depuis <a href="/chanson/${encodeURIComponent(r.source_slug)}" data-link>${esc(r.source_title)}</a>
+          — à propos de ${esc(inboundSourceLabel(r))}
+        </div>
+        <div class="inbound-anchor">« ${esc(inboundAnchorText(r))} »</div>
+        <div class="annotation-body">${esc(r.content)}</div>
+        <div class="annotation-head">
+          ${authorLink(r.username)}
+          <span>${esc(formatDate(r.created_at))}${r.updated_at ? ' (modifié)' : ''}</span>
+        </div>
+        ${socialFooter('annotation', r)}
+      </div>`).join('')}`;
+
+  bindSocial(container);
 }
 
 /* ----------------------------------- interprétations d'ensemble (essais) */
@@ -1232,21 +1315,38 @@ function referencesFieldset(refs = []) {
 }
 
 // Ligne de sélection d'un passage interne : morceau → du vers → au vers.
+// Seuls les passages déjà interprétés peuvent être référencés : une
+// référence relie une lecture à une autre lecture, pas à du texte brut.
 function insertInternalRefRow(zone) {
+  const interpreted = state.corpus.lines.filter((l) => l.interp > 0);
+  const songIds = new Set(interpreted.map((l) => l.song_id));
+  const songs = state.corpus.songs.filter((s) => songIds.has(s.id));
+
   const row = document.createElement('div');
   row.className = 'ref-row ref-internal-row';
+  if (!songs.length) {
+    row.innerHTML = `<span class="ref-fixed-label">Aucun passage n’a encore été interprété : il n’y a rien à référencer pour l’instant.</span>
+      <button type="button" class="link-btn ref-remove" title="Retirer">✕</button>`;
+    zone.appendChild(row);
+    row.querySelector('.ref-remove').onclick = () => row.remove();
+    return;
+  }
   row.innerHTML = `
     <select class="ref-song"><option value="">— Morceau —</option>
-      ${state.corpus.songs.map((s) => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}
+      ${songs.map((s) => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}
     </select>
     <select class="ref-start" disabled><option value="">— Du vers… —</option></select>
     <select class="ref-end" disabled><option value="">— …au vers (optionnel) —</option></select>
-    <button type="button" class="link-btn ref-remove" title="Retirer">✕</button>`;
+    <button type="button" class="link-btn ref-remove" title="Retirer">✕</button>
+    <span class="ref-note">Seuls les passages déjà interprétés sont proposés.</span>`;
   zone.appendChild(row);
   row.querySelector('.ref-song').onchange = () => {
     const songId = Number(row.querySelector('.ref-song').value);
-    const opts = state.corpus.lines.filter((l) => l.song_id === songId)
-      .map((l) => `<option value="${l.id}">${esc(l.text.length > 50 ? l.text.slice(0, 47) + '…' : l.text)}</option>`)
+    const opts = interpreted.filter((l) => l.song_id === songId)
+      .map((l) => {
+        const t = l.text.length > 46 ? l.text.slice(0, 43) + '…' : l.text;
+        return `<option value="${l.id}">${esc(t)} (${l.interp})</option>`;
+      })
       .join('');
     const start = row.querySelector('.ref-start');
     const end = row.querySelector('.ref-end');
@@ -1814,6 +1914,7 @@ async function pageAdmin() {
 /* ------------------------------------------------------------- démarrage */
 
 (async function init() {
+  bindNavToggle();
   try {
     const data = await api('/api/me');
     state.user = data.user;
