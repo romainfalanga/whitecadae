@@ -123,6 +123,7 @@ async function route() {
   if (path === '/inscription') return pageRegister();
   if (path === '/admin') return pageAdmin();
   if (path === '/reprises') return pageCovers();
+  if ((m = path.match(/^\/chanson\/([^/]+)\/reprises$/))) return pageSongCovers(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/membre\/([^/]+)$/))) return pageProfile(decodeURIComponent(m[1]));
   app.innerHTML = '<h1>Page introuvable</h1><p><a href="/" data-link>Retour à l’accueil</a></p>';
@@ -918,6 +919,9 @@ function renderSongPage() {
         La durée${duration ? ` (${duration})` : ''}${countFor('duration') ? ` · ${countFor('duration')}` : ''}
       </button>
       ${song.youtube_url ? `<a class="target-chip" href="${esc(song.youtube_url)}" target="_blank" rel="noopener">▶ Écouter</a>` : ''}
+      <a class="target-chip" href="/chanson/${encodeURIComponent(song.slug)}/reprises" data-link>
+        🎬 Reprises${state.song.coverCount ? ` · ${state.song.coverCount}` : ''}
+      </a>
     </div>
     <div class="song-layout">
       <div>
@@ -927,9 +931,6 @@ function renderSongPage() {
         <p class="hint">Une lecture globale du morceau, justifiée par des connexions entre phrases —
         y compris avec les phrases d’autres morceaux.</p>
         <div id="essays"></div>
-        <h2>Reprises de ce morceau</h2>
-        <p class="hint">Les versions et interprétations musicales de ce morceau par la communauté.</p>
-        <div id="covers"></div>
         <h2>Connexions avec d’autres chansons</h2>
         <div id="connections"></div>
       </div>
@@ -959,7 +960,6 @@ function renderSongPage() {
   renderPanel();
   renderInbound();
   renderEssays();
-  renderCovers();
   renderConnections();
   renderSelectionUI();
 }
@@ -1881,7 +1881,7 @@ function coverCard(c) {
       : `<a class="cover-link" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">▶ Voir la reprise</a>`}
     <div class="cover-head">
       <h4>${esc(c.title)}</h4>
-      ${c.song_slug ? `<a class="cover-song-tag" href="/chanson/${encodeURIComponent(c.song_slug)}" data-link>${esc(c.song_title)}</a>` : ''}
+      ${c.song_slug ? `<a class="cover-song-tag" href="/chanson/${encodeURIComponent(c.song_slug)}/reprises" data-link>${esc(c.song_title)}</a>` : ''}
       <div class="annotation-head">
         ${authorLink(c.username)}
         <span>${esc(formatDate(c.created_at))}</span>
@@ -1905,13 +1905,29 @@ function bindCoverDeletes(container, reload) {
   });
 }
 
-function renderCovers() {
-  const container = document.getElementById('covers');
-  if (!container) return;
-  const { song, covers } = state.song;
+// Page dédiée aux reprises d'un morceau — distincte de la page
+// d'interprétation (paroles, annotations, essais, connexions) : ici il n'y a
+// que les réalisations de la communauté pour ce morceau, et rien d'autre.
+async function pageSongCovers(slug) {
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  let data;
+  try {
+    data = await api(`/api/songs/${encodeURIComponent(slug)}/covers`);
+  } catch {
+    if (!stale(epoch)) app.innerHTML = '<h1>Chanson introuvable</h1><p><a href="/" data-link>Retour à l’accueil</a></p>';
+    return;
+  }
+  if (stale(epoch)) return;
+  state.songCovers = data;
+  renderSongCoversPage();
+}
+
+function renderSongCoversPage() {
+  const { song, covers } = state.songCovers;
   const u = state.user;
 
-  const list = (covers || []).length
+  const list = covers.length
     ? `<div class="covers-grid">${covers.map(coverCard).join('')}</div>`
     : '<p class="empty-note">Aucune reprise pour l’instant.</p>';
 
@@ -1929,9 +1945,17 @@ function renderCovers() {
       </form>`
     : `<p class="empty-note"><a href="/connexion" data-link>Connectez-vous</a> pour publier une reprise de ce morceau.</p>`;
 
-  container.innerHTML = list + form;
+  app.innerHTML = `
+    <div class="breadcrumb"><a href="/" data-link>Accueil</a> › ${esc(song.album_title || 'Sans album')} ›
+      <a href="/chanson/${encodeURIComponent(song.slug)}" data-link>${esc(song.title)}</a> › Reprises</div>
+    <h1>Reprises de « ${esc(song.title)} »</h1>
+    <p class="subtitle">${covers.length} reprise${covers.length > 1 ? 's' : ''} de la communauté, de la plus récente à la plus ancienne.</p>
+    <p class="hint"><a href="/chanson/${encodeURIComponent(song.slug)}" data-link>← Voir l’interprétation de ce morceau</a></p>
+    ${list}
+    ${form}`;
 
-  bindCoverDeletes(container, () => pageSong(song.slug, true));
+  bindSocial(app, { reload: () => pageSongCovers(song.slug), render: () => renderSongCoversPage() });
+  bindCoverDeletes(app, () => pageSongCovers(song.slug));
 
   const coverForm = document.getElementById('cover-form');
   if (coverForm) coverForm.onsubmit = async (e) => {
@@ -1946,13 +1970,11 @@ function renderCovers() {
           description: document.getElementById('cover-desc').value,
         },
       });
-      await pageSong(song.slug, true);
+      await pageSongCovers(song.slug);
     } catch (err) {
       coverForm.querySelector('.error-msg').textContent = err.message;
     }
   };
-
-  bindSocial(container);
 }
 
 /* --------------------------------------------------- profils & le livre */
@@ -2131,7 +2153,7 @@ async function pageCovers() {
 
   const songBlock = (s) => `
     <div class="covers-song">
-      <h3><a href="/chanson/${encodeURIComponent(s.slug)}" data-link>${esc(s.title)}</a>
+      <h3><a href="/chanson/${encodeURIComponent(s.slug)}/reprises" data-link>${esc(s.title)}</a>
         <span class="song-meta">${s.covers.length} reprise${s.covers.length > 1 ? 's' : ''}</span></h3>
       <div class="covers-grid">${s.covers.map(coverCard).join('')}</div>
     </div>`;

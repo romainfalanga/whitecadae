@@ -44,6 +44,7 @@ async function handleApi(request, env, url) {
   if (route('GET', '/api/albums')) return listAlbums(env);
   if (route('GET', '/api/corpus')) return getCorpus(env);
   if (route('GET', '/api/covers')) return listCovers(env, request);
+  if ((p = route('GET', '/api/songs/:slug/covers'))) return getSongCovers(env, request, p[0]);
   if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
   if ((p = route('GET', '/api/users/:username/avatar'))) return getAvatar(env, p[0]);
   if ((p = route('GET', '/api/users/:username'))) return getProfile(env, request, p[0]);
@@ -493,12 +494,11 @@ async function getSong(env, request, slug) {
   ).all()).results;
   for (const e of essays) e.links = essayLinks.filter((l) => l.essay_id === e.id);
 
-  // Reprises de ce morceau, de la plus récente à la plus ancienne.
-  const covers = (await env.DB.prepare(
-    `SELECT c.id, c.user_id, c.title, c.url, c.description, c.created_at, u.username
-       FROM covers c JOIN users u ON u.id = c.user_id
-      WHERE c.song_id = ?1 ORDER BY c.created_at DESC`
-  ).bind(song.id).all()).results;
+  // Les reprises ont leur propre page dédiée par morceau (/chanson/:slug/reprises) :
+  // seul le nombre est utile ici, pour afficher le lien vers cette page.
+  const coverCount = (await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM covers WHERE song_id = ?1'
+  ).bind(song.id).first()).n;
 
   // Références jointes aux interprétations (libres ou internes).
   const refs = (await env.DB.prepare(
@@ -524,10 +524,30 @@ async function getSong(env, request, slug) {
     await attachSocial(env, viewer, 'annotation',
       `SELECT annotation_id AS id FROM annotation_references WHERE ref_song_id = ${song.id}`, inbound);
   }
-  await attachSocial(env, viewer, 'cover',
-    `SELECT id FROM covers WHERE song_id = ${song.id}`, covers);
 
-  return json({ song, lines, annotations, connections, essays, inbound, covers, allSongs });
+  return json({ song, lines, annotations, connections, essays, inbound, coverCount, allSongs });
+}
+
+// Page dédiée aux reprises d'un morceau : distincte de la page
+// d'interprétation, avec son propre contenu (aucune parole ni annotation ici).
+async function getSongCovers(env, request, slug) {
+  const song = await env.DB.prepare(
+    `SELECT s.id, s.title, s.slug, al.title AS album_title, al.slug AS album_slug
+       FROM songs s LEFT JOIN albums al ON al.id = s.album_id
+      WHERE s.slug = ?1`
+  ).bind(slug).first();
+  if (!song) return json({ error: 'Chanson introuvable.' }, 404);
+
+  const covers = (await env.DB.prepare(
+    `SELECT c.id, c.user_id, c.title, c.url, c.description, c.created_at, u.username
+       FROM covers c JOIN users u ON u.id = c.user_id
+      WHERE c.song_id = ?1 ORDER BY c.created_at DESC`
+  ).bind(song.id).all()).results;
+
+  const viewer = await getUser(request, env);
+  await attachSocial(env, viewer, 'cover', `SELECT id FROM covers WHERE song_id = ${song.id}`, covers);
+
+  return json({ song, covers });
 }
 
 // Ajoute favorite_count, my_favorite et comments[] à chaque élément.
