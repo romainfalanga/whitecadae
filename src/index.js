@@ -43,6 +43,7 @@ async function handleApi(request, env, url) {
   // --- lecture publique
   if (route('GET', '/api/albums')) return listAlbums(env);
   if (route('GET', '/api/corpus')) return getCorpus(env);
+  if (route('GET', '/api/covers')) return listCovers(env, request);
   if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
   if ((p = route('GET', '/api/users/:username/avatar'))) return getAvatar(env, p[0]);
   if ((p = route('GET', '/api/users/:username'))) return getProfile(env, request, p[0]);
@@ -56,6 +57,8 @@ async function handleApi(request, env, url) {
   if (route('POST', '/api/essays')) return createEssay(request, env);
   if ((p = route('PUT', '/api/essays/:id'))) return updateEssay(request, env, +p[0]);
   if ((p = route('DELETE', '/api/essays/:id'))) return deleteEssay(request, env, +p[0]);
+  if (route('POST', '/api/covers')) return createCover(request, env);
+  if ((p = route('DELETE', '/api/covers/:id'))) return deleteCover(request, env, +p[0]);
   if (route('POST', '/api/favorites')) return toggleFavorite(request, env);
   if (route('POST', '/api/comments')) return createComment(request, env);
   if ((p = route('DELETE', '/api/comments/:id'))) return deleteComment(request, env, +p[0]);
@@ -490,6 +493,13 @@ async function getSong(env, request, slug) {
   ).all()).results;
   for (const e of essays) e.links = essayLinks.filter((l) => l.essay_id === e.id);
 
+  // Reprises de ce morceau, de la plus récente à la plus ancienne.
+  const covers = (await env.DB.prepare(
+    `SELECT c.id, c.user_id, c.title, c.url, c.description, c.created_at, u.username
+       FROM covers c JOIN users u ON u.id = c.user_id
+      WHERE c.song_id = ?1 ORDER BY c.created_at DESC`
+  ).bind(song.id).all()).results;
+
   // Références jointes aux interprétations (libres ou internes).
   const refs = (await env.DB.prepare(
     `SELECT r.id, r.annotation_id, r.label, r.url,
@@ -514,8 +524,10 @@ async function getSong(env, request, slug) {
     await attachSocial(env, viewer, 'annotation',
       `SELECT annotation_id AS id FROM annotation_references WHERE ref_song_id = ${song.id}`, inbound);
   }
+  await attachSocial(env, viewer, 'cover',
+    `SELECT id FROM covers WHERE song_id = ${song.id}`, covers);
 
-  return json({ song, lines, annotations, connections, essays, inbound, allSongs });
+  return json({ song, lines, annotations, connections, essays, inbound, covers, allSongs });
 }
 
 // Ajoute favorite_count, my_favorite et comments[] à chaque élément.
@@ -625,6 +637,16 @@ async function getProfile(env, request, username) {
       WHERE c.user_id = ?1 ORDER BY c.created_at`
   ).bind(user.id).all()).results;
 
+  const covers = (await env.DB.prepare(
+    `SELECT c.id, c.user_id, c.title, c.url, c.description, c.created_at, u.username,
+            s.title AS song_title, s.slug AS song_slug
+       FROM covers c
+       JOIN songs s ON s.id = c.song_id
+       JOIN users u ON u.id = c.user_id
+      WHERE c.user_id = ?1 ORDER BY c.created_at DESC`
+  ).bind(user.id).all()).results;
+  await attachSocial(env, viewer, 'cover', `SELECT id FROM covers WHERE user_id = ${user.id}`, covers);
+
   // Les compteurs publics ne portent que sur ce qui a été publié ; le nombre
   // de brouillons en attente est renvoyé à part (n'a de sens que pour l'auteur).
   const stats = await env.DB.prepare(
@@ -632,6 +654,7 @@ async function getProfile(env, request, username) {
        (SELECT COUNT(*) FROM annotations WHERE user_id = ?1 AND is_published = 1) AS annotations,
        (SELECT COUNT(*) FROM essays WHERE user_id = ?1 AND is_published = 1) AS essays,
        (SELECT COUNT(*) FROM song_connections WHERE user_id = ?1) AS connections,
+       (SELECT COUNT(*) FROM covers WHERE user_id = ?1) AS covers,
        (SELECT COUNT(*) FROM comments WHERE user_id = ?1) AS comments,
        (SELECT COUNT(*) FROM annotations WHERE user_id = ?1 AND is_published = 0) +
        (SELECT COUNT(*) FROM essays WHERE user_id = ?1 AND is_published = 0) AS draft_count,
@@ -640,7 +663,9 @@ async function getProfile(env, request, username) {
        (SELECT COUNT(*) FROM favorites f WHERE f.target_kind = 'essay'
           AND f.target_id IN (SELECT id FROM essays WHERE user_id = ?1)) +
        (SELECT COUNT(*) FROM favorites f WHERE f.target_kind = 'connection'
-          AND f.target_id IN (SELECT id FROM song_connections WHERE user_id = ?1)) AS favorites_received`
+          AND f.target_id IN (SELECT id FROM song_connections WHERE user_id = ?1)) +
+       (SELECT COUNT(*) FROM favorites f WHERE f.target_kind = 'cover'
+          AND f.target_id IN (SELECT id FROM covers WHERE user_id = ?1)) AS favorites_received`
   ).bind(user.id).first();
 
   // Historique des publications : les versions successives, la plus récente
@@ -654,7 +679,7 @@ async function getProfile(env, request, username) {
 
   return json({
     user: { username: user.username, created_at: user.created_at, is_admin: !!user.is_admin },
-    stats, annotations, essays, connections, versions,
+    stats, annotations, essays, connections, versions, covers,
   });
 }
 
@@ -947,6 +972,80 @@ async function deleteEssay(request, env, id) {
   return json({ ok: true });
 }
 
+/* ------------------------------------------------------------------ reprises */
+
+// Arborescence complète des reprises : albums (ordre de sortie) → morceaux
+// (ordre de piste) → reprises (de la plus récente à la plus ancienne).
+async function listCovers(env, request) {
+  const albums = (await env.DB.prepare(
+    'SELECT id, title, slug, release_date, is_single FROM albums ORDER BY position, release_date'
+  ).all()).results;
+  const songs = (await env.DB.prepare(
+    'SELECT id, album_id, title, slug, track_number FROM songs ORDER BY track_number, title'
+  ).all()).results;
+  const covers = (await env.DB.prepare(
+    `SELECT c.id, c.song_id, c.user_id, c.title, c.url, c.description, c.created_at, u.username
+       FROM covers c JOIN users u ON u.id = c.user_id
+      ORDER BY c.created_at DESC`
+  ).all()).results;
+
+  const viewer = await getUser(request, env);
+  await attachSocial(env, viewer, 'cover', 'SELECT id FROM covers', covers);
+
+  for (const s of songs) s.covers = covers.filter((c) => c.song_id === s.id);
+  for (const al of albums) {
+    al.is_single = !!al.is_single;
+    al.songs = songs.filter((s) => s.album_id === al.id);
+  }
+  const orphans = songs.filter((s) => !albums.some((al) => al.id === s.album_id));
+
+  return json({ albums, orphans });
+}
+
+async function createCover(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const body = await readJson(request);
+  if (!body) return json({ error: 'Requête invalide.' }, 400);
+  const songId = Number(body.song_id);
+  const title = String(body.title || '').trim();
+  const url = String(body.url || '').trim();
+  const description = String(body.description || '').trim();
+
+  if (!title) return json({ error: 'Donnez un titre à votre reprise.' }, 400);
+  if (title.length > 200) return json({ error: 'Titre trop long (200 caractères max).' }, 400);
+  if (!url || url.length > 600 || !/^https?:\/\//i.test(url)) {
+    return json({ error: 'Lien invalide (il doit commencer par http:// ou https://).' }, 400);
+  }
+  if (description.length > 2000) return json({ error: 'Description trop longue (2000 caractères max).' }, 400);
+
+  const song = await env.DB.prepare('SELECT id FROM songs WHERE id = ?1').bind(songId).first();
+  if (!song) return json({ error: 'Chanson introuvable.' }, 404);
+
+  const result = await env.DB.prepare(
+    'INSERT INTO covers (song_id, user_id, title, url, description) VALUES (?1, ?2, ?3, ?4, ?5)'
+  ).bind(songId, user.id, title, url, description || null).run();
+  return json({ id: result.meta.last_row_id }, 201);
+}
+
+async function deleteCover(request, env, id) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const cover = await env.DB.prepare('SELECT id, user_id FROM covers WHERE id = ?1').bind(id).first();
+  if (!cover) return json({ error: 'Reprise introuvable.' }, 404);
+  if (cover.user_id !== user.id && !user.is_admin) {
+    return json({ error: 'Vous ne pouvez supprimer que vos propres reprises.' }, 403);
+  }
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM favorites WHERE target_kind = 'cover' AND target_id = ?1`).bind(id),
+    env.DB.prepare(`DELETE FROM comments WHERE target_kind = 'cover' AND target_id = ?1`).bind(id),
+    env.DB.prepare('DELETE FROM covers WHERE id = ?1').bind(id),
+  ]);
+  return json({ ok: true });
+}
+
 /* ------------------------------------------------------------- publication */
 
 // Rend publiques toutes les interprétations et interprétations d'ensemble
@@ -1062,7 +1161,7 @@ async function getAvatar(env, username) {
 
 /* ------------------------------------------------- favoris & commentaires */
 
-const FAVORITE_KINDS = { annotation: 'annotations', connection: 'song_connections', essay: 'essays' };
+const FAVORITE_KINDS = { annotation: 'annotations', connection: 'song_connections', essay: 'essays', cover: 'covers' };
 
 async function targetExists(env, kind, id) {
   const table = FAVORITE_KINDS[kind];
@@ -1226,6 +1325,12 @@ async function adminDeleteSong(request, env, id) {
     env.DB.prepare(
       `DELETE FROM comments WHERE target_kind = 'essay'
         AND target_id IN (SELECT id FROM essays WHERE song_id = ?1)`).bind(id),
+    env.DB.prepare(
+      `DELETE FROM favorites WHERE target_kind = 'cover'
+        AND target_id IN (SELECT id FROM covers WHERE song_id = ?1)`).bind(id),
+    env.DB.prepare(
+      `DELETE FROM comments WHERE target_kind = 'cover'
+        AND target_id IN (SELECT id FROM covers WHERE song_id = ?1)`).bind(id),
     env.DB.prepare('DELETE FROM songs WHERE id = ?1').bind(id),
   ]);
   return json({ ok: true });

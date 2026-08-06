@@ -122,6 +122,7 @@ async function route() {
   if (path === '/connexion') return pageLogin();
   if (path === '/inscription') return pageRegister();
   if (path === '/admin') return pageAdmin();
+  if (path === '/reprises') return pageCovers();
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/membre\/([^/]+)$/))) return pageProfile(decodeURIComponent(m[1]));
   app.innerHTML = '<h1>Page introuvable</h1><p><a href="/" data-link>Retour à l’accueil</a></p>';
@@ -330,10 +331,12 @@ function renderNav() {
   const u = state.user;
   nav.innerHTML = u
     ? `<a href="/" data-link>Accueil</a>
+       <a href="/reprises" data-link>Reprises</a>
        ${u.is_admin ? '<a href="/admin" data-link>Administration</a>' : ''}
        <a href="${profileHref(u.username)}" data-link>Mon profil</a>
        <button class="link-btn" id="logout-btn">Se déconnecter</button>`
     : `<a href="/" data-link>Accueil</a>
+       <a href="/reprises" data-link>Reprises</a>
        <a href="/connexion" data-link>Se connecter</a>
        <a href="/inscription" data-link class="btn">Créer un compte</a>`;
   const btn = document.getElementById('logout-btn');
@@ -924,6 +927,9 @@ function renderSongPage() {
         <p class="hint">Une lecture globale du morceau, justifiée par des connexions entre phrases —
         y compris avec les phrases d’autres morceaux.</p>
         <div id="essays"></div>
+        <h2>Reprises de ce morceau</h2>
+        <p class="hint">Les versions et interprétations musicales de ce morceau par la communauté.</p>
+        <div id="covers"></div>
         <h2>Connexions avec d’autres chansons</h2>
         <div id="connections"></div>
       </div>
@@ -953,6 +959,7 @@ function renderSongPage() {
   renderPanel();
   renderInbound();
   renderEssays();
+  renderCovers();
   renderConnections();
   renderSelectionUI();
 }
@@ -1391,7 +1398,15 @@ function socialFooter(kind, item) {
   </div>`;
 }
 
-function bindSocial(container) {
+// `opts.reload` (recharge les données depuis le serveur après une mutation)
+// et `opts.render` (réaffiche depuis l'état local, ex. ouvrir un fil de
+// commentaires) valent par défaut le comportement de la page chanson : les
+// autres pages qui réutilisent le bloc social (ex. la page des reprises)
+// passent leurs propres callbacks.
+function bindSocial(container, opts = {}) {
+  const reload = opts.reload || (() => pageSong(state.song.song.slug, true));
+  const render = opts.render || renderSongPage;
+
   container.querySelectorAll('[data-fav]').forEach((btn) => {
     btn.onclick = async () => {
       if (!state.user) { navigate('/connexion'); return; }
@@ -1401,7 +1416,7 @@ function bindSocial(container) {
           method: 'POST',
           body: { target_kind: kind, target_id: Number(id) },
         });
-        await pageSong(state.song.song.slug, true);
+        await reload();
       } catch (err) { alert(err.message); }
     };
   });
@@ -1410,7 +1425,7 @@ function bindSocial(container) {
       const key = btn.dataset.commentsToggle;
       if (state.openComments.has(key)) state.openComments.delete(key);
       else state.openComments.add(key);
-      renderSongPage();
+      render();
     };
   });
   container.querySelectorAll('[data-comment-form]').forEach((form) => {
@@ -1426,7 +1441,7 @@ function bindSocial(container) {
             content: form.querySelector('textarea').value,
           },
         });
-        await pageSong(state.song.song.slug, true);
+        await reload();
       } catch (err) {
         form.querySelector('.error-msg').textContent = err.message;
       }
@@ -1437,7 +1452,7 @@ function bindSocial(container) {
       if (!confirm('Supprimer ce commentaire ?')) return;
       try {
         await api(`/api/comments/${btn.dataset.delComment}`, { method: 'DELETE' });
-        await pageSong(state.song.song.slug, true);
+        await reload();
       } catch (err) { alert(err.message); }
     };
   });
@@ -1836,6 +1851,110 @@ function renderConnections() {
   bindSocial(container);
 }
 
+/* ------------------------------------------------------------------ reprises */
+
+// Identifiant YouTube d'une URL (watch, youtu.be, shorts, déjà en embed…),
+// ou null si le lien ne pointe pas vers YouTube — dans ce cas la reprise
+// s'affiche comme une simple carte-lien plutôt qu'un lecteur intégré.
+function youtubeEmbedId(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, '');
+    if (host === 'youtu.be') return u.pathname.slice(1).split('/')[0] || null;
+    if (host === 'youtube.com' || host === 'm.youtube.com') {
+      if (u.pathname === '/watch') return u.searchParams.get('v');
+      const m = u.pathname.match(/^\/(?:shorts|embed|live)\/([^/]+)/);
+      if (m) return m[1];
+    }
+  } catch { /* URL invalide : traité comme un lien externe simple */ }
+  return null;
+}
+
+function coverCard(c) {
+  const u = state.user;
+  const own = u && (u.id === c.user_id || u.is_admin);
+  const ytId = youtubeEmbedId(c.url);
+  return `<div class="cover-card" data-cover="${c.id}">
+    ${ytId
+      ? `<div class="cover-embed"><iframe src="https://www.youtube.com/embed/${esc(ytId)}"
+          title="${esc(c.title)}" loading="lazy" allowfullscreen></iframe></div>`
+      : `<a class="cover-link" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">▶ Voir la reprise</a>`}
+    <div class="cover-head">
+      <h4>${esc(c.title)}</h4>
+      ${c.song_slug ? `<a class="cover-song-tag" href="/chanson/${encodeURIComponent(c.song_slug)}" data-link>${esc(c.song_title)}</a>` : ''}
+      <div class="annotation-head">
+        ${authorLink(c.username)}
+        <span>${esc(formatDate(c.created_at))}</span>
+        ${own ? `<button class="link-btn" data-cover-del="${c.id}">supprimer</button>` : ''}
+      </div>
+    </div>
+    ${c.description ? `<div class="cover-desc">${esc(c.description)}</div>` : ''}
+    ${socialFooter('cover', c)}
+  </div>`;
+}
+
+function bindCoverDeletes(container, reload) {
+  container.querySelectorAll('[data-cover-del]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm('Supprimer cette reprise ?')) return;
+      try {
+        await api(`/api/covers/${btn.dataset.coverDel}`, { method: 'DELETE' });
+        await reload();
+      } catch (err) { alert(err.message); }
+    };
+  });
+}
+
+function renderCovers() {
+  const container = document.getElementById('covers');
+  if (!container) return;
+  const { song, covers } = state.song;
+  const u = state.user;
+
+  const list = (covers || []).length
+    ? `<div class="covers-grid">${covers.map(coverCard).join('')}</div>`
+    : '<p class="empty-note">Aucune reprise pour l’instant.</p>';
+
+  const form = u
+    ? `<form class="panel-card" id="cover-form">
+        <h3>Publier une reprise de « ${esc(song.title)} »</h3>
+        <label for="cover-title">Titre</label>
+        <input id="cover-title" required maxlength="200" placeholder="Ma reprise acoustique…">
+        <label for="cover-url">Lien (YouTube, etc.)</label>
+        <input id="cover-url" type="url" required maxlength="600" placeholder="https://…">
+        <label for="cover-desc">Description (optionnel)</label>
+        <textarea id="cover-desc" maxlength="2000" placeholder="Quelques mots sur ta version…"></textarea>
+        <div class="error-msg"></div>
+        <button type="submit" class="primary">Publier la reprise</button>
+      </form>`
+    : `<p class="empty-note"><a href="/connexion" data-link>Connectez-vous</a> pour publier une reprise de ce morceau.</p>`;
+
+  container.innerHTML = list + form;
+
+  bindCoverDeletes(container, () => pageSong(song.slug, true));
+
+  const coverForm = document.getElementById('cover-form');
+  if (coverForm) coverForm.onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api('/api/covers', {
+        method: 'POST',
+        body: {
+          song_id: song.id,
+          title: document.getElementById('cover-title').value,
+          url: document.getElementById('cover-url').value,
+          description: document.getElementById('cover-desc').value,
+        },
+      });
+      await pageSong(song.slug, true);
+    } catch (err) {
+      coverForm.querySelector('.error-msg').textContent = err.message;
+    }
+  };
+
+  bindSocial(container);
+}
+
 /* --------------------------------------------------- profils & le livre */
 
 function bookPassageLabel(a) {
@@ -1869,7 +1988,7 @@ async function pageProfile(username) {
   }
   if (stale(epoch)) return;
 
-  const { user, stats, annotations, essays, connections, versions } = data;
+  const { user, stats, annotations, essays, connections, versions, covers } = data;
 
   // sections par morceau, dans l'ordre livré par le serveur (albums, pistes)
   const sections = [];
@@ -1955,6 +2074,7 @@ async function pageProfile(username) {
           ${stats.annotations} interprétation${stats.annotations > 1 ? 's' : ''} ·
           ${stats.essays} interprétation${stats.essays > 1 ? 's' : ''} d’ensemble ·
           ${stats.connections} connexion${stats.connections > 1 ? 's' : ''} ·
+          ${stats.covers} reprise${stats.covers > 1 ? 's' : ''} ·
           ♥ ${stats.favorites_received} reçu${stats.favorites_received > 1 ? 's' : ''}</p>
       </div>
       ${isMe ? `<button type="button" class="icon-btn" id="settings-btn" title="Paramètres du compte" aria-label="Paramètres du compte">⚙</button>` : ''}
@@ -1964,6 +2084,8 @@ async function pageProfile(username) {
     <p class="hint">${total} bloc${total > 1 ? 's' : ''} d’interprétation, classé${total > 1 ? 's' : ''} morceau par morceau
     dans l’ordre chronologique des sorties : le passage interprété, puis la lecture qu’${isMe ? 'en fais-tu' : `en fait ${esc(user.username)}`}.</p>
     ${bookHtml}
+    ${covers.length ? `<h2>${isMe ? 'Tes reprises' : `Les reprises de ${esc(user.username)}`}</h2>
+      <div class="covers-grid">${covers.map(coverCard).join('')}</div>` : ''}
     ${connections.length ? `<h2>Ses connexions entre morceaux</h2>
       ${connections.map((c) => `<div class="connection">
         <div class="connection-songs">
@@ -1988,6 +2110,57 @@ async function pageProfile(username) {
       }
     };
   }
+  if (covers.length) {
+    bindSocial(app, { reload: () => pageProfile(username), render: () => pageProfile(username) });
+    bindCoverDeletes(app, () => pageProfile(username));
+  }
+}
+
+/* ------------------------------------------------------------------ reprises */
+
+// Arborescence de toutes les reprises publiées : album (ordre de sortie) →
+// morceau (ordre de piste) → reprises, de la plus récente à la plus ancienne.
+async function pageCovers() {
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  const data = await api('/api/covers');
+  if (stale(epoch)) return;
+
+  const allSongs = data.albums.flatMap((al) => al.songs).concat(data.orphans || []);
+  const total = allSongs.reduce((n, s) => n + (s.covers ? s.covers.length : 0), 0);
+
+  const songBlock = (s) => `
+    <div class="covers-song">
+      <h3><a href="/chanson/${encodeURIComponent(s.slug)}" data-link>${esc(s.title)}</a>
+        <span class="song-meta">${s.covers.length} reprise${s.covers.length > 1 ? 's' : ''}</span></h3>
+      <div class="covers-grid">${s.covers.map(coverCard).join('')}</div>
+    </div>`;
+
+  const albumsHtml = data.albums
+    .filter((al) => al.songs.some((s) => s.covers && s.covers.length))
+    .map((al) => `
+      <section class="album-card">
+        <div class="album-head"><h2>${esc(al.title)}</h2></div>
+        ${al.songs.filter((s) => s.covers && s.covers.length).map(songBlock).join('')}
+      </section>`).join('');
+
+  const orphanSongs = (data.orphans || []).filter((s) => s.covers && s.covers.length);
+  const orphansHtml = orphanSongs.length
+    ? `<section class="album-card">
+        <div class="album-head"><h2>Sans album</h2></div>
+        ${orphanSongs.map(songBlock).join('')}
+      </section>`
+    : '';
+
+  app.innerHTML = `
+    <h1>Reprises</h1>
+    <p class="subtitle">${total} reprise${total > 1 ? 's' : ''} de la communauté, classées par album puis par morceau,
+    de la plus récente à la plus ancienne.</p>
+    ${albumsHtml + orphansHtml || `<p class="empty-note">Aucune reprise n’a encore été publiée.
+      Rendez-vous sur la page d’un morceau pour publier la vôtre.</p>`}`;
+
+  bindSocial(app, { reload: () => pageCovers(), render: () => pageCovers() });
+  bindCoverDeletes(app, () => pageCovers());
 }
 
 /* ---------------------------------------------------------------- admin */

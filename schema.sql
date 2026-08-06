@@ -156,8 +156,22 @@ CREATE TABLE IF NOT EXISTS essay_links (
 
 CREATE INDEX IF NOT EXISTS idx_essay_links_essay ON essay_links(essay_id);
 
+-- Reprise (cover) : réalisation audio/vidéo d'un morceau par un membre,
+-- publiée avec un lien vers sa réalisation (YouTube ou autre).
+CREATE TABLE IF NOT EXISTS covers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  song_id INTEGER NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  url TEXT NOT NULL,
+  description TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_covers_song ON covers(song_id);
+
 -- Favoris (♥) sur une interprétation ('annotation'), une connexion
--- ('connection') ou une interprétation d'ensemble ('essay').
+-- ('connection'), une interprétation d'ensemble ('essay') ou une reprise ('cover').
 CREATE TABLE IF NOT EXISTS favorites (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   target_kind TEXT NOT NULL,
