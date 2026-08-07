@@ -2,7 +2,7 @@
 // Stratégie « réseau d'abord » : le site est collaboratif, on ne veut jamais
 // servir une interprétation périmée. Le cache ne sert que de filet hors ligne.
 
-const CACHE = 'whitecadae-v2';
+const CACHE = 'whitecadae-v3';
 const SHELL = ['/', '/styles.css', '/app.js', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {

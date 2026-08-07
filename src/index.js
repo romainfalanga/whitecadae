@@ -1,5 +1,7 @@
 // WhiteCadae — Cloudflare Worker : API + service du site statique
 
+import { getRiddle, isLocked, checkAnswer, buildState } from './enigmas57.js';
+
 const SESSION_COOKIE = 'wc_session';
 const SESSION_DAYS = 30;
 const PBKDF2_ITERATIONS = 100000;
@@ -64,6 +66,14 @@ async function handleApi(request, env, url) {
   if (route('POST', '/api/comments')) return createComment(request, env);
   if ((p = route('DELETE', '/api/comments/:id'))) return deleteComment(request, env, +p[0]);
   if (route('POST', '/api/profile/publish')) return publishVersion(request, env);
+
+  // --- les signes de l'EP 57 (page /57, réservée aux membres)
+  if (route('GET', '/api/57')) return signsState(request, env);
+  if (route('POST', '/api/57/guess')) return signsGuess(request, env);
+  if (route('POST', '/api/57/hint')) return signsHint(request, env);
+  if (route('POST', '/api/57/reveal')) return signsReveal(request, env);
+  if (route('DELETE', '/api/57/progress')) return signsReset(request, env);
+
   if (route('PUT', '/api/account/username')) return updateUsername(request, env);
   if (route('PUT', '/api/account/password')) return updatePassword(request, env);
   if (route('POST', '/api/account/avatar')) return updateAvatar(request, env);
@@ -1196,6 +1206,133 @@ async function getAvatar(env, username) {
       'Cache-Control': 'public, max-age=600',
     },
   });
+}
+
+/* ------------------------------------------- les signes de l'EP 57 (/57) */
+
+// Toute la logique du jeu (réponses, explications, indices) est dans
+// src/enigmas57.js et ne quitte jamais le Worker : le client ne reçoit une
+// réponse qu'une fois le signe trouvé, et un indice qu'une fois demandé.
+
+async function riddleRows(env, userId) {
+  const { results } = await env.DB.prepare(
+    'SELECT riddle_id, hints_used, revealed, solved_at FROM riddle_progress WHERE user_id = ?1'
+  ).bind(userId).all();
+  return results || [];
+}
+
+async function riddleState(env, userId) {
+  return buildState(await riddleRows(env, userId));
+}
+
+// Crée la ligne de progression si elle n'existe pas encore.
+async function ensureRiddleRow(env, userId, riddleId) {
+  await env.DB.prepare(
+    `INSERT INTO riddle_progress (user_id, riddle_id) VALUES (?1, ?2)
+     ON CONFLICT(user_id, riddle_id) DO NOTHING`
+  ).bind(userId, riddleId).run();
+}
+
+// Récupère le signe visé par la requête, en vérifiant qu'il est jouable.
+// Retourne { riddle, rows } ou { error: Response }.
+async function riddleTarget(request, env, userId) {
+  const body = await readJson(request);
+  const riddle = getRiddle(String(body?.id || ''));
+  if (!riddle) return { error: json({ error: 'Signe introuvable.' }, 404) };
+
+  const rows = await riddleRows(env, userId);
+  const solvedIds = new Set(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
+  const already = rows.find((r) => r.riddle_id === riddle.id);
+  if (!already?.solved_at && isLocked(riddle, solvedIds)) {
+    return { error: json({ error: 'Ce signe est encore verrouillé.' }, 403) };
+  }
+  return { riddle, rows, row: already, body };
+}
+
+async function signsState(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  return json(await riddleState(env, user.id));
+}
+
+async function signsGuess(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const target = await riddleTarget(request, env, user.id);
+  if (target.error) return target.error;
+  const { riddle, row, body } = target;
+
+  const answer = String(body?.answer ?? '');
+  if (answer.length > 200) return json({ error: 'Réponse trop longue.' }, 400);
+
+  if (row?.solved_at) {
+    // déjà trouvé : on renvoie simplement l'état, sans rien changer
+    return json({ ok: true, id: riddle.id, state: await riddleState(env, user.id) });
+  }
+  if (!checkAnswer(riddle, answer)) {
+    return json({ ok: false, id: riddle.id });
+  }
+
+  await ensureRiddleRow(env, user.id, riddle.id);
+  await env.DB.prepare(
+    `UPDATE riddle_progress
+        SET solved_at = datetime('now'), updated_at = datetime('now')
+      WHERE user_id = ?1 AND riddle_id = ?2`
+  ).bind(user.id, riddle.id).run();
+
+  return json({ ok: true, id: riddle.id, state: await riddleState(env, user.id) });
+}
+
+async function signsHint(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const target = await riddleTarget(request, env, user.id);
+  if (target.error) return target.error;
+  const { riddle, row } = target;
+
+  const used = Math.min(row?.hints_used || 0, riddle.hints.length);
+  if (used >= riddle.hints.length) {
+    return json({ ok: false, error: 'Plus d’indice pour ce signe.' }, 400);
+  }
+
+  await ensureRiddleRow(env, user.id, riddle.id);
+  await env.DB.prepare(
+    `UPDATE riddle_progress SET hints_used = ?3, updated_at = datetime('now')
+      WHERE user_id = ?1 AND riddle_id = ?2`
+  ).bind(user.id, riddle.id, used + 1).run();
+
+  return json({ ok: true, id: riddle.id, state: await riddleState(env, user.id) });
+}
+
+// Dernier recours : on donne la réponse, mais le signe est compté comme
+// « révélé » et non comme « trouvé ».
+async function signsReveal(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const target = await riddleTarget(request, env, user.id);
+  if (target.error) return target.error;
+  const { riddle, row } = target;
+  if (row?.solved_at) return json({ ok: true, id: riddle.id, state: await riddleState(env, user.id) });
+
+  await ensureRiddleRow(env, user.id, riddle.id);
+  await env.DB.prepare(
+    `UPDATE riddle_progress
+        SET solved_at = datetime('now'), revealed = 1, hints_used = ?3,
+            updated_at = datetime('now')
+      WHERE user_id = ?1 AND riddle_id = ?2`
+  ).bind(user.id, riddle.id, riddle.hints.length).run();
+
+  return json({ ok: true, id: riddle.id, state: await riddleState(env, user.id) });
+}
+
+async function signsReset(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  await env.DB.prepare('DELETE FROM riddle_progress WHERE user_id = ?1').bind(user.id).run();
+  return json({ ok: true, state: await riddleState(env, user.id) });
 }
 
 /* ------------------------------------------------- favoris & commentaires */

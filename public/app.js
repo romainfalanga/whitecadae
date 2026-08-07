@@ -12,6 +12,7 @@ const state = {
   corpusDf: null, // fréquence documentaire des mots (moteur d'échos)
   builder: null, // constructeur d'interprétation d'ensemble en cours
   sheetOpen: false, // feuille du bas ouverte (mobile)
+  enigmes: null, // état des énigmes de la page /57
 };
 
 /* ------------------------------------------------------------------ utils */
@@ -123,6 +124,7 @@ async function route() {
   if (path === '/inscription') return pageRegister();
   if (path === '/admin') return pageAdmin();
   if (path === '/reprises') return pageCovers();
+  if (path === '/57') return pageEnigmes();
   if ((m = path.match(/^\/chanson\/([^/]+)\/reprises$/))) return pageSongCovers(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/membre\/([^/]+)$/))) return pageProfile(decodeURIComponent(m[1]));
@@ -334,10 +336,12 @@ function renderNav() {
   // pas besoin de la dupliquer dans le menu.
   nav.innerHTML = u
     ? `<a href="/" data-link>Accueil</a>
+       <a href="/57" data-link>57</a>
        <a href="/reprises" data-link>Reprises</a>
        ${u.is_admin ? '<a href="/admin" data-link>Administration</a>' : ''}
        <a href="${profileHref(u.username)}" data-link>Mon profil</a>`
     : `<a href="/" data-link>Accueil</a>
+       <a href="/57" data-link>57</a>
        <a href="/reprises" data-link>Reprises</a>
        <a href="/connexion" data-link>Se connecter</a>
        <a href="/inscription" data-link class="btn">Créer un compte</a>`;
@@ -2174,6 +2178,378 @@ async function pageCovers() {
     </section>`).join('');
 
   app.innerHTML = `<h1>Reprises</h1>${albums}`;
+}
+
+/* --------------------------------------------------- les énigmes (/57) */
+
+/* Page 57 : les mots de passe cachés dans les morceaux, en arborescence.
+   Rien de ce qui est à trouver n'apparaît ici — ni réponse, ni explication,
+   ni indice, ni même dans un nom de classe ou d'identifiant. Le Worker ne
+   les envoie qu'une fois l'énigme résolue, ou l'indice demandé. */
+
+async function pageEnigmes() {
+  const epoch = newEpoch();
+
+  if (!state.user) {
+    app.innerHTML = `
+      <h1>57</h1>
+      <p class="subtitle">Ce que les morceaux disent à mots couverts.</p>
+      <div class="enigmes-gate">
+        <p>Un nombre, une heure, un mot : dans les textes de White Cadae,
+           beaucoup de choses en désignent une autre. Cette page les rassemble
+           en une arborescence à reconstituer — à chaque « = », il y a un mot
+           de passe à trouver.</p>
+        <p>Il faut un compte pour jouer : votre progression est enregistrée
+           dessus, et vous la retrouvez sur tous vos appareils.</p>
+        <p class="enigmes-gate-actions">
+          <a href="/connexion" data-link class="btn">Se connecter</a>
+          <a href="/inscription" data-link class="btn">Créer un compte</a>
+        </p>
+      </div>`;
+    return;
+  }
+
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  let data;
+  try {
+    data = await api('/api/57');
+  } catch (err) {
+    if (stale(epoch)) return;
+    app.innerHTML = `<h1>57</h1><p class="empty-note">${esc(err.message)}</p>`;
+    return;
+  }
+  if (stale(epoch)) return;
+  state.enigmes = data;
+  renderEnigmesPage();
+}
+
+// Les énigmes d'une branche, regroupées par source : « 57 » porte deux sens,
+// ils s'affichent sous une seule et même racine.
+function enigmeGroups(branchId) {
+  const groups = [];
+  for (const r of state.enigmes.riddles) {
+    if (r.branch !== branchId) continue;
+    const last = groups[groups.length - 1];
+    if (last && last.source === r.source) last.items.push(r);
+    else groups.push({ source: r.source, items: [r] });
+  }
+  return groups;
+}
+
+function enigmeLabel(id) {
+  const r = state.enigmes.riddles.find((x) => x.id === id);
+  if (!r) return id;
+  return r.rank > 1 ? `${r.source} (2ᵉ sens)` : r.source;
+}
+
+function enigmeClass(r) {
+  if (r.locked) return 'enigme enigme--locked';
+  if (r.solved) return r.revealed ? 'enigme enigme--revealed' : 'enigme enigme--solved';
+  return 'enigme';
+}
+
+// « a, b et c »
+function joinFr(parts) {
+  if (parts.length < 2) return parts.join('');
+  return parts.slice(0, -1).join(', ') + ' et ' + parts[parts.length - 1];
+}
+
+// La source n'est pas répétée dans la carte : elle est déjà sur la racine, à
+// gauche sur ordinateur et au-dessus sur mobile. La carte n'affiche que ce qui
+// suit le « = ».
+function enigmeCardHtml(r) {
+  const rank = r.rank > 1 ? `<p class="enigme-rank">${r.rank}ᵉ sens</p>` : '';
+
+  if (r.locked) {
+    const missing = joinFr(r.requires
+      .map((id) => `<button type="button" class="link-btn enigme-goto" data-goto="${esc(id)}">${esc(enigmeLabel(id))}</button>`));
+    return `${rank}
+      <p class="enigme-line">
+        <span class="enigme-eq">=</span>
+        <span class="enigme-blank">?</span>
+      </p>
+      <p class="enigme-locked-note">Verrouillé — trouve d’abord ${missing}.</p>`;
+  }
+
+  if (r.solved) {
+    const badge = r.revealed ? '<span class="enigme-badge">révélé</span>' : '';
+    const quotes = (r.quotes || [])
+      .map((q) => `<li><span class="enigme-quote">« ${esc(q.text)} »</span>
+        <a href="/chanson/${encodeURIComponent(q.slug)}" data-link>${esc(q.song)}</a></li>`)
+      .join('');
+    return `${rank}
+      <p class="enigme-line">
+        <span class="enigme-eq">=</span>
+        <strong class="enigme-answer">${esc(r.answer)}</strong>${badge}
+      </p>
+      <p class="enigme-reveal">${esc(r.reveal)}</p>
+      ${quotes ? `<ul class="enigme-quotes">${quotes}</ul>` : ''}`;
+  }
+
+  const shown = r.hints || [];
+  const hints = shown
+    .map((h, i) => `<li><span class="enigme-hint-num">Indice ${i + 1}</span>${esc(h)}</li>`)
+    .join('');
+  const canHint = shown.length < r.hintCount;
+
+  return `${rank}
+    <form class="enigme-form">
+      <span class="enigme-eq">=</span>
+      <input class="enigme-input" type="text" placeholder="le mot de passe…"
+             autocomplete="off" autocapitalize="off" autocorrect="off"
+             spellcheck="false" enterkeyhint="go" maxlength="200"
+             aria-label="Mot de passe pour ${esc(r.source)}">
+      <button type="submit" class="primary">Valider</button>
+    </form>
+    <p class="enigme-msg" role="status" aria-live="polite"></p>
+    ${hints ? `<ul class="enigme-hints">${hints}</ul>` : ''}
+    <p class="enigme-actions">
+      ${canHint
+        ? `<button type="button" class="link-btn enigme-hint-btn">${shown.length ? `Indice suivant (${shown.length}/${r.hintCount} lus)` : 'Voir un indice'}</button>`
+        : '<button type="button" class="link-btn enigme-reveal-btn">Donner la réponse</button>'}
+    </p>`;
+}
+
+function convergenceHtml(c) {
+  if (!c.open) {
+    return `
+      <div class="convergence" id="${esc(c.id)}">
+        <span class="conv-mark">✦</span>
+        <div>
+          <strong>Les deux chemins se rejoignent ici.</strong>
+          <p>Trouve les ${c.from.length} mots de passe ci-dessus pour voir sur quoi.</p>
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="convergence convergence--open" id="${esc(c.id)}">
+      <span class="conv-mark">✦</span>
+      <div>
+        <strong>${esc(c.label)}</strong>
+        <p>${esc(c.note)}</p>
+      </div>
+    </div>`;
+}
+
+function enigmesProgressHtml() {
+  const d = state.enigmes;
+  const pct = d.total ? Math.round((d.solved / d.total) * 100) : 0;
+  const revealed = d.solved - d.found;
+  const detail = revealed
+    ? `<span class="progress-sub">${d.found} trouvé${d.found > 1 ? 's' : ''}, ${revealed} révélé${revealed > 1 ? 's' : ''}</span>`
+    : '';
+  return `
+    <div class="progress-bar"><span style="width:${pct}%"></span></div>
+    <p class="progress-text"><strong>${d.solved}</strong> / ${d.total} mots de passe ${detail}</p>`;
+}
+
+function renderEnigmesPage() {
+  const d = state.enigmes;
+
+  const toc = d.branches
+    .map((b) => `<button type="button" class="target-chip" data-branch="${esc(b.id)}">${esc(b.title)}</button>`)
+    .join('');
+
+  const branches = d.branches.map((b) => `
+    <section class="enigme-branch" id="branche-${esc(b.id)}">
+      <h2>${esc(b.title)}</h2>
+      <p class="branch-intro">${esc(b.intro)}</p>
+      ${enigmeGroups(b.id).map((g) => `
+        <div class="node-group">
+          <div class="node-source" id="src-${esc(g.items[0].id)}"><span>${esc(g.source)}</span></div>
+          <div class="node-leaves">
+            ${g.items.map((r) => `<article class="${enigmeClass(r)}" id="e-${esc(r.id)}">${enigmeCardHtml(r)}</article>`).join('')}
+          </div>
+        </div>`).join('')}
+      ${d.convergences.filter((c) => c.branch === b.id).map(convergenceHtml).join('')}
+    </section>`).join('');
+
+  app.innerHTML = `
+    <h1>57</h1>
+    <p class="subtitle">Dans les morceaux, un mot peut en dire un autre. Partout
+       où il y a un « = », trouve ce qui se cache derrière.</p>
+    <div class="enigmes-progress" id="enigmes-progress">${enigmesProgressHtml()}</div>
+    <nav class="enigmes-toc">${toc}</nav>
+    ${branches}
+    <p class="enigmes-reset"><button type="button" class="link-btn" id="enigmes-reset">Recommencer à zéro</button></p>`;
+
+  d.riddles.forEach((r) => {
+    const el = document.getElementById('e-' + r.id);
+    if (!el) return;
+    el.dataset.sig = JSON.stringify(r);
+    bindEnigmeCard(el, r);
+  });
+  bindEnigmesChrome();
+  state.enigmesShape = enigmesShape();
+}
+
+// Le découpage en racines : si un déverrouillage le change, la mise à jour
+// ciblée ne suffit plus et il faut reconstruire la page.
+function enigmesShape() {
+  return state.enigmes.branches
+    .map((b) => enigmeGroups(b.id).map((g) => g.items.map((r) => r.id).join('+')).join('|'))
+    .join('/');
+}
+
+// Après chaque action, le serveur renvoie l'état complet : on ne réécrit que
+// les cartes qui ont réellement changé, pour ne pas perdre le focus ni la
+// position de défilement (essentiel sur mobile, clavier ouvert).
+function applyEnigmesState(data, focusId) {
+  state.enigmes = data;
+
+  if (enigmesShape() !== state.enigmesShape) {
+    renderEnigmesPage();
+    if (focusId) flashEnigme(focusId);
+    return;
+  }
+
+  const prog = document.getElementById('enigmes-progress');
+  if (prog) prog.innerHTML = enigmesProgressHtml();
+
+  // Le libellé d'une racine peut changer : celui d'une énigme verrouillée est
+  // masqué tant que son prérequis n'est pas trouvé.
+  data.branches.forEach((b) => {
+    enigmeGroups(b.id).forEach((g) => {
+      const holder = document.getElementById('src-' + g.items[0].id);
+      const label = holder && holder.firstElementChild;
+      if (label && label.textContent !== g.source) label.textContent = g.source;
+    });
+  });
+
+  data.riddles.forEach((r) => {
+    const el = document.getElementById('e-' + r.id);
+    if (!el) return;
+    const sig = JSON.stringify(r);
+    if (el.dataset.sig === sig) return;
+    el.dataset.sig = sig;
+    el.className = enigmeClass(r);
+    el.innerHTML = enigmeCardHtml(r);
+    bindEnigmeCard(el, r);
+  });
+
+  data.convergences.forEach((c) => {
+    const el = document.getElementById(c.id);
+    if (el) el.outerHTML = convergenceHtml(c);
+  });
+
+  if (focusId) flashEnigme(focusId);
+}
+
+// Met la carte en évidence et l'amène au centre de l'écran : sur mobile le
+// clavier vient de se refermer, la révélation doit atterrir sous les yeux.
+function flashEnigme(id) {
+  const el = document.getElementById('e-' + id);
+  if (!el) return;
+  el.classList.add('enigme--just');
+  setTimeout(() => el.classList.remove('enigme--just'), 1800);
+  // on laisse la mise en page se stabiliser avant de faire défiler
+  setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
+}
+
+function enigmeWrong(el, input) {
+  const msg = el.querySelector('.enigme-msg');
+  if (msg) msg.textContent = 'Ce n’est pas le bon mot de passe. Réessaie, ou demande un indice.';
+  el.classList.remove('enigme--wrong');
+  void el.offsetWidth; // force le redémarrage de l'animation
+  el.classList.add('enigme--wrong');
+  setTimeout(() => el.classList.remove('enigme--wrong'), 600);
+  if (input) input.select();
+  if (navigator.vibrate) navigator.vibrate(40);
+}
+
+function bindEnigmeCard(el, r) {
+  const form = el.querySelector('.enigme-form');
+  if (form) {
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const input = form.querySelector('.enigme-input');
+      const btn = form.querySelector('button[type="submit"]');
+      const answer = input.value.trim();
+      if (!answer) return;
+      btn.disabled = true;
+      try {
+        const res = await api('/api/57/guess', { method: 'POST', body: { id: r.id, answer } });
+        if (res.ok) {
+          input.blur(); // referme le clavier avant de dérouler la révélation
+          applyEnigmesState(res.state, r.id);
+        } else {
+          btn.disabled = false;
+          enigmeWrong(el, input);
+        }
+      } catch (err) {
+        btn.disabled = false;
+        const msg = el.querySelector('.enigme-msg');
+        if (msg) msg.textContent = err.message;
+      }
+    };
+  }
+
+  const hintBtn = el.querySelector('.enigme-hint-btn');
+  if (hintBtn) {
+    hintBtn.onclick = async () => {
+      hintBtn.disabled = true;
+      try {
+        const res = await api('/api/57/hint', { method: 'POST', body: { id: r.id } });
+        applyEnigmesState(res.state);
+      } catch {
+        hintBtn.disabled = false;
+      }
+    };
+  }
+
+  const revealBtn = el.querySelector('.enigme-reveal-btn');
+  if (revealBtn) {
+    revealBtn.onclick = async () => {
+      if (!confirm('Afficher la réponse ? Elle sera comptée comme révélée, pas comme trouvée.')) return;
+      revealBtn.disabled = true;
+      try {
+        const res = await api('/api/57/reveal', { method: 'POST', body: { id: r.id } });
+        applyEnigmesState(res.state, r.id);
+      } catch {
+        revealBtn.disabled = false;
+      }
+    };
+  }
+
+  el.querySelectorAll('.enigme-goto').forEach((b) => {
+    b.onclick = () => {
+      const target = document.getElementById('e-' + b.dataset.goto);
+      if (!target) return;
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      target.classList.add('enigme--just');
+      setTimeout(() => target.classList.remove('enigme--just'), 1800);
+      // sur mobile, on évite d'ouvrir le clavier au milieu d'un défilement
+      if (window.innerWidth > 700) {
+        const input = target.querySelector('.enigme-input');
+        if (input) setTimeout(() => input.focus(), 450);
+      }
+    };
+  });
+}
+
+function bindEnigmesChrome() {
+  document.querySelectorAll('.enigmes-toc .target-chip').forEach((b) => {
+    b.onclick = () => {
+      const section = document.getElementById('branche-' + b.dataset.branch);
+      if (section) section.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+  });
+
+  const reset = document.getElementById('enigmes-reset');
+  if (reset) {
+    reset.onclick = async () => {
+      if (!confirm('Effacer toute ta progression sur cette page ?')) return;
+      reset.disabled = true;
+      try {
+        const res = await api('/api/57/progress', { method: 'DELETE' });
+        state.enigmes = res.state;
+        renderEnigmesPage();
+        window.scrollTo(0, 0);
+      } catch {
+        reset.disabled = false;
+      }
+    };
+  }
 }
 
 /* ---------------------------------------------------------------- admin */
