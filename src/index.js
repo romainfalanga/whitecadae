@@ -1,6 +1,6 @@
 // WhiteCadae — Cloudflare Worker : API + service du site statique
 
-import { getNode, isLocked, matchAnswer, buildState } from './enigmas57.js';
+import { getNode, isLocked, matchAnswer, buildState, currentAnswerId } from './enigmas57.js';
 
 const SESSION_COOKIE = 'wc_session';
 const SESSION_DAYS = 30;
@@ -1402,7 +1402,8 @@ async function riddleRows(env, userId) {
   const { results } = await env.DB.prepare(
     'SELECT riddle_id, solved_at FROM riddle_progress WHERE user_id = ?1'
   ).bind(userId).all();
-  return results || [];
+  // Un nœud a pu être réuni à un autre depuis : la progression suit.
+  return (results || []).map((r) => ({ ...r, riddle_id: currentAnswerId(r.riddle_id) }));
 }
 
 async function riddleState(env, userId) {

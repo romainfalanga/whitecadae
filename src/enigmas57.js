@@ -90,6 +90,14 @@ export const NODES = [
         quotes: ['Je vois des signes partout sur le chantier du paradis. (Orange)',
                  'Sans indices dans les dés, je laisse des signes cachés. (Sans indices dans les dés)'],
       },
+      {
+        id: 'n-a-3',
+        label: 'Archanges (7 et 12)',
+        // « archanges » suffit, avec ou sans nombre ; « les 12 anges » aussi.
+        match: (n) => /archange/.test(n) || (/\bange/.test(n) && /\b(7|12|sept|douze)\b/.test(n)),
+        note: '5 + 7 = 12, et les 57 sont déjà les anges : ce sont donc les 12 archanges. Selon les prismes ils sont 7 ou 12 — 57 porte les deux nombres à la fois, et les deux désignent les archanges.',
+        quotes: ['La matrix est vivante, elle grandit grâce aux anges. (13h20)'],
+      },
     ],
   },
   {
@@ -109,41 +117,19 @@ export const NODES = [
   },
 
   {
+    // Les deux formules tombent sur la même date : un seul élément, un seul
+    // champ, plutôt que deux nœuds à la réponse identique.
     id: 'n-c',
-    source: '5 vins divins',
+    source: '5 vins divins et 30 vins divins',
     requires: [],
     answers: [
       {
         id: 'n-c-1',
         label: '25 décembre',
         match: (n) => isDecemberDay(n, 25) && !numbersIn(n).includes(2031),
-        note: '5 vins = 5 + vingt = 25, et « divins » donne le mois de la naissance du divin.',
-        quotes: ['5 vins divins, t’entendras les 57. (Sans indices dans les dés)'],
-      },
-    ],
-  },
-  {
-    id: 'n-d',
-    source: '30 vins divins',
-    requires: [],
-    answers: [
-      {
-        id: 'n-d-1',
-        label: '30 décembre + 20 décembre',
-        match: (n) => {
-          const nums = numbersIn(n);
-          const hasDec = /\bdec/.test(n) || nums.includes(12);
-          return hasDec && nums.includes(30) && nums.includes(20);
-        },
-        note: '30 vins porte deux dates à la fois : le 30 et le vingt.',
-        quotes: ['30 vins divins, tu verras les 57. (30 vins divins)'],
-      },
-      {
-        id: 'n-d-2',
-        label: '25 décembre',
-        match: (n) => isDecemberDay(n, 25) && !numbersIn(n).includes(2031),
-        note: '(30 + 20) / 2 = 25 : la moyenne des deux dates retombe sur celle de 5 vins divins.',
-        quotes: ['5 vins divins, t’entendras les 57. (Sans indices dans les dés)'],
+        note: '5 vins = 5 + vingt = 25 ; 30 vins = (30 + 20) / 2 = 25. « Divins » donne le mois de la naissance du divin.',
+        quotes: ['5 vins divins, t’entendras les 57. (Sans indices dans les dés)',
+                 '30 vins divins, tu verras les 57. (30 vins divins)'],
       },
     ],
   },
@@ -172,8 +158,8 @@ export const NODES = [
 
   {
     id: 'n-f',
-    source: '5 vins divins + 30 vins divins + 13h20',
-    requires: ['n-c-1', 'n-d-2', 'n-e-1'],
+    source: '5 vins divins et 30 vins divins + 13h20',
+    requires: ['n-c-1', 'n-e-1'],
     answers: [
       {
         id: 'n-f-1',
@@ -270,6 +256,14 @@ export const NODES = [
 ];
 
 /* ----------------------------------------------------------------- API */
+
+// « 30 vins divins » a eu son propre nœud avant d'être réuni à « 5 vins
+// divins » : ce qui y avait été trouvé vaut toujours, on ne réinitialise
+// personne. Les réponses supprimées, elles, sont simplement ignorées.
+const RENAMED = { 'n-d-2': 'n-c-1' };
+export function currentAnswerId(id) {
+  return RENAMED[id] || id;
+}
 
 const NODE_BY_ID = new Map(NODES.map((n) => [n.id, n]));
 const NODE_OF_ANSWER = new Map();
