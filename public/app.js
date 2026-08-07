@@ -1021,24 +1021,13 @@ function renderSongPage() {
       </div>
       <aside class="side-panel" id="panel"></aside>
     </div>
-    <button type="button" class="fab" id="song-fab"
-            title="Interpréter « ${esc(song.title)} » dans son ensemble"
-            aria-label="Interpréter la chanson dans son ensemble">
-      <span class="fab-icon">💬</span>
-      ${countFor('song') ? `<span class="fab-count">${countFor('song')}</span>` : ''}
-    </button>`;
+`;
 
   bindLyricsSelection();
 
-  const pickTarget = (type) => {
-    const was = sel && sel.type === type;
-    state.sel = was ? null : { type };
-    renderSongPage();
-    if (!was) openInterpretation();
-  };
-  document.getElementById('target-title').onclick = () => pickTarget('title');
-
-  document.getElementById('song-fab').onclick = openSongModal;
+  // La pastille du titre ouvre tout ce qui concerne le morceau pris en entier :
+  // son titre, son sens général, les lectures d'ensemble et les connexions.
+  document.getElementById('target-title').onclick = openSongModal;
 
   renderPanel();
   renderInbound();
@@ -1095,11 +1084,19 @@ function renderSongModal() {
   }
   resetComposers();
   const { song } = state.song;
+  const titleAnns = annotationsFor((a) => a.target_type === 'title');
   const songAnns = annotationsFor((a) => a.target_type === 'song');
 
   modal.innerHTML = `
     <button type="button" class="link-btn modal-close" id="song-modal-close" aria-label="Fermer">✕</button>
     <h2>« ${esc(song.title)} » dans son ensemble</h2>
+
+    <section class="settings-section">
+      <h3>Le titre</h3>
+      ${titleAnns.map((a) => annotationCard(a)).join('') || '<p class="empty-note">Aucune interprétation du titre pour l’instant.</p>'}
+      ${refBlocks((r) => r.target_type === 'title')}
+      ${composerHtml()}
+    </section>
 
     <section class="settings-section">
       <h3>Le sens général</h3>
@@ -1123,7 +1120,9 @@ function renderSongModal() {
   backdrop.hidden = false;
   modal.hidden = false;
   document.getElementById('song-modal-close').onclick = closeSongModal;
-  bindComposer(modal, 0, { song_id: song.id, target_type: 'song' },
+  bindComposer(modal, 0, { song_id: song.id, target_type: 'title' },
+    `Pourquoi ce titre, « ${song.title} » ?`, 'Interpréter le titre', nextGridFor(titleAnns));
+  bindComposer(modal, 1, { song_id: song.id, target_type: 'song' },
     `Le sens général de « ${song.title} »…`, 'Interpréter la chanson', nextGridFor(songAnns));
   bindRefDeletes(modal);
   bindAnnotationActions(modal);
@@ -1707,6 +1706,7 @@ function refEditorInternal() {
       ${songs.map((s) => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}
     </select>
     <div class="ref-lines" hidden></div>
+    <p class="ref-hint" hidden></p>
     <p class="ref-picked" hidden></p>
     <input type="hidden" class="ref-start"><input type="hidden" class="ref-end">
     <label>En quoi est-ce une référence ?</label>
@@ -1727,6 +1727,7 @@ function bindRefSongPicker(editor) {
   if (!songSel) return;
   const box = editor.querySelector('.ref-lines');
   const picked = editor.querySelector('.ref-picked');
+  const hint = editor.querySelector('.ref-hint');
   const startField = editor.querySelector('.ref-start');
   const endField = editor.querySelector('.ref-end');
   let lines = [];
@@ -1741,6 +1742,12 @@ function bindRefSongPicker(editor) {
       const no = Number(el.dataset.no);
       el.classList.toggle('picked', a > 0 && no >= lo && no <= hi);
     });
+    hint.hidden = false;
+    hint.textContent = !a
+      ? 'Touchez le premier vers du passage.'
+      : (b === a && !Number(endField.value)
+        ? 'Touchez le dernier vers, ou publiez pour n’en garder qu’un. Un nouveau toucher recommence.'
+        : 'Un nouveau toucher recommence la sélection.');
     if (!a) { picked.hidden = true; editor.dataset.label = ''; return; }
     const first = lines.find((l) => l.line_number === lo);
     const last = lines.find((l) => l.line_number === hi);
@@ -1755,11 +1762,25 @@ function bindRefSongPicker(editor) {
     };
   };
 
+  // Trois temps : premier vers, dernier vers, puis un clic recommence depuis
+  // le vers touché. Sans ce troisième temps, le début restait figé et on ne
+  // pouvait que rogner la fin.
   const onLine = (el) => {
     const id = Number(el.dataset.id);
-    if (!startField.value) { startField.value = id; endField.value = ''; paint(); return; }
-    if (Number(startField.value) === id && !endField.value) {
-      startField.value = ''; endField.value = ''; paint(); return;
+    const hasStart = !!startField.value;
+    const hasEnd = !!endField.value;
+
+    if (!hasStart || hasEnd) {
+      startField.value = id;
+      endField.value = '';
+      paint();
+      return;
+    }
+    if (Number(startField.value) === id) {
+      startField.value = '';
+      endField.value = '';
+      paint();
+      return;
     }
     const a = lines.find((l) => l.id === Number(startField.value));
     const b = lines.find((l) => l.id === id);
@@ -1774,6 +1795,7 @@ function bindRefSongPicker(editor) {
     startField.value = '';
     endField.value = '';
     box.hidden = !lines.length;
+    hint.hidden = !lines.length;
     box.innerHTML = lines.map((l) =>
       `<button type="button" class="ref-line" data-id="${l.id}" data-no="${l.line_number}">${esc(l.text)}</button>`
     ).join('');
@@ -2221,9 +2243,6 @@ function renderPanel() {
     html += `<div class="panel-card panel-invite">
       <h3>Interpréter</h3>
       <p class="empty-note">Sélectionnez un mot, une phrase ou un passage dans le texte.</p>
-      <button type="button" class="btn panel-open-modal">
-        💬 L’ensemble du morceau${songAnns.length ? ` · ${songAnns.length}` : ''}
-      </button>
     </div>`;
 
     const passAnns = annotationsFor((a) => a.target_type === 'passage');
@@ -2239,8 +2258,6 @@ function renderPanel() {
   }
 
   panel.innerHTML = html;
-  const openModal = panel.querySelector('.panel-open-modal');
-  if (openModal) openModal.onclick = openSongModal;
   forms.forEach(([payload, placeholder, label, grid], i) => {
     bindComposer(panel, i, payload, placeholder, label, grid);
   });

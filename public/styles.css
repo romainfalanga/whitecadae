@@ -1138,3 +1138,35 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
   margin-bottom: 0.5rem;
 }
 .ref-block .annotation-head { margin-top: 0.45rem; }
+
+/* ------------------------------------ l'ensemble du morceau : fenêtre --- */
+
+/* Ouverte par la pastille du titre : le titre, le sens général, les lectures
+   d'ensemble et les connexions. Centrée sur ordinateur, feuille montante sur
+   téléphone — la page ne défile jamais derrière. */
+.modal-song { width: min(760px, calc(100vw - 2rem)); max-height: calc(100vh - 3rem); }
+.modal-song .settings-section h3 { font-family: var(--serif); font-size: 1.15rem; }
+
+@media (max-width: 700px) {
+  .modal-song {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: none;
+    transform: none;
+    max-height: 88vh;
+    border-radius: 18px 18px 0 0;
+    padding: 1.25rem 1.1rem calc(1.25rem + env(safe-area-inset-bottom));
+    animation: sheet-up 0.18s ease-out;
+  }
+  @keyframes sheet-up {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+}
+
+/* Choisir un passage : où l'on en est de la sélection. */
+.ref-hint { color: var(--text-dim); font-size: 0.82rem; margin-top: 0.45rem; }
+.ref-hint[hidden] { display: none; }
