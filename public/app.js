@@ -2151,26 +2151,29 @@ async function pageCovers() {
   const allSongs = data.albums.flatMap((al) => al.songs).concat(data.orphans || []);
   const total = allSongs.reduce((n, s) => n + (s.covers ? s.covers.length : 0), 0);
 
+  // Chaque morceau a déjà sa page de reprises accessible, même sans reprise
+  // publiée : l'arborescence liste tous les morceaux, pas seulement ceux
+  // qui ont déjà une reprise.
   const songBlock = (s) => `
     <div class="covers-song">
       <h3><a href="/chanson/${encodeURIComponent(s.slug)}/reprises" data-link>${esc(s.title)}</a>
-        <span class="song-meta">${s.covers.length} reprise${s.covers.length > 1 ? 's' : ''}</span></h3>
-      <div class="covers-grid">${s.covers.map(coverCard).join('')}</div>
+        <span class="song-meta">${s.covers.length ? `${s.covers.length} reprise${s.covers.length > 1 ? 's' : ''}` : 'aucune reprise pour l’instant'}</span></h3>
+      ${s.covers.length
+        ? `<div class="covers-grid">${s.covers.map(coverCard).join('')}</div>`
+        : `<p class="empty-note">Soyez le premier à publier une reprise de ce morceau —
+            <a href="/chanson/${encodeURIComponent(s.slug)}/reprises" data-link>c’est par ici</a>.</p>`}
     </div>`;
 
-  const albumsHtml = data.albums
-    .filter((al) => al.songs.some((s) => s.covers && s.covers.length))
-    .map((al) => `
-      <section class="album-card">
-        <div class="album-head"><h2>${esc(al.title)}</h2></div>
-        ${al.songs.filter((s) => s.covers && s.covers.length).map(songBlock).join('')}
-      </section>`).join('');
+  const albumsHtml = data.albums.map((al) => `
+    <section class="album-card">
+      <div class="album-head"><h2>${esc(al.title)}</h2></div>
+      ${al.songs.map(songBlock).join('')}
+    </section>`).join('');
 
-  const orphanSongs = (data.orphans || []).filter((s) => s.covers && s.covers.length);
-  const orphansHtml = orphanSongs.length
+  const orphansHtml = (data.orphans || []).length
     ? `<section class="album-card">
         <div class="album-head"><h2>Sans album</h2></div>
-        ${orphanSongs.map(songBlock).join('')}
+        ${data.orphans.map(songBlock).join('')}
       </section>`
     : '';
 
@@ -2178,8 +2181,7 @@ async function pageCovers() {
     <h1>Reprises</h1>
     <p class="subtitle">${total} reprise${total > 1 ? 's' : ''} de la communauté, classées par album puis par morceau,
     de la plus récente à la plus ancienne.</p>
-    ${albumsHtml + orphansHtml || `<p class="empty-note">Aucune reprise n’a encore été publiée.
-      Rendez-vous sur la page d’un morceau pour publier la vôtre.</p>`}`;
+    ${albumsHtml + orphansHtml}`;
 
   bindSocial(app, { reload: () => pageCovers(), render: () => pageCovers() });
   bindCoverDeletes(app, () => pageCovers());
