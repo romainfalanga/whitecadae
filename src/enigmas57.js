@@ -157,7 +157,7 @@ export const NODES = [
     // Les deux formules tombent sur la même date : un seul élément, un seul
     // champ, plutôt que deux nœuds à la réponse identique.
     id: 'n-c',
-    source: '5 vins divins et 30 vins divins',
+    source: '5 vins divins & 30 vins divins',
     requires: [],
     answers: [
       {
@@ -195,7 +195,7 @@ export const NODES = [
 
   {
     id: 'n-f',
-    source: '5 vins divins et 30 vins divins + 13h20',
+    source: '5 vins divins & 30 vins divins + 13h20',
     requires: ['n-c-1', 'n-e-1'],
     answers: [
       {
@@ -394,6 +394,26 @@ export function matchPorte(nom, answer, solved) {
   if (!n) return null;
   const hit = porte.answers.find((a) => !solved.has(a.id) && a.match(n));
   return hit ? hit.id : null;
+}
+
+/* -------------------------------------------------------- l'attente ---
+   Plus on est haut, plus un essai coûte cher. En bas de l'échelle on peut
+   tâtonner ; en haut, chaque proposition engage la journée.
+
+     échelon 0 → 1 minute
+     échelon 1 → 5 minutes
+     échelon 2 → 1 heure, puis une heure de plus par cran
+
+   Les multiplicateurs font bondir l'échelon (3, 6, 18…) : le plafond de
+   24 heures évite qu'un seul essai malheureux ne ferme la porte plusieurs
+   jours.                                                                 */
+
+export const ATTENTE_PLAFOND_H = 24;
+
+export function delaiEssaiMs(echelon) {
+  if (echelon <= 0) return 60 * 1000;
+  if (echelon === 1) return 5 * 60 * 1000;
+  return Math.min(echelon - 1, ATTENTE_PLAFOND_H) * 60 * 60 * 1000;
 }
 
 export function accessOf(echelon, solved = new Set()) {

@@ -2,7 +2,7 @@
 
 import {
   getNode, isLocked, matchAnswer, buildState, currentAnswerId, echelonOf, accessOf,
-  getPorte, matchPorte, porteOuverte, PORTES,
+  getPorte, matchPorte, porteOuverte, PORTES, delaiEssaiMs,
 } from './enigmas57.js';
 
 const SESSION_COOKIE = 'wc_session';
@@ -473,12 +473,12 @@ async function logout(request, env) {
 // fermées, et le minuteur d'essai — commun à tous les mots de passe du site.
 // L'interface s'y règle dès le chargement, sans attendre l'état du jeu.
 async function me(request, env) {
-  const { user, access } = await viewerAccess(request, env);
+  const { user, access, echelon } = await viewerAccess(request, env);
   return json({
     user: user ? { ...user, is_admin: !!user.is_admin } : null,
     access,
     portes: Object.fromEntries(Object.entries(PORTES).map(([nom, p]) => [nom, p.source])),
-    attenteMs: user ? await attenteRestante(env, user.id) : 0,
+    attenteMs: user && Number.isFinite(echelon) ? await attenteRestante(env, user.id, echelon) : 0,
   });
 }
 
@@ -1502,16 +1502,18 @@ async function ensureRiddleTable(env) {
 // Pas d'`export` ici : le module d'entrée d'un Worker ne peut exporter que
 // son gestionnaire, le reste fait échouer le démarrage du runtime.
 const ESSAI_ROW = '@essai';
-const DELAI_ESSAI_MS = 60 * 60 * 1000;
 
-async function attenteRestante(env, userId) {
+// Le délai dépend de l'échelon atteint, et il est relu à chaque fois : monter
+// d'un cran allonge donc l'attente en cours. C'est voulu — l'attente est une
+// propriété de là où l'on est, pas du moment où l'on a tenté.
+async function attenteRestante(env, userId, echelon) {
   await ensureRiddleTable(env);
   const row = await env.DB.prepare(
     `SELECT (julianday('now') - julianday(updated_at)) * 86400000 AS ecoule
        FROM riddle_progress WHERE user_id = ?1 AND riddle_id = ?2`
   ).bind(userId, ESSAI_ROW).first();
   if (!row || row.ecoule == null) return 0;
-  return Math.max(0, Math.round(DELAI_ESSAI_MS - row.ecoule));
+  return Math.max(0, Math.round(delaiEssaiMs(echelon) - row.ecoule));
 }
 
 async function marquerEssai(env, userId) {
@@ -1533,8 +1535,9 @@ async function riddleRows(env, userId) {
 }
 
 async function riddleState(env, userId) {
-  const [rows, attente] = await Promise.all([riddleRows(env, userId), attenteRestante(env, userId)]);
-  return { ...buildState(rows), attenteMs: attente };
+  const rows = await riddleRows(env, userId);
+  const etat = buildState(rows);
+  return { ...etat, attenteMs: await attenteRestante(env, userId, etat.echelon) };
 }
 
 // La page se lit sans compte : on voit les éléments, mais rien n'y a été
@@ -1561,17 +1564,18 @@ async function signsGuess(request, env) {
 
   // Un essai par heure, juste ou faux. On vérifie avant de regarder la
   // réponse, et on décompte avant de la juger : proposer, c'est déjà jouer.
-  const attente = await attenteRestante(env, user.id);
-  if (attente > 0) return json({ error: 'Trop tôt.', attenteMs: attente }, 429);
-
   const rows = await riddleRows(env, user.id);
   const solved = new Set(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
+  const echelon = echelonOf(solved);
+
+  const attente = await attenteRestante(env, user.id, echelon);
+  if (attente > 0) return json({ error: 'Trop tôt.', attenteMs: attente }, 429);
   if (isLocked(node, solved)) return json({ error: 'Cet élément est encore verrouillé.' }, 403);
 
   await marquerEssai(env, user.id);
 
   const hit = matchAnswer(node, answer, solved);
-  if (!hit) return json({ ok: false, id: node.id, attenteMs: DELAI_ESSAI_MS });
+  if (!hit) return json({ ok: false, id: node.id, attenteMs: delaiEssaiMs(echelon) });
 
   await env.DB.prepare(
     `INSERT INTO riddle_progress (user_id, riddle_id, solved_at)
@@ -1603,12 +1607,12 @@ async function porteGuess(request, env, nom) {
   // Déjà franchie : on ne consomme pas l'essai pour rien.
   if (porteOuverte(nom, solved)) return json({ ok: true, deja: true });
 
-  const attente = await attenteRestante(env, user.id);
+  const attente = await attenteRestante(env, user.id, echelon);
   if (attente > 0) return json({ error: 'Trop tôt.', attenteMs: attente }, 429);
   await marquerEssai(env, user.id);
 
   const hit = matchPorte(nom, answer, solved);
-  if (!hit) return json({ ok: false, attenteMs: DELAI_ESSAI_MS });
+  if (!hit) return json({ ok: false, attenteMs: delaiEssaiMs(echelon) });
 
   await env.DB.prepare(
     `INSERT INTO riddle_progress (user_id, riddle_id, solved_at)
@@ -1618,7 +1622,7 @@ async function porteGuess(request, env, nom) {
   ).bind(user.id, hit).run();
 
   const apres = await viewerAccess(request, env);
-  return json({ ok: true, access: apres.access, attenteMs: DELAI_ESSAI_MS });
+  return json({ ok: true, access: apres.access, attenteMs: delaiEssaiMs(apres.echelon) });
 }
 
 // Plus proposé dans l'interface, mais conservé : c'est le seul moyen de

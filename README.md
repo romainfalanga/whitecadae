@@ -17,26 +17,33 @@ récente à la plus ancienne.
 La page **Reprises** fonctionne pareil : les dernières reprises des membres
 en tête, et le fil complet sur `/reprises/fil`.
 
-Les utilisateurs créent un compte, lisent les paroles et proposent des
-interprétations à quatre niveaux :
+Les utilisateurs créent un compte, lisent les paroles et interprètent ce
+qu'ils veulent du texte. **Une sélection est toujours un passage** : un mot,
+deux mots, une phrase entière ou plusieurs — c'est la même chose, un seul bloc
+qui les englobe tous. Le panneau y rassemble tout ce qui touche à l'étendue
+choisie, y compris les lectures écrites du temps où un mot et une phrase
+avaient chacun la leur.
 
-- **la chanson entière** (sens général),
-- **le titre** de la chanson,
-- **une phrase** (une ligne du texte),
-- **un mot ou un groupe de mots** dans une phrase — un mot peut avoir sa
-  propre interprétation *en plus* de celle de sa phrase.
+Aucun menu système ne s'ouvre sur les paroles : la sélection est entièrement
+peinte à la main (`user-select: none` sur le texte comme sur chaque mot,
+`contextmenu` et `selectstart` neutralisés), sans quoi un appui prolongé
+rouvrirait le « copier / rechercher sur le Web » du navigateur.
 
 Chaque interprétation peut porter des **références** : une œuvre extérieure
 (son nom, son artiste, et en quoi c'en est une) ou un **passage d'un autre
-morceau**, choisi en le sélectionnant directement dans son texte. Une référence interne apparaît des deux côtés — sur
+morceau**, choisi en le sélectionnant directement dans son texte — une
+poignée permet d'y donner plus de place au texte ou au champ d'écriture,
+selon ce qu'on est en train de faire. Une référence interne apparaît des deux côtés — sur
 l'interprétation qui la pose, et sur la page du morceau visé. Chacune se
 compose dans son propre éditeur et se publie avec son propre bouton, y
 compris après coup sur une interprétation déjà en ligne.
 
-Le titre, le sens général du morceau, les interprétations d'ensemble et les
-connexions entre chansons vivent dans une **fenêtre ouverte par la pastille
-« Interpréter le titre »**, en haut de chaque page de chanson : un seul point
-d'entrée pour tout ce qui concerne le morceau pris en entier.
+Le morceau pris en entier s'interprète dans une **fenêtre ouverte par la
+pastille « Interpréter le titre »**, en haut de chaque page. Un seul bloc :
+ce qu'on dit du morceau, et de quoi le relier à d'autres par une référence.
+Les interprétations d'ensemble et les connexions ne sont plus proposées à
+l'écriture ; celles qui existent restent en base et s'affichent dans le fil
+des profils.
 
 La **page de profil est un fil**, et rien d'autre : tout ce qu'un membre a
 fait ici, du plus récent au plus ancien, daté entrée par entrée —
@@ -74,12 +81,29 @@ ne dit pas non plus combien de mots de passe il cache — il envoie seulement
 `open`, qui suffit à savoir s'il faut encore afficher le champ. Le nombre
 total de mots de passe du jeu ne quitte jamais le Worker.
 
-**Un essai par heure.** Proposer un mot de passe, juste ou faux, ferme tous
-les champs pendant une heure : il faut donc choisir ce qu'on tente. Le délai
-est tenu par le serveur (une ligne réservée de `riddle_progress`, dont le
-`riddle_id` ne correspond à aucune réponse), donc un rechargement ne le fait
-pas sauter. Rien ne l'annonce et rien ne l'explique : le décompte prend
-simplement la place du bouton, et tout revient de soi-même.
+**Un essai à la fois.** Proposer un mot de passe, juste ou faux, ferme tous
+les champs du site : il faut donc choisir ce qu'on tente. Le délai est tenu
+par le serveur (une ligne réservée de `riddle_progress`, dont le `riddle_id`
+ne correspond à aucune réponse), donc un rechargement ne le fait pas sauter.
+Rien ne l'annonce et rien ne l'explique : le décompte prend simplement la
+place du bouton, et tout revient de soi-même.
+
+Il grandit avec l'échelon (`delaiEssaiMs`) — en bas on tâtonne, en haut chaque
+proposition engage la journée :
+
+| Échelon | Attente |
+| --- | --- |
+| 0 | 1 minute |
+| 1 | 5 minutes |
+| 2 | 1 heure |
+| 3 | 2 heures |
+| n ≥ 2 | n − 1 heures, plafonné à 24 |
+
+Le délai est relu à chaque vérification : monter d'un cran allonge donc
+l'attente en cours. C'est une propriété de là où l'on est, pas du moment où
+l'on a tenté. Le plafond de 24 heures existe parce que les multiplicateurs
+font bondir l'échelon (3, 6, 18…) et qu'un seul essai malheureux ne doit pas
+fermer la porte plusieurs jours.
 
 ### Les échelons
 
@@ -99,6 +123,11 @@ L'échelon **commande l'accès au site**, et pas seulement l'affichage des liens
 | 0 | la page 57, et rien d'autre |
 | 1 | la page Interprétations apparaît — mais vide, voir les portes |
 | 6 | les Reprises |
+
+Le tout premier bloc **occupe toute la largeur** et s'entoure d'un halo doré
+(`.enigme--graal`, posé sur les blocs dont le serveur ne donne pas le total) :
+on doit voir au premier regard qu'il n'est pas de la même espèce, sans qu'une
+ligne de texte ait à le dire.
 
 ### Les portes
 

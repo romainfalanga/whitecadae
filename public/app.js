@@ -697,6 +697,26 @@ function passageRange(a) {
   return [posKey(a.line_id, a.word_start || 0), posKey(a.end_line_id, a.word_end == null ? 999 : a.word_end)];
 }
 
+// L'étendue d'une cible, quelle que soit sa nature : un mot, une phrase et un
+// passage se mesurent sur la même règle. [null, null] si la cible ne vise pas
+// le texte (le titre, le morceau entier).
+function cibleRange(a) {
+  if (a.target_type === 'passage') return passageRange(a);
+  if (a.target_type === 'word') return [posKey(a.line_id, a.word_start), posKey(a.line_id, a.word_end)];
+  if (a.target_type === 'line') return [posKey(a.line_id, 0), posKey(a.line_id, 999)];
+  return [null, null];
+}
+
+// Le texte visé par une cible, pour le citer au-dessus de ce qu'on en dit.
+function cibleTexte(a) {
+  const ligne = state.song.lines.find((l) => l.id === a.line_id);
+  if (a.target_type === 'passage') {
+    return passageText(a.line_id, a.word_start || 0, a.end_line_id, a.word_end == null ? 0 : a.word_end);
+  }
+  if (a.target_type === 'word' && ligne) return tokens(ligne.text).slice(a.word_start, a.word_end + 1).join(' ');
+  return ligne ? ligne.text : '';
+}
+
 function selPassageRange(sel) {
   return [posKey(sel.startLine, sel.startIdx), posKey(sel.endLine, sel.endIdx)];
 }
@@ -853,9 +873,9 @@ function commitSelection() {
   const [a, b] = SEL.anchor.pos <= SEL.focus.pos
     ? [SEL.anchor, SEL.focus]
     : [SEL.focus, SEL.anchor];
-  state.sel = a.lineId === b.lineId
-    ? { type: 'word', lineId: a.lineId, start: a.idx, end: b.idx }
-    : { type: 'passage', startLine: a.lineId, startIdx: a.idx, endLine: b.lineId, endIdx: b.idx };
+  // Un mot, des mots, une phrase ou plusieurs : c'est toujours un passage.
+  // Un seul bloc, toujours le même — il englobe tous les cas.
+  state.sel = { type: 'passage', startLine: a.lineId, startIdx: a.idx, endLine: b.lineId, endIdx: b.idx };
   renderSongPage();
   // sur grand écran, on amène le panneau sous les yeux s'il est hors de vue
   if (!window.matchMedia('(max-width: 900px)').matches) {
@@ -932,9 +952,21 @@ function bindLyricsSelection() {
   lyrics.addEventListener('dblclick', (e) => {
     const el = e.target.closest && e.target.closest('.w');
     if (!el) return;
-    state.sel = { type: 'line', lineId: Number(el.dataset.line) };
+    const lineId = Number(el.dataset.line);
+    const mots = SEL.words.filter((w) => w.lineId === lineId);
+    if (!mots.length) return;
+    state.sel = {
+      type: 'passage',
+      startLine: lineId, startIdx: mots[0].idx,
+      endLine: lineId, endIdx: mots[mots.length - 1].idx,
+    };
     renderSongPage();
   });
+
+  // Aucun menu système ne doit s'ouvrir sur le texte : ni la loupe de
+  // recherche, ni « copier ». La sélection est entièrement à nous.
+  lyrics.addEventListener('contextmenu', (e) => e.preventDefault());
+  lyrics.addEventListener('selectstart', (e) => e.preventDefault());
 
   // poignées d'ajustement
   for (const side of ['start', 'end']) {
@@ -1009,9 +1041,7 @@ function renderSelectionUI() {
 
   const quote = selectionQuote();
   const short = quote.length > 90 ? quote.slice(0, 87) + '…' : quote;
-  const nWords = sel.type === 'line' ? 0 : quote.split(/\s+/).length;
-  const label = sel.type === 'line' ? 'Phrase'
-    : (sel.type === 'passage' ? 'Passage' : (nWords > 1 ? `${nWords} mots` : 'Mot'));
+  const label = 'Passage';
   bar.innerHTML = `
     <div class="sel-bar-text">
       <span class="sel-bar-kind">${esc(label)}</span>
@@ -1111,10 +1141,7 @@ function renderSongPage() {
       }).join('')}
         <span id="sel-handle-start" class="sel-handle sel-handle-start" hidden></span>
         <span id="sel-handle-end" class="sel-handle sel-handle-end" hidden></span>
-      </div>
-      <p class="hint">Appuyez sur un mot, puis <strong>faites glisser les poignées</strong> pour étendre la sélection
-      au passage exact — même à cheval sur plusieurs phrases. Glisser directement sur le texte fonctionne aussi,
-      et un double-clic sélectionne toute la phrase.</p>`
+      </div>`
     : `<div class="no-lyrics">Les paroles de « ${esc(song.title)} » seront bientôt disponibles.</div>`;
 
   app.innerHTML = `
@@ -1199,51 +1226,27 @@ function renderSongModal() {
   }
   resetComposers();
   const { song } = state.song;
-  const titleAnns = annotationsFor((a) => a.target_type === 'title');
-  const songAnns = annotationsFor((a) => a.target_type === 'song');
+  // Un seul bloc : le morceau lui-même. Les lectures écrites autrefois sur
+  // « le titre » et sur « le sens général » s'y retrouvent ensemble, et le
+  // composeur permet d'y relier d'autres morceaux par une référence.
+  const anns = annotationsFor((a) => a.target_type === 'title' || a.target_type === 'song');
 
   modal.innerHTML = `
     <button type="button" class="link-btn modal-close" id="song-modal-close" aria-label="Fermer">✕</button>
-    <h2>« ${esc(song.title)} » dans son ensemble</h2>
-
-    <section class="settings-section">
-      <h3>Le titre</h3>
-      ${titleAnns.map((a) => annotationCard(a)).join('') || '<p class="empty-note">Aucune interprétation du titre pour l’instant.</p>'}
-      ${refBlocks((r) => r.target_type === 'title')}
-      ${composerHtml()}
-    </section>
-
-    <section class="settings-section">
-      <h3>Le sens général</h3>
-      ${songAnns.map((a) => annotationCard(a)).join('') || '<p class="empty-note">Aucune interprétation générale pour l’instant.</p>'}
-      ${refBlocks((r) => r.target_type === 'song')}
-      ${composerHtml()}
-    </section>
-
-    <section class="settings-section">
-      <h3>Interprétations d’ensemble</h3>
-      <p class="hint">Une lecture globale du morceau, justifiée par des connexions entre phrases —
-      y compris avec les phrases d’autres morceaux.</p>
-      <div id="essays"></div>
-    </section>
-
-    <section class="settings-section">
-      <h3>Connexions avec d’autres chansons</h3>
-      <div id="connections"></div>
-    </section>`;
+    <h2>« ${esc(song.title)} »</h2>
+    ${anns.map((a) => annotationCard(a)).join('')
+      || '<p class="empty-note">Aucune interprétation de ce morceau pour l’instant.</p>'}
+    ${refBlocks((r) => r.target_type === 'title' || r.target_type === 'song')}
+    ${composerHtml()}`;
 
   backdrop.hidden = false;
   modal.hidden = false;
   document.getElementById('song-modal-close').onclick = closeSongModal;
   bindComposer(modal, 0, { song_id: song.id, target_type: 'title' },
-    `Pourquoi ce titre, « ${song.title} » ?`, 'Interpréter le titre', nextGridFor(titleAnns));
-  bindComposer(modal, 1, { song_id: song.id, target_type: 'song' },
-    `Le sens général de « ${song.title} »…`, 'Interpréter la chanson', nextGridFor(songAnns));
+    `Que raconte « ${song.title} » ?`, 'Interpréter ce morceau', nextGridFor(anns));
   bindRefDeletes(modal);
   bindAnnotationActions(modal);
   bindSocial(modal);
-  renderEssays();
-  renderConnections();
 }
 
 /* ------------------------- grilles de lecture venues d'autres morceaux ---
@@ -1821,6 +1824,8 @@ function refEditorInternal() {
       ${songs.map((s) => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}
     </select>
     <div class="ref-lines" hidden></div>
+    <div class="ref-grip" hidden role="separator" aria-label="Redimensionner la zone de texte"
+         title="Faire glisser pour agrandir ou réduire"><span></span></div>
     <p class="ref-hint" hidden></p>
     <p class="ref-picked" hidden></p>
     <input type="hidden" class="ref-start"><input type="hidden" class="ref-end">
@@ -1835,14 +1840,45 @@ function refEditorInternal() {
   </div>`;
 }
 
+// La zone où l'on choisit le passage s'agrandit et se réduit à la demande :
+// selon qu'on cherche dans un texte long ou qu'on veut de la place pour
+// écrire, ce n'est pas la même fenêtre qu'on veut.
+function bindRefGrip(box, grip) {
+  if (!box || !grip) return;
+  let depart = 0;
+  let hauteur = 0;
+  const bouge = (e) => {
+    const h = Math.max(80, Math.min(600, hauteur + (e.clientY - depart)));
+    box.style.maxHeight = `${h}px`;
+    box.style.height = `${h}px`;
+  };
+  const lache = (e) => {
+    grip.classList.remove('ref-grip--actif');
+    grip.releasePointerCapture?.(e.pointerId);
+    grip.removeEventListener('pointermove', bouge);
+  };
+  grip.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    depart = e.clientY;
+    hauteur = box.getBoundingClientRect().height;
+    grip.classList.add('ref-grip--actif');
+    try { grip.setPointerCapture(e.pointerId); } catch { /* ignoré */ }
+    grip.addEventListener('pointermove', bouge);
+  });
+  grip.addEventListener('pointerup', lache);
+  grip.addEventListener('pointercancel', lache);
+}
+
 // Affiche le texte du morceau choisi et y gère la sélection d'un passage :
 // un vers, puis un second pour étendre. Un nouvel appui sur le premier annule.
 function bindRefSongPicker(editor) {
   const songSel = editor.querySelector('.ref-song');
   if (!songSel) return;
   const box = editor.querySelector('.ref-lines');
+  const grip = editor.querySelector('.ref-grip');
   const picked = editor.querySelector('.ref-picked');
   const hint = editor.querySelector('.ref-hint');
+  bindRefGrip(box, grip);
   const startField = editor.querySelector('.ref-start');
   const endField = editor.querySelector('.ref-end');
   let lines = [];
@@ -1910,6 +1946,7 @@ function bindRefSongPicker(editor) {
     startField.value = '';
     endField.value = '';
     box.hidden = !lines.length;
+    grip.hidden = !lines.length;
     hint.hidden = !lines.length;
     box.innerHTML = lines.map((l) =>
       `<button type="button" class="ref-line" data-id="${l.id}" data-no="${l.line_number}">${esc(l.text)}</button>`
@@ -2282,23 +2319,20 @@ function renderPanel() {
   if (sel && sel.type === 'passage') {
     const quote = passageText(sel.startLine, sel.startIdx, sel.endLine, sel.endIdx);
     const [s0, s1] = selPassageRange(sel);
-    const passAnns = annotationsFor((a) => {
-      if (a.target_type !== 'passage') return false;
-      const [a0, a1] = passageRange(a);
-      return a0 <= s1 && s0 <= a1;
-    });
+    // Un seul bloc, qui ramasse tout ce qui touche au passage choisi — y
+    // compris ce qui fut écrit du temps où un mot et une phrase avaient
+    // chacun le leur.
+    const touche = (x) => {
+      const [a0, a1] = cibleRange(x);
+      return a0 !== null && a0 <= s1 && s0 <= a1;
+    };
+    const passAnns = annotationsFor(touche);
     html += `<div class="panel-card">
       <h3>Le passage</h3>
       <div class="panel-target">« ${esc(quote)} »</div>
-      ${passAnns.map((a) => annotationCard(
-        a,
-        `« ${esc(passageText(a.line_id, a.word_start || 0, a.end_line_id, a.word_end == null ? 0 : a.word_end))} »`
-      )).join('') || '<p class="empty-note">Aucune interprétation de passage ici pour l’instant.</p>'}
-      ${refBlocks((r) => {
-        if (r.target_type !== 'passage') return false;
-        const [a0, a1] = passageRange(r);
-        return a0 <= s1 && s0 <= a1;
-      })}
+      ${passAnns.map((a) => annotationCard(a, `« ${esc(cibleTexte(a))} »`)).join('')
+        || '<p class="empty-note">Aucune interprétation ici pour l’instant.</p>'}
+      ${refBlocks(touche)}
       ${composerHtml()}
     </div>
     <button class="link-btn" id="clear-sel">← Revenir à la chanson</button>`;
@@ -2354,12 +2388,6 @@ function renderPanel() {
     forms.push([{ song_id: song.id, target_type: 'title' },
       `Pourquoi ce titre, « ${song.title} » ?`, 'Interpréter le titre', nextGridFor(titleAnns)]);
   } else {
-    const songAnns = annotationsFor((a) => a.target_type === 'song');
-    html += `<div class="panel-card panel-invite">
-      <h3>Interpréter</h3>
-      <p class="empty-note">Sélectionnez un mot, une phrase ou un passage dans le texte.</p>
-    </div>`;
-
     const passAnns = annotationsFor((a) => a.target_type === 'passage');
     if (passAnns.length) {
       html += `<div class="panel-card">
@@ -2855,10 +2883,13 @@ async function pageEnigmes() {
 }
 
 function nodeClass(n) {
-  if (n.locked) return 'enigme enigme--locked';
-  if (!n.open) return 'enigme enigme--solved';
-  if (n.found.length) return 'enigme enigme--partial';
-  return 'enigme';
+  // Le bloc qui ne dit ni son nom ni son compte est d'une autre nature : il
+  // occupe toute la largeur et se distingue à l'œil.
+  const rang = n.total === null ? 'enigme enigme--graal' : 'enigme';
+  if (n.locked) return `${rang} enigme--locked`;
+  if (!n.open) return `${rang} enigme--solved`;
+  if (n.found.length) return `${rang} enigme--partial`;
+  return rang;
 }
 
 // Un seul champ par élément, même quand il porte plusieurs sens : les
