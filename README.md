@@ -3,19 +3,22 @@
 Plateforme communautaire d'explications des textes de **White Cadae**
 ([chaîne YouTube](https://www.youtube.com/@WhiteCadae)).
 
+La page **Interprétations** ouvre sur les dernières lectures publiées par
+les membres — le passage visé, puis ce qu’on en dit — avec un lien vers le
+**fil** (`/fil`), qui les déroule toutes de la plus récente à la plus ancienne.
+
 Les utilisateurs créent un compte, lisent les paroles et proposent des
-interprétations à cinq niveaux :
+interprétations à quatre niveaux :
 
 - **la chanson entière** (sens général),
 - **le titre** de la chanson,
-- **la durée** de la chanson (les chiffres en minutes et secondes),
 - **une phrase** (une ligne du texte),
 - **un mot ou un groupe de mots** dans une phrase — un mot peut avoir sa
   propre interprétation *en plus* de celle de sa phrase.
 
 Chaque interprétation peut porter des **références** : une œuvre extérieure
 (son nom, son artiste, et en quoi c'en est une) ou un **passage d'un autre
-morceau**. Une référence interne apparaît des deux côtés — sur
+morceau**, choisi en le sélectionnant directement dans son texte. Une référence interne apparaît des deux côtés — sur
 l'interprétation qui la pose, et sur la page du morceau visé. Chacune se
 compose dans son propre éditeur et se publie avec son propre bouton, y
 compris après coup sur une interprétation déjà en ligne.
@@ -31,9 +34,8 @@ des autres membres.
 ## La page « 57 »
 
 `/57` est un escape game : reconstituer l'arborescence des mots de passe
-cachés dans l'EP **57**. Partout où il y a un « = », il y a un mot de passe
-à trouver. Aucun texte, aucune explication, aucun indice — un élément, un
-« = », un champ.
+cachés dans l'EP **57**. Aucun texte, aucune explication, aucun indice :
+un élément, un champ, et ce qu'il veut dire.
 
 La page est une liste plate : ni titres, ni sections, ni sommaire. Un
 même élément peut porter plusieurs sens ; dans ce cas il n'a qu'un seul

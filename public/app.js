@@ -13,6 +13,7 @@ const state = {
   builder: null, // constructeur d'interprétation d'ensemble en cours
   sheetOpen: false, // feuille du bas ouverte (mobile)
   songModalOpen: false, // fenêtre « l'ensemble du morceau » ouverte
+  feed: null, // fil des interprétations récentes
   enigmes: null, // état des énigmes de la page /57
 };
 
@@ -128,6 +129,7 @@ async function route() {
   if (path === '/admin') return pageAdmin();
   if (path === '/reprises') return pageCovers();
   if (path === '/57') return pageEnigmes();
+  if (path === '/fil') return pageFeed();
   if ((m = path.match(/^\/chanson\/([^/]+)\/reprises$/))) return pageSongCovers(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/membre\/([^/]+)$/))) return pageProfile(decodeURIComponent(m[1]));
@@ -360,6 +362,70 @@ function newestFirst(albums) {
   return [...albums].reverse();
 }
 
+/* ------------------------------------------------------------------ fil ---
+   Les interprétations des autres, de la plus récente à la plus ancienne :
+   le passage visé, puis ce qu'on en dit.                                  */
+
+// Le passage sur lequel porte une interprétation, reconstitué sans avoir à
+// charger tout le morceau.
+function feedQuote(it) {
+  if (it.target_type === 'song') return 'le morceau entier';
+  if (it.target_type === 'title') return `le titre « ${it.song_title} »`;
+  if (it.target_type === 'duration') return 'la durée';
+  if (!it.line_text) return '';
+  if (it.target_type === 'word') {
+    return `« ${tokens(it.line_text).slice(it.word_start, it.word_end + 1).join(' ')} »`;
+  }
+  if (it.target_type === 'passage' && it.end_line_text) {
+    const from = tokens(it.line_text).slice(it.word_start || 0).join(' ');
+    const to = tokens(it.end_line_text).slice(0, (it.word_end == null ? 0 : it.word_end) + 1).join(' ');
+    return `« ${from} […] ${to} »`;
+  }
+  return `« ${it.line_text} »`;
+}
+
+function feedCard(it) {
+  return `<article class="feed-card" data-ann="${it.id}">
+    <div class="feed-head">
+      <a class="feed-song" href="/chanson/${encodeURIComponent(it.song_slug)}" data-link>${esc(it.song_title)}</a>
+      <span class="feed-date">${esc(formatDate(it.created_at))}</span>
+    </div>
+    <div class="feed-quote">${esc(feedQuote(it))}</div>
+    <div class="annotation-body">${esc(it.content)}</div>
+    <div class="feed-foot">par ${authorLink(it.username)}</div>
+    ${socialFooter('annotation', it)}
+  </article>`;
+}
+
+async function pageFeed() {
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  const data = await api('/api/feed?limit=15');
+  if (stale(epoch)) return;
+  state.feed = { items: data.items, more: data.more };
+  renderFeedPage();
+}
+
+function renderFeedPage() {
+  const { items, more } = state.feed;
+  app.innerHTML = `
+    <div class="breadcrumb"><a href="/" data-link>Interprétations</a></div>
+    <h1>Le fil</h1>
+    <p class="subtitle">Toutes les interprétations publiées, de la plus récente à la plus ancienne.</p>
+    <div class="feed-list" id="feed-list">${items.map(feedCard).join('')
+      || '<p class="empty-note">Aucune interprétation publiée pour l’instant.</p>'}</div>
+    ${more ? '<p class="feed-more"><button type="button" class="btn" id="feed-more">Voir les précédentes</button></p>' : ''}`;
+  bindSocial(document.getElementById('feed-list'));
+  const btn = document.getElementById('feed-more');
+  if (btn) btn.onclick = async () => {
+    btn.disabled = true;
+    const data = await api(`/api/feed?limit=15&offset=${state.feed.items.length}`);
+    state.feed.items = state.feed.items.concat(data.items);
+    state.feed.more = data.more;
+    renderFeedPage();
+  };
+}
+
 async function pageInterpretations() {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
@@ -382,7 +448,23 @@ async function pageInterpretations() {
       </ol>
     </section>`).join('');
 
-  app.innerHTML = '<h1>Interprétations</h1>' + (albums || '<p class="empty-note">Aucun album pour le moment.</p>');
+  let recent = { items: [], more: false };
+  try { recent = await api('/api/feed?limit=3'); } catch { /* le fil n'est pas vital */ }
+  if (stale(epoch)) return;
+
+  const feedBlock = `<section class="feed-block">
+    <div class="feed-block-head">
+      <h2>Les dernières interprétations</h2>
+      <a class="btn" href="/fil" data-link>Voir le fil →</a>
+    </div>
+    <div class="feed-list" id="recent-list">${recent.items.map(feedCard).join('')
+      || '<p class="empty-note">Aucune interprétation publiée pour l’instant.</p>'}</div>
+  </section>`;
+
+  app.innerHTML = '<h1>Interprétations</h1>' + feedBlock +
+    '<h2 class="albums-title">Les morceaux</h2>' +
+    (albums || '<p class="empty-note">Aucun album pour le moment.</p>');
+  bindSocial(document.getElementById('recent-list'));
 }
 
 /* ------------------------------------------------------- connexion/compte */
@@ -925,9 +1007,6 @@ function renderSongPage() {
       <button class="target-chip target-chip-write ${sel && sel.type === 'title' ? 'active' : ''}" id="target-title">
         ✍ Interpréter le titre${countFor('title') ? ` · ${countFor('title')}` : ''}
       </button>
-      <button class="target-chip target-chip-write ${sel && sel.type === 'duration' ? 'active' : ''}" id="target-duration">
-        ✍ Interpréter la durée${duration ? ` (${duration})` : ''}${countFor('duration') ? ` · ${countFor('duration')}` : ''}
-      </button>
       ${song.youtube_url ? `<a class="target-chip" href="${esc(song.youtube_url)}" target="_blank" rel="noopener">▶ Écouter</a>` : ''}
       <a class="target-chip" href="/chanson/${encodeURIComponent(song.slug)}/reprises" data-link>
         🎬 Reprises${state.song.coverCount ? ` · ${state.song.coverCount}` : ''}
@@ -956,7 +1035,6 @@ function renderSongPage() {
     if (!was) openInterpretation();
   };
   document.getElementById('target-title').onclick = () => pickTarget('title');
-  document.getElementById('target-duration').onclick = () => pickTarget('duration');
 
   document.getElementById('song-fab').onclick = openSongModal;
 
@@ -1593,8 +1671,10 @@ function refEditorFree() {
   </div>`;
 }
 
-// L'éditeur d'une référence interne : n'importe quel passage de n'importe
-// quel morceau — plus seulement ceux déjà interprétés.
+// L'éditeur d'une référence interne : on choisit un morceau, puis on
+// sélectionne le passage dans son texte, exactement comme on sélectionne un
+// passage à interpréter. La base ne stocke que des identifiants de vers
+// (ref_line_id..ref_end_line_id) : la sélection se fait donc au vers.
 function refEditorInternal() {
   const songs = state.corpus.songs.filter((s) => state.corpus.lines.some((l) => l.song_id === s.id));
   return `<div class="ref-editor ref-editor-internal" data-kind="internal">
@@ -1602,10 +1682,9 @@ function refEditorInternal() {
     <select class="ref-song"><option value="">— Choisir un morceau —</option>
       ${songs.map((s) => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}
     </select>
-    <label>Du vers</label>
-    <select class="ref-start" disabled><option value="">— Choisir d’abord un morceau —</option></select>
-    <label>Au vers <small>(facultatif — pour un passage de plusieurs vers)</small></label>
-    <select class="ref-end" disabled><option value="">— Le même vers —</option></select>
+    <div class="ref-lines" hidden></div>
+    <p class="ref-picked" hidden></p>
+    <input type="hidden" class="ref-start"><input type="hidden" class="ref-end">
     <label>En quoi est-ce une référence ?</label>
     <textarea class="ref-note" rows="5" maxlength="2000"
       placeholder="Ce qui relie ce passage à celui-là…"></textarea>
@@ -1615,6 +1694,68 @@ function refEditorInternal() {
     </div>
     <div class="error-msg ref-error"></div>
   </div>`;
+}
+
+// Affiche le texte du morceau choisi et y gère la sélection d'un passage :
+// un vers, puis un second pour étendre. Un nouvel appui sur le premier annule.
+function bindRefSongPicker(editor) {
+  const songSel = editor.querySelector('.ref-song');
+  if (!songSel) return;
+  const box = editor.querySelector('.ref-lines');
+  const picked = editor.querySelector('.ref-picked');
+  const startField = editor.querySelector('.ref-start');
+  const endField = editor.querySelector('.ref-end');
+  let lines = [];
+
+  const paint = () => {
+    const a = Number(startField.value) || 0;
+    const b = Number(endField.value) || a;
+    const nums = lines.filter((l) => l.id === a || l.id === b).map((l) => l.line_number);
+    const lo = Math.min(...nums);
+    const hi = Math.max(...nums);
+    box.querySelectorAll('.ref-line').forEach((el) => {
+      const no = Number(el.dataset.no);
+      el.classList.toggle('picked', a > 0 && no >= lo && no <= hi);
+    });
+    if (!a) { picked.hidden = true; editor.dataset.label = ''; return; }
+    const first = lines.find((l) => l.line_number === lo);
+    const last = lines.find((l) => l.line_number === hi);
+    const song = songSel.options[songSel.selectedIndex].textContent;
+    const quote = lo === hi ? first.text : `${first.text} […] ${last.text}`;
+    editor.dataset.label = `${song} — « ${quote} »`;
+    picked.hidden = false;
+    picked.innerHTML = `<span class="ref-picked-quote">« ${esc(quote)} »</span>
+      <button type="button" class="link-btn ref-picked-clear">changer</button>`;
+    picked.querySelector('.ref-picked-clear').onclick = () => {
+      startField.value = ''; endField.value = ''; paint();
+    };
+  };
+
+  const onLine = (el) => {
+    const id = Number(el.dataset.id);
+    if (!startField.value) { startField.value = id; endField.value = ''; paint(); return; }
+    if (Number(startField.value) === id && !endField.value) {
+      startField.value = ''; endField.value = ''; paint(); return;
+    }
+    const a = lines.find((l) => l.id === Number(startField.value));
+    const b = lines.find((l) => l.id === id);
+    if (b.line_number < a.line_number) { startField.value = b.id; endField.value = a.id; }
+    else { endField.value = b.id; }
+    paint();
+  };
+
+  songSel.onchange = () => {
+    const songId = Number(songSel.value);
+    lines = state.corpus.lines.filter((l) => l.song_id === songId);
+    startField.value = '';
+    endField.value = '';
+    box.hidden = !lines.length;
+    box.innerHTML = lines.map((l) =>
+      `<button type="button" class="ref-line" data-id="${l.id}" data-no="${l.line_number}">${esc(l.text)}</button>`
+    ).join('');
+    box.querySelectorAll('.ref-line').forEach((el) => { el.onclick = () => onLine(el); });
+    paint();
+  };
 }
 
 // Une référence composée, en attente de publication avec l'interprétation.
@@ -1637,38 +1778,16 @@ function readRefEditor(editor) {
   const note = editor.querySelector('.ref-note').value.trim();
   if (editor.dataset.kind === 'internal') {
     const start = editor.querySelector('.ref-start').value;
-    if (!start) { err.textContent = 'Choisissez le vers référencé.'; return null; }
+    if (!start) { err.textContent = 'Sélectionnez le passage référencé dans le texte.'; return null; }
     const end = editor.querySelector('.ref-end').value || start;
-    const opt = editor.querySelector(`.ref-start option[value="${start}"]`);
-    const songSel = editor.querySelector('.ref-song');
-    const songName = songSel.options[songSel.selectedIndex].textContent;
     return {
       ref_line_id: Number(start), ref_end_line_id: Number(end), note,
-      _label: `${songName} — ${opt ? opt.textContent : ''}`,
+      _label: editor.dataset.label || '',
     };
   }
   const label = editor.querySelector('.ref-label').value.trim();
   if (!label) { err.textContent = 'Nommez l’œuvre référencée.'; return null; }
   return { label, artist: editor.querySelector('.ref-artist').value.trim(), note };
-}
-
-// Remplit les vers d'un morceau dans un éditeur interne.
-function bindRefSongPicker(editor) {
-  const songSel = editor.querySelector('.ref-song');
-  if (!songSel) return;
-  songSel.onchange = () => {
-    const songId = Number(songSel.value);
-    const opts = state.corpus.lines.filter((l) => l.song_id === songId).map((l) => {
-      const t = l.text.length > 52 ? l.text.slice(0, 49) + '…' : l.text;
-      return `<option value="${l.id}">${esc(t)}</option>`;
-    }).join('');
-    const start = editor.querySelector('.ref-start');
-    const end = editor.querySelector('.ref-end');
-    start.innerHTML = '<option value="">— Choisir un vers —</option>' + opts;
-    end.innerHTML = '<option value="">— Le même vers —</option>' + opts;
-    start.disabled = !opts;
-    end.disabled = !opts;
-  };
 }
 
 // Zone « références » d'un formulaire d'interprétation : un éditeur à la fois,
@@ -1954,16 +2073,6 @@ function renderPanel() {
     </div>
     <button class="link-btn" id="clear-sel">← Revenir à la chanson</button>`;
     forms.push(['title-ann-form', { song_id: song.id, target_type: 'title' }]);
-  } else if (sel && sel.type === 'duration') {
-    const durAnns = annotationsFor((a) => a.target_type === 'duration');
-    html += `<div class="panel-card">
-      <h3>La durée${duration ? ` — ${duration}` : ''}</h3>
-      ${duration ? '' : '<div class="panel-target">durée non renseignée pour l’instant</div>'}
-      ${durAnns.map((a) => annotationCard(a)).join('') || '<p class="empty-note">Aucune interprétation de la durée pour l’instant.</p>'}
-      ${annotationForm('duration-ann-form', duration ? `Que disent les chiffres de ${duration} ?` : 'Que dit la durée de cette chanson ?', 'Interpréter la durée', nextGridFor(durAnns))}
-    </div>
-    <button class="link-btn" id="clear-sel">← Revenir à la chanson</button>`;
-    forms.push(['duration-ann-form', { song_id: song.id, target_type: 'duration' }]);
   } else {
     const songAnns = annotationsFor((a) => a.target_type === 'song');
     html += `<div class="panel-card panel-invite">
@@ -2448,12 +2557,11 @@ function nodeCardHtml(n) {
   }
 
   const found = n.found
-    .map((a) => `<p class="enigme-line"><span class="enigme-eq">=</span><strong class="enigme-answer">${esc(a.label)}</strong></p>`)
+    .map((a) => `<p class="enigme-line"><strong class="enigme-answer">${esc(a.label)}</strong></p>`)
     .join('');
 
   const form = n.found.length === n.total ? '' : `
     <form class="enigme-form">
-      <span class="enigme-eq">=</span>
       <input class="enigme-input" type="text" placeholder="mot de passe"
              autocomplete="off" autocapitalize="off" autocorrect="off"
              spellcheck="false" enterkeyhint="go" maxlength="200"

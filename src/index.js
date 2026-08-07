@@ -45,6 +45,7 @@ async function handleApi(request, env, url) {
   // --- lecture publique
   if (route('GET', '/api/albums')) return listAlbums(env);
   if (route('GET', '/api/corpus')) return getCorpus(env);
+  if (route('GET', '/api/feed')) return getFeed(env, request, url);
   if (route('GET', '/api/covers')) return listCovers(env, request);
   if ((p = route('GET', '/api/songs/:slug/covers'))) return getSongCovers(env, request, p[0]);
   if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
@@ -461,6 +462,36 @@ async function getCorpus(env) {
   }
 
   return json({ songs, lines });
+}
+
+// Le fil : les interprétations publiées, de la plus récente à la plus
+// ancienne, avec de quoi afficher le passage visé sans charger le morceau.
+// On demande un élément de plus que la page pour savoir s'il en reste.
+async function getFeed(env, request, url) {
+  const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 5, 1), 30);
+  const offset = Math.max(Number(url.searchParams.get('offset')) || 0, 0);
+
+  const items = (await env.DB.prepare(
+    `SELECT a.id, a.user_id, a.content, a.created_at, a.updated_at, a.grid_number,
+            a.target_type, a.word_start, a.word_end,
+            u.username, s.title AS song_title, s.slug AS song_slug,
+            l.text AS line_text, le.text AS end_line_text
+       FROM annotations a
+       JOIN users u ON u.id = a.user_id
+       JOIN songs s ON s.id = a.song_id
+       LEFT JOIN lyric_lines l ON l.id = a.line_id
+       LEFT JOIN lyric_lines le ON le.id = a.end_line_id
+      WHERE a.is_published = 1
+      ORDER BY a.created_at DESC, a.id DESC
+      LIMIT ?1 OFFSET ?2`
+  ).bind(limit + 1, offset).all()).results;
+
+  const more = items.length > limit;
+  if (more) items.pop();
+
+  const viewer = await getUser(request, env);
+  await attachSocial(env, viewer, 'annotation', 'SELECT id FROM annotations WHERE is_published = 1', items);
+  return json({ items, more });
 }
 
 async function listAlbums(env) {

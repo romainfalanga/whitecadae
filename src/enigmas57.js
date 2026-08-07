@@ -258,18 +258,12 @@ export const NODES = [
     answers: [
       {
         id: 'n-k-1',
-        label: 'Infini',
-        match: (n) => /^(l |les |un |une |d )?infinis?$/.test(n),
-        note: 'Cadae : C=3, A=1, D=4, A=1, E=5 — les décimales de pi, qui ne s’arrêtent jamais.',
+        label: 'Infini blanc',
+        // les deux mots, dans l'ordre qu'on veut
+        match: (n) => /infini/.test(n) && /blanc/.test(n),
+        note: 'White : blanc. Cadae : C=3, A=1, D=4, A=1, E=5 — les décimales de pi, qui ne s’arrêtent jamais.',
         quotes: ['J’harmonise l’infini, l’infini devient fini. (Multivers)',
                  'Je ne suis qu’un fil qui relie deux infinis. (Un fil entre deux infinis)'],
-      },
-      {
-        id: 'n-k-2',
-        label: 'Blanc',
-        match: (n) => /^(le |la |les |un |une |de |d )?blanc(he|s|hes)?$/.test(n),
-        note: 'White.',
-        quotes: [],
       },
     ],
   },
