@@ -220,6 +220,9 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 }
 .target-chip:hover { border-color: var(--accent); color: var(--text); text-decoration: none; }
 .target-chip.active { background: var(--accent); border-color: var(--accent); color: #17130a; font-weight: 600; }
+/* pastille d'écriture : elle ouvre un formulaire, elle doit s'en distinguer */
+.target-chip-write { border-color: rgba(216, 192, 122, 0.45); color: var(--accent); }
+.target-chip-write:hover { background: var(--accent-soft); }
 
 .song-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 2rem; }
 @media (max-width: 900px) { .song-layout { grid-template-columns: 1fr; } }
@@ -252,12 +255,6 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .w.has-note { border-bottom: 1px dotted var(--accent); }
 .w.selected-word { background: var(--accent); color: #17130a; }
 
-.line-note-btn {
-  border: none; background: none; cursor: pointer;
-  color: transparent; font-size: 0.85rem; padding: 0 0.35rem;
-}
-.lyric-line:hover .line-note-btn { color: var(--text-dim); }
-.lyric-line .line-note-btn.active, .lyric-line.has-line-note .line-note-btn { color: var(--accent); }
 
 .no-lyrics {
   color: var(--text-dim);

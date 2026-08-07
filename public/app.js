@@ -119,7 +119,7 @@ async function route() {
   closeSettings();
   renderNav();
   let m;
-  if (path === '/' || path === '') return pageHome();
+  if (path === '/' || path === '') return pageInterpretations();
   if (path === '/connexion') return pageLogin();
   if (path === '/inscription') return pageRegister();
   if (path === '/admin') return pageAdmin();
@@ -128,7 +128,7 @@ async function route() {
   if ((m = path.match(/^\/chanson\/([^/]+)\/reprises$/))) return pageSongCovers(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/membre\/([^/]+)$/))) return pageProfile(decodeURIComponent(m[1]));
-  app.innerHTML = '<h1>Page introuvable</h1><p><a href="/" data-link>Retour à l’accueil</a></p>';
+  app.innerHTML = '<h1>Page introuvable</h1><p><a href="/" data-link>Retour aux interprétations</a></p>';
 }
 
 function profileHref(username) {
@@ -335,19 +335,19 @@ function renderNav() {
   // La déconnexion se fait depuis les paramètres du compte (page profil) :
   // pas besoin de la dupliquer dans le menu.
   nav.innerHTML = u
-    ? `<a href="/" data-link>Accueil</a>
+    ? `<a href="/" data-link>Interprétations</a>
        <a href="/57" data-link>57</a>
        <a href="/reprises" data-link>Reprises</a>
        ${u.is_admin ? '<a href="/admin" data-link>Administration</a>' : ''}
        <a href="${profileHref(u.username)}" data-link>Mon profil</a>`
-    : `<a href="/" data-link>Accueil</a>
+    : `<a href="/" data-link>Interprétations</a>
        <a href="/57" data-link>57</a>
        <a href="/reprises" data-link>Reprises</a>
        <a href="/connexion" data-link>Se connecter</a>
        <a href="/inscription" data-link class="btn">Créer un compte</a>`;
 }
 
-/* ---------------------------------------------------------------- accueil */
+/* -------------------------------------------------------- interprétations */
 
 // L'API sert les albums du plus ancien au plus récent (colonne `position`).
 // L'accueil et les reprises les présentent dans l'autre sens : la dernière
@@ -357,7 +357,7 @@ function newestFirst(albums) {
   return [...albums].reverse();
 }
 
-async function pageHome() {
+async function pageInterpretations() {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
   const data = await api('/api/albums');
@@ -379,7 +379,7 @@ async function pageHome() {
       </ol>
     </section>`).join('');
 
-  app.innerHTML = albums || '<p class="empty-note">Aucun album pour le moment.</p>';
+  app.innerHTML = '<h1>Interprétations</h1>' + (albums || '<p class="empty-note">Aucun album pour le moment.</p>');
 }
 
 /* ------------------------------------------------------- connexion/compte */
@@ -464,7 +464,7 @@ async function pageSong(slug, keepSelection = false) {
     data = await api(`/api/songs/${encodeURIComponent(slug)}`);
   } catch (err) {
     if (!stale(epoch)) {
-      app.innerHTML = `<h1>Chanson introuvable</h1><p><a href="/" data-link>Retour à l’accueil</a></p>`;
+      app.innerHTML = `<h1>Chanson introuvable</h1><p><a href="/" data-link>Retour aux interprétations</a></p>`;
     }
     return;
   }
@@ -795,11 +795,12 @@ function renderSelectionUI() {
       delete install.dataset.suspended;
       if (localStorage.getItem('wc_install_dismissed') !== '1') install.hidden = false;
     }
-    if (!isText) {
+    if (!sel) {
       state.sheetOpen = false;
       document.body.classList.remove('sheet-open');
-      ensureSheetChrome();
     }
+    document.body.classList.toggle('sheet-open', state.sheetOpen);
+    ensureSheetChrome();
     return;
   }
 
@@ -839,8 +840,6 @@ function openInterpretation() {
   } else {
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
-  const ta = panel.querySelector('textarea');
-  if (ta) setTimeout(() => ta.focus({ preventScroll: true }), 120);
 }
 
 function ensureSheetChrome() {
@@ -903,11 +902,7 @@ function renderSongPage() {
         if (lineHasNote(line.id)) lineClasses.push('has-line-note');
         if (isSelLine && sel.type === 'line') lineClasses.push('selected-line');
         if (lineInPassage) lineClasses.push('selected-line');
-        return `<div class="${lineClasses.join(' ')}" data-line-id="${line.id}">
-          ${words}
-          <button class="line-note-btn ${isSelLine && sel.type === 'line' ? 'active' : ''}"
-                  data-line-btn="${line.id}" title="Interpréter cette phrase">&#128172;</button>
-        </div>`;
+        return `<div class="${lineClasses.join(' ')}" data-line-id="${line.id}">${words}</div>`;
       }).join('')}
         <span id="sel-handle-start" class="sel-handle sel-handle-start" hidden></span>
         <span id="sel-handle-end" class="sel-handle sel-handle-end" hidden></span>
@@ -918,14 +913,14 @@ function renderSongPage() {
     : `<div class="no-lyrics">Les paroles de « ${esc(song.title)} » seront bientôt disponibles.</div>`;
 
   app.innerHTML = `
-    <div class="breadcrumb"><a href="/" data-link>Accueil</a> › ${esc(song.album_title || 'Sans album')}</div>
+    <div class="breadcrumb"><a href="/" data-link>Interprétations</a> › ${esc(song.album_title || 'Sans album')}</div>
     <h1>${esc(song.title)}</h1>
     <div class="song-targets">
-      <button class="target-chip ${sel && sel.type === 'title' ? 'active' : ''}" id="target-title">
-        Le titre${countFor('title') ? ` · ${countFor('title')}` : ''}
+      <button class="target-chip target-chip-write ${sel && sel.type === 'title' ? 'active' : ''}" id="target-title">
+        ✍ Interpréter le titre${countFor('title') ? ` · ${countFor('title')}` : ''}
       </button>
-      <button class="target-chip ${sel && sel.type === 'duration' ? 'active' : ''}" id="target-duration">
-        La durée${duration ? ` (${duration})` : ''}${countFor('duration') ? ` · ${countFor('duration')}` : ''}
+      <button class="target-chip target-chip-write ${sel && sel.type === 'duration' ? 'active' : ''}" id="target-duration">
+        ✍ Interpréter la durée${duration ? ` (${duration})` : ''}${countFor('duration') ? ` · ${countFor('duration')}` : ''}
       </button>
       ${song.youtube_url ? `<a class="target-chip" href="${esc(song.youtube_url)}" target="_blank" rel="noopener">▶ Écouter</a>` : ''}
       <a class="target-chip" href="/chanson/${encodeURIComponent(song.slug)}/reprises" data-link>
@@ -948,23 +943,14 @@ function renderSongPage() {
 
   bindLyricsSelection();
 
-  app.querySelectorAll('[data-line-btn]').forEach((btn) => {
-    btn.onclick = () => {
-      const lineId = Number(btn.dataset.lineBtn);
-      state.sel = (state.sel && state.sel.type === 'line' && state.sel.lineId === lineId)
-        ? null
-        : { type: 'line', lineId };
-      renderSongPage();
-    };
-  });
-  document.getElementById('target-title').onclick = () => {
-    state.sel = (sel && sel.type === 'title') ? null : { type: 'title' };
+  const pickTarget = (type) => {
+    const was = sel && sel.type === type;
+    state.sel = was ? null : { type };
     renderSongPage();
+    if (!was) openInterpretation();
   };
-  document.getElementById('target-duration').onclick = () => {
-    state.sel = (sel && sel.type === 'duration') ? null : { type: 'duration' };
-    renderSongPage();
-  };
+  document.getElementById('target-title').onclick = () => pickTarget('title');
+  document.getElementById('target-duration').onclick = () => pickTarget('duration');
 
   renderPanel();
   renderInbound();
@@ -1938,7 +1924,7 @@ async function pageSongCovers(slug) {
   try {
     data = await api(`/api/songs/${encodeURIComponent(slug)}/covers`);
   } catch {
-    if (!stale(epoch)) app.innerHTML = '<h1>Chanson introuvable</h1><p><a href="/" data-link>Retour à l’accueil</a></p>';
+    if (!stale(epoch)) app.innerHTML = '<h1>Chanson introuvable</h1><p><a href="/" data-link>Retour aux interprétations</a></p>';
     return;
   }
   if (stale(epoch)) return;
@@ -1969,7 +1955,7 @@ function renderSongCoversPage() {
     : `<p class="empty-note"><a href="/connexion" data-link>Connectez-vous</a> pour publier une reprise de ce morceau.</p>`;
 
   app.innerHTML = `
-    <div class="breadcrumb"><a href="/" data-link>Accueil</a> › ${esc(song.album_title || 'Sans album')} ›
+    <div class="breadcrumb"><a href="/" data-link>Interprétations</a> › ${esc(song.album_title || 'Sans album')} ›
       <a href="/chanson/${encodeURIComponent(song.slug)}" data-link>${esc(song.title)}</a> › Reprises</div>
     <h1>Reprises de « ${esc(song.title)} »</h1>
     ${list}
@@ -2026,7 +2012,7 @@ async function pageProfile(username) {
   try {
     data = await api(`/api/users/${encodeURIComponent(username)}`);
   } catch {
-    if (!stale(epoch)) app.innerHTML = '<h1>Membre introuvable</h1><p><a href="/" data-link>Retour à l’accueil</a></p>';
+    if (!stale(epoch)) app.innerHTML = '<h1>Membre introuvable</h1><p><a href="/" data-link>Retour aux interprétations</a></p>';
     return;
   }
   if (stale(epoch)) return;
