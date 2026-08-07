@@ -2433,33 +2433,38 @@ function nodeClass(n) {
 // réponses s'empilent au-dessus au fur et à mesure, dans n'importe quel ordre.
 function nodeCardHtml(n) {
   const counter = n.total > 1
-    ? `<span class="enigme-count">${n.found.length}/${n.total}</span>` : '';
+    ? `<span class="enigme-count">${n.found.length}<span>/${n.total}</span></span>` : '';
+  const head = `<div class="enigme-head">
+      <span class="enigme-source">${esc(n.source)}</span>${counter}
+    </div>`;
 
   if (n.locked) {
     const missing = n.requires
       .map((r) => `<button type="button" class="link-btn enigme-goto" data-goto="${esc(r.node)}">${esc(r.label)}</button>`)
       .join('');
-    return `${counter}
-      <p class="enigme-line"><span class="enigme-eq">=</span><span class="enigme-blank">?</span></p>
-      <p class="enigme-locked-note"><span class="enigme-lock" aria-label="verrouillé">🔒</span>${missing}</p>`;
+    return `${head}<div class="enigme-body">
+      <p class="enigme-locked-note"><span class="enigme-lock" aria-label="verrouillé">🔒</span>${missing}</p>
+    </div>`;
   }
 
   const found = n.found
     .map((a) => `<p class="enigme-line"><span class="enigme-eq">=</span><strong class="enigme-answer">${esc(a.label)}</strong></p>`)
     .join('');
 
-  if (n.found.length === n.total) return counter + found;
-
-  return `${counter}${found}
+  const form = n.found.length === n.total ? '' : `
     <form class="enigme-form">
       <span class="enigme-eq">=</span>
       <input class="enigme-input" type="text" placeholder="mot de passe"
              autocomplete="off" autocapitalize="off" autocorrect="off"
              spellcheck="false" enterkeyhint="go" maxlength="200"
              aria-label="Mot de passe pour ${esc(n.source)}">
-      <button type="submit" class="primary">Valider</button>
+      <button type="submit" class="primary" aria-label="Valider">
+        <span class="enigme-go">→</span><span class="enigme-go-text">Valider</span>
+      </button>
     </form>
     <p class="enigme-msg" role="status" aria-live="polite"></p>`;
+
+  return `${head}<div class="enigme-body">${found}${form}</div>`;
 }
 
 function enigmesProgressHtml() {
@@ -2473,18 +2478,14 @@ function enigmesProgressHtml() {
 function renderEnigmesPage() {
   const d = state.enigmes;
 
-  const nodes = d.nodes.map((n) => `
-    <div class="node-group">
-      <div class="node-source" id="src-${esc(n.id)}"><span>${esc(n.source)}</span></div>
-      <div class="node-leaves">
-        <article class="${nodeClass(n)}" id="e-${esc(n.id)}">${nodeCardHtml(n)}</article>
-      </div>
-    </div>`).join('');
+  const nodes = d.nodes
+    .map((n) => `<article class="${nodeClass(n)}" id="e-${esc(n.id)}">${nodeCardHtml(n)}</article>`)
+    .join('');
 
   app.innerHTML = `
     <h1>57</h1>
     <div class="enigmes-progress" id="enigmes-progress">${enigmesProgressHtml()}</div>
-    ${nodes}`;
+    <div class="enigmes-grid">${nodes}</div>`;
 
   d.nodes.forEach((n) => {
     const el = document.getElementById('e-' + n.id);
@@ -2506,10 +2507,6 @@ function applyEnigmesState(data, focusId) {
   data.nodes.forEach((n) => {
     const el = document.getElementById('e-' + n.id);
     if (!el) return;
-    // le libellé d'une racine est masqué tant que son prérequis manque
-    const label = document.getElementById('src-' + n.id)?.firstElementChild;
-    if (label && label.textContent !== n.source) label.textContent = n.source;
-
     const sig = JSON.stringify(n);
     if (el.dataset.sig === sig) return;
     el.dataset.sig = sig;
@@ -2555,8 +2552,12 @@ function bindEnigmeCard(el, n) {
       try {
         const res = await api('/api/57/guess', { method: 'POST', body: { id: n.id, answer } });
         if (res.ok) {
-          input.blur(); // referme le clavier avant de dérouler la réponse
+          // sur téléphone on referme le clavier pour laisser voir la réponse ;
+          // au clavier physique on reste dans le champ pour enchaîner
+          const chain = window.innerWidth > 700 && n.found.length + 1 < n.total;
+          input.blur();
           applyEnigmesState(res.state, n.id);
+          if (chain) document.querySelector('#e-' + n.id + ' .enigme-input')?.focus();
         } else {
           btn.disabled = false;
           enigmeWrong(el, input);

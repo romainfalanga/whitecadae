@@ -13,8 +13,16 @@ interprétations à cinq niveaux :
 - **un mot ou un groupe de mots** dans une phrase — un mot peut avoir sa
   propre interprétation *en plus* de celle de sa phrase.
 
-Chaque chanson peut aussi être **connectée à une autre chanson**, avec une
-explication du lien entre les deux.
+Chaque interprétation peut porter des **références** : une œuvre extérieure
+(son nom, son artiste, et en quoi c'en est une) ou un **passage d'un autre
+morceau**. Une référence interne apparaît des deux côtés — sur
+l'interprétation qui la pose, et sur la page du morceau visé. Chacune se
+compose dans son propre éditeur et se publie avec son propre bouton, y
+compris après coup sur une interprétation déjà en ligne.
+
+Le sens général du morceau, les interprétations d'ensemble et les connexions
+entre chansons vivent dans une **fenêtre ouverte par le bouton flottant** en
+bas à droite de chaque page de chanson.
 
 Dimension sociale : tout est public en lecture, et chaque interprétation
 ou connexion peut recevoir des **favoris (♥)** et des **commentaires**
