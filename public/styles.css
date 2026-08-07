@@ -114,6 +114,17 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-7px) rotate
 }
 .site-nav a { color: var(--text-dim); }
 .site-nav a:hover { color: var(--text); text-decoration: none; }
+/* « Mon compte » quand le profil n'est pas encore ouvert : un lien du menu,
+   pas un bouton — il ne doit pas se distinguer des autres. */
+.site-nav .nav-account {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.site-nav .nav-account:hover { color: var(--text); }
 
 main {
   flex: 1;
@@ -1050,6 +1061,21 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 
 .enigme-msg { color: var(--danger); font-size: 0.85rem; }
 .enigme-msg:empty { display: none; }
+
+/* L'attente : proposer un mot de passe ferme les champs pour une heure. Le
+   décompte prend la place du bouton — rien n'est écrit, rien n'est expliqué.
+   La largeur est figée pour que la carte ne tressaille pas à chaque seconde. */
+.enigme-form button { min-width: 6.2rem; text-align: center; }
+.enigme-form button:disabled {
+  opacity: 0.55;
+  cursor: default;
+  font-variant-numeric: tabular-nums;
+}
+.enigme-input:disabled { opacity: 0.4; cursor: default; }
+.enigmes-grid--attente .enigme-form { opacity: 0.85; }
+@media (max-width: 460px) {
+  .enigme-form button { min-width: 4.6rem; }
+}
 
 /* verrouillé : un cadenas et le nom de ce qui manque, rien d'autre */
 .enigme-locked-note { display: flex; align-items: center; flex-wrap: wrap; gap: 0.15rem; }

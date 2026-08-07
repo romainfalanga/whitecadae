@@ -4,7 +4,9 @@ Plateforme communautaire d'explications des textes de **White Cadae**
 ([chaîne YouTube](https://www.youtube.com/@WhiteCadae)).
 
 **On arrive par le 57.** La racine `/` ouvre l'escape game (voir plus bas) :
-c'est lui qui commande l'accès au reste, échelon par échelon.
+c'est lui qui commande l'accès au reste, échelon par échelon. Tant qu'aucun
+mot de passe n'a été trouvé, il n'y a que lui — ni interprétations, ni
+reprises, ni profil.
 
 La page **Interprétations** (`/interpretations`) ouvre sur les dernières
 lectures publiées par les membres — le passage visé, puis ce qu’on en dit —
@@ -66,10 +68,39 @@ ne dit pas non plus combien de mots de passe il cache — il envoie seulement
 `open`, qui suffit à savoir s'il faut encore afficher le champ. Le nombre
 total de mots de passe du jeu ne quitte jamais le Worker.
 
-On monte d'un **échelon** tous les trois mots de passe trouvés : on commence
-au 1, le troisième fait passer au 2. La barre de progression montre le chemin
-restant dans l'échelon en cours — jamais la progression dans le jeu entier.
-C'est cet échelon qui, à terme, ouvrira les fonctionnalités de la plateforme.
+**Un essai par heure.** Proposer un mot de passe, juste ou faux, ferme tous
+les champs pendant une heure : il faut donc choisir ce qu'on tente. Le délai
+est tenu par le serveur (une ligne réservée de `riddle_progress`, dont le
+`riddle_id` ne correspond à aucune réponse), donc un rechargement ne le fait
+pas sauter. Rien ne l'annonce et rien ne l'explique : le décompte prend
+simplement la place du bouton, et tout revient de soi-même.
+
+### Les échelons
+
+`echelon = ⌊ordinaires / 3⌋ × 3^multiplicateurs`
+
+Les mots de passe ordinaires font monter d'un cran tous les trois ; ceux du
+bloc muet ne font pas monter — ils **multiplient** par trois. Deux d'entre eux
+multiplient donc par neuf. Multiplier zéro ne donne rien : il faut d'abord
+gravir un premier cran. La barre de progression montre le chemin restant dans
+le cran en cours, jamais la progression dans le jeu entier.
+
+L'échelon **commande l'accès au site**, et pas seulement l'affichage des liens
+(`accessOf`) :
+
+| Échelon | Ce qui s'ouvre |
+| --- | --- |
+| 0 | la page 57, et rien d'autre |
+| 1 | les Interprétations et le profil |
+| 6 | les Reprises |
+
+Comme les mots de passe ordinaires plafonnent à l'échelon 4, les **Reprises
+sont hors d'atteinte sans un multiplicateur** : six ordinaires et un mot du
+bloc muet y mènent. Le barrage est appliqué dans le routeur du Worker, pas
+seulement dans l'interface — masquer un lien n'a jamais fermé une porte. Le
+compte et son avatar y échappent, sans quoi on ne pourrait plus se
+déconnecter, et **l'artiste (`is_admin`) en est exempté** : il ne peut pas se
+retrouver enfermé dehors par un jeu dont il connaît les réponses.
 
 La page est réservée aux membres : la progression est enregistrée sur le
 compte (`riddle_progress`, une ligne par mot de passe trouvé), donc

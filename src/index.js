@@ -1,6 +1,8 @@
 // WhiteCadae — Cloudflare Worker : API + service du site statique
 
-import { getNode, isLocked, matchAnswer, buildState, currentAnswerId } from './enigmas57.js';
+import {
+  getNode, isLocked, matchAnswer, buildState, currentAnswerId, echelonOf, accessOf,
+} from './enigmas57.js';
 
 const SESSION_COOKIE = 'wc_session';
 const SESSION_DAYS = 30;
@@ -42,7 +44,33 @@ async function handleApi(request, env, url) {
   if (route('POST', '/api/logout')) return logout(request, env);
   if (route('GET', '/api/me')) return me(request, env);
 
-  // --- lecture publique
+  // --- l'avatar n'est barré par rien : il s'affiche jusque dans le menu
+  if ((p = route('GET', '/api/users/:username/avatar'))) return getAvatar(env, p[0]);
+
+  // --- le 57 : la porte d'entrée, ouverte à tout membre
+  if (route('GET', '/api/57')) return signsState(request, env);
+  if (route('POST', '/api/57/guess')) return signsGuess(request, env);
+  if (route('DELETE', '/api/57/progress')) return signsReset(request, env);
+
+  // --- le compte : toujours accessible, sinon on ne pourrait plus en sortir
+  if (route('PUT', '/api/account/username')) return updateUsername(request, env);
+  if (route('PUT', '/api/account/password')) return updatePassword(request, env);
+  if (route('POST', '/api/account/avatar')) return updateAvatar(request, env);
+
+  // --- tout ce qui suit demande un échelon : d'abord les reprises, qui sont
+  //     la porte la plus haute, puis les interprétations.
+  const coversRoute = route('GET', '/api/covers/feed') || route('GET', '/api/covers')
+    || route('GET', '/api/songs/:slug/covers') || route('POST', '/api/covers')
+    || route('DELETE', '/api/covers/:id');
+  if (coversRoute) {
+    const refus = await requireAccess(request, env, 'reprises');
+    if (refus) return refus;
+  } else if (path.startsWith('/api/') && !path.startsWith('/api/admin/')) {
+    const refus = await requireAccess(request, env, 'interpretations');
+    if (refus) return refus;
+  }
+
+  // --- lecture
   if (route('GET', '/api/albums')) return listAlbums(env);
   if (route('GET', '/api/corpus')) return getCorpus(env);
   if (route('GET', '/api/feed')) return getFeed(env, request, url);
@@ -50,7 +78,6 @@ async function handleApi(request, env, url) {
   if (route('GET', '/api/covers')) return listCovers(env, request);
   if ((p = route('GET', '/api/songs/:slug/covers'))) return getSongCovers(env, request, p[0]);
   if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
-  if ((p = route('GET', '/api/users/:username/avatar'))) return getAvatar(env, p[0]);
   if ((p = route('GET', '/api/users/:username'))) return getProfile(env, request, p[0]);
 
   // --- contributions (connecté)
@@ -72,15 +99,6 @@ async function handleApi(request, env, url) {
   if (route('POST', '/api/comments')) return createComment(request, env);
   if ((p = route('DELETE', '/api/comments/:id'))) return deleteComment(request, env, +p[0]);
   if (route('POST', '/api/profile/publish')) return publishVersion(request, env);
-
-  // --- les signes de l'EP 57 (page /57, réservée aux membres)
-  if (route('GET', '/api/57')) return signsState(request, env);
-  if (route('POST', '/api/57/guess')) return signsGuess(request, env);
-  if (route('DELETE', '/api/57/progress')) return signsReset(request, env);
-
-  if (route('PUT', '/api/account/username')) return updateUsername(request, env);
-  if (route('PUT', '/api/account/password')) return updatePassword(request, env);
-  if (route('POST', '/api/account/avatar')) return updateAvatar(request, env);
 
   // --- administration
   if (route('POST', '/api/admin/albums')) return adminCreateAlbum(request, env);
@@ -188,6 +206,34 @@ async function requireAdmin(request, env) {
   const user = await requireUser(request, env);
   if (!user.is_admin) throw json({ error: 'Réservé à l’administrateur.' }, 403);
   return user;
+}
+
+/* --------------------------------------------------- ce que l'échelon ouvre
+
+   Le 57 commande le reste du site : sans mot de passe trouvé, il n'y a que
+   lui. Les pages s'ouvrent ensuite une à une (voir accessOf). Le barrage vit
+   ici, pas seulement dans l'interface : masquer un lien n'a jamais fermé une
+   porte.
+
+   L'artiste en est exempté — il ne peut pas se retrouver enfermé dehors de
+   son propre site par un jeu dont il connaît déjà les réponses.            */
+
+async function viewerAccess(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return { user: null, echelon: 0, access: accessOf(0) };
+  if (user.is_admin) return { user, echelon: Infinity, access: { interpretations: true, reprises: true } };
+  const rows = await riddleRows(env, user.id);
+  const solved = new Set(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
+  const echelon = echelonOf(solved);
+  return { user, echelon, access: accessOf(echelon) };
+}
+
+// Renvoie null si la porte est ouverte, sinon la réponse à servir telle
+// quelle. Le message ne dit pas ce qu'il faudrait trouver.
+async function requireAccess(request, env, porte) {
+  const { access } = await viewerAccess(request, env);
+  if (access[porte]) return null;
+  return json({ error: 'Cette page n’est pas encore ouverte.', locked: porte }, 403);
 }
 
 function slugify(text) {
@@ -401,9 +447,14 @@ async function logout(request, env) {
   return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
 }
 
+// La session porte aussi ce que l'échelon ouvre : l'interface s'y règle dès
+// le chargement, sans attendre d'avoir demandé l'état du jeu.
 async function me(request, env) {
-  const user = await getUser(request, env);
-  return json({ user: user ? { ...user, is_admin: !!user.is_admin } : null });
+  const { user, access } = await viewerAccess(request, env);
+  return json({
+    user: user ? { ...user, is_admin: !!user.is_admin } : null,
+    access,
+  });
 }
 
 /* ---------------------------------------------------------------- lecture */
@@ -1415,6 +1466,37 @@ async function ensureRiddleTable(env) {
   riddleTableReady = true;
 }
 
+/* Un essai par heure. Le délai court dès qu'un mot de passe est proposé,
+   juste ou faux : c'est ce qui oblige à réfléchir avant de taper. Il est
+   gardé côté serveur — un rechargement de page ne le fait pas sauter.
+
+   La date du dernier essai vit sur une ligne réservée de riddle_progress,
+   dont le riddle_id ne correspond à aucune réponse : buildState l'ignore
+   comme n'importe quel identifiant inconnu, et il n'y a pas de colonne à
+   ajouter à users. */
+// Pas d'`export` ici : le module d'entrée d'un Worker ne peut exporter que
+// son gestionnaire, le reste fait échouer le démarrage du runtime.
+const ESSAI_ROW = '@essai';
+const DELAI_ESSAI_MS = 60 * 60 * 1000;
+
+async function attenteRestante(env, userId) {
+  await ensureRiddleTable(env);
+  const row = await env.DB.prepare(
+    `SELECT (julianday('now') - julianday(updated_at)) * 86400000 AS ecoule
+       FROM riddle_progress WHERE user_id = ?1 AND riddle_id = ?2`
+  ).bind(userId, ESSAI_ROW).first();
+  if (!row || row.ecoule == null) return 0;
+  return Math.max(0, Math.round(DELAI_ESSAI_MS - row.ecoule));
+}
+
+async function marquerEssai(env, userId) {
+  await env.DB.prepare(
+    `INSERT INTO riddle_progress (user_id, riddle_id, updated_at)
+     VALUES (?1, ?2, datetime('now'))
+     ON CONFLICT(user_id, riddle_id) DO UPDATE SET updated_at = datetime('now')`
+  ).bind(userId, ESSAI_ROW).run();
+}
+
 // Une ligne par réponse trouvée.
 async function riddleRows(env, userId) {
   await ensureRiddleTable(env);
@@ -1426,7 +1508,8 @@ async function riddleRows(env, userId) {
 }
 
 async function riddleState(env, userId) {
-  return buildState(await riddleRows(env, userId));
+  const [rows, attente] = await Promise.all([riddleRows(env, userId), attenteRestante(env, userId)]);
+  return { ...buildState(rows), attenteMs: attente };
 }
 
 async function signsState(request, env) {
@@ -1447,13 +1530,21 @@ async function signsGuess(request, env) {
 
   const answer = String(body?.answer ?? '');
   if (answer.length > 200) return json({ error: 'Réponse trop longue.' }, 400);
+  if (!answer.trim()) return json({ error: 'Réponse vide.' }, 400);
+
+  // Un essai par heure, juste ou faux. On vérifie avant de regarder la
+  // réponse, et on décompte avant de la juger : proposer, c'est déjà jouer.
+  const attente = await attenteRestante(env, user.id);
+  if (attente > 0) return json({ error: 'Trop tôt.', attenteMs: attente }, 429);
 
   const rows = await riddleRows(env, user.id);
   const solved = new Set(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
   if (isLocked(node, solved)) return json({ error: 'Cet élément est encore verrouillé.' }, 403);
 
+  await marquerEssai(env, user.id);
+
   const hit = matchAnswer(node, answer, solved);
-  if (!hit) return json({ ok: false, id: node.id });
+  if (!hit) return json({ ok: false, id: node.id, attenteMs: DELAI_ESSAI_MS });
 
   await env.DB.prepare(
     `INSERT INTO riddle_progress (user_id, riddle_id, solved_at)

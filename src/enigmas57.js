@@ -79,23 +79,18 @@ const oneWord = (...formes) => (n) => formes.includes(n.replace(/ /g, ''));
 export const NODES = [
   {
     // Le bloc d'entrée : ni titre, ni compte. On ne sait pas ce qu'on
-    // cherche, ni combien il y en a.
+    // cherche, ni combien il y en a. Ses mots de passe ne font pas monter
+    // d'un échelon comme les autres — ils multiplient celui qu'on a déjà.
     id: 'n-0',
     source: '',
     silent: true,
+    multiplies: 3,
     requires: [],
     answers: [
       {
         id: 'n-0-1',
         label: 'Devincix',
         match: oneWord('devincix'),
-        note: '',
-        quotes: [],
-      },
-      {
-        id: 'n-0-2',
-        label: 'Aavulpis',
-        match: oneWord('aavulpis'),
         note: '',
         quotes: [],
       },
@@ -337,12 +332,41 @@ function sourceOf(node, locked) {
   return locked && node.lockedLabel ? node.lockedLabel : node.source;
 }
 
-// On monte d'un échelon tous les trois mots de passe trouvés : on commence à
-// l'échelon 1, le troisième fait passer au 2, et ainsi de suite.
+/* ------------------------------------------------------------- échelons */
+
+// On part de l'échelon 0, et l'on monte d'un cran tous les trois mots de
+// passe ordinaires. Les mots de passe du bloc muet, eux, ne font pas monter :
+// ils multiplient. Chacun triple l'échelon, donc deux d'entre eux le
+// multiplient par neuf. Tant qu'on n'a pas gravi un premier cran, multiplier
+// zéro ne donne rien : il faut d'abord trois mots de passe ordinaires.
 export const PAR_ECHELON = 3;
 
-export function echelonOf(solvedCount) {
-  return Math.floor(solvedCount / PAR_ECHELON) + 1;
+const MULTIPLIER_ANSWERS = new Set();
+const ORDINARY_ANSWERS = new Set();
+for (const node of NODES) {
+  for (const a of node.answers) (node.multiplies ? MULTIPLIER_ANSWERS : ORDINARY_ANSWERS).add(a.id);
+}
+
+export function echelonOf(solved) {
+  let ordinaires = 0;
+  let facteur = 1;
+  for (const id of solved) {
+    if (ORDINARY_ANSWERS.has(id)) ordinaires += 1;
+    else if (MULTIPLIER_ANSWERS.has(id)) facteur *= 3;
+  }
+  return Math.floor(ordinaires / PAR_ECHELON) * facteur;
+}
+
+// Ce que l'échelon ouvre. La page 57 est toujours là : c'est par elle qu'on
+// entre, et elle seule tant qu'on n'a rien trouvé.
+export const ECHELON_INTERPRETATIONS = 1;
+export const ECHELON_REPRISES = 6;
+
+export function accessOf(echelon) {
+  return {
+    interpretations: echelon >= ECHELON_INTERPRETATIONS,
+    reprises: echelon >= ECHELON_REPRISES,
+  };
 }
 
 // L'état complet du jeu pour un membre. `rows` vient de riddle_progress ;
@@ -375,11 +399,16 @@ export function buildState(rows) {
     };
   });
 
+  const ordinaires = [...solved].filter((id) => ORDINARY_ANSWERS.has(id)).length;
+  const echelon = echelonOf(solved);
+
   return {
     nodes,
     solved: solved.size,
-    echelon: echelonOf(solved.size),
-    step: solved.size % PAR_ECHELON,
+    echelon,
+    // le chemin qu'il reste dans le cran en cours, jamais dans le jeu entier
+    step: ordinaires % PAR_ECHELON,
     perEchelon: PAR_ECHELON,
+    access: accessOf(echelon),
   };
 }

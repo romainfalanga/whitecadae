@@ -5,6 +5,8 @@ const nav = document.getElementById('nav');
 
 const state = {
   user: null,
+  // ce que l'échelon atteint sur la page 57 a ouvert du reste du site
+  access: { interpretations: false, reprises: false },
   song: null, // données de la page chanson en cours
   sel: null, // sélection : {type:'line'|'word'|'title'|'duration', lineId?, start?, end?}
   openComments: new Set(), // espaces commentaires ouverts, clés "kind:id"
@@ -54,7 +56,12 @@ async function api(path, options = {}) {
   const res = await fetch(path, opts);
   let data = null;
   try { data = await res.json(); } catch { /* réponse vide */ }
-  if (!res.ok) throw new Error((data && data.error) || `Erreur ${res.status}`);
+  if (!res.ok) {
+    const err = new Error((data && data.error) || `Erreur ${res.status}`);
+    err.status = res.status;
+    err.data = data; // le corps de l'erreur porte parfois de quoi réagir
+    throw err;
+  }
   return data;
 }
 
@@ -66,8 +73,12 @@ let renderEpoch = 0;
 function newEpoch() { return ++renderEpoch; }
 function stale(epoch) { return epoch !== renderEpoch; }
 
-function navigate(path) {
-  history.pushState(null, '', path);
+// `remplace` : on ne laisse pas de trace dans l'historique — utile quand on
+// renvoie quelqu'un d'une page qui ne lui est pas encore ouverte, pour que le
+// bouton « retour » ne l'y ramène pas en boucle.
+function navigate(path, remplace) {
+  if (remplace) history.replaceState(null, '', path);
+  else history.pushState(null, '', path);
   route();
 }
 
@@ -126,10 +137,16 @@ async function route() {
   let m;
   // On arrive sur la plateforme par le 57 : c'est lui qui ouvre le reste.
   if (path === '/' || path === '' || path === '/57') return pageEnigmes();
-  if (path === '/interpretations') return pageInterpretations();
   if (path === '/connexion') return pageLogin();
   if (path === '/inscription') return pageRegister();
   if (path === '/admin') return pageAdmin();
+
+  // Une porte encore fermée ne se discute pas : on revient au 57, sans un mot.
+  const porte = (path === '/reprises' || path === '/reprises/fil'
+    || /^\/chanson\/[^/]+\/reprises$/.test(path)) ? 'reprises' : 'interpretations';
+  if (!state.access[porte]) return navigate('/57', true);
+
+  if (path === '/interpretations') return pageInterpretations();
   if (path === '/reprises/fil') return pageCoverFeed();
   if (path === '/reprises') return pageCovers();
   if (path === '/fil') return pageFeed();
@@ -333,26 +350,36 @@ function openSettings() {
   document.getElementById('settings-logout').onclick = async () => {
     await api('/api/logout', { method: 'POST' });
     state.user = null;
+    state.access = { interpretations: false, reprises: false };
     closeSettings();
     navigate('/');
   };
 }
 
+// Le menu ne montre que ce qui est ouvert : une page qu'on n'a pas encore
+// méritée n'apparaît pas du tout, pas même grisée.
 function renderNav() {
   const u = state.user;
+  const a = state.access;
+  const liens = ['<a href="/57" data-link>57</a>'];
+  if (a.interpretations) liens.push('<a href="/interpretations" data-link>Interprétations</a>');
+  if (a.reprises) liens.push('<a href="/reprises" data-link>Reprises</a>');
   // La déconnexion se fait depuis les paramètres du compte (page profil) :
   // pas besoin de la dupliquer dans le menu.
-  nav.innerHTML = u
-    ? `<a href="/57" data-link>57</a>
-       <a href="/interpretations" data-link>Interprétations</a>
-       <a href="/reprises" data-link>Reprises</a>
-       ${u.is_admin ? '<a href="/admin" data-link>Administration</a>' : ''}
-       <a href="${profileHref(u.username)}" data-link>Mon profil</a>`
-    : `<a href="/57" data-link>57</a>
-       <a href="/interpretations" data-link>Interprétations</a>
-       <a href="/reprises" data-link>Reprises</a>
-       <a href="/connexion" data-link>Se connecter</a>
-       <a href="/inscription" data-link class="btn">Créer un compte</a>`;
+  if (u) {
+    if (u.is_admin) liens.push('<a href="/admin" data-link>Administration</a>');
+    // Sans profil ouvert, il faut tout de même pouvoir régler son compte et
+    // se déconnecter : le menu mène alors droit aux paramètres.
+    liens.push(a.interpretations
+      ? `<a href="${profileHref(u.username)}" data-link>Mon profil</a>`
+      : '<button type="button" class="nav-account" id="nav-settings">Mon compte</button>');
+  } else {
+    liens.push('<a href="/connexion" data-link>Se connecter</a>');
+    liens.push('<a href="/inscription" data-link class="btn">Créer un compte</a>');
+  }
+  nav.innerHTML = liens.join('\n       ');
+  const reglages = document.getElementById('nav-settings');
+  if (reglages) reglages.onclick = () => openSettings();
 }
 
 /* -------------------------------------------------------- interprétations */
@@ -472,6 +499,19 @@ async function pageInterpretations() {
 
 /* ------------------------------------------------------- connexion/compte */
 
+// La session porte le membre et ce que son échelon a ouvert : on la relit
+// après chaque connexion, sans quoi le menu resterait celui d'avant.
+async function refreshSession() {
+  try {
+    const data = await api('/api/me');
+    state.user = data.user;
+    state.access = data.access || { interpretations: false, reprises: false };
+  } catch {
+    state.user = null;
+    state.access = { interpretations: false, reprises: false };
+  }
+}
+
 function pageLogin() {
   app.innerHTML = `
     <form class="form-card" id="login-form">
@@ -494,7 +534,7 @@ function pageLogin() {
           password: document.getElementById('lf-password').value,
         },
       });
-      state.user = data.user;
+      await refreshSession();
       navigate('/');
     } catch (err) {
       document.getElementById('lf-error').textContent = err.message;
@@ -527,7 +567,7 @@ function pageRegister() {
           password: document.getElementById('rf-password').value,
         },
       });
-      state.user = data.user;
+      await refreshSession();
       navigate('/');
     } catch (err) {
       document.getElementById('rf-error').textContent = err.message;
@@ -2582,7 +2622,9 @@ async function pageProfile(username) {
       body: `<div class="annotation-body">${esc(c.explanation)}</div>`,
     }));
   }
-  for (const c of covers) {
+  // Les reprises n'entrent dans le fil qu'une fois leur page ouverte : tant
+  // qu'on n'y a pas accès, le profil s'en tient aux interprétations.
+  for (const c of (state.access.reprises ? covers : [])) {
     add(c.created_at, timelineEntry('reprise', c.created_at, {
       // depuis une reprise, on va vers les reprises du morceau
       where: c.song_slug
@@ -2631,7 +2673,7 @@ async function pageProfile(username) {
       }
     };
   }
-  if (covers.length) {
+  if (covers.length && state.access.reprises) {
     bindSocial(app, { reload: () => pageProfile(username), render: () => pageProfile(username) });
     bindCoverDeletes(app, () => pageProfile(username));
   }
@@ -2811,6 +2853,45 @@ function enigmesProgressHtml() {
     <p class="progress-text"><strong>Échelon ${d.echelon}</strong></p>`;
 }
 
+/* --------------------------------------------------------- l'attente ---
+   Proposer un mot de passe ferme les champs pour une heure. Rien ne
+   l'annonce et rien ne l'explique : le décompte prend simplement la place
+   du bouton, et tout revient de soi-même quand il s'achève.             */
+
+let attenteTimer = null;
+
+function attenteLabel(ms) {
+  const s = Math.ceil(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function appliqueAttente() {
+  const jusqua = state.enigmesAttenteFin || 0;
+  const reste = Math.max(0, jusqua - Date.now());
+  const grille = document.querySelector('.enigmes-grid');
+  if (grille) grille.classList.toggle('enigmes-grid--attente', reste > 0);
+
+  document.querySelectorAll('.enigme-form').forEach((f) => {
+    const champ = f.querySelector('.enigme-input');
+    const bouton = f.querySelector('button[type="submit"]');
+    if (champ) champ.disabled = reste > 0;
+    if (!bouton) return;
+    bouton.disabled = reste > 0;
+    const texte = reste > 0 ? attenteLabel(reste) : null;
+    f.querySelector('.enigme-go').textContent = texte ?? '→';
+    f.querySelector('.enigme-go-text').textContent = texte ?? 'Valider';
+  });
+
+  if (reste <= 0 && attenteTimer) { clearInterval(attenteTimer); attenteTimer = null; }
+}
+
+// `ms` vient du serveur : un rechargement de page ne raccourcit rien.
+function armeAttente(ms) {
+  state.enigmesAttenteFin = ms > 0 ? Date.now() + ms : 0;
+  appliqueAttente();
+  if (ms > 0 && !attenteTimer) attenteTimer = setInterval(appliqueAttente, 1000);
+}
+
 function renderEnigmesPage() {
   const d = state.enigmes;
 
@@ -2829,16 +2910,24 @@ function renderEnigmesPage() {
     el.dataset.sig = JSON.stringify(n);
     bindEnigmeCard(el, n);
   });
+  armeAttente(d.attenteMs || 0);
 }
 
 // Après chaque tentative, le serveur renvoie l'état complet : on ne réécrit
 // que ce qui a changé, pour ne pas perdre le focus ni la position de
 // défilement (essentiel sur mobile, clavier ouvert).
 function applyEnigmesState(data, focusId) {
+  const echelonAvant = state.enigmes ? state.enigmes.echelon : null;
   state.enigmes = data;
 
   const prog = document.getElementById('enigmes-progress');
   if (prog) prog.innerHTML = enigmesProgressHtml();
+
+  // Un échelon franchi peut ouvrir une page : le menu doit suivre aussitôt.
+  if (data.access && data.echelon !== echelonAvant) {
+    state.access = data.access;
+    renderNav();
+  }
 
   data.nodes.forEach((n) => {
     const el = document.getElementById('e-' + n.id);
@@ -2851,6 +2940,7 @@ function applyEnigmesState(data, focusId) {
     bindEnigmeCard(el, n);
   });
 
+  armeAttente(data.attenteMs || 0);
   if (focusId) flashEnigme(focusId);
 }
 
@@ -2870,7 +2960,7 @@ function enigmeWrong(el, input) {
   el.classList.remove('enigme--wrong');
   void el.offsetWidth; // force le redémarrage de l'animation
   el.classList.add('enigme--wrong');
-  if (input) input.select();
+  if (input && !input.disabled) input.select();
   if (navigator.vibrate) navigator.vibrate(40);
 }
 
@@ -2887,20 +2977,22 @@ function bindEnigmeCard(el, n) {
       btn.disabled = true;
       try {
         const res = await api('/api/57/guess', { method: 'POST', body: { id: n.id, answer } });
+        // Juste ou faux, l'essai est joué : le clavier se referme et tout se
+        // fige jusqu'au bout de l'heure.
+        input.blur();
         if (res.ok) {
-          // sur téléphone on referme le clavier pour laisser voir la réponse ;
-          // au clavier physique on reste dans le champ pour enchaîner. Un bloc
-          // silencieux ne dit pas combien il en reste : c'est `open` qui décide.
-          const apres = res.state.nodes.find((x) => x.id === n.id);
-          const chain = window.innerWidth > 700 && !!(apres && apres.open);
-          input.blur();
           applyEnigmesState(res.state, n.id);
-          if (chain) document.querySelector('#e-' + n.id + ' .enigme-input')?.focus();
         } else {
-          btn.disabled = false;
+          armeAttente(res.attenteMs || 0);
           enigmeWrong(el, input);
         }
       } catch (err) {
+        // Un essai trop tôt : le serveur dit combien de temps il reste.
+        if (err.data && err.data.attenteMs) {
+          input.blur();
+          armeAttente(err.data.attenteMs);
+          return;
+        }
         btn.disabled = false;
         const msg = el.querySelector('.enigme-msg');
         if (msg) msg.textContent = err.message;
@@ -3180,9 +3272,6 @@ function registerServiceWorker() {
   bindNavToggle();
   bindInstall();
   registerServiceWorker();
-  try {
-    const data = await api('/api/me');
-    state.user = data.user;
-  } catch { state.user = null; }
+  await refreshSession();
   route();
 })();
