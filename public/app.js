@@ -330,22 +330,17 @@ function openSettings() {
 
 function renderNav() {
   const u = state.user;
+  // La déconnexion se fait depuis les paramètres du compte (page profil) :
+  // pas besoin de la dupliquer dans le menu.
   nav.innerHTML = u
     ? `<a href="/" data-link>Accueil</a>
        <a href="/reprises" data-link>Reprises</a>
        ${u.is_admin ? '<a href="/admin" data-link>Administration</a>' : ''}
-       <a href="${profileHref(u.username)}" data-link>Mon profil</a>
-       <button class="link-btn" id="logout-btn">Se déconnecter</button>`
+       <a href="${profileHref(u.username)}" data-link>Mon profil</a>`
     : `<a href="/" data-link>Accueil</a>
        <a href="/reprises" data-link>Reprises</a>
        <a href="/connexion" data-link>Se connecter</a>
        <a href="/inscription" data-link class="btn">Créer un compte</a>`;
-  const btn = document.getElementById('logout-btn');
-  if (btn) btn.onclick = async () => {
-    await api('/api/logout', { method: 'POST' });
-    state.user = null;
-    navigate('/');
-  };
 }
 
 /* ---------------------------------------------------------------- accueil */
