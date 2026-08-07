@@ -1214,7 +1214,31 @@ async function getAvatar(env, username) {
 // src/enigmas57.js et ne quitte jamais le Worker : le client ne reçoit une
 // réponse qu'une fois le signe trouvé, et un indice qu'une fois demandé.
 
+// La table de progression est additive et n'existe que pour cette page : on
+// la crée à la volée si la migration 0009 n'a pas encore été appliquée, une
+// seule fois par isolat. `migrations/0009_signes57.sql` reste la référence.
+let riddleTableReady = false;
+async function ensureRiddleTable(env) {
+  if (riddleTableReady) return;
+  await env.DB.batch([
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS riddle_progress (
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         riddle_id TEXT NOT NULL,
+         hints_used INTEGER NOT NULL DEFAULT 0,
+         revealed INTEGER NOT NULL DEFAULT 0,
+         solved_at TEXT,
+         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+         PRIMARY KEY (user_id, riddle_id)
+       )`
+    ),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_riddle_progress_user ON riddle_progress(user_id)'),
+  ]);
+  riddleTableReady = true;
+}
+
 async function riddleRows(env, userId) {
+  await ensureRiddleTable(env);
   const { results } = await env.DB.prepare(
     'SELECT riddle_id, hints_used, revealed, solved_at FROM riddle_progress WHERE user_id = ?1'
   ).bind(userId).all();
@@ -1331,6 +1355,7 @@ async function signsReveal(request, env) {
 async function signsReset(request, env) {
   let user;
   try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  await ensureRiddleTable(env);
   await env.DB.prepare('DELETE FROM riddle_progress WHERE user_id = ?1').bind(user.id).run();
   return json({ ok: true, state: await riddleState(env, user.id) });
 }
