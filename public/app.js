@@ -1090,6 +1090,7 @@ function renderInbound() {
           — à propos de ${esc(inboundSourceLabel(r))}
         </div>
         <div class="inbound-anchor">« ${esc(inboundAnchorText(r))} »</div>
+        ${r.ref_note ? `<p class="ref-item-note">${esc(r.ref_note)}</p>` : ''}
         <div class="grid-label">Grille de lecture n°${r.grid_number}</div>
         <div class="annotation-body">${esc(r.content)}</div>
         <div class="annotation-head">
@@ -1545,124 +1546,236 @@ function bindSocial(container, opts = {}) {
 
 /* --------- panneau latéral : interprétations de la sélection en cours ---- */
 
+/* ------------------------------------------------------------ références ---
+   Une référence dit trois choses : quelle œuvre, de quel artiste, et en quoi
+   c'en est une. Elle se compose dans son propre éditeur et se publie avec son
+   propre bouton — greffée à l'interprétation, mais écrite à part.
+   En interne, la cible n'est pas une œuvre mais un passage d'un morceau : la
+   référence apparaît alors des deux côtés, ici et sur la chanson visée.    */
+
+function refTitle(r) {
+  if (r.ref_song_slug) {
+    return `<a href="/chanson/${encodeURIComponent(r.ref_song_slug)}" data-link>♪ ${esc(r.label)}</a>`;
+  }
+  return `<span class="ref-work">${esc(r.label)}</span>${r.artist ? ` <span class="ref-artist-name">— ${esc(r.artist)}</span>` : ''}`;
+}
+
 function referencesList(a) {
   if (!a.references || !a.references.length) return '';
+  const u = state.user;
+  const own = u && (u.id === a.user_id || u.is_admin);
   return `<ul class="ref-list">
-    ${a.references.map((r) => {
-      if (r.ref_song_slug) {
-        return `<li>♪ <a href="/chanson/${encodeURIComponent(r.ref_song_slug)}" data-link>${esc(r.label)}</a></li>`;
-      }
-      return `<li>${r.url
-        ? `<a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.label)}</a>`
-        : esc(r.label)}</li>`;
-    }).join('')}
+    ${a.references.map((r) => `<li class="ref-item">
+      <div class="ref-item-head">
+        ${refTitle(r)}
+        ${own ? `<button type="button" class="link-btn ref-del" data-ref-del="${r.id}" title="Retirer cette référence">✕</button>` : ''}
+      </div>
+      ${r.note ? `<p class="ref-item-note">${esc(r.note)}</p>` : ''}
+    </li>`).join('')}
   </ul>`;
 }
 
-function refRow(label = '', url = '') {
-  return `<div class="ref-row">
-    <input class="ref-label" placeholder="Référence (artiste, texte, œuvre…)" maxlength="300" value="${esc(label)}">
-    <input class="ref-url" placeholder="Lien (optionnel)" maxlength="600" value="${esc(url)}">
-    <button type="button" class="link-btn ref-remove" title="Retirer">✕</button>
+// L'éditeur d'une référence libre : l'œuvre, l'artiste, et pourquoi.
+function refEditorFree() {
+  return `<div class="ref-editor" data-kind="free">
+    <label>L’œuvre</label>
+    <input class="ref-label" placeholder="Le nom de l’œuvre" maxlength="300">
+    <label>L’artiste</label>
+    <input class="ref-artist" placeholder="Qui l’a faite" maxlength="300">
+    <label>En quoi est-ce une référence ?</label>
+    <textarea class="ref-note" rows="5" maxlength="2000"
+      placeholder="Ce qui, pour vous, relie ce passage à cette œuvre…"></textarea>
+    <div class="ref-editor-actions">
+      <button type="button" class="primary ref-commit">Ajouter cette référence</button>
+      <button type="button" class="link-btn ref-cancel">Annuler</button>
+    </div>
+    <div class="error-msg ref-error"></div>
   </div>`;
 }
 
-// Zone « références » d'un formulaire d'interprétation : lignes dynamiques.
+// L'éditeur d'une référence interne : n'importe quel passage de n'importe
+// quel morceau — plus seulement ceux déjà interprétés.
+function refEditorInternal() {
+  const songs = state.corpus.songs.filter((s) => state.corpus.lines.some((l) => l.song_id === s.id));
+  return `<div class="ref-editor ref-editor-internal" data-kind="internal">
+    <label>Le morceau</label>
+    <select class="ref-song"><option value="">— Choisir un morceau —</option>
+      ${songs.map((s) => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}
+    </select>
+    <label>Du vers</label>
+    <select class="ref-start" disabled><option value="">— Choisir d’abord un morceau —</option></select>
+    <label>Au vers <small>(facultatif — pour un passage de plusieurs vers)</small></label>
+    <select class="ref-end" disabled><option value="">— Le même vers —</option></select>
+    <label>En quoi est-ce une référence ?</label>
+    <textarea class="ref-note" rows="5" maxlength="2000"
+      placeholder="Ce qui relie ce passage à celui-là…"></textarea>
+    <div class="ref-editor-actions">
+      <button type="button" class="primary ref-commit">Ajouter cette référence</button>
+      <button type="button" class="link-btn ref-cancel">Annuler</button>
+    </div>
+    <div class="error-msg ref-error"></div>
+  </div>`;
+}
+
+// Une référence composée, en attente de publication avec l'interprétation.
+function refStagedHtml(ref) {
+  const title = ref.ref_line_id
+    ? `♪ ${esc(ref._label || 'Passage d’un morceau')}`
+    : `${esc(ref.label)}${ref.artist ? ` — ${esc(ref.artist)}` : ''}`;
+  return `<div class="ref-staged" data-ref="${esc(JSON.stringify(ref))}">
+    <div class="ref-item-head">
+      <span class="ref-work">${title}</span>
+      <button type="button" class="link-btn ref-remove" title="Retirer">✕</button>
+    </div>
+    ${ref.note ? `<p class="ref-item-note">${esc(ref.note)}</p>` : ''}
+  </div>`;
+}
+
+// Lit un éditeur et renvoie la référence, ou null avec un message d'erreur.
+function readRefEditor(editor) {
+  const err = editor.querySelector('.ref-error');
+  const note = editor.querySelector('.ref-note').value.trim();
+  if (editor.dataset.kind === 'internal') {
+    const start = editor.querySelector('.ref-start').value;
+    if (!start) { err.textContent = 'Choisissez le vers référencé.'; return null; }
+    const end = editor.querySelector('.ref-end').value || start;
+    const opt = editor.querySelector(`.ref-start option[value="${start}"]`);
+    const songSel = editor.querySelector('.ref-song');
+    const songName = songSel.options[songSel.selectedIndex].textContent;
+    return {
+      ref_line_id: Number(start), ref_end_line_id: Number(end), note,
+      _label: `${songName} — ${opt ? opt.textContent : ''}`,
+    };
+  }
+  const label = editor.querySelector('.ref-label').value.trim();
+  if (!label) { err.textContent = 'Nommez l’œuvre référencée.'; return null; }
+  return { label, artist: editor.querySelector('.ref-artist').value.trim(), note };
+}
+
+// Remplit les vers d'un morceau dans un éditeur interne.
+function bindRefSongPicker(editor) {
+  const songSel = editor.querySelector('.ref-song');
+  if (!songSel) return;
+  songSel.onchange = () => {
+    const songId = Number(songSel.value);
+    const opts = state.corpus.lines.filter((l) => l.song_id === songId).map((l) => {
+      const t = l.text.length > 52 ? l.text.slice(0, 49) + '…' : l.text;
+      return `<option value="${l.id}">${esc(t)}</option>`;
+    }).join('');
+    const start = editor.querySelector('.ref-start');
+    const end = editor.querySelector('.ref-end');
+    start.innerHTML = '<option value="">— Choisir un vers —</option>' + opts;
+    end.innerHTML = '<option value="">— Le même vers —</option>' + opts;
+    start.disabled = !opts;
+    end.disabled = !opts;
+  };
+}
+
+// Zone « références » d'un formulaire d'interprétation : un éditeur à la fois,
+// et les références déjà composées empilées au-dessus.
 function bindReferenceRows(form) {
   const zone = form.querySelector('.refs-zone');
   if (!zone) return;
-  const bindRemove = () => zone.querySelectorAll('.ref-remove').forEach((b) => {
-    b.onclick = () => { b.closest('.ref-row').remove(); };
+  const slot = form.querySelector('.ref-editor-slot');
+
+  const bindStaged = () => zone.querySelectorAll('.ref-remove').forEach((b) => {
+    b.onclick = () => b.closest('.ref-staged').remove();
   });
-  form.querySelector('.add-ref').onclick = () => {
-    zone.insertAdjacentHTML('beforeend', refRow());
-    bindRemove();
+
+  const closeEditor = () => { slot.innerHTML = ''; form.querySelectorAll('.add-ref, .add-ref-internal').forEach((b) => { b.hidden = false; }); };
+
+  const openEditor = (html) => {
+    slot.innerHTML = html;
+    form.querySelectorAll('.add-ref, .add-ref-internal').forEach((b) => { b.hidden = true; });
+    const editor = slot.querySelector('.ref-editor');
+    bindRefSongPicker(editor);
+    editor.querySelector('.ref-cancel').onclick = closeEditor;
+    editor.querySelector('.ref-commit').onclick = () => {
+      const ref = readRefEditor(editor);
+      if (!ref) return;
+      zone.insertAdjacentHTML('beforeend', refStagedHtml(ref));
+      bindStaged();
+      closeEditor();
+    };
   };
+
+  form.querySelector('.add-ref').onclick = () => openEditor(refEditorFree());
   const internalBtn = form.querySelector('.add-ref-internal');
   if (internalBtn) internalBtn.onclick = async () => {
     await loadCorpus();
-    insertInternalRefRow(zone);
+    openEditor(refEditorInternal());
   };
-  bindRemove();
+  bindStaged();
 }
 
 function collectReferences(form) {
-  const out = [];
-  form.querySelectorAll('.ref-row').forEach((row) => {
-    if (row.dataset.internal) {
-      out.push(JSON.parse(row.dataset.internal));
-      return;
-    }
-    if (row.classList.contains('ref-internal-row')) {
-      const start = row.querySelector('.ref-start').value;
-      const end = row.querySelector('.ref-end').value || start;
-      if (start) out.push({ ref_line_id: Number(start), ref_end_line_id: Number(end) });
-      return;
-    }
-    const label = row.querySelector('.ref-label').value.trim();
-    if (label) out.push({ label, url: row.querySelector('.ref-url').value.trim() || null });
+  return [...form.querySelectorAll('.ref-staged')].map((row) => {
+    const r = JSON.parse(row.dataset.ref);
+    delete r._label;
+    return r;
   });
-  return out;
-}
-
-function fixedInternalRow(r) {
-  const payload = esc(JSON.stringify({ ref_line_id: r.ref_line_id, ref_end_line_id: r.ref_end_line_id }));
-  return `<div class="ref-row ref-fixed" data-internal="${payload}">
-    <span class="ref-fixed-label">♪ ${esc(r.label)}</span>
-    <button type="button" class="link-btn ref-remove" title="Retirer">✕</button>
-  </div>`;
 }
 
 function referencesFieldset(refs = []) {
-  return `<div class="refs-zone">${refs.map((r) => r.ref_line_id
-    ? fixedInternalRow(r)
-    : refRow(r.label, r.url || '')).join('')}</div>
-  <button type="button" class="link-btn add-ref">+ Référence libre (artiste, texte, œuvre…)</button>
-  <button type="button" class="link-btn add-ref-internal">+ Référencer un passage d’un morceau</button>`;
+  return `<div class="refs-block">
+    <div class="refs-zone">${refs.map((r) => refStagedHtml(
+      r.ref_line_id
+        ? { ref_line_id: r.ref_line_id, ref_end_line_id: r.ref_end_line_id, note: r.note || '', _label: r.label }
+        : { label: r.label, artist: r.artist || '', note: r.note || '' }
+    )).join('')}</div>
+    <div class="ref-editor-slot"></div>
+    <div class="refs-add">
+      <button type="button" class="link-btn add-ref">+ Référence à une œuvre</button>
+      <button type="button" class="link-btn add-ref-internal">+ Référence à un passage d’un morceau</button>
+    </div>
+  </div>`;
 }
 
-// Ligne de sélection d'un passage interne : morceau → du vers → au vers.
-// Seuls les passages déjà interprétés peuvent être référencés : une
-// référence relie une lecture à une autre lecture, pas à du texte brut.
-function insertInternalRefRow(zone) {
-  const interpreted = state.corpus.lines.filter((l) => l.interp > 0);
-  const songIds = new Set(interpreted.map((l) => l.song_id));
-  const songs = state.corpus.songs.filter((s) => songIds.has(s.id));
+// Sur une interprétation déjà publiée : on greffe une référence sans avoir à
+// réécrire quoi que ce soit.
+function bindReferenceAdders(container) {
+  container.querySelectorAll('[data-add-ref]').forEach((btn) => {
+    btn.onclick = async () => {
+      const id = Number(btn.dataset.addRef);
+      const host = container.querySelector(`[data-ref-slot="${id}"]`);
+      if (!host) return;
+      if (host.innerHTML) { host.innerHTML = ''; return; }
+      host.innerHTML = `<div class="refs-add">
+        <button type="button" class="link-btn ref-pick-free">+ Référence à une œuvre</button>
+        <button type="button" class="link-btn ref-pick-internal">+ Référence à un passage d’un morceau</button>
+      </div><div class="ref-editor-slot"></div>`;
+      const slot = host.querySelector('.ref-editor-slot');
+      const publish = async (editor) => {
+        const ref = readRefEditor(editor);
+        if (!ref) return;
+        delete ref._label;
+        try {
+          await api(`/api/annotations/${id}/references`, { method: 'POST', body: ref });
+          await pageSong(state.song.song.slug, true);
+        } catch (err) { editor.querySelector('.ref-error').textContent = err.message; }
+      };
+      const open = (html) => {
+        slot.innerHTML = html;
+        const editor = slot.querySelector('.ref-editor');
+        bindRefSongPicker(editor);
+        editor.querySelector('.ref-commit').textContent = 'Publier cette référence';
+        editor.querySelector('.ref-cancel').onclick = () => { host.innerHTML = ''; };
+        editor.querySelector('.ref-commit').onclick = () => publish(editor);
+      };
+      host.querySelector('.ref-pick-free').onclick = () => open(refEditorFree());
+      host.querySelector('.ref-pick-internal').onclick = async () => { await loadCorpus(); open(refEditorInternal()); };
+    };
+  });
 
-  const row = document.createElement('div');
-  row.className = 'ref-row ref-internal-row';
-  if (!songs.length) {
-    row.innerHTML = `<span class="ref-fixed-label">Aucun passage n’a encore été interprété : il n’y a rien à référencer pour l’instant.</span>
-      <button type="button" class="link-btn ref-remove" title="Retirer">✕</button>`;
-    zone.appendChild(row);
-    row.querySelector('.ref-remove').onclick = () => row.remove();
-    return;
-  }
-  row.innerHTML = `
-    <select class="ref-song"><option value="">— Morceau —</option>
-      ${songs.map((s) => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}
-    </select>
-    <select class="ref-start" disabled><option value="">— Du vers… —</option></select>
-    <select class="ref-end" disabled><option value="">— …au vers (optionnel) —</option></select>
-    <button type="button" class="link-btn ref-remove" title="Retirer">✕</button>
-    <span class="ref-note">Seuls les passages déjà interprétés sont proposés.</span>`;
-  zone.appendChild(row);
-  row.querySelector('.ref-song').onchange = () => {
-    const songId = Number(row.querySelector('.ref-song').value);
-    const opts = interpreted.filter((l) => l.song_id === songId)
-      .map((l) => {
-        const t = l.text.length > 46 ? l.text.slice(0, 43) + '…' : l.text;
-        return `<option value="${l.id}">${esc(t)} (${l.interp})</option>`;
-      })
-      .join('');
-    const start = row.querySelector('.ref-start');
-    const end = row.querySelector('.ref-end');
-    start.innerHTML = '<option value="">— Du vers… —</option>' + opts;
-    end.innerHTML = '<option value="">— …au vers (optionnel) —</option>' + opts;
-    start.disabled = false;
-    end.disabled = false;
-  };
-  row.querySelector('.ref-remove').onclick = () => row.remove();
+  container.querySelectorAll('[data-ref-del]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm('Retirer cette référence ?')) return;
+      try {
+        await api(`/api/references/${btn.dataset.refDel}`, { method: 'DELETE' });
+        await pageSong(state.song.song.slug, true);
+      } catch (err) { alert(err.message); }
+    };
+  });
 }
 
 function annotationCard(a, targetQuote) {
@@ -1680,6 +1793,8 @@ function annotationCard(a, targetQuote) {
     ${targetQuote ? `<div class="annotation-target-quote">${targetQuote}</div>` : ''}
     <div class="annotation-body">${esc(a.content)}</div>
     ${referencesList(a)}
+    ${own ? `<button type="button" class="link-btn ref-add-btn" data-add-ref="${a.id}">+ Référence</button>` : ''}
+    <div data-ref-slot="${a.id}"></div>
     ${socialFooter('annotation', a)}
   </div>`;
 }
@@ -1728,6 +1843,7 @@ function bindAnnotationForm(id, payloadBase) {
 }
 
 function bindAnnotationActions(container) {
+  bindReferenceAdders(container);
   container.querySelectorAll('[data-del]').forEach((btn) => {
     btn.onclick = async () => {
       if (!confirm('Supprimer cette interprétation ?')) return;

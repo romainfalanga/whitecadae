@@ -55,6 +55,8 @@ async function handleApi(request, env, url) {
   if (route('POST', '/api/annotations')) return createAnnotation(request, env);
   if ((p = route('PUT', '/api/annotations/:id'))) return updateAnnotation(request, env, +p[0]);
   if ((p = route('DELETE', '/api/annotations/:id'))) return deleteAnnotation(request, env, +p[0]);
+  if ((p = route('POST', '/api/annotations/:id/references'))) return addReference(request, env, +p[0]);
+  if ((p = route('DELETE', '/api/references/:id'))) return deleteReference(request, env, +p[0]);
   if (route('POST', '/api/connections')) return createConnection(request, env);
   if ((p = route('DELETE', '/api/connections/:id'))) return deleteConnection(request, env, +p[0]);
   if (route('POST', '/api/essays')) return createEssay(request, env);
@@ -208,8 +210,25 @@ function countWords(text) {
   return t ? t.split(/\s+/).length : 0;
 }
 
-// Valide la liste de références d'une interprétation : libres (label + lien
-// optionnel) ou internes (passage d'un morceau : ref_line_id..ref_end_line_id).
+// Les colonnes artist/note (migration 0010) sont ajoutées à la volée si la
+// migration n'a pas encore été appliquée : ALTER TABLE n'est pas idempotent
+// en SQLite, on regarde donc d'abord ce qui existe.
+let refColumnsReady = false;
+async function ensureReferenceColumns(env) {
+  if (refColumnsReady) return;
+  const { results } = await env.DB.prepare('PRAGMA table_info(annotation_references)').all();
+  const have = new Set((results || []).map((c) => c.name));
+  for (const col of ['artist', 'note']) {
+    if (!have.has(col)) {
+      await env.DB.prepare(`ALTER TABLE annotation_references ADD COLUMN ${col} TEXT`).run();
+    }
+  }
+  refColumnsReady = true;
+}
+
+// Valide la liste de références d'une interprétation. Une référence libre
+// nomme l'œuvre et son artiste ; une référence interne vise un passage d'un
+// morceau (ref_line_id..ref_end_line_id). Les deux portent une explication.
 // Retourne un tableau normalisé, ou une Response d'erreur.
 async function parseReferences(env, raw) {
   if (raw == null) return [];
@@ -232,33 +251,81 @@ async function parseReferences(env, raw) {
       if (end.line_number < start.line_number) return json({ error: 'Passage référencé invalide (fin avant le début).' }, 400);
       const excerpt = start.text.length > 60 ? start.text.slice(0, 57) + '…' : start.text;
       const label = `${start.title} — « ${excerpt}${endId !== startId ? ' […]' : ''} »`;
-      refs.push({ label, url: null, ref_song_id: start.song_id, ref_line_id: startId, ref_end_line_id: endId });
+      const note = String((r && r.note) || '').trim();
+      if (note.length > 2000) return json({ error: 'Explication de référence trop longue (2000 caractères max).' }, 400);
+      refs.push({
+        label, artist: null, note: note || null, url: null,
+        ref_song_id: start.song_id, ref_line_id: startId, ref_end_line_id: endId,
+      });
       continue;
     }
     const label = String((r && r.label) || '').trim();
-    const url = String((r && r.url) || '').trim();
+    const artist = String((r && r.artist) || '').trim();
+    const note = String((r && r.note) || '').trim();
     if (!label) continue;
-    if (label.length > 300) return json({ error: 'Référence trop longue (300 caractères max).' }, 400);
-    if (url && (url.length > 600 || !/^https?:\/\//i.test(url))) {
-      return json({ error: 'Lien de référence invalide (il doit commencer par http:// ou https://).' }, 400);
-    }
-    refs.push({ label, url: url || null, ref_song_id: null, ref_line_id: null, ref_end_line_id: null });
+    if (label.length > 300) return json({ error: 'Nom de l’œuvre trop long (300 caractères max).' }, 400);
+    if (artist.length > 300) return json({ error: 'Nom de l’artiste trop long (300 caractères max).' }, 400);
+    if (note.length > 2000) return json({ error: 'Explication de référence trop longue (2000 caractères max).' }, 400);
+    refs.push({
+      label, artist: artist || null, note: note || null, url: null,
+      ref_song_id: null, ref_line_id: null, ref_end_line_id: null,
+    });
   }
   return refs;
 }
 
 async function replaceReferences(env, annotationId, refs) {
+  await ensureReferenceColumns(env);
   const statements = [
     env.DB.prepare('DELETE FROM annotation_references WHERE annotation_id = ?1').bind(annotationId),
   ];
-  refs.forEach((r, i) => {
-    statements.push(env.DB.prepare(
-      `INSERT INTO annotation_references
-        (annotation_id, position, label, url, ref_song_id, ref_line_id, ref_end_line_id)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
-    ).bind(annotationId, i, r.label, r.url, r.ref_song_id || null, r.ref_line_id || null, r.ref_end_line_id || null));
-  });
+  refs.forEach((r, i) => statements.push(refInsert(env, annotationId, i, r)));
   await env.DB.batch(statements);
+}
+
+function refInsert(env, annotationId, position, r) {
+  return env.DB.prepare(
+    `INSERT INTO annotation_references
+      (annotation_id, position, label, artist, note, url, ref_song_id, ref_line_id, ref_end_line_id)
+     VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?8)`
+  ).bind(annotationId, position, r.label, r.artist || null, r.note || null,
+         r.ref_song_id || null, r.ref_line_id || null, r.ref_end_line_id || null);
+}
+
+// Une référence se publie seule, après coup, sur une interprétation qui
+// existe déjà : elle lui est greffée sans qu'il faille la réécrire.
+async function addReference(request, env, annotationId) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  const ann = await env.DB.prepare('SELECT id, user_id FROM annotations WHERE id = ?1').bind(annotationId).first();
+  if (!ann) return json({ error: 'Interprétation introuvable.' }, 404);
+  if (ann.user_id !== user.id && !user.is_admin) return json({ error: 'Action non autorisée.' }, 403);
+
+  const body = await readJson(request);
+  const parsed = await parseReferences(env, [body]);
+  if (parsed instanceof Response) return parsed;
+  if (!parsed.length) return json({ error: 'Référence vide.' }, 400);
+
+  await ensureReferenceColumns(env);
+  const n = (await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM annotation_references WHERE annotation_id = ?1'
+  ).bind(annotationId).first()).n;
+  if (n >= 10) return json({ error: '10 références maximum par interprétation.' }, 400);
+  await refInsert(env, annotationId, n, parsed[0]).run();
+  return json({ ok: true });
+}
+
+async function deleteReference(request, env, id) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  const row = await env.DB.prepare(
+    `SELECT r.id, a.user_id FROM annotation_references r
+       JOIN annotations a ON a.id = r.annotation_id WHERE r.id = ?1`
+  ).bind(id).first();
+  if (!row) return json({ error: 'Référence introuvable.' }, 404);
+  if (row.user_id !== user.id && !user.is_admin) return json({ error: 'Action non autorisée.' }, 403);
+  await env.DB.prepare('DELETE FROM annotation_references WHERE id = ?1').bind(id).run();
+  return json({ ok: true });
 }
 
 /* ------------------------------------------------------------------- auth */
@@ -415,6 +482,7 @@ async function listAlbums(env) {
 }
 
 async function getSong(env, request, slug) {
+  await ensureReferenceColumns(env);
   // Une interprétation non publiée n'est visible que par son auteur : le
   // reste du monde ne voit que ce qui a été intégré à une version publiée.
   const viewer = await getUser(request, env);
@@ -465,7 +533,7 @@ async function getSong(env, request, slug) {
   const inbound = (await env.DB.prepare(
     `SELECT a.id, a.user_id, a.content, a.created_at, a.updated_at, a.is_published, a.grid_number, u.username,
             a.target_type, a.word_start, a.word_end,
-            r.ref_line_id, r.ref_end_line_id,
+            r.ref_line_id, r.ref_end_line_id, r.note AS ref_note,
             rl.text AS ref_text, rl.line_number AS ref_line_number,
             rle.text AS ref_end_text, rle.line_number AS ref_end_number,
             src.title AS source_title, src.slug AS source_slug,
@@ -513,7 +581,7 @@ async function getSong(env, request, slug) {
 
   // Références jointes aux interprétations (libres ou internes).
   const refs = (await env.DB.prepare(
-    `SELECT r.id, r.annotation_id, r.label, r.url,
+    `SELECT r.id, r.annotation_id, r.label, r.artist, r.note,
             r.ref_song_id, r.ref_line_id, r.ref_end_line_id, rs.slug AS ref_song_slug
        FROM annotation_references r
        LEFT JOIN songs rs ON rs.id = r.ref_song_id
@@ -596,6 +664,7 @@ async function attachSocial(env, viewer, kind, idSubquery, items) {
 // dans le texte. Un visiteur ne voit que ce que le membre a publié ; le
 // membre lui-même voit aussi ses brouillons en attente de publication.
 async function getProfile(env, request, username) {
+  await ensureReferenceColumns(env);
   const user = await env.DB.prepare(
     'SELECT id, username, created_at, is_admin FROM users WHERE username = ?1 COLLATE NOCASE'
   ).bind(username).first();
@@ -624,7 +693,7 @@ async function getProfile(env, request, username) {
   ).bind(user.id, isOwner).all()).results;
 
   const refs = (await env.DB.prepare(
-    `SELECT r.id, r.annotation_id, r.label, r.url,
+    `SELECT r.id, r.annotation_id, r.label, r.artist, r.note,
             r.ref_song_id, rs.slug AS ref_song_slug
        FROM annotation_references r
        LEFT JOIN songs rs ON rs.id = r.ref_song_id

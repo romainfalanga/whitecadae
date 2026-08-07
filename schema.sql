@@ -112,7 +112,12 @@ CREATE TABLE IF NOT EXISTS annotation_references (
   url TEXT,
   ref_song_id INTEGER REFERENCES songs(id) ON DELETE CASCADE,
   ref_line_id INTEGER REFERENCES lyric_lines(id) ON DELETE CASCADE,
-  ref_end_line_id INTEGER REFERENCES lyric_lines(id) ON DELETE CASCADE
+  ref_end_line_id INTEGER REFERENCES lyric_lines(id) ON DELETE CASCADE,
+  -- Référence libre : label = le nom de l'œuvre, artist = qui l'a faite.
+  -- note = l'explication de ce qui en fait une référence, dans les deux cas.
+  -- url n'est plus ni proposée ni affichée (conservée pour les liens déjà saisis).
+  artist TEXT,
+  note TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_refs_annotation ON annotation_references(annotation_id);

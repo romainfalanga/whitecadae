@@ -322,21 +322,53 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 
 /* ------------------------------------------------------------- références */
 
-.ref-list {
-  list-style: none;
-  margin-top: 0.45rem;
-  padding-left: 0.2rem;
-  font-size: 0.85rem;
+/* Lecture : une référence est un petit bloc à part entière — l'œuvre et son
+   artiste en tête, l'explication en dessous. */
+.ref-list { list-style: none; margin-top: 0.7rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.ref-item {
+  border-left: 2px solid var(--accent);
+  background: rgba(216, 192, 122, 0.05);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 0.5rem 0.7rem;
 }
-.ref-list li { color: var(--text-dim); padding: 0.1rem 0; }
-.ref-list li::before { content: '→ '; color: var(--accent); }
+.ref-item-head { display: flex; align-items: baseline; gap: 0.5rem; }
+.ref-item-head > :first-child { flex: 1; min-width: 0; }
+.ref-work { font-family: var(--serif); font-size: 1rem; color: var(--accent); }
+.ref-artist-name { color: var(--text-dim); font-style: italic; }
+.ref-item-note { font-size: 0.88rem; color: var(--text); margin-top: 0.25rem; white-space: pre-wrap; }
 
-.refs-zone { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem; }
-.ref-row { display: flex; gap: 0.4rem; align-items: center; }
-.ref-row input { font-size: 0.85rem; padding: 0.35rem 0.6rem; }
-.ref-row .ref-label { flex: 3; }
-.ref-row .ref-url { flex: 2; }
-.add-ref { align-self: flex-start; margin-top: 0.35rem; }
+/* Écriture : un éditeur à la fois, avec de la place pour écrire. */
+.refs-block { margin-top: 0.9rem; border-top: 1px solid var(--border); padding-top: 0.7rem; }
+.refs-zone { display: flex; flex-direction: column; gap: 0.5rem; }
+.ref-staged {
+  border: 1px dashed rgba(216, 192, 122, 0.45);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.7rem;
+}
+.refs-add { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
+.refs-add .link-btn { color: var(--accent); padding: 0.45rem 0.3rem; font-size: 0.85rem; }
+.ref-add-btn { color: var(--accent); padding: 0.45rem 0.2rem; }
+
+.ref-editor {
+  margin-top: 0.6rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  padding: 0.9rem 1rem 1rem;
+}
+.ref-editor label { margin: 0.7rem 0 0.25rem; }
+.ref-editor label:first-child { margin-top: 0; }
+.ref-editor input, .ref-editor select { font-size: 16px; }
+/* l'explication est le cœur de la référence : elle a la place pour ça */
+.ref-editor .ref-note { min-height: 130px; font-size: 16px; line-height: 1.55; }
+.ref-editor-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.9rem; }
+.ref-editor-actions .primary { flex: 1; }
+.ref-error:empty { display: none; }
+
+@media (max-width: 560px) {
+  .ref-editor-actions { flex-direction: column-reverse; align-items: stretch; }
+  .ref-editor-actions .link-btn { padding: 0.6rem; }
+}
 
 /* --------------------------------------------------- favoris/commentaires */
 
