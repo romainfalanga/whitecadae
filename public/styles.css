@@ -958,16 +958,14 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 
 /* ------------------------------------------------------ les énigmes (/57) */
 
-.enigmes-gate {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.5rem;
-  max-width: 520px;
-}
-.enigmes-gate p { margin-bottom: 0.9rem; }
-.enigmes-gate p:last-child { margin-bottom: 0; }
-.enigmes-gate-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+/* Sans compte : les éléments se lisent, rien ne se saisit. Les deux boutons
+   suffisent à dire quoi faire — la page 57 n'explique jamais rien. */
+.enigmes-gate-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.enigmes-grid--lecture .enigme-form { opacity: 0.5; }
+
+/* La porte d'une page : une seule carte, au même dessin que celles du 57. */
+.porte-grid { max-width: 32rem; }
+
 
 /* Un fil fin sous le titre, collé en haut : on garde toujours sous les yeux
    le nombre de mots de passe trouvés, sans manger la hauteur d'écran. */

@@ -141,12 +141,17 @@ async function route() {
   if (path === '/inscription') return pageRegister();
   if (path === '/admin') return pageAdmin();
 
-  // Une porte encore fermée ne se discute pas : on revient au 57, sans un mot.
-  const porte = (path === '/reprises' || path === '/reprises/fil'
+  // Une page qu'on n'a pas encore atteinte ne se discute pas : on revient au
+  // 57, sans un mot.
+  const cle = (path === '/reprises' || path === '/reprises/fil'
     || /^\/chanson\/[^/]+\/reprises$/.test(path)) ? 'reprises' : 'interpretations';
-  if (!state.access[porte]) return navigate('/57', true);
+  if (!state.access[cle]) return navigate('/57', true);
 
   if (path === '/interpretations') return pageInterpretations();
+
+  // La page est atteinte mais son mot de passe n'est pas trouvé : tout ce
+  // qu'elle contient reste invisible, et l'on ne voit que la porte.
+  if (!state.access.porteInterpretations) return navigate('/interpretations', true);
   if (path === '/reprises/fil') return pageCoverFeed();
   if (path === '/reprises') return pageCovers();
   if (path === '/fil') return pageFeed();
@@ -370,7 +375,7 @@ function renderNav() {
     if (u.is_admin) liens.push('<a href="/admin" data-link>Administration</a>');
     // Sans profil ouvert, il faut tout de même pouvoir régler son compte et
     // se déconnecter : le menu mène alors droit aux paramètres.
-    liens.push(a.interpretations
+    liens.push(a.interpretations && a.porteInterpretations
       ? `<a href="${profileHref(u.username)}" data-link>Mon profil</a>`
       : '<button type="button" class="nav-account" id="nav-settings">Mon compte</button>');
   } else {
@@ -456,8 +461,73 @@ function renderFeedPage() {
   };
 }
 
+/* ------------------------------------------------- la porte d'une page ---
+   L'échelon fait apparaître la page ; son mot de passe en découvre le
+   contenu. Tant qu'il n'est pas trouvé, la page ne montre que lui — même
+   carte, même champ, même minuteur que sur le 57. Rien n'est expliqué.   */
+
+function pagePorte(nom, titre) {
+  const source = (state.portes && state.portes[nom]) || '';
+  app.innerHTML = `
+    <h1>${esc(titre)}</h1>
+    <div class="enigmes-grid porte-grid">
+      <article class="enigme" id="porte-${esc(nom)}">
+        <div class="enigme-head"><span class="enigme-source">${esc(source)}</span></div>
+        <div class="enigme-body">
+          <form class="enigme-form">
+            <input class="enigme-input" type="text" placeholder="mot de passe"
+                   autocomplete="off" autocapitalize="off" autocorrect="off"
+                   spellcheck="false" enterkeyhint="go" maxlength="200"
+                   aria-label="Mot de passe pour ${esc(source)}">
+            <button type="submit" class="primary" aria-label="Valider">
+              <span class="enigme-go">→</span><span class="enigme-go-text">Valider</span>
+            </button>
+          </form>
+          <p class="enigme-msg" role="status" aria-live="polite"></p>
+        </div>
+      </article>
+    </div>`;
+
+  const el = document.getElementById('porte-' + nom);
+  const form = el.querySelector('.enigme-form');
+  const champ = form.querySelector('.enigme-input');
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const answer = champ.value.trim();
+    if (!answer) return;
+    el.classList.remove('enigme--wrong');
+    try {
+      const res = await api(`/api/portes/${encodeURIComponent(nom)}/guess`, {
+        method: 'POST', body: { answer },
+      });
+      champ.blur();
+      if (res.ok) {
+        if (res.access) state.access = res.access;
+        renderNav();
+        route(); // la page se rouvre, cette fois avec son contenu
+      } else {
+        armeAttente(res.attenteMs || 0);
+        enigmeWrong(el, champ);
+      }
+    } catch (err) {
+      if (err.data && err.data.attenteMs) { champ.blur(); armeAttente(err.data.attenteMs); return; }
+      el.querySelector('.enigme-msg').textContent = err.message;
+    }
+  };
+  armeAttente(state.attenteMs || 0);
+}
+
 async function pageInterpretations() {
   const epoch = newEpoch();
+  // La porte a pu être franchie depuis le chargement de la page : on relit la
+  // session avant de conclure qu'elle est fermée.
+  if (!state.access.porteInterpretations) {
+    app.innerHTML = '<div class="loading">Chargement…</div>';
+    await refreshSession();
+    if (stale(epoch)) return;
+    renderNav();
+    if (!state.access.porteInterpretations) return pagePorte('interpretations', 'Interprétations');
+  }
   app.innerHTML = '<div class="loading">Chargement…</div>';
   const data = await api('/api/albums');
   if (stale(epoch)) return;
@@ -506,9 +576,13 @@ async function refreshSession() {
     const data = await api('/api/me');
     state.user = data.user;
     state.access = data.access || { interpretations: false, reprises: false };
+    state.portes = data.portes || {};
+    state.attenteMs = data.attenteMs || 0;
   } catch {
     state.user = null;
     state.access = { interpretations: false, reprises: false };
+    state.portes = {};
+    state.attenteMs = 0;
   }
 }
 
@@ -2766,20 +2840,6 @@ async function pageCovers() {
 
 async function pageEnigmes() {
   const epoch = newEpoch();
-
-  if (!state.user) {
-    app.innerHTML = `
-      <h1>57</h1>
-      <div class="enigmes-gate">
-        <p>Réservé aux membres.</p>
-        <p class="enigmes-gate-actions">
-          <a href="/connexion" data-link class="btn">Se connecter</a>
-          <a href="/inscription" data-link class="btn">Créer un compte</a>
-        </p>
-      </div>`;
-    return;
-  }
-
   app.innerHTML = '<div class="loading">Chargement…</div>';
   let data;
   try {
@@ -2899,18 +2959,35 @@ function renderEnigmesPage() {
     .map((n) => `<article class="${nodeClass(n)}" id="e-${esc(n.id)}">${nodeCardHtml(n)}</article>`)
     .join('');
 
+  // Sans compte on voit les éléments, mais on n'écrit pas : les champs sont
+  // inertes et les deux boutons disent quoi faire, sans une phrase.
+  const invite = d.anonyme ? `
+    <p class="enigmes-gate-actions">
+      <a href="/connexion" data-link class="btn">Se connecter</a>
+      <a href="/inscription" data-link class="btn">Créer un compte</a>
+    </p>` : '';
+
   app.innerHTML = `
     <h1>57</h1>
     <div class="enigmes-progress" id="enigmes-progress">${enigmesProgressHtml()}</div>
-    <div class="enigmes-grid">${nodes}</div>`;
+    ${invite}
+    <div class="enigmes-grid${d.anonyme ? ' enigmes-grid--lecture' : ''}">${nodes}</div>`;
 
   d.nodes.forEach((n) => {
     const el = document.getElementById('e-' + n.id);
     if (!el) return;
     el.dataset.sig = JSON.stringify(n);
-    bindEnigmeCard(el, n);
+    if (!d.anonyme) bindEnigmeCard(el, n);
   });
-  armeAttente(d.attenteMs || 0);
+  if (d.anonyme) figeChamps();
+  else armeAttente(d.attenteMs || 0);
+}
+
+// Aucun compte : rien n'est saisissable, et le bouton ne porte plus de
+// promesse d'action.
+function figeChamps() {
+  document.querySelectorAll('.enigme-input').forEach((c) => { c.disabled = true; });
+  document.querySelectorAll('.enigme-form button').forEach((b) => { b.disabled = true; });
 }
 
 // Après chaque tentative, le serveur renvoie l'état complet : on ne réécrit

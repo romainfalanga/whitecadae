@@ -104,22 +104,6 @@ export const NODES = [
     ],
   },
   {
-    id: 'n-k',
-    source: 'White Cadae',
-    requires: [],
-    answers: [
-      {
-        id: 'n-k-1',
-        label: 'Infini blanc',
-        // les deux mots, dans l'ordre qu'on veut
-        match: (n) => /infini/.test(n) && /blanc/.test(n),
-        note: 'White : blanc. Cadae : C=3, A=1, D=4, A=1, E=5 — les décimales de pi, qui ne s’arrêtent jamais.',
-        quotes: ['J’harmonise l’infini, l’infini devient fini. (Multivers)',
-                 'Je ne suis qu’un fil qui relie deux infinis. (Un fil entre deux infinis)'],
-      },
-    ],
-  },
-  {
     id: 'n-a',
     source: '57',
     requires: [],
@@ -362,10 +346,63 @@ export function echelonOf(solved) {
 export const ECHELON_INTERPRETATIONS = 1;
 export const ECHELON_REPRISES = 6;
 
-export function accessOf(echelon) {
+/* ------------------------------------------------------------- les portes
+
+   Certains mots de passe n'ouvrent pas un échelon mais une fonctionnalité.
+   Ils ne comptent donc pas dans le calcul de l'échelon — leurs identifiants
+   sont volontairement hors de NODES, que buildState et echelonOf ignorent —
+   et ils ne s'affichent pas sur la page 57 : ils vivent sur la page qu'ils
+   gardent.
+
+   L'échelon donne la clé de la porte ; la porte donne la pièce. Atteindre
+   l'échelon fait apparaître la page, mais elle reste vide tant que son mot de
+   passe n'a pas été trouvé.                                               */
+
+export const PORTES = {
+  interpretations: {
+    source: 'White Cadae',
+    // avant cet échelon, la porte n'est même pas proposée
+    echelon: ECHELON_INTERPRETATIONS,
+    answers: [
+      {
+        id: 'porte-interp-1',
+        label: 'Infini blanc',
+        // les deux mots, dans l'ordre qu'on veut
+        match: (n) => /infini/.test(n) && /blanc/.test(n),
+        note: 'White : blanc. Cadae : C=3, A=1, D=4, A=1, E=5 — les décimales de pi, qui ne s’arrêtent jamais.',
+        quotes: ['J’harmonise l’infini, l’infini devient fini. (Multivers)',
+                 'Je ne suis qu’un fil qui relie deux infinis. (Un fil entre deux infinis)'],
+      },
+    ],
+  },
+};
+
+export function getPorte(nom) {
+  return Object.prototype.hasOwnProperty.call(PORTES, nom) ? PORTES[nom] : null;
+}
+
+export function porteOuverte(nom, solved) {
+  const porte = getPorte(nom);
+  return !!porte && porte.answers.some((a) => solved.has(a.id));
+}
+
+// Comme pour un nœud : la réponse trouvée, ou null.
+export function matchPorte(nom, answer, solved) {
+  const porte = getPorte(nom);
+  if (!porte) return null;
+  const n = normalize(answer);
+  if (!n) return null;
+  const hit = porte.answers.find((a) => !solved.has(a.id) && a.match(n));
+  return hit ? hit.id : null;
+}
+
+export function accessOf(echelon, solved = new Set()) {
   return {
+    // la page apparaît dans le menu
     interpretations: echelon >= ECHELON_INTERPRETATIONS,
     reprises: echelon >= ECHELON_REPRISES,
+    // ... et son contenu se montre
+    porteInterpretations: porteOuverte('interpretations', solved),
   };
 }
 
@@ -409,6 +446,7 @@ export function buildState(rows) {
     // le chemin qu'il reste dans le cran en cours, jamais dans le jeu entier
     step: ordinaires % PAR_ECHELON,
     perEchelon: PAR_ECHELON,
-    access: accessOf(echelon),
+    // `rows` porte aussi les portes déjà franchies : accessOf les y retrouve
+    access: accessOf(echelon, new Set(rows.filter((r) => r.solved_at).map((r) => r.riddle_id))),
   };
 }

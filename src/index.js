@@ -2,6 +2,7 @@
 
 import {
   getNode, isLocked, matchAnswer, buildState, currentAnswerId, echelonOf, accessOf,
+  getPorte, matchPorte, porteOuverte, PORTES,
 } from './enigmas57.js';
 
 const SESSION_COOKIE = 'wc_session';
@@ -57,8 +58,12 @@ async function handleApi(request, env, url) {
   if (route('PUT', '/api/account/password')) return updatePassword(request, env);
   if (route('POST', '/api/account/avatar')) return updateAvatar(request, env);
 
-  // --- tout ce qui suit demande un échelon : d'abord les reprises, qui sont
-  //     la porte la plus haute, puis les interprétations.
+  // --- la porte d'une page : on ne peut l'essayer qu'une fois l'échelon
+  //     atteint, et c'est elle qui découvre le contenu.
+  if ((p = route('POST', '/api/portes/:nom/guess'))) return porteGuess(request, env, p[0]);
+
+  // --- tout ce qui suit demande un échelon. Les reprises sont la porte la
+  //     plus haute ; le reste demande l'échelon ET le mot de passe de la page.
   const coversRoute = route('GET', '/api/covers/feed') || route('GET', '/api/covers')
     || route('GET', '/api/songs/:slug/covers') || route('POST', '/api/covers')
     || route('DELETE', '/api/covers/:id');
@@ -66,7 +71,7 @@ async function handleApi(request, env, url) {
     const refus = await requireAccess(request, env, 'reprises');
     if (refus) return refus;
   } else if (path.startsWith('/api/') && !path.startsWith('/api/admin/')) {
-    const refus = await requireAccess(request, env, 'interpretations');
+    const refus = await requireAccess(request, env, 'interpretations', 'porteInterpretations');
     if (refus) return refus;
   }
 
@@ -229,20 +234,28 @@ async function requireAdmin(request, env) {
 
 async function viewerAccess(request, env) {
   const user = await getUser(request, env);
-  if (!user) return { user: null, echelon: 0, access: accessOf(0) };
-  if (user.is_admin) return { user, echelon: Infinity, access: { interpretations: true, reprises: true } };
+  if (!user) return { user: null, echelon: 0, solved: new Set(), access: accessOf(0) };
+  if (user.is_admin) {
+    return {
+      user,
+      echelon: Infinity,
+      solved: new Set(),
+      access: { interpretations: true, reprises: true, porteInterpretations: true },
+    };
+  }
   const rows = await riddleRows(env, user.id);
   const solved = new Set(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
   const echelon = echelonOf(solved);
-  return { user, echelon, access: accessOf(echelon) };
+  return { user, echelon, solved, access: accessOf(echelon, solved) };
 }
 
-// Renvoie null si la porte est ouverte, sinon la réponse à servir telle
-// quelle. Le message ne dit pas ce qu'il faudrait trouver.
-async function requireAccess(request, env, porte) {
+// Renvoie null si tout est ouvert, sinon la réponse à servir telle quelle.
+// Le message ne dit jamais ce qu'il faudrait trouver.
+async function requireAccess(request, env, ...cles) {
   const { access } = await viewerAccess(request, env);
-  if (access[porte]) return null;
-  return json({ error: 'Cette page n’est pas encore ouverte.', locked: porte }, 403);
+  const manque = cles.find((c) => !access[c]);
+  if (!manque) return null;
+  return json({ error: 'Ce n’est pas encore ouvert.', locked: manque }, 403);
 }
 
 function slugify(text) {
@@ -456,13 +469,16 @@ async function logout(request, env) {
   return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
 }
 
-// La session porte aussi ce que l'échelon ouvre : l'interface s'y règle dès
-// le chargement, sans attendre d'avoir demandé l'état du jeu.
+// La session porte aussi ce que l'échelon ouvre, le libellé des portes encore
+// fermées, et le minuteur d'essai — commun à tous les mots de passe du site.
+// L'interface s'y règle dès le chargement, sans attendre l'état du jeu.
 async function me(request, env) {
   const { user, access } = await viewerAccess(request, env);
   return json({
     user: user ? { ...user, is_admin: !!user.is_admin } : null,
     access,
+    portes: Object.fromEntries(Object.entries(PORTES).map(([nom, p]) => [nom, p.source])),
+    attenteMs: user ? await attenteRestante(env, user.id) : 0,
   });
 }
 
@@ -1521,9 +1537,11 @@ async function riddleState(env, userId) {
   return { ...buildState(rows), attenteMs: attente };
 }
 
+// La page se lit sans compte : on voit les éléments, mais rien n'y a été
+// trouvé et il n'y a rien à saisir. C'est le POST qui exige un membre.
 async function signsState(request, env) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  const user = await getUser(request, env);
+  if (!user) return json({ ...buildState([]), attenteMs: 0, anonyme: true });
   return json(await riddleState(env, user.id));
 }
 
@@ -1563,6 +1581,44 @@ async function signsGuess(request, env) {
   ).bind(user.id, hit).run();
 
   return json({ ok: true, id: node.id, state: await riddleState(env, user.id) });
+}
+
+// Le mot de passe d'une page. Même minuteur que le 57 : un essai par heure,
+// tous champs confondus — proposer, c'est jouer, où que ce soit.
+async function porteGuess(request, env, nom) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+
+  const porte = getPorte(nom);
+  if (!porte) return json({ error: 'Porte introuvable.' }, 404);
+
+  const body = await readJson(request);
+  const answer = String(body?.answer ?? '');
+  if (answer.length > 200) return json({ error: 'Réponse trop longue.' }, 400);
+  if (!answer.trim()) return json({ error: 'Réponse vide.' }, 400);
+
+  // On ne peut pas essayer une porte qu'on n'a pas encore atteinte.
+  const { echelon, solved } = await viewerAccess(request, env);
+  if (echelon < porte.echelon) return json({ error: 'Ce n’est pas encore ouvert.', locked: nom }, 403);
+  // Déjà franchie : on ne consomme pas l'essai pour rien.
+  if (porteOuverte(nom, solved)) return json({ ok: true, deja: true });
+
+  const attente = await attenteRestante(env, user.id);
+  if (attente > 0) return json({ error: 'Trop tôt.', attenteMs: attente }, 429);
+  await marquerEssai(env, user.id);
+
+  const hit = matchPorte(nom, answer, solved);
+  if (!hit) return json({ ok: false, attenteMs: DELAI_ESSAI_MS });
+
+  await env.DB.prepare(
+    `INSERT INTO riddle_progress (user_id, riddle_id, solved_at)
+     VALUES (?1, ?2, datetime('now'))
+     ON CONFLICT(user_id, riddle_id) DO UPDATE
+       SET solved_at = COALESCE(solved_at, datetime('now')), updated_at = datetime('now')`
+  ).bind(user.id, hit).run();
+
+  const apres = await viewerAccess(request, env);
+  return json({ ok: true, access: apres.access, attenteMs: DELAI_ESSAI_MS });
 }
 
 // Plus proposé dans l'interface, mais conservé : c'est le seul moyen de

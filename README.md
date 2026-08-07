@@ -4,9 +4,10 @@ Plateforme communautaire d'explications des textes de **White Cadae**
 ([chaîne YouTube](https://www.youtube.com/@WhiteCadae)).
 
 **On arrive par le 57.** La racine `/` ouvre l'escape game (voir plus bas) :
-c'est lui qui commande l'accès au reste, échelon par échelon. Tant qu'aucun
-mot de passe n'a été trouvé, il n'y a que lui — ni interprétations, ni
-reprises, ni profil.
+c'est lui qui commande l'accès au reste, échelon par échelon. Il se lit sans
+compte, mais rien ne s'y saisit sans être connecté. Tant qu'aucun mot de passe
+n'a été trouvé, il n'y a que lui — ni interprétations, ni reprises, ni
+profil.
 
 La page **Interprétations** (`/interpretations`) ouvre sur les dernières
 lectures publiées par les membres — le passage visé, puis ce qu’on en dit —
@@ -55,6 +56,11 @@ des autres membres.
 cachés dans l'EP **57**. Aucun texte, aucune explication, aucun indice :
 un élément, un champ, et ce qu'il veut dire.
 
+**Elle se lit sans compte.** Un visiteur voit les éléments et leur structure,
+mais aucun champ n'est saisissable : deux boutons, se connecter ou créer un
+compte, tiennent lieu de toute explication. Le serveur renvoie alors un état
+vide (`anonyme: true`), et refuse toute tentative.
+
 La page est une liste plate : ni titres, ni sections, ni sommaire. Un
 même élément peut porter plusieurs sens ; dans ce cas il n'a qu'un seul
 champ, et les réponses s'y ajoutent une à une, dans n'importe quel ordre
@@ -91,8 +97,25 @@ L'échelon **commande l'accès au site**, et pas seulement l'affichage des liens
 | Échelon | Ce qui s'ouvre |
 | --- | --- |
 | 0 | la page 57, et rien d'autre |
-| 1 | les Interprétations et le profil |
+| 1 | la page Interprétations apparaît — mais vide, voir les portes |
 | 6 | les Reprises |
+
+### Les portes
+
+Certains mots de passe n'ouvrent pas un échelon mais une **fonctionnalité**.
+Ils vivent dans `PORTES`, hors de `NODES` : ni `buildState` ni `echelonOf` ne
+les connaissent, donc ils ne comptent pas dans le calcul, et ils ne
+s'affichent pas sur la page 57 — ils vivent sur la page qu'ils gardent.
+
+L'échelon donne la clé, la porte donne la pièce. **White Cadae** garde les
+Interprétations : à l'échelon 1 la page apparaît dans le menu, mais elle ne
+montre que ce mot de passe, dans la même carte que celles du 57. Tant qu'il
+n'est pas trouvé, tout le reste est refusé — les albums, le fil, les chansons,
+le profil — et le menu n'affiche pas encore « Mon profil ».
+
+Le **minuteur est commun** à tous les mots de passe du site : un essai sur une
+porte ferme aussi ceux du 57, et réciproquement. Une porte déjà franchie ne
+consomme pas d'essai.
 
 Comme les mots de passe ordinaires plafonnent à l'échelon 4, les **Reprises
 sont hors d'atteinte sans un multiplicateur** : six ordinaires et un mot du
@@ -102,9 +125,9 @@ compte et son avatar y échappent, sans quoi on ne pourrait plus se
 déconnecter, et **l'artiste (`is_admin`) en est exempté** : il ne peut pas se
 retrouver enfermé dehors par un jeu dont il connaît les réponses.
 
-La page est réservée aux membres : la progression est enregistrée sur le
-compte (`riddle_progress`, une ligne par mot de passe trouvé), donc
-conservée d'un appareil à l'autre. Il n'y a pas de bouton de remise à
+Jouer demande un compte : la progression est enregistrée dessus
+(`riddle_progress`, une ligne par mot de passe trouvé), donc conservée d'un
+appareil à l'autre. Il n'y a pas de bouton de remise à
 zéro dans l'interface ; la route `DELETE /api/57/progress` existe toujours.
 
 **Tout le contenu du jeu vit dans `src/enigmas57.js`, côté Worker.**
