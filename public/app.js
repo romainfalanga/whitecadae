@@ -1929,7 +1929,7 @@ function renderSongCoversPage() {
 
   const list = covers.length
     ? `<div class="covers-grid">${covers.map(coverCard).join('')}</div>`
-    : '<p class="empty-note">Aucune reprise pour l’instant.</p>';
+    : '';
 
   const form = u
     ? `<form class="panel-card" id="cover-form">
@@ -1949,8 +1949,6 @@ function renderSongCoversPage() {
     <div class="breadcrumb"><a href="/" data-link>Accueil</a> › ${esc(song.album_title || 'Sans album')} ›
       <a href="/chanson/${encodeURIComponent(song.slug)}" data-link>${esc(song.title)}</a> › Reprises</div>
     <h1>Reprises de « ${esc(song.title)} »</h1>
-    <p class="subtitle">${covers.length} reprise${covers.length > 1 ? 's' : ''} de la communauté, de la plus récente à la plus ancienne.</p>
-    <p class="hint"><a href="/chanson/${encodeURIComponent(song.slug)}" data-link>← Voir l’interprétation de ce morceau</a></p>
     ${list}
     ${form}`;
 
@@ -2142,49 +2140,30 @@ async function pageProfile(username) {
 
 // Arborescence de toutes les reprises publiées : album (ordre de sortie) →
 // morceau (ordre de piste) → reprises, de la plus récente à la plus ancienne.
+// Même mise en page que l'accueil (albums → morceaux) : c'est en ouvrant un
+// morceau qu'on retrouve toutes ses reprises, sur sa page dédiée.
 async function pageCovers() {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
   const data = await api('/api/covers');
   if (stale(epoch)) return;
 
-  const allSongs = data.albums.flatMap((al) => al.songs).concat(data.orphans || []);
-  const total = allSongs.reduce((n, s) => n + (s.covers ? s.covers.length : 0), 0);
+  const songRow = (s) => `
+    <li>
+      <span class="song-num">${s.track_number ?? ''}</span>
+      <a href="/chanson/${encodeURIComponent(s.slug)}/reprises" data-link>${esc(s.title)}</a>
+      <span class="song-meta">${s.covers.length ? `${s.covers.length} reprise${s.covers.length > 1 ? 's' : ''}` : ''}</span>
+    </li>`;
 
-  // Chaque morceau a déjà sa page de reprises accessible, même sans reprise
-  // publiée : l'arborescence liste tous les morceaux, pas seulement ceux
-  // qui ont déjà une reprise.
-  const songBlock = (s) => `
-    <div class="covers-song">
-      <h3><a href="/chanson/${encodeURIComponent(s.slug)}/reprises" data-link>${esc(s.title)}</a>
-        <span class="song-meta">${s.covers.length ? `${s.covers.length} reprise${s.covers.length > 1 ? 's' : ''}` : 'aucune reprise pour l’instant'}</span></h3>
-      ${s.covers.length
-        ? `<div class="covers-grid">${s.covers.map(coverCard).join('')}</div>`
-        : `<p class="empty-note">Soyez le premier à publier une reprise de ce morceau —
-            <a href="/chanson/${encodeURIComponent(s.slug)}/reprises" data-link>c’est par ici</a>.</p>`}
-    </div>`;
-
-  const albumsHtml = data.albums.map((al) => `
+  const albums = data.albums.map((al) => `
     <section class="album-card">
-      <div class="album-head"><h2>${esc(al.title)}</h2></div>
-      ${al.songs.map(songBlock).join('')}
+      <div class="album-head">
+        <h2>${esc(al.title)}</h2>
+      </div>
+      <ol class="song-list">${al.songs.map(songRow).join('')}</ol>
     </section>`).join('');
 
-  const orphansHtml = (data.orphans || []).length
-    ? `<section class="album-card">
-        <div class="album-head"><h2>Sans album</h2></div>
-        ${data.orphans.map(songBlock).join('')}
-      </section>`
-    : '';
-
-  app.innerHTML = `
-    <h1>Reprises</h1>
-    <p class="subtitle">${total} reprise${total > 1 ? 's' : ''} de la communauté, classées par album puis par morceau,
-    de la plus récente à la plus ancienne.</p>
-    ${albumsHtml + orphansHtml}`;
-
-  bindSocial(app, { reload: () => pageCovers(), render: () => pageCovers() });
-  bindCoverDeletes(app, () => pageCovers());
+  app.innerHTML = `<h1>Reprises</h1>${albums}`;
 }
 
 /* ---------------------------------------------------------------- admin */
