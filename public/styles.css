@@ -1035,3 +1035,75 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
   .enigme--wrong, .enigme--just { animation: none; }
   .progress-bar span { transition: none; }
 }
+
+/* ------------------------------ l'ensemble du morceau : bouton flottant */
+
+/* Atteignable au pouce depuis n'importe où dans le texte, il remplace la
+   pile de sections qui s'entassait en bas de chaque page de chanson. */
+.fab {
+  position: fixed;
+  z-index: 55;
+  right: 1.1rem;
+  bottom: 1.1rem;
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #17130a;
+  font-size: 1.5rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
+}
+.fab:hover { filter: brightness(1.08); border-color: var(--accent); }
+.fab-icon { display: block; transform: translateY(1px); }
+.fab-count {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 11px;
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* la barre de sélection prend déjà tout le bas de l'écran */
+body.bar-visible .fab { display: none; }
+
+/* La fenêtre de l'ensemble : centrée sur ordinateur, feuille montante sur
+   téléphone — on ne fait jamais défiler la page derrière. */
+.modal-song { width: min(760px, calc(100vw - 2rem)); max-height: calc(100vh - 3rem); }
+.modal-song .settings-section h3 { font-family: var(--serif); font-size: 1.15rem; }
+.panel-invite .btn { width: 100%; margin-top: 0.6rem; text-align: center; }
+
+@media (max-width: 700px) {
+  .modal-song {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: none;
+    transform: none;
+    max-height: 88vh;
+    border-radius: 18px 18px 0 0;
+    padding: 1.25rem 1.1rem calc(1.25rem + env(safe-area-inset-bottom));
+    animation: sheet-up 0.18s ease-out;
+  }
+  @keyframes sheet-up {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  .fab { width: 54px; height: 54px; right: 0.9rem; bottom: 0.9rem; }
+}

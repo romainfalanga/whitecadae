@@ -12,6 +12,7 @@ const state = {
   corpusDf: null, // fréquence documentaire des mots (moteur d'échos)
   builder: null, // constructeur d'interprétation d'ensemble en cours
   sheetOpen: false, // feuille du bas ouverte (mobile)
+  songModalOpen: false, // fenêtre « l'ensemble du morceau » ouverte
   enigmes: null, // état des énigmes de la page /57
 };
 
@@ -111,6 +112,8 @@ async function route() {
   const path = location.pathname;
   // toute navigation ferme la sélection en cours
   state.sheetOpen = false;
+  state.songModalOpen = false;
+  closeSongModal();
   document.body.classList.remove('sheet-open');
   const bar = document.getElementById('sel-bar');
   if (bar) bar.hidden = true;
@@ -790,6 +793,7 @@ function renderSelectionUI() {
   const narrow = window.matchMedia('(max-width: 900px)').matches;
   if (!isText || !narrow) {
     bar.hidden = true;
+    document.body.classList.remove('bar-visible');
     const install = document.getElementById('install-banner');
     if (install && install.dataset.suspended === '1') {
       delete install.dataset.suspended;
@@ -817,6 +821,7 @@ function renderSelectionUI() {
     <button class="primary" id="sel-bar-go">✍ Interpréter</button>
     <button class="link-btn" id="sel-bar-clear" title="Annuler la sélection">✕</button>`;
   bar.hidden = false;
+  document.body.classList.add('bar-visible');
   // les deux bandeaux occupent le bas de l'écran : l'invitation à installer
   // s'efface tant qu'une sélection est en cours
   const install = document.getElementById('install-banner');
@@ -861,6 +866,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   const modal = document.getElementById('settings-modal');
   if (modal && !modal.hidden) { closeSettings(); return; }
+  if (state.songModalOpen) { closeSongModal(); return; }
   if (state.sel) clearSelection();
 });
 
@@ -931,15 +937,15 @@ function renderSongPage() {
       <div>
         ${lyricsHtml}
         <div id="inbound"></div>
-        <h2>Interprétations d’ensemble</h2>
-        <p class="hint">Une lecture globale du morceau, justifiée par des connexions entre phrases —
-        y compris avec les phrases d’autres morceaux.</p>
-        <div id="essays"></div>
-        <h2>Connexions avec d’autres chansons</h2>
-        <div id="connections"></div>
       </div>
       <aside class="side-panel" id="panel"></aside>
-    </div>`;
+    </div>
+    <button type="button" class="fab" id="song-fab"
+            title="Interpréter « ${esc(song.title)} » dans son ensemble"
+            aria-label="Interpréter la chanson dans son ensemble">
+      <span class="fab-icon">💬</span>
+      ${countFor('song') ? `<span class="fab-count">${countFor('song')}</span>` : ''}
+    </button>`;
 
   bindLyricsSelection();
 
@@ -952,11 +958,94 @@ function renderSongPage() {
   document.getElementById('target-title').onclick = () => pickTarget('title');
   document.getElementById('target-duration').onclick = () => pickTarget('duration');
 
+  document.getElementById('song-fab').onclick = openSongModal;
+
   renderPanel();
   renderInbound();
+  renderSelectionUI();
+  renderSongModal();
+}
+
+/* ------------------------------------------------- l'ensemble du morceau ---
+   Le sens général, les interprétations d'ensemble et les connexions ne sont
+   plus empilés en bas de page : ils vivent dans une fenêtre qu'on ouvre par
+   le bouton flottant, atteignable au pouce depuis n'importe quel endroit du
+   texte.                                                                   */
+
+function ensureSongModalChrome() {
+  let backdrop = document.getElementById('song-backdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'song-backdrop';
+    backdrop.className = 'modal-backdrop';
+    backdrop.hidden = true;
+    backdrop.onclick = closeSongModal;
+    document.body.appendChild(backdrop);
+  }
+  let modal = document.getElementById('song-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'song-modal';
+    modal.className = 'modal modal-song';
+    modal.hidden = true;
+    document.body.appendChild(modal);
+  }
+  return { backdrop, modal };
+}
+
+function closeSongModal() {
+  state.songModalOpen = false;
+  const backdrop = document.getElementById('song-backdrop');
+  const modal = document.getElementById('song-modal');
+  if (backdrop) backdrop.hidden = true;
+  if (modal) modal.hidden = true;
+}
+
+function openSongModal() {
+  state.songModalOpen = true;
+  renderSongModal();
+}
+
+function renderSongModal() {
+  const { backdrop, modal } = ensureSongModalChrome();
+  if (!state.songModalOpen || !state.song) {
+    backdrop.hidden = true;
+    modal.hidden = true;
+    return;
+  }
+  const { song } = state.song;
+  const songAnns = annotationsFor((a) => a.target_type === 'song');
+
+  modal.innerHTML = `
+    <button type="button" class="link-btn modal-close" id="song-modal-close" aria-label="Fermer">✕</button>
+    <h2>« ${esc(song.title)} » dans son ensemble</h2>
+
+    <section class="settings-section">
+      <h3>Le sens général</h3>
+      ${songAnns.map((a) => annotationCard(a)).join('') || '<p class="empty-note">Aucune interprétation générale pour l’instant.</p>'}
+      ${annotationForm('song-ann-form', `Le sens général de « ${song.title} »…`, 'Interpréter la chanson', nextGridFor(songAnns))}
+    </section>
+
+    <section class="settings-section">
+      <h3>Interprétations d’ensemble</h3>
+      <p class="hint">Une lecture globale du morceau, justifiée par des connexions entre phrases —
+      y compris avec les phrases d’autres morceaux.</p>
+      <div id="essays"></div>
+    </section>
+
+    <section class="settings-section">
+      <h3>Connexions avec d’autres chansons</h3>
+      <div id="connections"></div>
+    </section>`;
+
+  backdrop.hidden = false;
+  modal.hidden = false;
+  document.getElementById('song-modal-close').onclick = closeSongModal;
+  bindAnnotationForm('song-ann-form', { song_id: song.id, target_type: 'song' });
+  bindAnnotationActions(modal);
+  bindSocial(modal);
   renderEssays();
   renderConnections();
-  renderSelectionUI();
 }
 
 /* ------------------------- grilles de lecture venues d'autres morceaux ---
@@ -1761,12 +1850,13 @@ function renderPanel() {
     forms.push(['duration-ann-form', { song_id: song.id, target_type: 'duration' }]);
   } else {
     const songAnns = annotationsFor((a) => a.target_type === 'song');
-    html += `<div class="panel-card">
-      <h3>À propos de la chanson</h3>
-      ${songAnns.map((a) => annotationCard(a)).join('') || '<p class="empty-note">Aucune interprétation générale pour l’instant.</p>'}
-      ${annotationForm('song-ann-form', `Le sens général de « ${song.title} »…`, 'Interpréter la chanson', nextGridFor(songAnns))}
+    html += `<div class="panel-card panel-invite">
+      <h3>Interpréter</h3>
+      <p class="empty-note">Sélectionnez un mot, une phrase ou un passage dans le texte.</p>
+      <button type="button" class="btn panel-open-modal">
+        💬 L’ensemble du morceau${songAnns.length ? ` · ${songAnns.length}` : ''}
+      </button>
     </div>`;
-    forms.push(['song-ann-form', { song_id: song.id, target_type: 'song' }]);
 
     const passAnns = annotationsFor((a) => a.target_type === 'passage');
     if (passAnns.length) {
@@ -1781,6 +1871,8 @@ function renderPanel() {
   }
 
   panel.innerHTML = html;
+  const openModal = panel.querySelector('.panel-open-modal');
+  if (openModal) openModal.onclick = openSongModal;
   for (const [id, payload] of forms) bindAnnotationForm(id, payload);
   const clear = document.getElementById('clear-sel');
   if (clear) clear.onclick = clearSelection;
@@ -1792,6 +1884,7 @@ function renderPanel() {
 
 function renderConnections() {
   const container = document.getElementById('connections');
+  if (!container) return;
   const { song, connections, allSongs } = state.song;
   const u = state.user;
 
