@@ -115,10 +115,19 @@ async function handleApi(request, env, url) {
 
 /* ---------------------------------------------------------------- helpers */
 
+// `no-store` : toutes ces réponses dépendent de qui les demande — la session,
+// l'échelon atteint, les brouillons qu'on est seul à voir. Aucune ne doit
+// dormir dans un cache intermédiaire, encore moins être resservie à
+// quelqu'un d'autre. (L'avatar, lui, forge sa propre réponse et reste
+// cachable : c'est une image publique.)
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...headers },
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      ...headers,
+    },
   });
 }
 
