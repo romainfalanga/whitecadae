@@ -1093,6 +1093,7 @@ function renderSongModal() {
     modal.hidden = true;
     return;
   }
+  resetComposers();
   const { song } = state.song;
   const songAnns = annotationsFor((a) => a.target_type === 'song');
 
@@ -1103,7 +1104,8 @@ function renderSongModal() {
     <section class="settings-section">
       <h3>Le sens général</h3>
       ${songAnns.map((a) => annotationCard(a)).join('') || '<p class="empty-note">Aucune interprétation générale pour l’instant.</p>'}
-      ${annotationForm('song-ann-form', `Le sens général de « ${song.title} »…`, 'Interpréter la chanson', nextGridFor(songAnns))}
+      ${refBlocks((r) => r.target_type === 'song')}
+      ${composerHtml()}
     </section>
 
     <section class="settings-section">
@@ -1121,7 +1123,9 @@ function renderSongModal() {
   backdrop.hidden = false;
   modal.hidden = false;
   document.getElementById('song-modal-close').onclick = closeSongModal;
-  bindAnnotationForm('song-ann-form', { song_id: song.id, target_type: 'song' });
+  bindComposer(modal, 0, { song_id: song.id, target_type: 'song' },
+    `Le sens général de « ${song.title} »…`, 'Interpréter la chanson', nextGridFor(songAnns));
+  bindRefDeletes(modal);
   bindAnnotationActions(modal);
   bindSocial(modal);
   renderEssays();
@@ -1158,7 +1162,24 @@ function renderInbound() {
   const container = document.getElementById('inbound');
   if (!container) return;
   const inbound = state.song.inbound || [];
-  if (!inbound.length) { container.innerHTML = ''; return; }
+  const refs = state.song.inboundRefs || [];
+  if (!inbound.length && !refs.length) { container.innerHTML = ''; return; }
+
+  const refsHtml = refs.length ? `
+    <h2>Ce morceau est cité ailleurs</h2>
+    <p class="hint">Des passages d'autres chansons qui renvoient à celui-ci.</p>
+    ${refs.map((r) => `
+      <div class="inbound">
+        <div class="inbound-from">
+          ↩ depuis <a href="/chanson/${encodeURIComponent(r.source_slug)}" data-link>${esc(r.source_title)}</a>
+          — à propos de ${esc(inboundSourceLabel(r))}
+        </div>
+        <div class="inbound-anchor">« ${esc(inboundAnchorText(r))} »</div>
+        ${r.note ? `<p class="ref-item-note">${esc(r.note)}</p>` : ''}
+        <div class="annotation-head">${authorLink(r.username)}<span>${esc(formatDate(r.created_at))}</span></div>
+      </div>`).join('')}` : '';
+
+  if (!inbound.length) { container.innerHTML = refsHtml; return; }
 
   container.innerHTML = `
     <h2>Grilles de lecture venues d’autres morceaux</h2>
@@ -1179,7 +1200,8 @@ function renderInbound() {
           ${!r.is_published ? '<span class="draft-badge" title="Visible seulement par vous, tant qu’une nouvelle version n’a pas été publiée">Brouillon</span>' : ''}
         </div>
         ${socialFooter('annotation', r)}
-      </div>`).join('')}`;
+      </div>`).join('')}
+    ${refsHtml}`;
 
   bindSocial(container);
 }
@@ -1914,8 +1936,6 @@ function annotationCard(a, targetQuote) {
     ${targetQuote ? `<div class="annotation-target-quote">${targetQuote}</div>` : ''}
     <div class="annotation-body">${esc(a.content)}</div>
     ${referencesList(a)}
-    ${own ? `<button type="button" class="link-btn ref-add-btn" data-add-ref="${a.id}">+ Référence</button>` : ''}
-    <div data-ref-slot="${a.id}"></div>
     ${socialFooter('annotation', a)}
   </div>`;
 }
@@ -1931,6 +1951,112 @@ function nextGridFor(anns) {
   return mine.length ? Math.max(...mine.map((a) => a.grid_number)) + 1 : 1;
 }
 
+/* --------------------------------------------- écrire sur un passage ---
+   Sur une même cible, trois choses indépendantes peuvent être dites, de la
+   plus fréquente à la plus rare : une interprétation, une référence à un
+   passage d'un autre morceau, une référence à une œuvre. On choisit d'abord
+   laquelle — ce ne sont pas des annexes l'une de l'autre.               */
+
+function passageRefsFor(pred) {
+  return (state.song.passageRefs || []).filter(pred);
+}
+
+// Une référence autonome, affichée comme un bloc à part entière.
+function refCard(r) {
+  const u = state.user;
+  const own = u && (u.id === r.user_id || u.is_admin);
+  const title = r.kind === 'internal'
+    ? `<a href="/chanson/${encodeURIComponent(r.ref_song_slug || '')}" data-link>♪ ${esc(r.label)}</a>`
+    : `<span class="ref-work">${esc(r.label)}</span>${r.artist ? ` <span class="ref-artist-name">— ${esc(r.artist)}</span>` : ''}`;
+  return `<div class="ref-block" data-pref="${r.id}">
+    <div class="ref-item-head">
+      ${title}
+      ${own ? `<button type="button" class="link-btn" data-pref-del="${r.id}" title="Supprimer">✕</button>` : ''}
+    </div>
+    ${r.note ? `<p class="ref-item-note">${esc(r.note)}</p>` : ''}
+    <div class="annotation-head">${authorLink(r.username)}<span>${esc(formatDate(r.created_at))}</span></div>
+  </div>`;
+}
+
+// Les deux listes de références d'une cible, dans l'ordre de fréquence.
+function refBlocks(pred) {
+  const refs = passageRefsFor(pred);
+  const internal = refs.filter((r) => r.kind === 'internal');
+  const work = refs.filter((r) => r.kind !== 'internal');
+  return (internal.length ? `<div class="ref-group"><h4>Références à un passage d'un autre morceau</h4>${internal.map(refCard).join('')}</div>` : '')
+       + (work.length ? `<div class="ref-group"><h4>Références à une œuvre</h4>${work.map(refCard).join('')}</div>` : '');
+}
+
+let composerSeq = 0;
+function resetComposers() { composerSeq = 0; }
+
+function composerHtml() {
+  if (!state.user) {
+    return '<p class="empty-note"><a href="/connexion" data-link>Connectez-vous</a> pour contribuer.</p>';
+  }
+  return `<div class="composer" data-composer="${composerSeq++}">
+    <div class="write-picker">
+      <button type="button" class="btn write-pick" data-mode="interp">✍ Interprétation</button>
+      <button type="button" class="btn write-pick" data-mode="internal">♪ Référence à un passage</button>
+      <button type="button" class="btn write-pick" data-mode="work">◆ Référence à une œuvre</button>
+    </div>
+    <div class="write-slot"></div>
+  </div>`;
+}
+
+function bindComposer(container, index, payload, placeholder, buttonLabel, nextGrid) {
+  const comp = container.querySelector(`[data-composer="${index}"]`);
+  if (!comp) return;
+  const slot = comp.querySelector('.write-slot');
+  const picker = comp.querySelector('.write-picker');
+  const close = () => { slot.innerHTML = ''; picker.hidden = false; };
+
+  comp.querySelectorAll('.write-pick').forEach((b) => {
+    b.onclick = async () => {
+      picker.hidden = true;
+      if (b.dataset.mode === 'interp') {
+        slot.innerHTML = annotationForm('panel-ann-form', placeholder, buttonLabel, nextGrid);
+        bindAnnotationForm('panel-ann-form', payload);
+        const cancel = slot.querySelector('.composer-cancel');
+        if (cancel) cancel.onclick = close;
+        return;
+      }
+      if (b.dataset.mode === 'internal') await loadCorpus();
+      slot.innerHTML = b.dataset.mode === 'internal' ? refEditorInternal() : refEditorFree();
+      const editor = slot.querySelector('.ref-editor');
+      bindRefSongPicker(editor);
+      editor.querySelector('.ref-cancel').onclick = close;
+      const commit = editor.querySelector('.ref-commit');
+      commit.textContent = 'Publier cette référence';
+      commit.onclick = async () => {
+        const ref = readRefEditor(editor);
+        if (!ref) return;
+        delete ref._label;
+        if (!ref.note) {
+          editor.querySelector('.ref-error').textContent = 'Expliquez en quoi c’est une référence.';
+          return;
+        }
+        try {
+          await api('/api/passage-references', { method: 'POST', body: { ...payload, ...ref } });
+          await pageSong(state.song.song.slug, true);
+        } catch (err) { editor.querySelector('.ref-error').textContent = err.message; }
+      };
+    };
+  });
+}
+
+function bindRefDeletes(container) {
+  container.querySelectorAll('[data-pref-del]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm('Supprimer cette référence ?')) return;
+      try {
+        await api(`/api/passage-references/${btn.dataset.prefDel}`, { method: 'DELETE' });
+        await pageSong(state.song.song.slug, true);
+      } catch (err) { alert(err.message); }
+    };
+  });
+}
+
 function annotationForm(id, placeholder, buttonLabel, nextGrid = 1) {
   if (!state.user) {
     return `<p class="empty-note"><a href="/connexion" data-link>Connectez-vous</a> pour proposer une interprétation.</p>`;
@@ -1938,9 +2064,11 @@ function annotationForm(id, placeholder, buttonLabel, nextGrid = 1) {
   return `<form class="annotation-form" id="${id}">
     ${nextGrid > 1 ? `<div class="grid-label grid-label-next">Nouvelle grille de lecture — n°${nextGrid}</div>` : ''}
     <textarea placeholder="${esc(placeholder)}" required maxlength="5000"></textarea>
-    ${referencesFieldset()}
     <div class="error-msg"></div>
-    <button type="submit" class="primary">${esc(nextGrid > 1 ? `Publier la grille de lecture n°${nextGrid}` : buttonLabel)}</button>
+    <div class="composer-actions">
+      <button type="submit" class="primary">${esc(nextGrid > 1 ? `Publier la grille de lecture n°${nextGrid}` : buttonLabel)}</button>
+      <button type="button" class="link-btn composer-cancel">Annuler</button>
+    </div>
   </form>`;
 }
 
@@ -2006,6 +2134,7 @@ function bindAnnotationActions(container) {
 }
 
 function renderPanel() {
+  resetComposers();
   const panel = document.getElementById('panel');
   const { song, lines } = state.song;
   const sel = state.sel;
@@ -2028,13 +2157,18 @@ function renderPanel() {
         a,
         `« ${esc(passageText(a.line_id, a.word_start || 0, a.end_line_id, a.word_end == null ? 0 : a.word_end))} »`
       )).join('') || '<p class="empty-note">Aucune interprétation de passage ici pour l’instant.</p>'}
-      ${annotationForm('passage-ann-form', 'Que raconte ce passage ?', 'Interpréter ce passage', nextGridFor(passAnns))}
+      ${refBlocks((r) => {
+        if (r.target_type !== 'passage') return false;
+        const [a0, a1] = passageRange(r);
+        return a0 <= s1 && s0 <= a1;
+      })}
+      ${composerHtml()}
     </div>
     <button class="link-btn" id="clear-sel">← Revenir à la chanson</button>`;
-    forms.push(['passage-ann-form', {
-      song_id: song.id, line_id: sel.startLine, end_line_id: sel.endLine,
+    forms.push([{
+      song_id: song.id, target_type: 'passage', line_id: sel.startLine, end_line_id: sel.endLine,
       word_start: sel.startIdx, word_end: sel.endIdx,
-    }]);
+    }, 'Que raconte ce passage ?', 'Interpréter ce passage', nextGridFor(passAnns)]);
   } else if (sel && (sel.type === 'word' || sel.type === 'line')) {
     const line = lines.find((l) => l.id === sel.lineId);
     const toks = line ? tokens(line.text) : [];
@@ -2052,9 +2186,12 @@ function renderPanel() {
           a,
           `« ${esc(toks.slice(a.word_start, a.word_end + 1).join(' '))} »`
         )).join('') || '<p class="empty-note">Aucune interprétation pour l’instant.</p>'}
-        ${annotationForm('word-ann-form', `Que signifie « ${quote} » ici ?`, 'Interpréter ces mots', nextGridFor(wordAnns))}
+        ${refBlocks((r) => r.target_type === 'word' && r.line_id === sel.lineId &&
+          r.word_start <= sel.end && r.word_end >= sel.start)}
+        ${composerHtml()}
       </div>`;
-      forms.push(['word-ann-form', { song_id: song.id, line_id: sel.lineId, word_start: sel.start, word_end: sel.end }]);
+      forms.push([{ song_id: song.id, target_type: 'word', line_id: sel.lineId, word_start: sel.start, word_end: sel.end },
+        `Que signifie « ${quote} » ici ?`, 'Interpréter ces mots', nextGridFor(wordAnns)]);
     }
 
     const lineAnns = annotationsFor((a) => a.target_type === 'line' && a.line_id === sel.lineId);
@@ -2062,19 +2199,23 @@ function renderPanel() {
       <h3>La phrase</h3>
       <div class="panel-target">« ${esc(line ? line.text : '')} »</div>
       ${lineAnns.map((a) => annotationCard(a)).join('') || '<p class="empty-note">Aucune interprétation pour l’instant.</p>'}
-      ${annotationForm('line-ann-form', 'Que signifie cette phrase ?', 'Interpréter cette phrase', nextGridFor(lineAnns))}
+      ${refBlocks((r) => r.target_type === 'line' && r.line_id === sel.lineId)}
+      ${composerHtml()}
     </div>
     <button class="link-btn" id="clear-sel">← Revenir à la chanson</button>`;
-    forms.push(['line-ann-form', { song_id: song.id, line_id: sel.lineId }]);
+    forms.push([{ song_id: song.id, target_type: 'line', line_id: sel.lineId },
+      'Que signifie cette phrase ?', 'Interpréter cette phrase', nextGridFor(lineAnns)]);
   } else if (sel && sel.type === 'title') {
     const titleAnns = annotationsFor((a) => a.target_type === 'title');
     html += `<div class="panel-card">
       <h3>Le titre « ${esc(song.title)} »</h3>
       ${titleAnns.map((a) => annotationCard(a)).join('') || '<p class="empty-note">Aucune interprétation du titre pour l’instant.</p>'}
-      ${annotationForm('title-ann-form', `Pourquoi ce titre, « ${song.title} » ?`, 'Interpréter le titre', nextGridFor(titleAnns))}
+      ${refBlocks((r) => r.target_type === 'title')}
+      ${composerHtml()}
     </div>
     <button class="link-btn" id="clear-sel">← Revenir à la chanson</button>`;
-    forms.push(['title-ann-form', { song_id: song.id, target_type: 'title' }]);
+    forms.push([{ song_id: song.id, target_type: 'title' },
+      `Pourquoi ce titre, « ${song.title} » ?`, 'Interpréter le titre', nextGridFor(titleAnns)]);
   } else {
     const songAnns = annotationsFor((a) => a.target_type === 'song');
     html += `<div class="panel-card panel-invite">
@@ -2100,7 +2241,10 @@ function renderPanel() {
   panel.innerHTML = html;
   const openModal = panel.querySelector('.panel-open-modal');
   if (openModal) openModal.onclick = openSongModal;
-  for (const [id, payload] of forms) bindAnnotationForm(id, payload);
+  forms.forEach(([payload, placeholder, label, grid], i) => {
+    bindComposer(panel, i, payload, placeholder, label, grid);
+  });
+  bindRefDeletes(panel);
   const clear = document.getElementById('clear-sel');
   if (clear) clear.onclick = clearSelection;
   bindAnnotationActions(panel);

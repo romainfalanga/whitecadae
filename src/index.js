@@ -59,6 +59,8 @@ async function handleApi(request, env, url) {
   if ((p = route('DELETE', '/api/annotations/:id'))) return deleteAnnotation(request, env, +p[0]);
   if ((p = route('POST', '/api/annotations/:id/references'))) return addReference(request, env, +p[0]);
   if ((p = route('DELETE', '/api/references/:id'))) return deleteReference(request, env, +p[0]);
+  if (route('POST', '/api/passage-references')) return createPassageReference(request, env);
+  if ((p = route('DELETE', '/api/passage-references/:id'))) return deletePassageReference(request, env, +p[0]);
   if (route('POST', '/api/connections')) return createConnection(request, env);
   if ((p = route('DELETE', '/api/connections/:id'))) return deleteConnection(request, env, +p[0]);
   if (route('POST', '/api/essays')) return createEssay(request, env);
@@ -582,6 +584,40 @@ async function getSong(env, request, slug) {
       ORDER BY a.created_at`
   ).bind(song.id, viewerId).all()).results;
 
+  // Références autonomes posées sur un passage de ce morceau.
+  await ensurePassageRefTable(env);
+  const passageRefs = (await env.DB.prepare(
+    `SELECT pr.id, pr.user_id, pr.target_type, pr.line_id, pr.word_start, pr.word_end,
+            pr.end_line_id, pr.kind, pr.label, pr.artist, pr.note, pr.created_at,
+            pr.ref_song_id, pr.ref_line_id, pr.ref_end_line_id,
+            u.username, rs.slug AS ref_song_slug
+       FROM passage_references pr
+       JOIN users u ON u.id = pr.user_id
+       LEFT JOIN songs rs ON rs.id = pr.ref_song_id
+      WHERE pr.song_id = ?1
+      ORDER BY pr.created_at`
+  ).bind(song.id).all()).results;
+
+  // Références venues d'ailleurs et qui pointent vers ce morceau.
+  const inboundRefs = (await env.DB.prepare(
+    `SELECT pr.id, pr.user_id, pr.note, pr.created_at,
+            pr.ref_line_id, pr.ref_end_line_id,
+            rl.text AS ref_text, rl.line_number AS ref_line_number,
+            rle.text AS ref_end_text, rle.line_number AS ref_end_number,
+            pr.target_type, pr.word_start, pr.word_end,
+            u.username, src.title AS source_title, src.slug AS source_slug,
+            sl.text AS source_line_text, sle.text AS source_end_text
+       FROM passage_references pr
+       JOIN users u ON u.id = pr.user_id
+       JOIN songs src ON src.id = pr.song_id
+       LEFT JOIN lyric_lines rl ON rl.id = pr.ref_line_id
+       LEFT JOIN lyric_lines rle ON rle.id = pr.ref_end_line_id
+       LEFT JOIN lyric_lines sl ON sl.id = pr.line_id
+       LEFT JOIN lyric_lines sle ON sle.id = pr.end_line_id
+      WHERE pr.ref_song_id = ?1 AND pr.song_id <> ?1
+      ORDER BY pr.created_at`
+  ).bind(song.id).all()).results;
+
   // Interprétations d'ensemble et leurs connexions entre blocs.
   const essays = (await env.DB.prepare(
     `SELECT e.id, e.user_id, e.content, e.created_at, e.updated_at, e.is_published, u.username
@@ -636,7 +672,7 @@ async function getSong(env, request, slug) {
       `SELECT annotation_id AS id FROM annotation_references WHERE ref_song_id = ${song.id}`, inbound);
   }
 
-  return json({ song, lines, annotations, connections, essays, inbound, coverCount, allSongs });
+  return json({ song, lines, annotations, connections, essays, inbound, passageRefs, inboundRefs, coverCount, allSongs });
 }
 
 // Page dédiée aux reprises d'un morceau : distincte de la page
@@ -1417,6 +1453,92 @@ async function signsReset(request, env) {
   await ensureRiddleTable(env);
   await env.DB.prepare('DELETE FROM riddle_progress WHERE user_id = ?1').bind(user.id).run();
   return json({ ok: true, state: await riddleState(env, user.id) });
+}
+
+/* ---------------------------------- références autonomes sur un passage ---
+   Sur un passage, trois choses indépendantes peuvent être dites : une
+   interprétation, une référence à un passage d'un autre morceau, ou une
+   référence à une œuvre. Les deux dernières vivent ici, avec la même cible
+   qu'une annotation, et sans dépendre d'une interprétation.               */
+
+// Créée à la volée si la migration 0011 n'a pas encore été appliquée.
+let passageRefTableReady = false;
+async function ensurePassageRefTable(env) {
+  if (passageRefTableReady) return;
+  await env.DB.batch([
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS passage_references (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         song_id INTEGER NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+         target_type TEXT NOT NULL DEFAULT 'passage',
+         line_id INTEGER REFERENCES lyric_lines(id) ON DELETE CASCADE,
+         word_start INTEGER,
+         word_end INTEGER,
+         end_line_id INTEGER REFERENCES lyric_lines(id) ON DELETE CASCADE,
+         kind TEXT NOT NULL,
+         label TEXT NOT NULL,
+         artist TEXT,
+         note TEXT,
+         ref_song_id INTEGER REFERENCES songs(id) ON DELETE CASCADE,
+         ref_line_id INTEGER REFERENCES lyric_lines(id) ON DELETE CASCADE,
+         ref_end_line_id INTEGER REFERENCES lyric_lines(id) ON DELETE CASCADE,
+         created_at TEXT NOT NULL DEFAULT (datetime('now'))
+       )`
+    ),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_passage_refs_song ON passage_references(song_id)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_passage_refs_target ON passage_references(ref_song_id)'),
+  ]);
+  passageRefTableReady = true;
+}
+
+async function createPassageReference(request, env) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  const body = await readJson(request);
+  if (!body) return json({ error: 'Requête invalide.' }, 400);
+
+  const songId = Number(body.song_id);
+  const song = await env.DB.prepare('SELECT id FROM songs WHERE id = ?1').bind(songId).first();
+  if (!song) return json({ error: 'Chanson introuvable.' }, 404);
+
+  // La cible est décrite comme celle d'une annotation.
+  const targetType = ['song', 'title', 'line', 'word', 'passage'].includes(body.target_type)
+    ? body.target_type : 'passage';
+  const lineId = body.line_id == null ? null : Number(body.line_id);
+  const endLineId = body.end_line_id == null ? null : Number(body.end_line_id);
+  const wordStart = body.word_start == null ? null : Number(body.word_start);
+  const wordEnd = body.word_end == null ? null : Number(body.word_end);
+
+  const parsed = await parseReferences(env, [body]);
+  if (parsed instanceof Response) return parsed;
+  if (!parsed.length) return json({ error: 'Référence vide.' }, 400);
+  const r = parsed[0];
+  if (!r.note) return json({ error: 'Expliquez en quoi c’est une référence.' }, 400);
+
+  await ensurePassageRefTable(env);
+  await env.DB.prepare(
+    `INSERT INTO passage_references
+      (user_id, song_id, target_type, line_id, word_start, word_end, end_line_id,
+       kind, label, artist, note, ref_song_id, ref_line_id, ref_end_line_id)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`
+  ).bind(
+    user.id, songId, targetType, lineId, wordStart, wordEnd, endLineId,
+    r.ref_line_id ? 'internal' : 'work', r.label, r.artist, r.note,
+    r.ref_song_id || null, r.ref_line_id || null, r.ref_end_line_id || null
+  ).run();
+  return json({ ok: true });
+}
+
+async function deletePassageReference(request, env, id) {
+  let user;
+  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  await ensurePassageRefTable(env);
+  const row = await env.DB.prepare('SELECT id, user_id FROM passage_references WHERE id = ?1').bind(id).first();
+  if (!row) return json({ error: 'Référence introuvable.' }, 404);
+  if (row.user_id !== user.id && !user.is_admin) return json({ error: 'Action non autorisée.' }, 403);
+  await env.DB.prepare('DELETE FROM passage_references WHERE id = ?1').bind(id).run();
+  return json({ ok: true });
 }
 
 /* ------------------------------------------------- favoris & commentaires */

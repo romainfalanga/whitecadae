@@ -1089,3 +1089,52 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .feed-card .annotation-body { white-space: pre-wrap; }
 .feed-foot { color: var(--text-dim); font-size: 0.82rem; margin-top: 0.5rem; }
 .feed-more { text-align: center; margin-top: 1.5rem; }
+
+@media (max-width: 700px) {
+  /* le bouton passe sous le titre : il lui faut sa respiration avant la liste */
+  .feed-block-head { flex-direction: column; align-items: stretch; gap: 0.6rem; }
+  .feed-block-head h2 { margin: 1.2rem 0 0; }
+  .feed-block-head .btn { text-align: center; }
+  .feed-block-head + .feed-list,
+  .feed-block-head + .covers-grid { margin-top: 1.4rem; }
+}
+
+/* ------------------------------- écrire : interprétation ou référence --- */
+
+/* Trois natures de contribution, présentées de la plus fréquente à la plus
+   rare. On choisit d'abord laquelle : ce ne sont pas des annexes l'une de
+   l'autre. */
+.composer { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.9rem; }
+.write-picker { display: flex; flex-direction: column; gap: 0.45rem; }
+.write-picker[hidden] { display: none; }
+.write-pick {
+  text-align: left;
+  font-size: 0.92rem;
+  padding: 0.65rem 0.9rem;
+  border-color: rgba(216, 192, 122, 0.35);
+}
+.write-pick:hover { background: var(--accent-soft); }
+.write-pick:first-child { border-color: var(--accent); color: var(--accent); }
+
+.composer-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.9rem; }
+.composer-actions .primary { flex: 1; }
+
+/* Une référence posée sur un passage : son propre bloc, à côté des
+   interprétations et non dedans. */
+.ref-group { margin-top: 1rem; }
+.ref-group h4 {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  margin-bottom: 0.45rem;
+}
+.ref-block {
+  border: 1px solid rgba(216, 192, 122, 0.3);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: rgba(216, 192, 122, 0.04);
+  padding: 0.65rem 0.8rem;
+  margin-bottom: 0.5rem;
+}
+.ref-block .annotation-head { margin-top: 0.45rem; }
