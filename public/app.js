@@ -141,6 +141,11 @@ async function route() {
   if (path === '/inscription') return pageRegister();
   if (path === '/admin') return pageAdmin();
 
+  // Le profil est public : on y lit l'échelon d'un membre et les énigmes
+  // qu'il a percées sans rien avoir trouvé soi-même. Ce qu'il a écrit reste
+  // soumis à l'accès de celui qui regarde — le serveur s'en charge.
+  if ((m = path.match(/^\/membre\/([^/]+)$/))) return pageProfile(decodeURIComponent(m[1]));
+
   // Une page qu'on n'a pas encore atteinte ne se discute pas : on revient au
   // 57, sans un mot.
   const cle = (path === '/reprises' || path === '/reprises/fil'
@@ -157,7 +162,6 @@ async function route() {
   if (path === '/fil') return pageFeed();
   if ((m = path.match(/^\/chanson\/([^/]+)\/reprises$/))) return pageSongCovers(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
-  if ((m = path.match(/^\/membre\/([^/]+)$/))) return pageProfile(decodeURIComponent(m[1]));
   app.innerHTML = '<h1>Page introuvable</h1><p><a href="/interpretations" data-link>Retour aux interprétations</a></p>';
 }
 
@@ -373,11 +377,9 @@ function renderNav() {
   // pas besoin de la dupliquer dans le menu.
   if (u) {
     if (u.is_admin) liens.push('<a href="/admin" data-link>Administration</a>');
-    // Sans profil ouvert, il faut tout de même pouvoir régler son compte et
-    // se déconnecter : le menu mène alors droit aux paramètres.
-    liens.push(a.interpretations && a.porteInterpretations
-      ? `<a href="${profileHref(u.username)}" data-link>Mon profil</a>`
-      : '<button type="button" class="nav-account" id="nav-settings">Mon compte</button>');
+    // Le profil est public et porte l'échelon : le menu y mène dès la
+    // connexion, et c'est aussi par là qu'on règle son compte.
+    liens.push(`<a href="${profileHref(u.username)}" data-link>Mon profil</a>`);
   } else {
     liens.push('<a href="/connexion" data-link>Se connecter</a>');
     liens.push('<a href="/inscription" data-link class="btn">Créer un compte</a>');
@@ -1152,9 +1154,9 @@ function renderSongPage() {
         ✍ Interpréter le titre${countFor('title') ? ` · ${countFor('title')}` : ''}
       </button>
       ${song.youtube_url ? `<a class="target-chip" href="${esc(song.youtube_url)}" target="_blank" rel="noopener">▶ Écouter</a>` : ''}
-      <a class="target-chip" href="/chanson/${encodeURIComponent(song.slug)}/reprises" data-link>
+      ${state.access.reprises ? `<a class="target-chip" href="/chanson/${encodeURIComponent(song.slug)}/reprises" data-link>
         🎬 Reprises${state.song.coverCount ? ` · ${state.song.coverCount}` : ''}
-      </a>
+      </a>` : ''}
     </div>
     <div class="song-layout">
       <div>
@@ -1237,7 +1239,7 @@ function renderSongModal() {
     ${anns.map((a) => annotationCard(a)).join('')
       || '<p class="empty-note">Aucune interprétation de ce morceau pour l’instant.</p>'}
     ${refBlocks((r) => r.target_type === 'title' || r.target_type === 'song')}
-    ${composerHtml()}`;
+    ${composerHtml(true)}`;
 
   backdrop.hidden = false;
   modal.hidden = false;
@@ -1804,6 +1806,8 @@ function refEditorFree() {
     <label>En quoi est-ce une référence ?</label>
     <textarea class="ref-note" rows="5" maxlength="2000"
       placeholder="Ce qui, pour vous, relie ce passage à cette œuvre…"></textarea>
+    <div class="ref-grip ref-grip-note" role="separator" aria-label="Redimensionner la zone d’écriture"
+         title="Faire glisser pour agrandir ou réduire"><span></span></div>
     <div class="ref-editor-actions">
       <button type="button" class="primary ref-commit">Ajouter cette référence</button>
       <button type="button" class="link-btn ref-cancel">Annuler</button>
@@ -1832,6 +1836,8 @@ function refEditorInternal() {
     <label>En quoi est-ce une référence ?</label>
     <textarea class="ref-note" rows="5" maxlength="2000"
       placeholder="Ce qui relie ce passage à celui-là…"></textarea>
+    <div class="ref-grip ref-grip-note" role="separator" aria-label="Redimensionner la zone d’écriture"
+         title="Faire glisser pour agrandir ou réduire"><span></span></div>
     <div class="ref-editor-actions">
       <button type="button" class="primary ref-commit">Ajouter cette référence</button>
       <button type="button" class="link-btn ref-cancel">Annuler</button>
@@ -1849,6 +1855,9 @@ function bindRefGrip(box, grip) {
   let hauteur = 0;
   const bouge = (e) => {
     const h = Math.max(80, Math.min(600, hauteur + (e.clientY - depart)));
+    // les trois, pour que la règle tienne aussi bien sur une boîte à
+    // défilement que sur un textarea, qui porte déjà un min-height
+    box.style.minHeight = `${h}px`;
     box.style.maxHeight = `${h}px`;
     box.style.height = `${h}px`;
   };
@@ -1872,10 +1881,14 @@ function bindRefGrip(box, grip) {
 // Affiche le texte du morceau choisi et y gère la sélection d'un passage :
 // un vers, puis un second pour étendre. Un nouvel appui sur le premier annule.
 function bindRefSongPicker(editor) {
+  // La zone d'écriture s'agrandit dans les deux sortes de référence : on la
+  // câble avant tout, même quand il n'y a pas de morceau à choisir.
+  bindRefGrip(editor.querySelector('.ref-note'), editor.querySelector('.ref-grip-note'));
+
   const songSel = editor.querySelector('.ref-song');
   if (!songSel) return;
   const box = editor.querySelector('.ref-lines');
-  const grip = editor.querySelector('.ref-grip');
+  const grip = editor.querySelector('.ref-grip:not(.ref-grip-note)');
   const picked = editor.querySelector('.ref-picked');
   const hint = editor.querySelector('.ref-hint');
   bindRefGrip(box, grip);
@@ -2164,12 +2177,15 @@ function refBlocks(pred) {
 let composerSeq = 0;
 function resetComposers() { composerSeq = 0; }
 
-function composerHtml() {
+// `seulInterp` : sur le morceau pris en entier, on n'écrit qu'une
+// interprétation — pas de référence. Le choix n'a alors plus lieu d'être, et
+// le formulaire s'ouvre directement.
+function composerHtml(seulInterp) {
   if (!state.user) {
     return '<p class="empty-note"><a href="/connexion" data-link>Connectez-vous</a> pour contribuer.</p>';
   }
-  return `<div class="composer" data-composer="${composerSeq++}">
-    <div class="write-picker">
+  return `<div class="composer" data-composer="${composerSeq++}"${seulInterp ? ' data-seul="1"' : ''}>
+    <div class="write-picker"${seulInterp ? ' hidden' : ''}>
       <button type="button" class="btn write-pick" data-mode="interp">✍ Interprétation</button>
       <button type="button" class="btn write-pick" data-mode="internal">♪ Référence à un passage</button>
       <button type="button" class="btn write-pick" data-mode="work">◆ Référence à une œuvre</button>
@@ -2183,7 +2199,18 @@ function bindComposer(container, index, payload, placeholder, buttonLabel, nextG
   if (!comp) return;
   const slot = comp.querySelector('.write-slot');
   const picker = comp.querySelector('.write-picker');
-  const close = () => { slot.innerHTML = ''; picker.hidden = false; };
+  const seul = comp.dataset.seul === '1';
+  const close = () => { slot.innerHTML = ''; picker.hidden = seul; if (seul) ouvreInterp(); };
+
+  // Sans choix à faire, le champ d'interprétation est là d'emblée.
+  const ouvreInterp = () => {
+    slot.innerHTML = annotationForm('panel-ann-form', placeholder, buttonLabel, nextGrid);
+    bindAnnotationForm('panel-ann-form', payload);
+    const annuler = slot.querySelector('.composer-cancel');
+    if (annuler) annuler.hidden = seul;
+    if (annuler && !seul) annuler.onclick = close;
+  };
+  if (seul) { ouvreInterp(); return; }
 
   comp.querySelectorAll('.write-pick').forEach((b) => {
     b.onclick = async () => {
@@ -2671,6 +2698,24 @@ function refTargetHtml(r) {
   return `<div class="tl-ref-target">${cible}</div>`;
 }
 
+// L'échelon d'un membre et les énigmes qu'il a percées : publics, et lisibles
+// par n'importe qui. Jamais les réponses — seulement le nom de ce qui a été
+// trouvé, tel que le serveur autorise celui qui regarde à le nommer.
+function jeuHtml(jeu) {
+  if (!jeu) return '';
+  const liste = jeu.enigmes.length
+    ? `<ul class="jeu-liste">${jeu.enigmes.map((e) => `
+        <li>
+          <span class="jeu-source">${e.source ? esc(e.source) : '<em>—</em>'}</span>
+          <span class="jeu-compte">${e.found}${e.total ? `<span>/${e.total}</span>` : ''}</span>
+        </li>`).join('')}</ul>`
+    : '<p class="empty-note">Aucune énigme percée pour l’instant.</p>';
+  return `<section class="jeu-bloc">
+    <div class="jeu-echelon"><span>Échelon</span> <strong>${jeu.echelon}</strong></div>
+    ${liste}
+  </section>`;
+}
+
 async function pageProfile(username) {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
@@ -2683,7 +2728,7 @@ async function pageProfile(username) {
   }
   if (stale(epoch)) return;
 
-  const { user, stats, annotations, essays, passageRefs, connections, versions, covers } = data;
+  const { user, jeu, stats, annotations, essays, passageRefs, connections, versions, covers } = data;
   const isMe = state.user && state.user.username === user.username;
 
   // Tout ce qu'a fait ce membre devient une entrée datée, puis le fil se
@@ -2752,14 +2797,15 @@ async function pageProfile(username) {
       ${isMe ? `<button type="button" class="icon-btn" id="settings-btn"
         title="Paramètres du compte" aria-label="Paramètres du compte">⚙</button>` : ''}
     </div>
+    ${jeuHtml(jeu)}
     ${isMe ? `<div class="profile-publish">
       <button type="button" class="primary" id="publish-btn" ${pending ? '' : 'disabled'}>
         Publier la version actuelle${pending ? ` · ${pending}` : ''}
       </button>
       <div class="error-msg" id="publish-error"></div>
     </div>` : ''}
-    <div class="timeline">${entries.map((e) => e.html).join('')
-      || '<p class="empty-note">Rien pour l’instant.</p>'}</div>`;
+    ${data.restreint ? '' : `<div class="timeline">${entries.map((e) => e.html).join('')
+      || '<p class="empty-note">Rien pour l’instant.</p>'}</div>`}`;
 
   if (isMe) {
     document.getElementById('settings-btn').onclick = () => openSettings();

@@ -410,6 +410,8 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
   transition: background 0.15s;
 }
 .ref-grip:hover span, .ref-grip--actif span { background: var(--accent); }
+/* celle du champ d'écriture se colle sous lui */
+.ref-grip-note { margin-top: -0.2rem; margin-bottom: 0.3rem; }
 .ref-line {
   display: block;
   width: 100%;
@@ -745,6 +747,52 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 
 .settings-avatar-row { display: flex; align-items: center; gap: 1rem; }
 .settings-avatar-row label.btn { margin: 0; }
+
+/* ------------------------------------------- l'échelon, sur un profil ---
+   Public : l'échelon d'un membre et les énigmes qu'il a percées se lisent
+   sans rien avoir trouvé soi-même. Jamais les réponses.                  */
+
+.jeu-bloc {
+  background: var(--bg-card);
+  border: 1px solid rgba(216, 192, 122, 0.3);
+  border-radius: 14px;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.jeu-echelon {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding-bottom: 0.8rem;
+  margin-bottom: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+.jeu-echelon span {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-dim);
+}
+.jeu-echelon strong {
+  font-family: var(--serif);
+  font-size: 2.1rem;
+  font-weight: normal;
+  color: var(--accent);
+  line-height: 1;
+}
+.jeu-liste { list-style: none; display: grid; gap: 0.1rem; }
+.jeu-liste li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.jeu-liste li:last-child { border-bottom: none; }
+.jeu-source { font-family: var(--serif); flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.jeu-source em { color: var(--accent); font-style: normal; letter-spacing: 0.3em; }
+.jeu-compte { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+.jeu-compte span { color: var(--text-dim); font-size: 0.78rem; }
 
 /* ---------------------------------------------------- le fil d'un profil
 

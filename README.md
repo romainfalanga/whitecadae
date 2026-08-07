@@ -31,27 +31,39 @@ rouvrirait le « copier / rechercher sur le Web » du navigateur.
 
 Chaque interprétation peut porter des **références** : une œuvre extérieure
 (son nom, son artiste, et en quoi c'en est une) ou un **passage d'un autre
-morceau**, choisi en le sélectionnant directement dans son texte — une
-poignée permet d'y donner plus de place au texte ou au champ d'écriture,
-selon ce qu'on est en train de faire. Une référence interne apparaît des deux côtés — sur
+morceau**, choisi en le sélectionnant directement dans son texte. **Deux
+poignées** y règlent la place : l'une sous la zone où l'on choisit le passage,
+l'autre sous le champ où l'on écrit. Une référence interne apparaît des deux côtés — sur
 l'interprétation qui la pose, et sur la page du morceau visé. Chacune se
 compose dans son propre éditeur et se publie avec son propre bouton, y
 compris après coup sur une interprétation déjà en ligne.
 
 Le morceau pris en entier s'interprète dans une **fenêtre ouverte par la
-pastille « Interpréter le titre »**, en haut de chaque page. Un seul bloc :
-ce qu'on dit du morceau, et de quoi le relier à d'autres par une référence.
-Les interprétations d'ensemble et les connexions ne sont plus proposées à
-l'écriture ; celles qui existent restent en base et s'affichent dans le fil
-des profils.
+pastille « Interpréter le titre »**, en haut de chaque page. Un seul bloc, et
+une seule chose à y écrire : l'interprétation. Pas de référence ici — le champ
+s'ouvre donc directement, sans choix préalable. Les interprétations d'ensemble
+et les connexions ne sont plus proposées à l'écriture ; celles qui existent
+restent en base et s'affichent dans le fil des profils.
 
-La **page de profil est un fil**, et rien d'autre : tout ce qu'un membre a
-fait ici, du plus récent au plus ancien, daté entrée par entrée —
+La pastille **Reprises** n'apparaît sur une page de chanson qu'une fois cette
+page-là ouverte par l'échelon.
+
+La **page de profil est publique** : n'importe qui, même sans compte, y lit
+l'échelon d'un membre et les énigmes qu'il a percées — le nom de l'élément et
+le nombre de mots de passe trouvés, **jamais les réponses**. Un élément dont
+le libellé est lui-même la réponse d'un autre y reste masqué tant que *celui
+qui regarde* ne l'a pas ouvert de son côté, sans quoi un profil deviendrait
+une antisèche.
+
+En dessous, un **fil** : tout ce que ce membre a fait ici, du plus récent au
+plus ancien, daté entrée par entrée —
 interprétations (jusqu'au passage), interprétations d'ensemble, références,
 connexions, reprises, et les publications qui ont rendu tout cela visible.
-Ni compteurs, ni présentation, ni sections. Le membre y trouve le bouton qui
-publie l'état actuel de ses interprétations : tant qu'il ne l'a pas pressé,
-ce qu'il écrit reste en brouillon, visible de lui seul.
+Ni compteurs, ni présentation, ni sections. Ce fil-là suit l'accès de celui
+qui regarde : sans les interprétations ouvertes, on ne voit que l'échelon et
+les énigmes. Le membre y trouve le bouton qui publie l'état actuel de ses
+interprétations : tant qu'il ne l'a pas pressé, ce qu'il écrit reste en
+brouillon, visible de lui seul.
 
 Dimension sociale : tout est public en lecture, et chaque interprétation
 ou connexion peut recevoir des **favoris (♥)** et des **commentaires**
@@ -88,41 +100,42 @@ ne correspond à aucune réponse), donc un rechargement ne le fait pas sauter.
 Rien ne l'annonce et rien ne l'explique : le décompte prend simplement la
 place du bouton, et tout revient de soi-même.
 
-Il grandit avec l'échelon (`delaiEssaiMs`) — en bas on tâtonne, en haut chaque
-proposition engage la journée :
+Il grandit avec l'échelon (`delaiEssaiMs`), sur les trois nombres du disque —
+**12, 33, 57** — repris d'une unité à l'autre :
 
-| Échelon | Attente |
-| --- | --- |
-| 0 | 1 minute |
-| 1 | 5 minutes |
-| 2 | 1 heure |
-| 3 | 2 heures |
-| n ≥ 2 | n − 1 heures, plafonné à 24 |
+| Échelon | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 et au-delà |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Attente | 33 s | 57 s | 12 min | 33 min | 57 min | 12 h | 33 h | 57 h |
+
+La suite s'arrête sur son dernier palier plutôt que de passer aux jours : les
+multiplicateurs font bondir l'échelon (jusqu'à 37) et un seul essai malheureux
+ne doit pas fermer la porte des semaines.
 
 Le délai est relu à chaque vérification : monter d'un cran allonge donc
 l'attente en cours. C'est une propriété de là où l'on est, pas du moment où
-l'on a tenté. Le plafond de 24 heures existe parce que les multiplicateurs
-font bondir l'échelon (3, 6, 18…) et qu'un seul essai malheureux ne doit pas
-fermer la porte plusieurs jours.
+l'on a tenté.
 
 ### Les échelons
 
-`echelon = ⌊ordinaires / 3⌋ × 3^multiplicateurs`
+`echelon = ⌊ordinaires / 3⌋ × 3^multiplicateurs + 1`
 
-Les mots de passe ordinaires font monter d'un cran tous les trois ; ceux du
-bloc muet ne font pas monter — ils **multiplient** par trois. Deux d'entre eux
-multiplient donc par neuf. Multiplier zéro ne donne rien : il faut d'abord
-gravir un premier cran. La barre de progression montre le chemin restant dans
-le cran en cours, jamais la progression dans le jeu entier.
+On est à l'échelon **1** dès l'arrivée : c'est le sol, pas une récompense. Ce
+qu'on gravit ensuite, ce sont les **crans** — trois mots de passe ordinaires
+chacun — et ce sont eux que les mots du bloc muet **triplent**. Deux d'entre
+eux multiplient donc par neuf. Multiplier zéro cran ne fait pas décoller : il
+faut d'abord en gravir un. La barre de progression montre le chemin restant
+dans le cran en cours, jamais la progression dans le jeu entier.
 
 L'échelon **commande l'accès au site**, et pas seulement l'affichage des liens
 (`accessOf`) :
 
 | Échelon | Ce qui s'ouvre |
 | --- | --- |
-| 0 | la page 57, et rien d'autre |
-| 1 | la page Interprétations apparaît — mais vide, voir les portes |
-| 6 | les Reprises |
+| 1 | la page 57, et rien d'autre |
+| 2 | la page Interprétations apparaît — mais vide, voir les portes |
+| 3 | les Reprises |
+
+Le maximum atteignable est 37 (douze ordinaires, deux multiplicateurs).
 
 Le tout premier bloc **occupe toute la largeur** et s'entoure d'un halo doré
 (`.enigme--graal`, posé sur les blocs dont le serveur ne donne pas le total) :
@@ -146,9 +159,7 @@ Le **minuteur est commun** à tous les mots de passe du site : un essai sur une
 porte ferme aussi ceux du 57, et réciproquement. Une porte déjà franchie ne
 consomme pas d'essai.
 
-Comme les mots de passe ordinaires plafonnent à l'échelon 4, les **Reprises
-sont hors d'atteinte sans un multiplicateur** : six ordinaires et un mot du
-bloc muet y mènent. Le barrage est appliqué dans le routeur du Worker, pas
+Le barrage est appliqué dans le routeur du Worker, pas
 seulement dans l'interface — masquer un lien n'a jamais fermé une porte. Le
 compte et son avatar y échappent, sans quoi on ne pourrait plus se
 déconnecter, et **l'artiste (`is_admin`) en est exempté** : il ne peut pas se

@@ -331,6 +331,10 @@ for (const node of NODES) {
   for (const a of node.answers) (node.multiplies ? MULTIPLIER_ANSWERS : ORDINARY_ANSWERS).add(a.id);
 }
 
+// On est à l'échelon 1 dès l'arrivée : c'est le sol, pas une récompense. Ce
+// qu'on gravit ensuite, ce sont les crans — trois mots de passe ordinaires
+// chacun — et ce sont eux que les multiplicateurs triplent. Multiplier zéro
+// cran ne donne toujours rien : il faut d'abord en gravir un.
 export function echelonOf(solved) {
   let ordinaires = 0;
   let facteur = 1;
@@ -338,13 +342,13 @@ export function echelonOf(solved) {
     if (ORDINARY_ANSWERS.has(id)) ordinaires += 1;
     else if (MULTIPLIER_ANSWERS.has(id)) facteur *= 3;
   }
-  return Math.floor(ordinaires / PAR_ECHELON) * facteur;
+  return Math.floor(ordinaires / PAR_ECHELON) * facteur + 1;
 }
 
 // Ce que l'échelon ouvre. La page 57 est toujours là : c'est par elle qu'on
-// entre, et elle seule tant qu'on n'a rien trouvé.
-export const ECHELON_INTERPRETATIONS = 1;
-export const ECHELON_REPRISES = 6;
+// entre, et elle seule tant qu'on n'a gravi aucun cran.
+export const ECHELON_INTERPRETATIONS = 2;
+export const ECHELON_REPRISES = 3;
 
 /* ------------------------------------------------------------- les portes
 
@@ -377,6 +381,30 @@ export const PORTES = {
   },
 };
 
+/* Ce qu'un membre a trouvé, tel qu'un autre a le droit de le voir : le nom de
+   l'élément, jamais la réponse. Un nœud dont le libellé est lui-même la
+   réponse d'un autre reste masqué tant que CELUI QUI REGARDE ne l'a pas
+   ouvert de son côté — sans quoi un profil deviendrait une antisèche.     */
+export function enigmesTrouvees(solvedCible, solvedVisiteur = new Set()) {
+  const desNoeuds = NODES.map((node) => {
+    const trouves = node.answers.filter((a) => solvedCible.has(a.id)).length;
+    if (!trouves) return null;
+    return {
+      id: node.id,
+      source: sourceOf(node, isLocked(node, solvedVisiteur)),
+      found: trouves,
+      total: node.silent ? null : node.answers.length,
+    };
+  }).filter(Boolean);
+
+  const desPortes = Object.entries(PORTES).map(([nom, porte]) => {
+    const trouves = porte.answers.filter((a) => solvedCible.has(a.id)).length;
+    return trouves ? { id: `porte-${nom}`, source: porte.source, found: trouves, total: porte.answers.length } : null;
+  }).filter(Boolean);
+
+  return [...desNoeuds, ...desPortes];
+}
+
 export function getPorte(nom) {
   return Object.prototype.hasOwnProperty.call(PORTES, nom) ? PORTES[nom] : null;
 }
@@ -408,12 +436,20 @@ export function matchPorte(nom, answer, solved) {
    24 heures évite qu'un seul essai malheureux ne ferme la porte plusieurs
    jours.                                                                 */
 
-export const ATTENTE_PLAFOND_H = 24;
+// 12, 33, 57 — les trois nombres du disque, repris d'une unité à l'autre :
+// secondes, puis minutes, puis heures. L'échelon 1 démarre au deuxième cran
+// de la suite (33 s), l'échelon 2 au troisième (57 s), et ainsi de suite.
+const SUITE = [12, 33, 57];
+const UNITES = [1000, 60 * 1000, 60 * 60 * 1000];
+
+// La suite complète : 12 s, 33 s, 57 s, 12 min, 33 min, 57 min, 12 h, 33 h,
+// 57 h. Au-delà, on s'arrête sur le dernier palier plutôt que de passer aux
+// jours — un seul essai malheureux ne doit pas fermer la porte des semaines.
+export const PALIERS = UNITES.flatMap((u) => SUITE.map((n) => n * u));
 
 export function delaiEssaiMs(echelon) {
-  if (echelon <= 0) return 60 * 1000;
-  if (echelon === 1) return 5 * 60 * 1000;
-  return Math.min(echelon - 1, ATTENTE_PLAFOND_H) * 60 * 60 * 1000;
+  const i = Math.max(0, Math.min(echelon, PALIERS.length - 1));
+  return PALIERS[i];
 }
 
 export function accessOf(echelon, solved = new Set()) {

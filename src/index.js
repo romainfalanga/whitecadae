@@ -2,7 +2,7 @@
 
 import {
   getNode, isLocked, matchAnswer, buildState, currentAnswerId, echelonOf, accessOf,
-  getPorte, matchPorte, porteOuverte, PORTES, delaiEssaiMs,
+  getPorte, matchPorte, porteOuverte, PORTES, delaiEssaiMs, enigmesTrouvees,
 } from './enigmas57.js';
 
 const SESSION_COOKIE = 'wc_session';
@@ -48,6 +48,11 @@ async function handleApi(request, env, url) {
   // --- l'avatar n'est barré par rien : il s'affiche jusque dans le menu
   if ((p = route('GET', '/api/users/:username/avatar'))) return getAvatar(env, p[0]);
 
+  // --- le profil est public : on y lit l'échelon d'un membre et les énigmes
+  //     qu'il a percées. Ce qu'il a écrit, lui, reste soumis à l'accès de
+  //     celui qui regarde (voir getProfile).
+  if ((p = route('GET', '/api/users/:username'))) return getProfile(env, request, p[0]);
+
   // --- le 57 : la porte d'entrée, ouverte à tout membre
   if (route('GET', '/api/57')) return signsState(request, env);
   if (route('POST', '/api/57/guess')) return signsGuess(request, env);
@@ -83,7 +88,6 @@ async function handleApi(request, env, url) {
   if (route('GET', '/api/covers')) return listCovers(env, request);
   if ((p = route('GET', '/api/songs/:slug/covers'))) return getSongCovers(env, request, p[0]);
   if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
-  if ((p = route('GET', '/api/users/:username'))) return getProfile(env, request, p[0]);
 
   // --- contributions (connecté)
   if (route('POST', '/api/annotations')) return createAnnotation(request, env);
@@ -807,6 +811,9 @@ async function attachSocial(env, viewer, kind, idSubquery, items) {
 // morceau, dans l'ordre des albums puis des morceaux puis de la position
 // dans le texte. Un visiteur ne voit que ce que le membre a publié ; le
 // membre lui-même voit aussi ses brouillons en attente de publication.
+// Le profil se lit sans rien avoir trouvé : l'échelon d'un membre et les
+// énigmes qu'il a percées sont publics. Ce qu'il a ÉCRIT, en revanche, suit
+// l'accès de celui qui regarde — on ne contourne pas les portes par ici.
 async function getProfile(env, request, username) {
   await ensureReferenceColumns(env);
   const user = await env.DB.prepare(
@@ -816,6 +823,27 @@ async function getProfile(env, request, username) {
 
   const viewer = await getUser(request, env);
   const isOwner = viewer && viewer.id === user.id ? 1 : 0;
+
+  // La part publique : l'échelon, et les énigmes trouvées telles que celui
+  // qui regarde a le droit de les nommer.
+  const solvedCible = new Set(
+    (await riddleRows(env, user.id)).filter((r) => r.solved_at).map((r) => r.riddle_id)
+  );
+  const vu = await viewerAccess(request, env);
+  const jeu = {
+    echelon: echelonOf(solvedCible),
+    enigmes: enigmesTrouvees(solvedCible, vu.solved),
+  };
+
+  if (!(vu.access.interpretations && vu.access.porteInterpretations)) {
+    return json({
+      user: { username: user.username, created_at: user.created_at, is_admin: !!user.is_admin },
+      jeu,
+      restreint: true,
+      stats: { draft_count: 0 },
+      annotations: [], essays: [], passageRefs: [], connections: [], versions: [], covers: [],
+    });
+  }
 
   const annotations = (await env.DB.prepare(
     `SELECT a.id, a.target_type, a.content, a.created_at, a.updated_at, a.is_published, a.grid_number,
@@ -942,6 +970,7 @@ async function getProfile(env, request, username) {
 
   return json({
     user: { username: user.username, created_at: user.created_at, is_admin: !!user.is_admin },
+    jeu,
     stats, annotations, essays, passageRefs, connections, versions, covers,
   });
 }
