@@ -870,7 +870,6 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 }
 .progress-text { font-size: 0.85rem; color: var(--text-dim); margin-top: 0.35rem; }
 .progress-text strong { color: var(--accent); font-size: 1rem; }
-.progress-sub { margin-left: 0.4rem; }
 
 .enigmes-toc { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
 
@@ -882,8 +881,7 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
   margin-bottom: 1.25rem;
   scroll-margin-top: 9rem;
 }
-.enigme-branch h2 { margin: 0 0 0.25rem; }
-.branch-intro { color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1.4rem; }
+.enigme-branch h2 { margin: 0 0 1.3rem; }
 
 /* --- l'arborescence -------------------------------------------------------
    Un seul DOM, deux lectures :
@@ -972,33 +970,30 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
   border-radius: var(--radius);
   padding: 0.9rem 1rem;
 }
+/* combien de sens porte cet élément, et combien sont trouvés — le seul
+   chiffre de la page, à la place d'une phrase d'explication */
+.enigme-count {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.7rem;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
 
 .enigme-line {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 0.5rem;
+  padding-right: 2.4rem; /* place pour le compteur */
   font-family: var(--serif);
   font-size: 1.05rem;
 }
+.enigme-line + .enigme-line { margin-top: 0.3rem; }
+.enigme-line + .enigme-form { margin-top: 0.6rem; }
 .enigme-eq, .enigme-blank { color: var(--text-dim); }
 .enigme-answer { color: var(--accent); font-size: 1.2rem; }
-.enigme-rank {
-  font-family: var(--sans);
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-dim);
-  margin-bottom: 0.4rem;
-}
-.enigme-badge {
-  font-family: var(--sans);
-  font-size: 0.7rem;
-  padding: 0.1rem 0.5rem;
-  border-radius: 99px;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-}
 
 .enigme-form { display: flex; align-items: center; gap: 0.5rem; }
 .enigme-form .enigme-eq { font-family: var(--serif); font-size: 1.15rem; }
@@ -1017,47 +1012,22 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 }
 
 .enigme-msg { color: var(--danger); font-size: 0.85rem; margin-top: 0.45rem; min-height: 1.2rem; }
-.enigme-actions { margin-top: 0.35rem; }
-.enigme-actions .link-btn { padding: 0.5rem 0; font-size: 0.85rem; }
 
-.enigme-hints { list-style: none; margin-top: 0.5rem; }
-.enigme-hints li {
-  font-size: 0.88rem;
-  color: var(--text-dim);
-  border-left: 2px solid var(--border);
-  padding: 0.25rem 0 0.25rem 0.7rem;
-  margin-bottom: 0.4rem;
-}
-.enigme-hint-num {
-  display: block;
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--accent);
-}
 
-.enigme-reveal { font-size: 0.93rem; margin-top: 0.6rem; }
-.enigme-quotes { list-style: none; margin-top: 0.8rem; }
-.enigme-quotes li {
-  border-left: 2px solid var(--accent);
-  padding-left: 0.7rem;
-  margin-bottom: 0.5rem;
-}
-.enigme-quote { display: block; font-family: var(--serif); font-size: 0.92rem; color: var(--text-dim); }
-.enigme-quotes a { font-size: 0.78rem; }
 
 .enigme--solved { border-color: rgba(216, 192, 122, 0.5); background: rgba(216, 192, 122, 0.05); }
-.enigme--revealed { border-style: dashed; }
-.enigme--revealed .enigme-answer { color: var(--text-dim); }
+.enigme--partial { border-color: rgba(216, 192, 122, 0.28); }
 .enigme--locked { border-style: dashed; }
-.enigme-locked-note { font-size: 0.85rem; color: var(--text-dim); margin-top: 0.5rem; }
-.enigme-locked-note .link-btn { font-size: 0.85rem; padding: 0.45rem 0.15rem; color: var(--accent); }
+/* verrouillé : un cadenas et le nom de ce qui manque, rien d'autre */
+.enigme-locked-note { display: flex; align-items: center; flex-wrap: wrap; gap: 0.15rem; margin-top: 0.5rem; }
+.enigme-lock { font-size: 0.85rem; margin-right: 0.3rem; }
+.enigme-locked-note .link-btn { font-size: 0.85rem; padding: 0.45rem 0.3rem; color: var(--accent); }
 
 /* --- convergences : là où deux chemins disent la même chose --------------- */
 
 .convergence {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.75rem;
   margin-top: 1.4rem;
   padding: 0.9rem 1rem;
@@ -1073,11 +1043,8 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 }
 .conv-mark { color: var(--text-dim); font-size: 1.1rem; line-height: 1.4; }
 .convergence--open .conv-mark { color: var(--accent); }
-.convergence strong { font-family: var(--serif); font-size: 1.05rem; font-weight: normal; }
-.convergence--open strong { color: var(--accent); font-size: 1.25rem; }
-.convergence p { font-size: 0.87rem; margin-top: 0.15rem; }
+.convergence strong { font-family: var(--serif); font-weight: normal; color: var(--accent); font-size: 1.25rem; }
 
-.enigmes-reset { text-align: center; margin-top: 1.75rem; }
 
 /* --- retours au doigt ----------------------------------------------------- */
 

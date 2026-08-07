@@ -22,27 +22,31 @@ des autres membres.
 
 ## La page « 57 »
 
-`/57` est un jeu : reconstituer l'arborescence des mots de passe cachés
-dans l'EP **57**. Partout où il y a un « = », il y a une réponse à trouver
-— `57 = ange`, `13h20 = 2031`, `M = M`… Certaines branches se **rejoignent**
-(57 et trompette disent la même chose), d'autres se **verrouillent** tant
-que leur prérequis n'est pas trouvé (`10 mains` n'apparaît qu'après
-`Prends la bête à …`). Chaque réponse trouvée déroule son explication et
-les vers qui la prouvent, avec un lien vers le morceau.
+`/57` est un escape game : reconstituer l'arborescence des mots de passe
+cachés dans l'EP **57**. Partout où il y a un « = », il y a un mot de passe
+à trouver. Aucun texte, aucune explication, aucun indice — un élément, un
+« = », un champ.
+
+Un même élément peut porter plusieurs sens : dans ce cas il n'a qu'un seul
+champ, et les réponses s'y ajoutent une à une, dans n'importe quel ordre
+(un compteur `1/2` indique combien il en reste). Certaines branches se
+**rejoignent** — deux éléments différents aboutissent au même mot — et
+d'autres se **verrouillent** tant que leurs prérequis ne sont pas trouvés,
+en masquant même leur libellé quand celui-ci est la réponse du précédent.
 
 La page est réservée aux membres : la progression est enregistrée sur le
-compte (`riddle_progress`), donc conservée d'un appareil à l'autre. Trois
-indices par énigme sont délivrés à la demande, puis la réponse peut être
-révélée en dernier recours — elle est alors comptée comme « révélée » et
-non « trouvée ».
+compte (`riddle_progress`, une ligne par mot de passe trouvé), donc
+conservée d'un appareil à l'autre. Il n'y a pas de bouton de remise à
+zéro dans l'interface ; la route `DELETE /api/57/progress` existe toujours.
 
 **Tout le contenu du jeu vit dans `src/enigmas57.js`, côté Worker.**
-Ce fichier n'est jamais servi au navigateur : réponses, explications et
-indices ne partent au client qu'une fois l'énigme résolue ou l'indice
-demandé. C'est aussi pour ça que rien de ce qui est à trouver n'apparaît
-dans `public/` — ni dans un texte, ni dans un nom de classe, ni dans un
-identifiant. Pour ajouter un mot de passe, il suffit d'ajouter un objet
-dans `RIDDLES` : ni l'API ni l'interface n'ont à changer.
+Ce fichier n'est jamais servi au navigateur : une réponse ne part au client
+qu'une fois trouvée. C'est aussi pour ça que rien de ce qui est à trouver
+n'apparaît dans `public/` — ni dans un texte, ni dans un nom de classe, ni
+dans un identifiant. Les champs `note` et `quotes` du fichier ne sont pas
+affichés : ils documentent, sur place, pourquoi telle réponse est la bonne.
+Pour ajouter un mot de passe, il suffit d'ajouter une entrée dans
+`answers` : ni l'API ni l'interface n'ont à changer.
 
 ## Architecture
 

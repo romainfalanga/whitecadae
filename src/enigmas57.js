@@ -1,15 +1,18 @@
-// WhiteCadae — les signes de l'EP 57
+// WhiteCadae — les mots de passe de l'EP 57 (page /57)
 //
 // ATTENTION : ce fichier est du code Worker. Il n'est JAMAIS servi au
-// navigateur — c'est toute la raison de son existence. Les réponses, les
-// explications et les indices vivent ici et ne partent au client qu'une fois
-// le signe trouvé (ou l'indice explicitement demandé). Ne recopiez rien de
-// tout ceci dans public/, sinon le jeu se résout avec la console du
-// navigateur.
+// navigateur — c'est toute la raison de son existence. Les réponses ne
+// partent au client qu'une fois trouvées. Ne recopiez rien de tout ceci
+// dans public/, sinon le jeu se résout avec la console du navigateur.
 //
-// Pour ajouter un signe : ajoutez un objet dans RIDDLES (et sa branche dans
-// BRANCHES si elle n'existe pas). Rien d'autre à toucher, ni côté API ni
-// côté interface.
+// La page est un escape game : aucun texte, aucune explication, aucun
+// indice. Un élément, un « = », un champ. Les champs `note` et `quotes`
+// ci-dessous ne sont PAS envoyés au client ni affichés : ils ne servent
+// qu'à documenter, ici, pourquoi telle réponse est la bonne.
+//
+// Pour ajouter un mot de passe : ajoutez une entrée dans `answers` du nœud
+// concerné, ou un nœud entier dans NODES. Rien d'autre à toucher, ni côté
+// API ni côté interface.
 
 /* ------------------------------------------------------- normalisation */
 
@@ -54,425 +57,320 @@ function isDecemberDay(n, day) {
 /* -------------------------------------------------------------- branches */
 
 export const BRANCHES = [
-  {
-    id: 'les-57',
-    title: 'Les 57',
-    intro: 'Le nombre qui donne son nom à l’EP dit deux choses à la fois. Et un autre mot dit exactement la même chose, autrement.',
-  },
-  {
-    id: 'vins-divins',
-    title: 'Les vins divins',
-    intro: 'Deux morceaux ouvrent sur le même vers, à un nombre près. Ce nombre est une date.',
-  },
-  {
-    id: 'heure',
-    title: 'L’heure',
-    intro: 'Une heure revient quarante fois dans l’EP. Elle cache deux nombres, pas un.',
-  },
-  {
-    id: 'la-date',
-    title: 'La date',
-    intro: 'Trois morceaux mis bout à bout n’écrivent qu’une seule chose.',
-  },
-  {
-    id: 'la-bete',
-    title: 'La bête',
-    intro: 'Elle traverse l’EP sans jamais être nommée en entier.',
-  },
-  {
-    id: 'equation',
-    title: 'L’équation',
-    intro: 'Deux lettres identiques, deux mots différents.',
-  },
+  { id: 'les-57', title: 'Les 57' },
+  { id: 'vins-divins', title: 'Les vins divins' },
+  { id: 'heure', title: 'L’heure' },
+  { id: 'la-date', title: 'La date' },
+  { id: 'la-bete', title: 'La bête' },
+  { id: 'equation', title: 'L’équation' },
+  { id: 'le-nom', title: 'Le nom' },
 ];
 
-/* --------------------------------------------------------------- signes */
+/* ----------------------------------------------------------------- nœuds */
 
-// source   : ce qui est écrit à gauche du « = »
-// rank     : rang du sens quand une même source en a plusieurs
-// requires : signes à trouver avant de pouvoir tenter celui-ci
-// answer   : la réponse affichée une fois trouvée
-// match    : le test appliqué à la réponse normalisée
-// reveal   : l'explication, révélée en même temps que la réponse
-// quotes   : les vers qui la prouvent, avec un lien vers le morceau
-// hints    : les indices, délivrés un par un à la demande
-export const RIDDLES = [
-  /* ------------------------------------------------------------ les 57 */
+// Un nœud = un élément de l'arborescence, avec un seul champ de saisie même
+// quand il porte plusieurs sens. Les réponses se révèlent au fur et à mesure,
+// dans n'importe quel ordre.
+//
+// source      : ce qui est écrit à gauche du « = »
+// lockedLabel : libellé de remplacement tant que le nœud est verrouillé,
+//               quand la source est elle-même la réponse d'un autre nœud
+// requires    : identifiants de réponses à trouver avant d'ouvrir ce nœud
+// answers[]   : { id, label, match }  — plus note/quotes, non affichés
+//
+// Aucun identifiant ne doit contenir sa propre réponse : ils voyagent
+// jusque dans le DOM.
+export const NODES = [
   {
-    id: 's57-a',
+    id: 'n-a',
     branch: 'les-57',
     source: '57',
-    rank: 1,
     requires: [],
-    answer: 'Ange',
-    match: (n) => /^(les |des |le |la |l |un |une )?anges?$/.test(n),
-    reveal:
-      'Les 57 sont les anges. Ils traversent tout l’EP : ce sont eux qui font grandir la matrix, eux qui s’actualisent, eux qui forment le carré qui protège.',
-    quotes: [
-      { text: 'La matrix est vivante, elle grandit grâce aux anges.', song: '13h20', slug: '13h20' },
-      { text: 'Regarde la fin de Lucifer, les anges s’actualisent.', song: '30 vins divins', slug: '30-vins-divins' },
-      { text: 'Mon carré d’anges est là pour me protéger.', song: 'Orange', slug: 'orange' },
-    ],
-    hints: [
-      'Dans 13h20, qu’est-ce qui fait grandir la matrix ? Dans Orange, de quoi est fait le carré ?',
-      '« La matrix est vivante, elle grandit grâce aux ______. »',
-      'Un mot de quatre lettres, celui qui revient dans les trois morceaux. Singulier ou pluriel, peu importe.',
+    answers: [
+      {
+        id: 'n-a-1',
+        label: 'Ange',
+        match: (n) => /^(les |des |le |la |l |un |une )?anges?$/.test(n),
+        note: 'Les 57 sont les anges : ils font grandir la matrix, ils s’actualisent, ils forment le carré qui protège.',
+        quotes: ['La matrix est vivante, elle grandit grâce aux anges. (13h20)',
+                 'Mon carré d’anges est là pour me protéger. (Orange)'],
+      },
+      {
+        id: 'n-a-2',
+        label: 'Signe',
+        match: (n) => /^(les |des |le |la |l |un |une )?signes?$/.test(n),
+        note: '« Tu verras les 57 » : ce que l’on voit apparaître partout, ce sont les signes laissés là exprès.',
+        quotes: ['Je vois des signes partout sur le chantier du paradis. (Orange)',
+                 'Sans indices dans les dés, je laisse des signes cachés. (Sans indices dans les dés)'],
+      },
     ],
   },
   {
-    id: 's57-b',
-    branch: 'les-57',
-    source: '57',
-    rank: 2,
-    requires: [],
-    answer: 'Signe',
-    match: (n) => /^(les |des |le |la |l |un |une )?signes?$/.test(n),
-    reveal:
-      'Les 57 sont aussi les signes. « Tu verras les 57 » : ce que l’on voit apparaître partout, sur le chantier du paradis, ce sont les signes laissés là exprès.',
-    quotes: [
-      { text: 'Je vois des signes partout sur le chantier du paradis.', song: 'Orange', slug: 'orange' },
-      { text: 'Sans indices dans les dés, je laisse des signes cachés.', song: 'Sans indices dans les dés', slug: 'sans-indice-dans-les-des' },
-      { text: '30 vins divins, tu verras les 57.', song: '30 vins divins', slug: '30-vins-divins' },
-    ],
-    hints: [
-      'Orange : qu’est-ce que le narrateur voit « partout sur le chantier du paradis » ?',
-      '« Je laisse des ______ cachés. »',
-      'Cinq lettres. C’est précisément ce que tu es en train de chercher sur cette page : chaque « = » en est un.',
-    ],
-  },
-  {
-    id: 'trompette',
+    id: 'n-b',
     branch: 'les-57',
     source: 'Trompette',
-    rank: 1,
     requires: [],
-    answer: 'Signe',
-    match: (n) => /^(les |des |le |la |l |un |une )?signes?$/.test(n),
-    reveal:
-      'La preuve tient dans un seul mot déplacé. 30 vins divins chante « 30 vins divins, tu verras les 57 ». Sans indices dans les dés chante « 30 vins divins, t’entendras les trompettes ». Même vers, même place : les trompettes sont les 57, donc les signes. Le 57 se voit, la trompette s’entend — c’est la même chose dite autrement.',
-    quotes: [
-      { text: '30 vins divins, tu verras les 57.', song: '30 vins divins', slug: '30-vins-divins' },
-      { text: '30 vins divins, t’entendras les trompettes.', song: 'Sans indices dans les dés', slug: 'sans-indice-dans-les-des' },
-    ],
-    hints: [
-      'Compare le refrain de 30 vins divins et le dernier refrain de Sans indices dans les dés. Un seul mot change de place.',
-      '« tu verras les 57 » d’un côté, « t’entendras les trompettes » de l’autre : les deux occupent exactement le même emplacement dans le vers.',
-      'Donc la trompette vaut ce que vaut le 57 — et ce mot-là, tu l’as déjà trouvé juste au-dessus.',
+    answers: [
+      {
+        id: 'n-b-1',
+        label: 'Signe',
+        match: (n) => /^(les |des |le |la |l |un |une )?signes?$/.test(n),
+        note: 'Même vers, deux versions : « tu verras les 57 » (30 vins divins) et « t’entendras les trompettes » (Sans indices dans les dés). Les trompettes sont les 57, donc les signes.',
+        quotes: ['30 vins divins, tu verras les 57. (30 vins divins)',
+                 '30 vins divins, t’entendras les trompettes. (Sans indices dans les dés)'],
+      },
     ],
   },
 
-  /* ------------------------------------------------------ vins divins */
   {
-    id: 'cinq-vins',
+    id: 'n-c',
     branch: 'vins-divins',
     source: '5 vins divins',
-    rank: 1,
     requires: [],
-    answer: '25 décembre',
-    match: (n) => isDecemberDay(n, 25) && !numbersIn(n).includes(2031),
-    reveal:
-      '5 vins : 5 et vingt. 5 + 20 = 25. Et « divins » fixe le mois — celui où naît le divin. 5 vins divins, c’est le 25 décembre.',
-    quotes: [
-      { text: '5 vins divins, t’entendras les 57.', song: 'Sans indices dans les dés', slug: 'sans-indice-dans-les-des' },
-      { text: 'J’ai dit sans vins divins, le diable prendra sa retraite.', song: '13h20', slug: '13h20' },
-    ],
-    hints: [
-      'Écoute « vins » autrement : le mot s’entend aussi comme un nombre.',
-      '« vins » s’entend « vingt ». Il y a donc deux nombres dans « 5 vins » : 5 et 20.',
-      '5 + 20 = 25. Reste le mois, et « divins » te le donne : celui de la naissance.',
+    answers: [
+      {
+        id: 'n-c-1',
+        label: '25 décembre',
+        match: (n) => isDecemberDay(n, 25) && !numbersIn(n).includes(2031),
+        note: '5 vins = 5 + vingt = 25, et « divins » donne le mois de la naissance du divin.',
+        quotes: ['5 vins divins, t’entendras les 57. (Sans indices dans les dés)'],
+      },
     ],
   },
   {
-    id: 'trente-vins-a',
+    id: 'n-d',
     branch: 'vins-divins',
     source: '30 vins divins',
-    rank: 1,
     requires: [],
-    answer: '30 décembre + 20 décembre',
-    match: (n) => {
-      const nums = numbersIn(n);
-      const hasDec = /\bdec/.test(n) || nums.filter((x) => x === 12).length > 0;
-      return hasDec && nums.includes(30) && nums.includes(20);
-    },
-    reveal:
-      '30 vins divins ne porte pas une date mais deux : le 30, et le vingt. 30 décembre et 20 décembre, ensemble.',
-    quotes: [
-      { text: '30 vins divins, tu verras les 57.', song: '30 vins divins', slug: '30-vins-divins' },
-      { text: '30 vins divins, t’entendras les trompettes.', song: 'Sans indices dans les dés', slug: 'sans-indice-dans-les-des' },
-    ],
-    hints: [
-      'Comme pour 5 vins divins, « vins » s’entend « vingt ». Mais cette fois, ne les additionne pas.',
-      'Il y a deux nombres côte à côte : 30 et 20. Ce sont deux jours du même mois.',
-      'Donne les deux dates de décembre, dans l’ordre que tu veux.',
-    ],
-  },
-  {
-    id: 'trente-vins-b',
-    branch: 'vins-divins',
-    source: '30 vins divins',
-    rank: 2,
-    requires: ['trente-vins-a'],
-    answer: '25 décembre',
-    match: (n) => isDecemberDay(n, 25) && !numbersIn(n).includes(2031),
-    reveal:
-      '(30 + 20) ÷ 2 = 25. La moyenne des deux dates de 30 vins divins retombe exactement sur le 25 décembre — la date de 5 vins divins. Les deux morceaux, l’un par l’addition, l’autre par le milieu, désignent le même jour.',
-    quotes: [
-      { text: '30 vins divins, tu verras les 57.', song: '30 vins divins', slug: '30-vins-divins' },
-      { text: '5 vins divins, t’entendras les 57.', song: 'Sans indices dans les dés', slug: 'sans-indice-dans-les-des' },
-    ],
-    hints: [
-      'Tu as deux dates. Que se passe-t-il si tu les ramènes à une seule ?',
-      'Prends le milieu : additionne 30 et 20, divise par deux.',
-      'Tu tombes sur le même jour que 5 vins divins.',
+    answers: [
+      {
+        id: 'n-d-1',
+        label: '30 décembre + 20 décembre',
+        match: (n) => {
+          const nums = numbersIn(n);
+          const hasDec = /\bdec/.test(n) || nums.includes(12);
+          return hasDec && nums.includes(30) && nums.includes(20);
+        },
+        note: '30 vins porte deux dates à la fois : le 30 et le vingt.',
+        quotes: ['30 vins divins, tu verras les 57. (30 vins divins)'],
+      },
+      {
+        id: 'n-d-2',
+        label: '25 décembre',
+        match: (n) => isDecemberDay(n, 25) && !numbersIn(n).includes(2031),
+        note: '(30 + 20) / 2 = 25 : la moyenne des deux dates retombe sur celle de 5 vins divins.',
+        quotes: ['5 vins divins, t’entendras les 57. (Sans indices dans les dés)'],
+      },
     ],
   },
 
-  /* ------------------------------------------------------------ l'heure */
   {
-    id: 'heure-a',
+    id: 'n-e',
     branch: 'heure',
     source: '13h20',
-    rank: 1,
     requires: [],
-    answer: '2031',
-    match: (n) => numbersIn(n).includes(2031),
-    reveal:
-      'Retourne le 13 : il devient 31. Pose-le derrière le 20 : 20|31. 13h20 écrit l’année 2031.',
-    quotes: [
-      { text: 'Jusqu’à la fin, et même si ça fait mal à 13h20, j’irai dans les étoiles.', song: '13h20', slug: '13h20' },
-      { text: 'À 13 heures 20, j’ai plus peur d’être. Le mal devient le bien.', song: '30 vins divins', slug: '30-vins-divins' },
-    ],
-    hints: [
-      'Sépare l’heure en deux nombres : 13 d’un côté, 20 de l’autre.',
-      'Retourne le premier. 13 devient 31.',
-      'Maintenant colle-le derrière le second.',
-    ],
-  },
-  {
-    id: 'heure-b',
-    branch: 'heure',
-    source: '13h20',
-    rank: 2,
-    requires: [],
-    answer: '33 ans',
-    match: (n) => numbersIn(n).includes(33),
-    reveal: '13 + 20 = 33. L’âge du Christ.',
-    quotes: [
-      { text: 'Jusqu’à la fin, et même si ça fait mal à 13h20, j’irai dans les étoiles.', song: '13h20', slug: '13h20' },
-    ],
-    hints: [
-      'Cette fois, n’inverse rien : additionne.',
-      '13 + 20 = ?',
-      'Ce n’est pas un nombre en l’air, c’est un âge — et pas n’importe lequel.',
+    answers: [
+      {
+        id: 'n-e-1',
+        label: '2031',
+        match: (n) => numbersIn(n).includes(2031),
+        note: '13 retourné donne 31, posé derrière le 20 : 2031.',
+        quotes: ['Jusqu’à la fin, et même si ça fait mal à 13h20. (13h20)'],
+      },
+      {
+        id: 'n-e-2',
+        label: '33 ans',
+        match: (n) => numbersIn(n).includes(33),
+        note: '13 + 20 = 33, l’âge du Christ.',
+        quotes: ['À 13 heures 20, j’ai plus peur d’être. (30 vins divins)'],
+      },
     ],
   },
 
-  /* ----------------------------------------------------------- la date */
   {
-    id: 'date',
+    id: 'n-f',
     branch: 'la-date',
     source: '5 vins divins + 30 vins divins + 13h20',
-    rank: 1,
-    requires: ['cinq-vins', 'trente-vins-b', 'heure-a'],
-    answer: '25 décembre 2031',
-    match: (n) => {
-      const nums = numbersIn(n);
-      return nums.includes(2031) && nums.includes(25) && (/\bdec/.test(n) || nums.includes(12));
-    },
-    reveal:
-      'Les trois morceaux ne disent qu’une seule chose. 5 vins divins et 30 vins divins donnent le jour : 25 décembre. 13h20 donne l’année : 2031. Mis bout à bout, l’EP écrit une date — le 25 décembre 2031.',
-    quotes: [
-      { text: '5 vins divins, t’entendras les 57.', song: 'Sans indices dans les dés', slug: 'sans-indice-dans-les-des' },
-      { text: '30 vins divins, tu verras les 57.', song: '30 vins divins', slug: '30-vins-divins' },
-      { text: 'Jusqu’à la fin, et même si ça fait mal à 13h20, j’irai dans les étoiles.', song: '13h20', slug: '13h20' },
-    ],
-    hints: [
-      'Tu as déjà tout : un jour d’un côté, une année de l’autre.',
-      'Le jour vient des vins divins, l’année vient de l’heure.',
-      'Écris la date complète, jour mois année.',
+    requires: ['n-c-1', 'n-d-2', 'n-e-1'],
+    answers: [
+      {
+        id: 'n-f-1',
+        label: '25 décembre 2031',
+        match: (n) => {
+          const nums = numbersIn(n);
+          return nums.includes(2031) && nums.includes(25) && (/\bdec/.test(n) || nums.includes(12));
+        },
+        note: 'Les vins divins donnent le jour, l’heure donne l’année.',
+        quotes: [],
+      },
     ],
   },
 
-  /* ----------------------------------------------------------- la bête */
   {
-    id: 'des',
+    id: 'n-g',
     branch: 'la-bete',
     source: 'Sans indices dans les dés',
-    rank: 1,
     requires: [],
-    answer: '666',
-    match: (n) => numbersIn(n).includes(666) || /six cent soixante six/.test(n) || /^six six six$/.test(n),
-    reveal:
-      'Le titre s’entend deux fois : « sans indices », mais aussi « cent indices ». Le morceau prévient qu’il cache des choses dans les dés — et un dé a six faces. Ce qui s’y cache, c’est le nombre de la bête : 666.',
-    quotes: [
-      { text: 'Sans indices dans les dés, je laisse des signes cachés.', song: 'Sans indices dans les dés', slug: 'sans-indice-dans-les-des' },
-      { text: 'Dieu et le diable se cachent dans les détails.', song: 'Sans indices dans les dés', slug: 'sans-indice-dans-les-des' },
-      { text: 'Prends la bête à 8 mains, dans l’aiguille j’ai vu un aigle.', song: 'Sans indices dans les dés', slug: 'sans-indice-dans-les-des' },
-    ],
-    hints: [
-      'Le titre s’entend de deux façons : « sans indices », mais aussi « cent indices ».',
-      'Un dé a six faces. Il en faut trois.',
-      'C’est le nombre de la bête — celle que l’EP prend justement à pleines mains.',
+    answers: [
+      {
+        id: 'n-g-1',
+        label: '666',
+        match: (n) => numbersIn(n).includes(666) || /^six six six$/.test(n),
+        note: 'Le titre s’entend aussi « cent indices ». Un dé a six faces ; ce qui s’y cache est le nombre de la bête.',
+        quotes: ['Sans indices dans les dés, je laisse des signes cachés. (Sans indices dans les dés)'],
+      },
     ],
   },
   {
-    id: 'bete-a',
+    id: 'n-h',
     branch: 'la-bete',
     source: 'Prends la bête à …',
-    rank: 1,
     requires: [],
-    answer: '10 mains',
-    match: (n) => numbersIn(n).includes(10) && !/corne/.test(n),
-    reveal:
-      'Le vers existe en deux versions. Sans indices dans les dés : « Prends la bête à 8 mains ». 30 vins divins : « Prends la bête à 2 mains ». 8 + 2 = 10. La bête se prend à 10 mains.',
-    quotes: [
-      { text: 'Prends la bête à 8 mains, dans l’aiguille j’ai vu un aigle.', song: 'Sans indices dans les dés', slug: 'sans-indice-dans-les-des' },
-      { text: 'Prends la bête à 2 mains, dans les chiffres j’ai vu un aigle.', song: '30 vins divins', slug: '30-vins-divins' },
-    ],
-    hints: [
-      'Le même vers revient dans deux morceaux de l’EP, avec un nombre différent à chaque fois.',
-      '8 mains dans Sans indices dans les dés, 2 mains dans 30 vins divins.',
-      'Additionne les deux.',
+    answers: [
+      {
+        id: 'n-h-1',
+        label: '10 mains',
+        match: (n) => numbersIn(n).includes(10) && !/corne/.test(n),
+        note: '« Prends la bête à 8 mains » (Sans indices dans les dés) + « Prends la bête à 2 mains » (30 vins divins).',
+        quotes: ['Prends la bête à 8 mains, dans l’aiguille j’ai vu un aigle. (Sans indices dans les dés)',
+                 'Prends la bête à 2 mains, dans les chiffres j’ai vu un aigle. (30 vins divins)'],
+      },
     ],
   },
   {
-    id: 'bete-b',
+    id: 'n-i',
     branch: 'la-bete',
     source: '10 mains',
-    // Sa source EST la réponse du signe précédent : tant qu'il est
-    // verrouillé, on affiche ce libellé neutre à la place.
+    // Sa source EST la réponse du nœud précédent : masquée tant qu'il est
+    // verrouillé.
     lockedLabel: 'Le mot de passe précédent',
-    rank: 1,
-    requires: ['bete-a'],
-    answer: '10 cornes',
-    match: (n) => /cornes?/.test(n),
-    reveal:
-      'Dix, parce que la bête de l’Apocalypse a dix cornes. Les mains du refrain ne comptent pas des mains : elles comptent les cornes de la bête. C’est pour ça que 8 + 2 devait tomber juste.',
-    quotes: [
-      { text: 'Prends la bête à 8 mains, dans l’aiguille j’ai vu un aigle.', song: 'Sans indices dans les dés', slug: 'sans-indice-dans-les-des' },
-      { text: 'Prends la bête à 2 mains, dans les chiffres j’ai vu un aigle.', song: '30 vins divins', slug: '30-vins-divins' },
-    ],
-    hints: [
-      'Pourquoi dix, précisément ? La réponse n’est pas dans les paroles.',
-      'Cherche la bête de l’Apocalypse : on la décrit toujours par ce qu’elle porte sur la tête.',
-      'Elle en a dix.',
+    requires: ['n-h-1'],
+    answers: [
+      {
+        id: 'n-i-1',
+        label: '10 cornes',
+        match: (n) => /cornes?/.test(n),
+        note: 'La bête de l’Apocalypse a dix cornes : les mains du refrain les comptent.',
+        quotes: [],
+      },
     ],
   },
 
-  /* --------------------------------------------------------- l'équation */
   {
-    id: 'm-m',
+    id: 'n-j',
     branch: 'equation',
     source: 'M = M',
-    rank: 1,
     requires: [],
-    answer: 'Mécanisme = Matière',
-    match: (n) => /mecanism/.test(n) && /matiere/.test(n),
-    reveal:
-      'M égale M : mécanisme égale matière. Les deux mots reviennent partout, toujours ensemble, toujours équivalents — l’un devient l’autre et réciproquement.',
-    quotes: [
-      { text: 'Je sais que le QI change, M égale M à jamais.', song: '30 vins divins', slug: '30-vins-divins' },
-      { text: 'Aujourd’hui je suis la matière, demain je serai les mécanismes.', song: '30 vins divins', slug: '30-vins-divins' },
-      { text: 'La matière le résultat, M égale M infiniment.', song: 'Multivers', slug: 'multivers' },
-      { text: 'Tout a une logique, matière et mécanisme.', song: 'Multivers', slug: 'multivers' },
+    answers: [
+      {
+        id: 'n-j-1',
+        label: 'Mécanisme = Matière',
+        match: (n) => /mecanism/.test(n) && /matiere/.test(n),
+        note: 'Les deux mots reviennent toujours ensemble, toujours équivalents.',
+        quotes: ['Je sais que le QI change, M égale M à jamais. (30 vins divins)',
+                 'Tout a une logique, matière et mécanisme. (Multivers)'],
+      },
     ],
-    hints: [
-      'Deux mots du vocabulaire de White Cadae commencent par M et ne se quittent jamais.',
-      'Multivers : « Tout a une logique, ______ et ______. »',
-      'Écris les deux mots séparés par un « = ».',
+  },
+
+  {
+    id: 'n-k',
+    branch: 'le-nom',
+    source: 'White Cadae',
+    requires: [],
+    answers: [
+      {
+        id: 'n-k-1',
+        label: 'Infini',
+        match: (n) => /^(l |les |un |une |d )?infinis?$/.test(n),
+        note: 'Cadae : C=3, A=1, D=4, A=1, E=5 — les décimales de pi, qui ne s’arrêtent jamais.',
+        quotes: ['J’harmonise l’infini, l’infini devient fini. (Multivers)',
+                 'Je ne suis qu’un fil qui relie deux infinis. (Un fil entre deux infinis)'],
+      },
+      {
+        id: 'n-k-2',
+        label: 'Blanc',
+        match: (n) => /^(le |la |les |un |une |de |d )?blanc(he|s|hes)?$/.test(n),
+        note: 'White.',
+        quotes: [],
+      },
     ],
   },
 ];
 
 /* --------------------------------------------------------- convergences */
 
-// Deux signes différents qui aboutissent au même mot : c'est là que
+// Deux nœuds différents qui aboutissent au même mot : c'est là que
 // l'arborescence se referme. Le libellé n'est envoyé au client que lorsque
-// tous les signes concernés ont été trouvés (sinon il vendrait la mèche).
+// toutes les réponses concernées ont été trouvées.
 export const CONVERGENCES = [
-  {
-    id: 'conv-les-57',
-    branch: 'les-57',
-    from: ['s57-b', 'trompette'],
-    label: 'Signe',
-    note: '57 et trompette ne disent qu’une seule chose. L’un se voit, l’autre s’entend.',
-  },
-  {
-    id: 'conv-vins-divins',
-    branch: 'vins-divins',
-    from: ['cinq-vins', 'trente-vins-b'],
-    label: '25 décembre',
-    note: '5 vins divins par l’addition, 30 vins divins par le milieu : les deux morceaux tombent sur le même jour.',
-  },
+  { id: 'conv-les-57', branch: 'les-57', from: ['n-a-2', 'n-b-1'], label: 'Signe' },
+  { id: 'conv-vins-divins', branch: 'vins-divins', from: ['n-c-1', 'n-d-2'], label: '25 décembre' },
 ];
 
 /* ----------------------------------------------------------------- API */
 
-const BY_ID = new Map(RIDDLES.map((r) => [r.id, r]));
+const NODE_BY_ID = new Map(NODES.map((n) => [n.id, n]));
+const NODE_OF_ANSWER = new Map();
+for (const node of NODES) for (const a of node.answers) NODE_OF_ANSWER.set(a.id, node);
 
-export function getRiddle(id) {
-  return BY_ID.get(id) || null;
+export const TOTAL_ANSWERS = NODES.reduce((sum, n) => sum + n.answers.length, 0);
+
+export function getNode(id) {
+  return NODE_BY_ID.get(id) || null;
 }
 
-// Un signe n'est jouable que si tous ses prérequis sont déjà trouvés.
-export function isLocked(riddle, solvedIds) {
-  return riddle.requires.some((id) => !solvedIds.has(id));
+// Un nœud n'est jouable que si toutes les réponses dont il dépend sont
+// trouvées.
+export function isLocked(node, solved) {
+  return node.requires.some((id) => !solved.has(id));
 }
 
-export function checkAnswer(riddle, answer) {
+// Cherche, parmi les réponses encore à trouver de ce nœud, celle qui
+// correspond. Retourne son identifiant, ou null.
+export function matchAnswer(node, answer, solved) {
   const n = normalize(answer);
-  if (!n) return false;
-  return riddle.match(n);
+  if (!n) return null;
+  const hit = node.answers.find((a) => !solved.has(a.id) && a.match(n));
+  return hit ? hit.id : null;
 }
 
-// La vue publique d'un signe : tout ce que le client a le droit de savoir.
-// `progress` est la ligne riddle_progress du membre (ou undefined).
-function publicRiddle(riddle, progress, solvedIds) {
-  const hintsUsed = Math.min(progress?.hints_used || 0, riddle.hints.length);
-  const solved = !!progress?.solved_at;
-  const locked = !solved && isLocked(riddle, solvedIds);
-  const view = {
-    id: riddle.id,
-    branch: riddle.branch,
-    // La source d'un signe verrouillé peut être la réponse du signe qui le
-    // précède : dans ce cas elle reste masquée jusqu'au déverrouillage.
-    source: locked && riddle.lockedLabel ? riddle.lockedLabel : riddle.source,
-    rank: riddle.rank,
-    requires: riddle.requires,
-    locked,
-    hintCount: riddle.hints.length,
-    hints: riddle.hints.slice(0, hintsUsed),
-    solved,
-    revealed: !!progress?.revealed,
-  };
-  if (solved) {
-    view.answer = riddle.answer;
-    view.reveal = riddle.reveal;
-    view.quotes = riddle.quotes;
-  }
-  return view;
+// Le libellé d'un nœud tel qu'on a le droit de l'afficher.
+function sourceOf(node, locked) {
+  return locked && node.lockedLabel ? node.lockedLabel : node.source;
 }
 
-// L'état complet du jeu pour un membre donné.
+// L'état complet du jeu pour un membre. `rows` vient de riddle_progress ;
+// les identifiants inconnus (anciennes parties) sont simplement ignorés.
 export function buildState(rows) {
-  const byId = new Map(rows.map((r) => [r.riddle_id, r]));
-  const solvedIds = new Set(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
+  const solved = new Set(
+    rows.filter((r) => r.solved_at && NODE_OF_ANSWER.has(r.riddle_id)).map((r) => r.riddle_id)
+  );
 
-  const riddles = RIDDLES.map((r) => publicRiddle(r, byId.get(r.id), solvedIds));
-  const convergences = CONVERGENCES.map((c) => {
-    const open = c.from.every((id) => solvedIds.has(id));
-    return open
-      ? { id: c.id, branch: c.branch, from: c.from, open: true, label: c.label, note: c.note }
-      : { id: c.id, branch: c.branch, from: c.from, open: false };
+  const nodes = NODES.map((node) => {
+    const locked = isLocked(node, solved);
+    const found = node.answers.filter((a) => solved.has(a.id)).map((a) => ({ id: a.id, label: a.label }));
+    return {
+      id: node.id,
+      branch: node.branch,
+      source: sourceOf(node, locked),
+      locked: locked && found.length === 0,
+      total: node.answers.length,
+      found,
+      // de quoi afficher un cadenas cliquable, sans rien révéler d'autre
+      requires: node.requires.map((answerId) => {
+        const dep = NODE_OF_ANSWER.get(answerId);
+        return { node: dep.id, label: sourceOf(dep, isLocked(dep, solved)) };
+      }),
+    };
   });
 
-  const found = RIDDLES.filter((r) => solvedIds.has(r.id) && !byId.get(r.id)?.revealed).length;
-  return {
-    branches: BRANCHES,
-    riddles,
-    convergences,
-    total: RIDDLES.length,
-    solved: solvedIds.size,
-    found,
-  };
+  const convergences = CONVERGENCES.map((c) => {
+    const open = c.from.every((id) => solved.has(id));
+    return open
+      ? { id: c.id, branch: c.branch, open: true, label: c.label }
+      : { id: c.id, branch: c.branch, open: false };
+  });
+
+  return { branches: BRANCHES, nodes, convergences, total: TOTAL_ANSWERS, solved: solved.size };
 }

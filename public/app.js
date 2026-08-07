@@ -2192,10 +2192,10 @@ async function pageCovers() {
 
 /* --------------------------------------------------- les énigmes (/57) */
 
-/* Page 57 : les mots de passe cachés dans les morceaux, en arborescence.
-   Rien de ce qui est à trouver n'apparaît ici — ni réponse, ni explication,
-   ni indice, ni même dans un nom de classe ou d'identifiant. Le Worker ne
-   les envoie qu'une fois l'énigme résolue, ou l'indice demandé. */
+/* Page 57 : un escape game. Aucun texte, aucune explication, aucun indice —
+   un élément, un « = », un champ. Rien de ce qui est à trouver n'apparaît
+   ici : ni réponse, ni nom de classe, ni identifiant. Le Worker ne renvoie
+   une réponse qu'une fois trouvée. */
 
 async function pageEnigmes() {
   const epoch = newEpoch();
@@ -2203,14 +2203,8 @@ async function pageEnigmes() {
   if (!state.user) {
     app.innerHTML = `
       <h1>57</h1>
-      <p class="subtitle">Ce que les morceaux disent à mots couverts.</p>
       <div class="enigmes-gate">
-        <p>Un nombre, une heure, un mot : dans les textes de White Cadae,
-           beaucoup de choses en désignent une autre. Cette page les rassemble
-           en une arborescence à reconstituer — à chaque « = », il y a un mot
-           de passe à trouver.</p>
-        <p>Il faut un compte pour jouer : votre progression est enregistrée
-           dessus, et vous la retrouvez sur tous vos appareils.</p>
+        <p>Réservé aux membres.</p>
         <p class="enigmes-gate-actions">
           <a href="/connexion" data-link class="btn">Se connecter</a>
           <a href="/inscription" data-link class="btn">Créer un compte</a>
@@ -2233,124 +2227,62 @@ async function pageEnigmes() {
   renderEnigmesPage();
 }
 
-// Les énigmes d'une branche, regroupées par source : « 57 » porte deux sens,
-// ils s'affichent sous une seule et même racine.
-function enigmeGroups(branchId) {
-  const groups = [];
-  for (const r of state.enigmes.riddles) {
-    if (r.branch !== branchId) continue;
-    const last = groups[groups.length - 1];
-    if (last && last.source === r.source) last.items.push(r);
-    else groups.push({ source: r.source, items: [r] });
-  }
-  return groups;
-}
-
-function enigmeLabel(id) {
-  const r = state.enigmes.riddles.find((x) => x.id === id);
-  if (!r) return id;
-  return r.rank > 1 ? `${r.source} (2ᵉ sens)` : r.source;
-}
-
-function enigmeClass(r) {
-  if (r.locked) return 'enigme enigme--locked';
-  if (r.solved) return r.revealed ? 'enigme enigme--revealed' : 'enigme enigme--solved';
+function nodeClass(n) {
+  if (n.locked) return 'enigme enigme--locked';
+  if (n.found.length === n.total) return 'enigme enigme--solved';
+  if (n.found.length) return 'enigme enigme--partial';
   return 'enigme';
 }
 
-// « a, b et c »
-function joinFr(parts) {
-  if (parts.length < 2) return parts.join('');
-  return parts.slice(0, -1).join(', ') + ' et ' + parts[parts.length - 1];
-}
+// Un seul champ par élément, même quand il porte plusieurs sens : les
+// réponses s'empilent au-dessus au fur et à mesure, dans n'importe quel ordre.
+function nodeCardHtml(n) {
+  const counter = n.total > 1
+    ? `<span class="enigme-count">${n.found.length}/${n.total}</span>` : '';
 
-// La source n'est pas répétée dans la carte : elle est déjà sur la racine, à
-// gauche sur ordinateur et au-dessus sur mobile. La carte n'affiche que ce qui
-// suit le « = ».
-function enigmeCardHtml(r) {
-  const rank = r.rank > 1 ? `<p class="enigme-rank">${r.rank}ᵉ sens</p>` : '';
-
-  if (r.locked) {
-    const missing = joinFr(r.requires
-      .map((id) => `<button type="button" class="link-btn enigme-goto" data-goto="${esc(id)}">${esc(enigmeLabel(id))}</button>`));
-    return `${rank}
-      <p class="enigme-line">
-        <span class="enigme-eq">=</span>
-        <span class="enigme-blank">?</span>
-      </p>
-      <p class="enigme-locked-note">Verrouillé — trouve d’abord ${missing}.</p>`;
-  }
-
-  if (r.solved) {
-    const badge = r.revealed ? '<span class="enigme-badge">révélé</span>' : '';
-    const quotes = (r.quotes || [])
-      .map((q) => `<li><span class="enigme-quote">« ${esc(q.text)} »</span>
-        <a href="/chanson/${encodeURIComponent(q.slug)}" data-link>${esc(q.song)}</a></li>`)
+  if (n.locked) {
+    const missing = n.requires
+      .map((r) => `<button type="button" class="link-btn enigme-goto" data-goto="${esc(r.node)}">${esc(r.label)}</button>`)
       .join('');
-    return `${rank}
-      <p class="enigme-line">
-        <span class="enigme-eq">=</span>
-        <strong class="enigme-answer">${esc(r.answer)}</strong>${badge}
-      </p>
-      <p class="enigme-reveal">${esc(r.reveal)}</p>
-      ${quotes ? `<ul class="enigme-quotes">${quotes}</ul>` : ''}`;
+    return `${counter}
+      <p class="enigme-line"><span class="enigme-eq">=</span><span class="enigme-blank">?</span></p>
+      <p class="enigme-locked-note"><span class="enigme-lock" aria-label="verrouillé">🔒</span>${missing}</p>`;
   }
 
-  const shown = r.hints || [];
-  const hints = shown
-    .map((h, i) => `<li><span class="enigme-hint-num">Indice ${i + 1}</span>${esc(h)}</li>`)
+  const found = n.found
+    .map((a) => `<p class="enigme-line"><span class="enigme-eq">=</span><strong class="enigme-answer">${esc(a.label)}</strong></p>`)
     .join('');
-  const canHint = shown.length < r.hintCount;
 
-  return `${rank}
+  if (n.found.length === n.total) return counter + found;
+
+  return `${counter}${found}
     <form class="enigme-form">
       <span class="enigme-eq">=</span>
-      <input class="enigme-input" type="text" placeholder="le mot de passe…"
+      <input class="enigme-input" type="text" placeholder="mot de passe"
              autocomplete="off" autocapitalize="off" autocorrect="off"
              spellcheck="false" enterkeyhint="go" maxlength="200"
-             aria-label="Mot de passe pour ${esc(r.source)}">
+             aria-label="Mot de passe pour ${esc(n.source)}">
       <button type="submit" class="primary">Valider</button>
     </form>
-    <p class="enigme-msg" role="status" aria-live="polite"></p>
-    ${hints ? `<ul class="enigme-hints">${hints}</ul>` : ''}
-    <p class="enigme-actions">
-      ${canHint
-        ? `<button type="button" class="link-btn enigme-hint-btn">${shown.length ? `Indice suivant (${shown.length}/${r.hintCount} lus)` : 'Voir un indice'}</button>`
-        : '<button type="button" class="link-btn enigme-reveal-btn">Donner la réponse</button>'}
-    </p>`;
+    <p class="enigme-msg" role="status" aria-live="polite"></p>`;
 }
 
 function convergenceHtml(c) {
-  if (!c.open) {
-    return `
-      <div class="convergence" id="${esc(c.id)}">
-        <span class="conv-mark">✦</span>
-        <div>
-          <strong>Les deux chemins se rejoignent ici.</strong>
-          <p>Trouve les ${c.from.length} mots de passe ci-dessus pour voir sur quoi.</p>
-        </div>
-      </div>`;
-  }
-  return `
-    <div class="convergence convergence--open" id="${esc(c.id)}">
-      <span class="conv-mark">✦</span>
-      <div>
-        <strong>${esc(c.label)}</strong>
-        <p>${esc(c.note)}</p>
-      </div>
-    </div>`;
+  return c.open
+    ? `<div class="convergence convergence--open" id="${esc(c.id)}">
+         <span class="conv-mark">✦</span><strong>${esc(c.label)}</strong>
+       </div>`
+    : `<div class="convergence" id="${esc(c.id)}">
+         <span class="conv-mark">✦</span><span class="enigme-blank">?</span>
+       </div>`;
 }
 
 function enigmesProgressHtml() {
   const d = state.enigmes;
   const pct = d.total ? Math.round((d.solved / d.total) * 100) : 0;
-  const revealed = d.solved - d.found;
-  const detail = revealed
-    ? `<span class="progress-sub">${d.found} trouvé${d.found > 1 ? 's' : ''}, ${revealed} révélé${revealed > 1 ? 's' : ''}</span>`
-    : '';
   return `
     <div class="progress-bar"><span style="width:${pct}%"></span></div>
-    <p class="progress-text"><strong>${d.solved}</strong> / ${d.total} mots de passe ${detail}</p>`;
+    <p class="progress-text"><strong>${d.solved}</strong> / ${d.total}</p>`;
 }
 
 function renderEnigmesPage() {
@@ -2363,12 +2295,11 @@ function renderEnigmesPage() {
   const branches = d.branches.map((b) => `
     <section class="enigme-branch" id="branche-${esc(b.id)}">
       <h2>${esc(b.title)}</h2>
-      <p class="branch-intro">${esc(b.intro)}</p>
-      ${enigmeGroups(b.id).map((g) => `
+      ${d.nodes.filter((n) => n.branch === b.id).map((n) => `
         <div class="node-group">
-          <div class="node-source" id="src-${esc(g.items[0].id)}"><span>${esc(g.source)}</span></div>
+          <div class="node-source" id="src-${esc(n.id)}"><span>${esc(n.source)}</span></div>
           <div class="node-leaves">
-            ${g.items.map((r) => `<article class="${enigmeClass(r)}" id="e-${esc(r.id)}">${enigmeCardHtml(r)}</article>`).join('')}
+            <article class="${nodeClass(n)}" id="e-${esc(n.id)}">${nodeCardHtml(n)}</article>
           </div>
         </div>`).join('')}
       ${d.convergences.filter((c) => c.branch === b.id).map(convergenceHtml).join('')}
@@ -2376,65 +2307,41 @@ function renderEnigmesPage() {
 
   app.innerHTML = `
     <h1>57</h1>
-    <p class="subtitle">Dans les morceaux, un mot peut en dire un autre. Partout
-       où il y a un « = », trouve ce qui se cache derrière.</p>
     <div class="enigmes-progress" id="enigmes-progress">${enigmesProgressHtml()}</div>
     <nav class="enigmes-toc">${toc}</nav>
-    ${branches}
-    <p class="enigmes-reset"><button type="button" class="link-btn" id="enigmes-reset">Recommencer à zéro</button></p>`;
+    ${branches}`;
 
-  d.riddles.forEach((r) => {
-    const el = document.getElementById('e-' + r.id);
+  d.nodes.forEach((n) => {
+    const el = document.getElementById('e-' + n.id);
     if (!el) return;
-    el.dataset.sig = JSON.stringify(r);
-    bindEnigmeCard(el, r);
+    el.dataset.sig = JSON.stringify(n);
+    bindEnigmeCard(el, n);
   });
   bindEnigmesChrome();
-  state.enigmesShape = enigmesShape();
 }
 
-// Le découpage en racines : si un déverrouillage le change, la mise à jour
-// ciblée ne suffit plus et il faut reconstruire la page.
-function enigmesShape() {
-  return state.enigmes.branches
-    .map((b) => enigmeGroups(b.id).map((g) => g.items.map((r) => r.id).join('+')).join('|'))
-    .join('/');
-}
-
-// Après chaque action, le serveur renvoie l'état complet : on ne réécrit que
-// les cartes qui ont réellement changé, pour ne pas perdre le focus ni la
-// position de défilement (essentiel sur mobile, clavier ouvert).
+// Après chaque tentative, le serveur renvoie l'état complet : on ne réécrit
+// que ce qui a changé, pour ne pas perdre le focus ni la position de
+// défilement (essentiel sur mobile, clavier ouvert).
 function applyEnigmesState(data, focusId) {
   state.enigmes = data;
-
-  if (enigmesShape() !== state.enigmesShape) {
-    renderEnigmesPage();
-    if (focusId) flashEnigme(focusId);
-    return;
-  }
 
   const prog = document.getElementById('enigmes-progress');
   if (prog) prog.innerHTML = enigmesProgressHtml();
 
-  // Le libellé d'une racine peut changer : celui d'une énigme verrouillée est
-  // masqué tant que son prérequis n'est pas trouvé.
-  data.branches.forEach((b) => {
-    enigmeGroups(b.id).forEach((g) => {
-      const holder = document.getElementById('src-' + g.items[0].id);
-      const label = holder && holder.firstElementChild;
-      if (label && label.textContent !== g.source) label.textContent = g.source;
-    });
-  });
-
-  data.riddles.forEach((r) => {
-    const el = document.getElementById('e-' + r.id);
+  data.nodes.forEach((n) => {
+    const el = document.getElementById('e-' + n.id);
     if (!el) return;
-    const sig = JSON.stringify(r);
+    // le libellé d'une racine est masqué tant que son prérequis manque
+    const label = document.getElementById('src-' + n.id)?.firstElementChild;
+    if (label && label.textContent !== n.source) label.textContent = n.source;
+
+    const sig = JSON.stringify(n);
     if (el.dataset.sig === sig) return;
     el.dataset.sig = sig;
-    el.className = enigmeClass(r);
-    el.innerHTML = enigmeCardHtml(r);
-    bindEnigmeCard(el, r);
+    el.className = nodeClass(n);
+    el.innerHTML = nodeCardHtml(n);
+    bindEnigmeCard(el, n);
   });
 
   data.convergences.forEach((c) => {
@@ -2446,19 +2353,16 @@ function applyEnigmesState(data, focusId) {
 }
 
 // Met la carte en évidence et l'amène au centre de l'écran : sur mobile le
-// clavier vient de se refermer, la révélation doit atterrir sous les yeux.
+// clavier vient de se refermer, la réponse doit atterrir sous les yeux.
 function flashEnigme(id) {
   const el = document.getElementById('e-' + id);
   if (!el) return;
   el.classList.add('enigme--just');
   setTimeout(() => el.classList.remove('enigme--just'), 1800);
-  // on laisse la mise en page se stabiliser avant de faire défiler
   setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
 }
 
 function enigmeWrong(el, input) {
-  const msg = el.querySelector('.enigme-msg');
-  if (msg) msg.textContent = 'Ce n’est pas le bon mot de passe. Réessaie, ou demande un indice.';
   el.classList.remove('enigme--wrong');
   void el.offsetWidth; // force le redémarrage de l'animation
   el.classList.add('enigme--wrong');
@@ -2467,7 +2371,7 @@ function enigmeWrong(el, input) {
   if (navigator.vibrate) navigator.vibrate(40);
 }
 
-function bindEnigmeCard(el, r) {
+function bindEnigmeCard(el, n) {
   const form = el.querySelector('.enigme-form');
   if (form) {
     form.onsubmit = async (e) => {
@@ -2478,10 +2382,10 @@ function bindEnigmeCard(el, r) {
       if (!answer) return;
       btn.disabled = true;
       try {
-        const res = await api('/api/57/guess', { method: 'POST', body: { id: r.id, answer } });
+        const res = await api('/api/57/guess', { method: 'POST', body: { id: n.id, answer } });
         if (res.ok) {
-          input.blur(); // referme le clavier avant de dérouler la révélation
-          applyEnigmesState(res.state, r.id);
+          input.blur(); // referme le clavier avant de dérouler la réponse
+          applyEnigmesState(res.state, n.id);
         } else {
           btn.disabled = false;
           enigmeWrong(el, input);
@@ -2490,33 +2394,6 @@ function bindEnigmeCard(el, r) {
         btn.disabled = false;
         const msg = el.querySelector('.enigme-msg');
         if (msg) msg.textContent = err.message;
-      }
-    };
-  }
-
-  const hintBtn = el.querySelector('.enigme-hint-btn');
-  if (hintBtn) {
-    hintBtn.onclick = async () => {
-      hintBtn.disabled = true;
-      try {
-        const res = await api('/api/57/hint', { method: 'POST', body: { id: r.id } });
-        applyEnigmesState(res.state);
-      } catch {
-        hintBtn.disabled = false;
-      }
-    };
-  }
-
-  const revealBtn = el.querySelector('.enigme-reveal-btn');
-  if (revealBtn) {
-    revealBtn.onclick = async () => {
-      if (!confirm('Afficher la réponse ? Elle sera comptée comme révélée, pas comme trouvée.')) return;
-      revealBtn.disabled = true;
-      try {
-        const res = await api('/api/57/reveal', { method: 'POST', body: { id: r.id } });
-        applyEnigmesState(res.state, r.id);
-      } catch {
-        revealBtn.disabled = false;
       }
     };
   }
@@ -2544,22 +2421,6 @@ function bindEnigmesChrome() {
       if (section) section.scrollIntoView({ block: 'start', behavior: 'smooth' });
     };
   });
-
-  const reset = document.getElementById('enigmes-reset');
-  if (reset) {
-    reset.onclick = async () => {
-      if (!confirm('Effacer toute ta progression sur cette page ?')) return;
-      reset.disabled = true;
-      try {
-        const res = await api('/api/57/progress', { method: 'DELETE' });
-        state.enigmes = res.state;
-        renderEnigmesPage();
-        window.scrollTo(0, 0);
-      } catch {
-        reset.disabled = false;
-      }
-    };
-  }
 }
 
 /* ---------------------------------------------------------------- admin */
