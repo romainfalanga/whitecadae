@@ -90,7 +90,12 @@ CREATE TABLE IF NOT EXISTS annotations (
   -- est un brouillon privé (is_published = 0) jusqu'à ce que son auteur
   -- publie une nouvelle version depuis sa page profil.
   is_published INTEGER NOT NULL DEFAULT 0,
-  version_id INTEGER REFERENCES versions(id) ON DELETE SET NULL
+  version_id INTEGER REFERENCES versions(id) ON DELETE SET NULL,
+  -- Grille de lecture : rang (à partir de 1) de cette interprétation parmi
+  -- celles que son auteur a écrites sur la même cible, dans l'ordre où il
+  -- les a écrites. Fixé à la création, jamais recalculé (une suppression ne
+  -- renumérote pas les grilles restantes).
+  grid_number INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX IF NOT EXISTS idx_annotations_song ON annotations(song_id);

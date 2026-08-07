@@ -424,9 +424,12 @@ async function getSong(env, request, slug) {
     'SELECT id, line_number, text FROM lyric_lines WHERE song_id = ?1 ORDER BY line_number'
   ).bind(song.id).all()).results;
 
+  // Grilles de lecture : le numéro de chaque lecture (n°1, n°2, …) est fixé
+  // une fois pour toutes à sa création — il n'est jamais recalculé, y compris
+  // si une lecture plus ancienne du même auteur sur la même cible est supprimée.
   const annotations = (await env.DB.prepare(
     `SELECT a.id, a.user_id, a.target_type, a.line_id, a.word_start, a.word_end, a.end_line_id,
-            a.content, a.created_at, a.updated_at, a.is_published, u.username
+            a.content, a.created_at, a.updated_at, a.is_published, a.grid_number, u.username
        FROM annotations a JOIN users u ON u.id = a.user_id
       WHERE a.song_id = ?1 AND (a.is_published = 1 OR a.user_id = ?2)
       ORDER BY a.created_at`
@@ -452,7 +455,7 @@ async function getSong(env, request, slug) {
   // Grilles de lecture venues d'autres morceaux : les interprétations
   // écrites ailleurs qui référencent un passage de ce morceau-ci.
   const inbound = (await env.DB.prepare(
-    `SELECT a.id, a.user_id, a.content, a.created_at, a.updated_at, a.is_published, u.username,
+    `SELECT a.id, a.user_id, a.content, a.created_at, a.updated_at, a.is_published, a.grid_number, u.username,
             a.target_type, a.word_start, a.word_end,
             r.ref_line_id, r.ref_end_line_id,
             rl.text AS ref_text, rl.line_number AS ref_line_number,
@@ -594,7 +597,7 @@ async function getProfile(env, request, username) {
   const isOwner = viewer && viewer.id === user.id ? 1 : 0;
 
   const annotations = (await env.DB.prepare(
-    `SELECT a.id, a.target_type, a.content, a.created_at, a.updated_at, a.is_published,
+    `SELECT a.id, a.target_type, a.content, a.created_at, a.updated_at, a.is_published, a.grid_number,
             a.line_id, a.word_start, a.word_end, a.end_line_id,
             s.id AS song_id, s.title AS song_title, s.slug AS song_slug,
             s.track_number, s.duration_seconds,
@@ -774,17 +777,33 @@ async function createAnnotation(request, env) {
   const refs = await parseReferences(env, body.references);
   if (refs instanceof Response) return refs;
 
+  // Grille de lecture : le rang de cette lecture parmi celles que cet
+  // auteur a déjà écrites sur cette même cible exacte (superposition
+  // simultanée de plusieurs lectures possibles d'un même passage).
+  const gridNumber = await nextGridNumber(env, user.id, songId, targetType, lineId, wordStart, wordEnd, endLineId);
+
   // Toute nouvelle interprétation naît en brouillon privé : elle ne devient
   // visible des autres que lorsque son auteur publie une nouvelle version.
   const result = await env.DB.prepare(
-    `INSERT INTO annotations (user_id, song_id, target_type, line_id, word_start, word_end, end_line_id, content, is_published, version_id)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, NULL)`
-  ).bind(user.id, songId, targetType, lineId, wordStart, wordEnd, endLineId, content).run();
+    `INSERT INTO annotations (user_id, song_id, target_type, line_id, word_start, word_end, end_line_id, content, is_published, version_id, grid_number)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, NULL, ?9)`
+  ).bind(user.id, songId, targetType, lineId, wordStart, wordEnd, endLineId, content, gridNumber).run();
 
   const annotationId = result.meta.last_row_id;
   if (refs.length) await replaceReferences(env, annotationId, refs);
 
   return json({ id: annotationId }, 201);
+}
+
+// Rang (à partir de 1) de la prochaine lecture de cet auteur sur cette cible
+// exacte, parmi celles qu'il a déjà écrites — jamais recalculé après coup.
+async function nextGridNumber(env, userId, songId, targetType, lineId, wordStart, wordEnd, endLineId) {
+  const row = await env.DB.prepare(
+    `SELECT COALESCE(MAX(grid_number), 0) AS n FROM annotations
+      WHERE user_id = ?1 AND song_id = ?2 AND target_type = ?3
+        AND line_id IS ?4 AND word_start IS ?5 AND word_end IS ?6 AND end_line_id IS ?7`
+  ).bind(userId, songId, targetType, lineId, wordStart, wordEnd, endLineId).first();
+  return row.n + 1;
 }
 
 async function updateAnnotation(request, env, id) {

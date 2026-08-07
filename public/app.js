@@ -1001,6 +1001,7 @@ function renderInbound() {
           — à propos de ${esc(inboundSourceLabel(r))}
         </div>
         <div class="inbound-anchor">« ${esc(inboundAnchorText(r))} »</div>
+        <div class="grid-label">Grille de lecture n°${r.grid_number}</div>
         <div class="annotation-body">${esc(r.content)}</div>
         <div class="annotation-head">
           ${authorLink(r.username)}
@@ -1579,6 +1580,7 @@ function annotationCard(a, targetQuote) {
   const u = state.user;
   const own = u && (u.id === a.user_id || u.is_admin);
   return `<div class="annotation" data-ann="${a.id}">
+    <div class="grid-label">Grille de lecture n°${a.grid_number}</div>
     <div class="annotation-head">
       ${authorLink(a.username)}
       <span>${esc(formatDate(a.created_at))}${a.updated_at ? ' (modifié)' : ''}</span>
@@ -1593,15 +1595,27 @@ function annotationCard(a, targetQuote) {
   </div>`;
 }
 
-function annotationForm(id, placeholder, buttonLabel) {
+// Le numéro de la prochaine grille de lecture que cet auteur écrirait sur
+// cette cible — 1 pour une première lecture, sinon la suite de ses lectures
+// déjà écrites ici (superposition simultanée : chacune s'ajoute, sans
+// remplacer les précédentes).
+function nextGridFor(anns) {
+  const u = state.user;
+  if (!u) return 1;
+  const mine = anns.filter((a) => a.user_id === u.id);
+  return mine.length ? Math.max(...mine.map((a) => a.grid_number)) + 1 : 1;
+}
+
+function annotationForm(id, placeholder, buttonLabel, nextGrid = 1) {
   if (!state.user) {
     return `<p class="empty-note"><a href="/connexion" data-link>Connectez-vous</a> pour proposer une interprétation.</p>`;
   }
   return `<form class="annotation-form" id="${id}">
+    ${nextGrid > 1 ? `<div class="grid-label grid-label-next">Nouvelle grille de lecture — n°${nextGrid}</div>` : ''}
     <textarea placeholder="${esc(placeholder)}" required maxlength="5000"></textarea>
     ${referencesFieldset()}
     <div class="error-msg"></div>
-    <button type="submit" class="primary">${esc(buttonLabel)}</button>
+    <button type="submit" class="primary">${esc(nextGrid > 1 ? `Publier la grille de lecture n°${nextGrid}` : buttonLabel)}</button>
   </form>`;
 }
 
@@ -1688,7 +1702,7 @@ function renderPanel() {
         a,
         `« ${esc(passageText(a.line_id, a.word_start || 0, a.end_line_id, a.word_end == null ? 0 : a.word_end))} »`
       )).join('') || '<p class="empty-note">Aucune interprétation de passage ici pour l’instant.</p>'}
-      ${annotationForm('passage-ann-form', 'Que raconte ce passage ?', 'Interpréter ce passage')}
+      ${annotationForm('passage-ann-form', 'Que raconte ce passage ?', 'Interpréter ce passage', nextGridFor(passAnns))}
     </div>
     <button class="link-btn" id="clear-sel">← Revenir à la chanson</button>`;
     forms.push(['passage-ann-form', {
@@ -1712,7 +1726,7 @@ function renderPanel() {
           a,
           `« ${esc(toks.slice(a.word_start, a.word_end + 1).join(' '))} »`
         )).join('') || '<p class="empty-note">Aucune interprétation pour l’instant.</p>'}
-        ${annotationForm('word-ann-form', `Que signifie « ${quote} » ici ?`, 'Interpréter ces mots')}
+        ${annotationForm('word-ann-form', `Que signifie « ${quote} » ici ?`, 'Interpréter ces mots', nextGridFor(wordAnns))}
       </div>`;
       forms.push(['word-ann-form', { song_id: song.id, line_id: sel.lineId, word_start: sel.start, word_end: sel.end }]);
     }
@@ -1722,7 +1736,7 @@ function renderPanel() {
       <h3>La phrase</h3>
       <div class="panel-target">« ${esc(line ? line.text : '')} »</div>
       ${lineAnns.map((a) => annotationCard(a)).join('') || '<p class="empty-note">Aucune interprétation pour l’instant.</p>'}
-      ${annotationForm('line-ann-form', 'Que signifie cette phrase ?', 'Interpréter cette phrase')}
+      ${annotationForm('line-ann-form', 'Que signifie cette phrase ?', 'Interpréter cette phrase', nextGridFor(lineAnns))}
     </div>
     <button class="link-btn" id="clear-sel">← Revenir à la chanson</button>`;
     forms.push(['line-ann-form', { song_id: song.id, line_id: sel.lineId }]);
@@ -1731,7 +1745,7 @@ function renderPanel() {
     html += `<div class="panel-card">
       <h3>Le titre « ${esc(song.title)} »</h3>
       ${titleAnns.map((a) => annotationCard(a)).join('') || '<p class="empty-note">Aucune interprétation du titre pour l’instant.</p>'}
-      ${annotationForm('title-ann-form', `Pourquoi ce titre, « ${song.title} » ?`, 'Interpréter le titre')}
+      ${annotationForm('title-ann-form', `Pourquoi ce titre, « ${song.title} » ?`, 'Interpréter le titre', nextGridFor(titleAnns))}
     </div>
     <button class="link-btn" id="clear-sel">← Revenir à la chanson</button>`;
     forms.push(['title-ann-form', { song_id: song.id, target_type: 'title' }]);
@@ -1741,7 +1755,7 @@ function renderPanel() {
       <h3>La durée${duration ? ` — ${duration}` : ''}</h3>
       ${duration ? '' : '<div class="panel-target">durée non renseignée pour l’instant</div>'}
       ${durAnns.map((a) => annotationCard(a)).join('') || '<p class="empty-note">Aucune interprétation de la durée pour l’instant.</p>'}
-      ${annotationForm('duration-ann-form', duration ? `Que disent les chiffres de ${duration} ?` : 'Que dit la durée de cette chanson ?', 'Interpréter la durée')}
+      ${annotationForm('duration-ann-form', duration ? `Que disent les chiffres de ${duration} ?` : 'Que dit la durée de cette chanson ?', 'Interpréter la durée', nextGridFor(durAnns))}
     </div>
     <button class="link-btn" id="clear-sel">← Revenir à la chanson</button>`;
     forms.push(['duration-ann-form', { song_id: song.id, target_type: 'duration' }]);
@@ -1750,7 +1764,7 @@ function renderPanel() {
     html += `<div class="panel-card">
       <h3>À propos de la chanson</h3>
       ${songAnns.map((a) => annotationCard(a)).join('') || '<p class="empty-note">Aucune interprétation générale pour l’instant.</p>'}
-      ${annotationForm('song-ann-form', `Le sens général de « ${song.title} »…`, 'Interpréter la chanson')}
+      ${annotationForm('song-ann-form', `Le sens général de « ${song.title} »…`, 'Interpréter la chanson', nextGridFor(songAnns))}
     </div>`;
     forms.push(['song-ann-form', { song_id: song.id, target_type: 'song' }]);
 
@@ -2034,6 +2048,7 @@ async function pageProfile(username) {
         <h3><a href="/chanson/${encodeURIComponent(sec.slug)}" data-link>${esc(sec.title)}</a></h3>
         ${sec.blocks.map((a) => `
           <div class="book-block ${a.is_published ? '' : 'book-draft'}">
+            <div class="grid-label">Grille de lecture n°${a.grid_number}</div>
             <div class="book-passage">${esc(bookPassageLabel(a))}
               ${!a.is_published ? '<span class="draft-badge">Brouillon</span>' : ''}</div>
             <div class="book-content">${esc(a.content)}</div>

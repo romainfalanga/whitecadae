@@ -302,6 +302,22 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .annotation-body { margin-top: 0.3rem; white-space: pre-wrap; font-size: 0.95rem; }
 .annotation-target-quote { font-family: var(--serif); font-style: italic; color: var(--text-dim); font-size: 0.85rem; margin-top: 0.2rem; }
 
+/* Numéro de grille de lecture : plusieurs lectures superposées d'une même
+   cible, chacune numérotée dans l'ordre où son auteur l'a écrite. */
+.grid-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin-bottom: 0.2rem;
+}
+.grid-label-next {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
 .empty-note { color: var(--text-dim); font-size: 0.9rem; font-style: italic; }
 
 .annotation-form textarea { margin-top: 0.5rem; }
