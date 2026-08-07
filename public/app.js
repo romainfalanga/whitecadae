@@ -124,18 +124,19 @@ async function route() {
   closeSettings();
   renderNav();
   let m;
-  if (path === '/' || path === '') return pageInterpretations();
+  // On arrive sur la plateforme par le 57 : c'est lui qui ouvre le reste.
+  if (path === '/' || path === '' || path === '/57') return pageEnigmes();
+  if (path === '/interpretations') return pageInterpretations();
   if (path === '/connexion') return pageLogin();
   if (path === '/inscription') return pageRegister();
   if (path === '/admin') return pageAdmin();
   if (path === '/reprises/fil') return pageCoverFeed();
   if (path === '/reprises') return pageCovers();
-  if (path === '/57') return pageEnigmes();
   if (path === '/fil') return pageFeed();
   if ((m = path.match(/^\/chanson\/([^/]+)\/reprises$/))) return pageSongCovers(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/membre\/([^/]+)$/))) return pageProfile(decodeURIComponent(m[1]));
-  app.innerHTML = '<h1>Page introuvable</h1><p><a href="/" data-link>Retour aux interprétations</a></p>';
+  app.innerHTML = '<h1>Page introuvable</h1><p><a href="/interpretations" data-link>Retour aux interprétations</a></p>';
 }
 
 function profileHref(username) {
@@ -342,13 +343,13 @@ function renderNav() {
   // La déconnexion se fait depuis les paramètres du compte (page profil) :
   // pas besoin de la dupliquer dans le menu.
   nav.innerHTML = u
-    ? `<a href="/" data-link>Interprétations</a>
-       <a href="/57" data-link>57</a>
+    ? `<a href="/57" data-link>57</a>
+       <a href="/interpretations" data-link>Interprétations</a>
        <a href="/reprises" data-link>Reprises</a>
        ${u.is_admin ? '<a href="/admin" data-link>Administration</a>' : ''}
        <a href="${profileHref(u.username)}" data-link>Mon profil</a>`
-    : `<a href="/" data-link>Interprétations</a>
-       <a href="/57" data-link>57</a>
+    : `<a href="/57" data-link>57</a>
+       <a href="/interpretations" data-link>Interprétations</a>
        <a href="/reprises" data-link>Reprises</a>
        <a href="/connexion" data-link>Se connecter</a>
        <a href="/inscription" data-link class="btn">Créer un compte</a>`;
@@ -411,7 +412,7 @@ async function pageFeed() {
 function renderFeedPage() {
   const { items, more } = state.feed;
   app.innerHTML = `
-    <div class="breadcrumb"><a href="/" data-link>Interprétations</a></div>
+    <div class="breadcrumb"><a href="/interpretations" data-link>Interprétations</a></div>
     <h1>Le fil</h1>
     <p class="subtitle">Toutes les interprétations publiées, de la plus récente à la plus ancienne.</p>
     <div class="feed-list" id="feed-list">${items.map(feedCard).join('')
@@ -551,7 +552,7 @@ async function pageSong(slug, keepSelection = false) {
     data = await api(`/api/songs/${encodeURIComponent(slug)}`);
   } catch (err) {
     if (!stale(epoch)) {
-      app.innerHTML = `<h1>Chanson introuvable</h1><p><a href="/" data-link>Retour aux interprétations</a></p>`;
+      app.innerHTML = `<h1>Chanson introuvable</h1><p><a href="/interpretations" data-link>Retour aux interprétations</a></p>`;
     }
     return;
   }
@@ -1003,7 +1004,7 @@ function renderSongPage() {
     : `<div class="no-lyrics">Les paroles de « ${esc(song.title)} » seront bientôt disponibles.</div>`;
 
   app.innerHTML = `
-    <div class="breadcrumb"><a href="/" data-link>Interprétations</a> › ${esc(song.album_title || 'Sans album')}</div>
+    <div class="breadcrumb"><a href="/interpretations" data-link>Interprétations</a> › ${esc(song.album_title || 'Sans album')}</div>
     <h1>${esc(song.title)}</h1>
     <div class="song-targets">
       <button class="target-chip target-chip-write ${sel && sel.type === 'title' ? 'active' : ''}" id="target-title">
@@ -2360,7 +2361,10 @@ function youtubeEmbedId(url) {
   return null;
 }
 
-function coverCard(c) {
+// `opts.solo` : la reprise est déjà présentée par ce qui l'entoure (le fil
+// d'un profil, par exemple), qui porte l'auteur et la date — on ne les répète
+// pas ici, mais le bouton de suppression reste à sa place.
+function coverCard(c, opts = {}) {
   const u = state.user;
   const own = u && (u.id === c.user_id || u.is_admin);
   const ytId = youtubeEmbedId(c.url);
@@ -2371,10 +2375,9 @@ function coverCard(c) {
       : `<a class="cover-link" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">▶ Voir la reprise</a>`}
     <div class="cover-head">
       <h4>${esc(c.title)}</h4>
-      ${c.song_slug ? `<a class="cover-song-tag" href="/chanson/${encodeURIComponent(c.song_slug)}/reprises" data-link>${esc(c.song_title)}</a>` : ''}
+      ${c.song_slug && !opts.solo ? `<a class="cover-song-tag" href="/chanson/${encodeURIComponent(c.song_slug)}/reprises" data-link>${esc(c.song_title)}</a>` : ''}
       <div class="annotation-head">
-        ${authorLink(c.username)}
-        <span>${esc(formatDate(c.created_at))}</span>
+        ${opts.solo ? '' : `${authorLink(c.username)}<span>${esc(formatDate(c.created_at))}</span>`}
         ${own ? `<button class="link-btn" data-cover-del="${c.id}">supprimer</button>` : ''}
       </div>
     </div>
@@ -2405,7 +2408,7 @@ async function pageSongCovers(slug) {
   try {
     data = await api(`/api/songs/${encodeURIComponent(slug)}/covers`);
   } catch {
-    if (!stale(epoch)) app.innerHTML = '<h1>Chanson introuvable</h1><p><a href="/" data-link>Retour aux interprétations</a></p>';
+    if (!stale(epoch)) app.innerHTML = '<h1>Chanson introuvable</h1><p><a href="/interpretations" data-link>Retour aux interprétations</a></p>';
     return;
   }
   if (stale(epoch)) return;
@@ -2436,7 +2439,7 @@ function renderSongCoversPage() {
     : `<p class="empty-note"><a href="/connexion" data-link>Connectez-vous</a> pour publier une reprise de ce morceau.</p>`;
 
   app.innerHTML = `
-    <div class="breadcrumb"><a href="/" data-link>Interprétations</a> › ${esc(song.album_title || 'Sans album')} ›
+    <div class="breadcrumb"><a href="/interpretations" data-link>Interprétations</a> › ${esc(song.album_title || 'Sans album')} ›
       <a href="/chanson/${encodeURIComponent(song.slug)}" data-link>${esc(song.title)}</a> › Reprises</div>
     <h1>Reprises de « ${esc(song.title)} »</h1>
     ${list}
@@ -2465,27 +2468,67 @@ function renderSongCoversPage() {
   };
 }
 
-/* --------------------------------------------------- profils & le livre */
+/* ------------------------------------------------------ profil = timeline
 
-function bookPassageLabel(a) {
-  if (a.target_type === 'song') return 'À propos du morceau';
-  if (a.target_type === 'title') return 'Le titre';
-  if (a.target_type === 'duration') return `La durée${a.duration_seconds ? ` (${mmss(a.duration_seconds)})` : ''}`;
-  if (a.target_type === 'passage') {
-    const from = tokens(a.line_text || '').slice(a.word_start || 0).join(' ');
-    const to = tokens(a.end_line_text || '').slice(0, (a.word_end == null ? -1 : a.word_end) + 1).join(' ');
-    const gap = (a.end_line_number || 0) - (a.line_number || 0) > 1 ? ' […] ' : ' / ';
-    return `« ${from}${gap}${to} »`;
-  }
-  if (a.target_type === 'word') {
-    return `« ${tokens(a.line_text || '').slice(a.word_start, a.word_end + 1).join(' ')} » — dans « ${a.line_text || ''} »`;
-  }
-  return `« ${a.line_text || ''} »`;
+   La page de profil EST le fil de ce qu'un membre a fait ici, du plus récent
+   au plus ancien : interprétations, interprétations d'ensemble, références,
+   connexions, reprises, et les publications qui ont rendu tout cela visible.
+   Un seul fil, daté de bout en bout — ni sections, ni compteurs, ni
+   présentation.                                                          */
+
+const TIMELINE_KIND = {
+  interpretation: 'Interprétation',
+  ensemble: 'Interprétation d’ensemble',
+  reference: 'Référence',
+  connexion: 'Connexion',
+  reprise: 'Reprise',
+  publication: 'Publication',
+};
+
+// La coquille commune à toutes les entrées : la date d'abord, puisque c'est
+// elle qui fait le fil.
+function timelineEntry(kind, at, { where = '', body = '', badge = '' }) {
+  return `<article class="tl-entry tl-${kind}">
+    <div class="tl-meta">
+      <time class="tl-date">${esc(formatDate(at))}</time>
+      <span class="tl-kind">${TIMELINE_KIND[kind]}</span>
+      ${badge}
+    </div>
+    ${where ? `<div class="tl-where">${where}</div>` : ''}
+    ${body ? `<div class="tl-body">${body}</div>` : ''}
+  </article>`;
 }
 
-// Les interprétations d'un membre, regroupées morceau par morceau et
-// classées dans l'ordre chronologique des sorties (albums puis pistes),
-// chaque bloc citant le passage interprété.
+const songLink = (slug, title) =>
+  `<a href="/chanson/${encodeURIComponent(slug)}" data-link>${esc(title)}</a>`;
+
+const draftBadge = (it) => (it.is_published ? '' : '<span class="draft-badge">Brouillon</span>');
+
+// Les connexions qui justifient une interprétation d'ensemble.
+function essayLinksHtml(e) {
+  if (!e.links || !e.links.length) return '';
+  return `<div class="tl-links">${e.links.map((l) => `
+    <div class="essay-link">
+      <div class="essay-link-blocks">
+        <span class="excerpt">« ${esc(excerptOf(l.from_text, l.from_word_start, l.from_word_end))} »</span>
+        <span class="link-song">(${esc(l.from_song_title)})</span>
+        <span class="arrow">⟷</span>
+        <span class="excerpt">« ${esc(excerptOf(l.to_text, l.to_word_start, l.to_word_end))} »</span>
+        <span class="link-song">(${esc(l.to_song_title)})</span>
+      </div>
+      <div class="essay-link-note">${esc(l.note)}</div>
+    </div>`).join('')}</div>`;
+}
+
+// Ce vers quoi pointe une référence : le passage d'un autre morceau, ou une
+// œuvre extérieure.
+function refTargetHtml(r) {
+  const cible = r.kind === 'internal'
+    ? `♪ ${r.ref_song_slug ? songLink(r.ref_song_slug, r.label) : esc(r.label)}`
+    : `${esc(r.label)}${r.artist ? ` <span class="ref-artist-name">— ${esc(r.artist)}</span>` : ''}`;
+  return `<div class="tl-ref-target">${cible}</div>`;
+}
+
 async function pageProfile(username) {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
@@ -2493,124 +2536,91 @@ async function pageProfile(username) {
   try {
     data = await api(`/api/users/${encodeURIComponent(username)}`);
   } catch {
-    if (!stale(epoch)) app.innerHTML = '<h1>Membre introuvable</h1><p><a href="/" data-link>Retour aux interprétations</a></p>';
+    if (!stale(epoch)) app.innerHTML = '<h1>Membre introuvable</h1><p><a href="/interpretations" data-link>Retour aux interprétations</a></p>';
     return;
   }
   if (stale(epoch)) return;
 
-  const { user, stats, annotations, essays, connections, versions, covers } = data;
-
-  // sections par morceau, dans l'ordre livré par le serveur (albums, pistes)
-  const sections = [];
-  const bySlug = new Map();
-  const sectionFor = (item) => {
-    if (!bySlug.has(item.song_slug)) {
-      const sec = {
-        slug: item.song_slug, title: item.song_title, album: item.album_title,
-        pos: [item.album_position, item.track_number || 0],
-        blocks: [], essays: [],
-      };
-      bySlug.set(item.song_slug, sec);
-      sections.push(sec);
-    }
-    return bySlug.get(item.song_slug);
-  };
-  annotations.forEach((a) => sectionFor(a).blocks.push(a));
-  essays.forEach((e) => sectionFor(e).essays.push(e));
-  sections.sort((x, y) => x.pos[0] - y.pos[0] || x.pos[1] - y.pos[1]);
-
+  const { user, stats, annotations, essays, passageRefs, connections, versions, covers } = data;
   const isMe = state.user && state.user.username === user.username;
-  const total = stats.annotations + stats.essays;
 
-  const bookHtml = sections.length
-    ? sections.map((sec) => `
-      <section class="book-song">
-        ${sec.album ? `<div class="book-album">${esc(sec.album)}</div>` : ''}
-        <h3><a href="/chanson/${encodeURIComponent(sec.slug)}" data-link>${esc(sec.title)}</a></h3>
-        ${sec.blocks.map((a) => `
-          <div class="book-block ${a.is_published ? '' : 'book-draft'}">
-            <div class="grid-label">Grille de lecture n°${a.grid_number}</div>
-            <div class="book-passage">${esc(bookPassageLabel(a))}
-              ${!a.is_published ? '<span class="draft-badge">Brouillon</span>' : ''}</div>
-            <div class="book-content">${esc(a.content)}</div>
-            ${referencesList(a)}
-          </div>`).join('')}
-        ${sec.essays.map((e) => `
-          <div class="book-block book-essay ${e.is_published ? '' : 'book-draft'}">
-            <div class="book-passage">Interprétation d’ensemble
-              ${!e.is_published ? '<span class="draft-badge">Brouillon</span>' : ''}</div>
-            <div class="book-content">${esc(e.content)}</div>
-            ${e.links.length ? `<div class="essay-links-title">Connexions</div>
-              ${e.links.map((l) => `<div class="essay-link">
-                <div class="essay-link-blocks">
-                  <span class="excerpt">« ${esc(excerptOf(l.from_text, l.from_word_start, l.from_word_end))} »</span>
-                  <span class="link-song">(${esc(l.from_song_title)})</span>
-                  <span class="arrow">⟷</span>
-                  <span class="excerpt">« ${esc(excerptOf(l.to_text, l.to_word_start, l.to_word_end))} »</span>
-                  <span class="link-song">(${esc(l.to_song_title)})</span>
-                </div>
-                <div class="essay-link-note">${esc(l.note)}</div>
-              </div>`).join('')}` : ''}
-          </div>`).join('')}
-      </section>`).join('')
-    : `<p class="empty-note">${isMe
-        ? 'Tu n’as pas encore écrit d’interprétation : va sur un morceau pour commencer.'
-        : 'Ce membre n’a pas encore écrit d’interprétation.'}</p>`;
+  // Tout ce qu'a fait ce membre devient une entrée datée, puis le fil se
+  // reforme dans l'ordre. Les dates viennent toutes de datetime('now') :
+  // elles se comparent telles quelles, sans passer par Date.
+  const entries = [];
+  const add = (at, html) => entries.push({ at: at || '', html });
 
-  const versionsHtml = `
-    <h2>Historique des publications</h2>
-    ${isMe ? `
-      <div class="publish-box">
-        ${stats.draft_count
-          ? `<p>${stats.draft_count} modification${stats.draft_count > 1 ? 's' : ''} en attente,
-             non visible${stats.draft_count > 1 ? 's' : ''} pour les autres membres tant que tu n’as pas publié.</p>
-             <button type="button" class="primary" id="publish-btn">Publier une nouvelle version</button>`
-          : `<p class="empty-note">Aucune modification en attente : tout ce que tu as écrit est déjà publié.</p>`}
-        <div class="error-msg" id="publish-error"></div>
-      </div>` : ''}
-    ${versions.length
-      ? `<ul class="version-list">
-          ${versions.map((v) => `
-            <li><strong>Version ${v.number}</strong> — publiée le ${esc(formatDate(v.published_at))}
-              <span class="version-count">(${v.item_count} bloc${v.item_count > 1 ? 's' : ''})</span></li>`).join('')}
-        </ul>`
-      : `<p class="empty-note">Aucune version publiée pour l’instant.</p>`}`;
+  for (const a of annotations) {
+    add(a.created_at, timelineEntry('interpretation', a.created_at, {
+      badge: draftBadge(a) + (a.grid_number > 1 ? `<span class="tl-grid">n°${a.grid_number}</span>` : ''),
+      where: songLink(a.song_slug, a.song_title),
+      body: `<div class="tl-quote">${esc(feedQuote(a))}</div>
+        <div class="annotation-body">${esc(a.content)}</div>
+        ${referencesList(a)}`,
+    }));
+  }
+  for (const e of essays) {
+    add(e.created_at, timelineEntry('ensemble', e.created_at, {
+      badge: draftBadge(e),
+      where: songLink(e.song_slug, e.song_title),
+      body: `<div class="annotation-body">${esc(e.content)}</div>${essayLinksHtml(e)}`,
+    }));
+  }
+  for (const r of passageRefs || []) {
+    add(r.created_at, timelineEntry('reference', r.created_at, {
+      where: songLink(r.song_slug, r.song_title),
+      body: `<div class="tl-quote">${esc(feedQuote(r))}</div>
+        ${refTargetHtml(r)}
+        ${r.note ? `<div class="annotation-body">${esc(r.note)}</div>` : ''}`,
+    }));
+  }
+  for (const c of connections) {
+    add(c.created_at, timelineEntry('connexion', c.created_at, {
+      where: `${songLink(c.song_a_slug, c.song_a_title)}
+        <span class="arrow">⟷</span>
+        ${songLink(c.song_b_slug, c.song_b_title)}`,
+      body: `<div class="annotation-body">${esc(c.explanation)}</div>`,
+    }));
+  }
+  for (const c of covers) {
+    add(c.created_at, timelineEntry('reprise', c.created_at, {
+      // depuis une reprise, on va vers les reprises du morceau
+      where: c.song_slug
+        ? `<a href="/chanson/${encodeURIComponent(c.song_slug)}/reprises" data-link>${esc(c.song_title)}</a>`
+        : '',
+      // l'auteur et la date sont déjà dans l'entête de l'entrée
+      body: coverCard(c, { solo: true }),
+    }));
+  }
+  for (const v of versions) {
+    add(v.published_at, timelineEntry('publication', v.published_at, {
+      badge: `<span class="tl-version">n°${v.number}</span>`,
+      body: `<div class="tl-count">${v.item_count} bloc${v.item_count > 1 ? 's' : ''}</div>`,
+    }));
+  }
+  entries.sort((x, y) => (x.at < y.at ? 1 : x.at > y.at ? -1 : 0));
 
+  const pending = stats.draft_count;
   app.innerHTML = `
     <div class="profile-head">
       ${avatarImg(user.username, 'profile-avatar')}
-      <div class="profile-head-text">
-        <h1>${esc(user.username)}${user.is_admin ? ' <span class="album-date">— artiste</span>' : ''}</h1>
-        <p class="subtitle">Membre depuis ${esc(formatDate(user.created_at))} ·
-          ${stats.annotations} interprétation${stats.annotations > 1 ? 's' : ''} ·
-          ${stats.essays} interprétation${stats.essays > 1 ? 's' : ''} d’ensemble ·
-          ${stats.connections} connexion${stats.connections > 1 ? 's' : ''} ·
-          ${stats.covers} reprise${stats.covers > 1 ? 's' : ''} ·
-          ♥ ${stats.favorites_received} reçu${stats.favorites_received > 1 ? 's' : ''}</p>
-      </div>
-      ${isMe ? `<button type="button" class="icon-btn" id="settings-btn" title="Paramètres du compte" aria-label="Paramètres du compte">⚙</button>` : ''}
+      <h1>${esc(user.username)}${user.is_admin ? ' <span class="album-date">— artiste</span>' : ''}</h1>
+      ${isMe ? `<button type="button" class="icon-btn" id="settings-btn"
+        title="Paramètres du compte" aria-label="Paramètres du compte">⚙</button>` : ''}
     </div>
-    ${versionsHtml}
-    <h2>${isMe ? 'Tes interprétations' : `Les interprétations de ${esc(user.username)}`}</h2>
-    <p class="hint">${total} bloc${total > 1 ? 's' : ''} d’interprétation, classé${total > 1 ? 's' : ''} morceau par morceau
-    dans l’ordre chronologique des sorties : le passage interprété, puis la lecture qu’${isMe ? 'en fais-tu' : `en fait ${esc(user.username)}`}.</p>
-    ${bookHtml}
-    ${covers.length ? `<h2>${isMe ? 'Tes reprises' : `Les reprises de ${esc(user.username)}`}</h2>
-      <div class="covers-grid">${covers.map(coverCard).join('')}</div>` : ''}
-    ${connections.length ? `<h2>Ses connexions entre morceaux</h2>
-      ${connections.map((c) => `<div class="connection">
-        <div class="connection-songs">
-          <a href="/chanson/${encodeURIComponent(c.song_a_slug)}" data-link>${esc(c.song_a_title)}</a>
-          <span class="arrow">⟷</span>
-          <a href="/chanson/${encodeURIComponent(c.song_b_slug)}" data-link>${esc(c.song_b_title)}</a>
-        </div>
-        <div class="connection-body">${esc(c.explanation)}</div>
-      </div>`).join('')}` : ''}`;
+    ${isMe ? `<div class="profile-publish">
+      <button type="button" class="primary" id="publish-btn" ${pending ? '' : 'disabled'}>
+        Publier la version actuelle${pending ? ` · ${pending}` : ''}
+      </button>
+      <div class="error-msg" id="publish-error"></div>
+    </div>` : ''}
+    <div class="timeline">${entries.map((e) => e.html).join('')
+      || '<p class="empty-note">Rien pour l’instant.</p>'}</div>`;
 
   if (isMe) {
     document.getElementById('settings-btn').onclick = () => openSettings();
     const publishBtn = document.getElementById('publish-btn');
-    if (publishBtn) publishBtn.onclick = async () => {
+    if (pending) publishBtn.onclick = async () => {
       publishBtn.disabled = true;
       try {
         await api('/api/profile/publish', { method: 'POST' });
@@ -2744,19 +2754,24 @@ async function pageEnigmes() {
 
 function nodeClass(n) {
   if (n.locked) return 'enigme enigme--locked';
-  if (n.found.length === n.total) return 'enigme enigme--solved';
+  if (!n.open) return 'enigme enigme--solved';
   if (n.found.length) return 'enigme enigme--partial';
   return 'enigme';
 }
 
 // Un seul champ par élément, même quand il porte plusieurs sens : les
 // réponses s'empilent au-dessus au fur et à mesure, dans n'importe quel ordre.
+//
+// Un élément sans libellé n'a pas d'entête du tout, et le serveur ne dit pas
+// combien de mots de passe il cache : ni titre, ni compte.
 function nodeCardHtml(n) {
   const counter = n.total > 1
     ? `<span class="enigme-count">${n.found.length}<span>/${n.total}</span></span>` : '';
-  const head = `<div class="enigme-head">
+  const head = n.source || counter
+    ? `<div class="enigme-head">
       <span class="enigme-source">${esc(n.source)}</span>${counter}
-    </div>`;
+    </div>`
+    : '';
 
   if (n.locked) {
     const missing = n.requires
@@ -2771,12 +2786,12 @@ function nodeCardHtml(n) {
     .map((a) => `<p class="enigme-line"><strong class="enigme-answer">${esc(a.label)}</strong></p>`)
     .join('');
 
-  const form = n.found.length === n.total ? '' : `
+  const form = !n.open ? '' : `
     <form class="enigme-form">
       <input class="enigme-input" type="text" placeholder="mot de passe"
              autocomplete="off" autocapitalize="off" autocorrect="off"
              spellcheck="false" enterkeyhint="go" maxlength="200"
-             aria-label="Mot de passe pour ${esc(n.source)}">
+             aria-label="Mot de passe${n.source ? ` pour ${esc(n.source)}` : ''}">
       <button type="submit" class="primary" aria-label="Valider">
         <span class="enigme-go">→</span><span class="enigme-go-text">Valider</span>
       </button>
@@ -2786,12 +2801,14 @@ function nodeCardHtml(n) {
   return `${head}<div class="enigme-body">${found}${form}</div>`;
 }
 
+// On ne dit jamais combien il y a de mots de passe en tout : la barre montre
+// le chemin qu'il reste dans l'échelon en cours, et rien de plus.
 function enigmesProgressHtml() {
   const d = state.enigmes;
-  const pct = d.total ? Math.round((d.solved / d.total) * 100) : 0;
+  const pct = Math.round((d.step / d.perEchelon) * 100);
   return `
     <div class="progress-bar"><span style="width:${pct}%"></span></div>
-    <p class="progress-text"><strong>${d.solved}</strong> / ${d.total}</p>`;
+    <p class="progress-text"><strong>Échelon ${d.echelon}</strong></p>`;
 }
 
 function renderEnigmesPage() {
@@ -2872,8 +2889,10 @@ function bindEnigmeCard(el, n) {
         const res = await api('/api/57/guess', { method: 'POST', body: { id: n.id, answer } });
         if (res.ok) {
           // sur téléphone on referme le clavier pour laisser voir la réponse ;
-          // au clavier physique on reste dans le champ pour enchaîner
-          const chain = window.innerWidth > 700 && n.found.length + 1 < n.total;
+          // au clavier physique on reste dans le champ pour enchaîner. Un bloc
+          // silencieux ne dit pas combien il en reste : c'est `open` qui décide.
+          const apres = res.state.nodes.find((x) => x.id === n.id);
+          const chain = window.innerWidth > 700 && !!(apres && apres.open);
           input.blur();
           applyEnigmesState(res.state, n.id);
           if (chain) document.querySelector('#e-' + n.id + ' .enigme-input')?.focus();

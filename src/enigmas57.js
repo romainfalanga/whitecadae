@@ -60,7 +60,10 @@ function isDecemberDay(n, day) {
 // quand il porte plusieurs sens. Les réponses se révèlent au fur et à mesure,
 // dans n'importe quel ordre.
 //
-// source      : ce qui est écrit à gauche du « = »
+// source      : ce qui est écrit à gauche du « = ». Vide : le bloc n'a pas
+//               de libellé du tout — on ne dit même pas de quoi il parle
+// silent      : le nombre de mots de passe à trouver n'est pas annoncé (le
+//               client ne reçoit alors aucun total pour ce bloc)
 // lockedLabel : libellé de remplacement tant que le nœud est verrouillé,
 //               quand la source est elle-même la réponse d'un autre nœud
 // requires    : identifiants de réponses à trouver avant d'ouvrir ce nœud
@@ -68,20 +71,67 @@ function isDecemberDay(n, day) {
 //
 // Aucun identifiant ne doit contenir sa propre réponse : ils voyagent
 // jusque dans le DOM.
+
+// Les mots de passe écrits d'un seul tenant : on tolère les espaces, pas
+// autre chose.
+const oneWord = (...formes) => (n) => formes.includes(n.replace(/ /g, ''));
+
 export const NODES = [
+  {
+    // Le bloc d'entrée : ni titre, ni compte. On ne sait pas ce qu'on
+    // cherche, ni combien il y en a.
+    id: 'n-0',
+    source: '',
+    silent: true,
+    requires: [],
+    answers: [
+      {
+        id: 'n-0-1',
+        label: 'Devincix',
+        match: oneWord('devincix'),
+        note: '',
+        quotes: [],
+      },
+      {
+        id: 'n-0-2',
+        label: 'Aavulpis',
+        match: oneWord('aavulpis'),
+        note: '',
+        quotes: [],
+      },
+      {
+        id: 'n-0-3',
+        label: 'Katikas',
+        match: oneWord('katikas', 'katikias'),
+        note: 'Les deux orthographes valent.',
+        quotes: [],
+      },
+    ],
+  },
+  {
+    id: 'n-k',
+    source: 'White Cadae',
+    requires: [],
+    answers: [
+      {
+        id: 'n-k-1',
+        label: 'Infini blanc',
+        // les deux mots, dans l'ordre qu'on veut
+        match: (n) => /infini/.test(n) && /blanc/.test(n),
+        note: 'White : blanc. Cadae : C=3, A=1, D=4, A=1, E=5 — les décimales de pi, qui ne s’arrêtent jamais.',
+        quotes: ['J’harmonise l’infini, l’infini devient fini. (Multivers)',
+                 'Je ne suis qu’un fil qui relie deux infinis. (Un fil entre deux infinis)'],
+      },
+    ],
+  },
   {
     id: 'n-a',
     source: '57',
     requires: [],
+    // Trois mots de passe, dans cet ordre. Les identifiants ne suivent pas
+    // l'ordre d'affichage : ils restent collés à leur sens pour ne pas
+    // effacer les parties déjà en cours.
     answers: [
-      {
-        id: 'n-a-1',
-        label: 'Anges',
-        match: (n) => /^(les |des |le |la |l |un |une )?anges?$/.test(n),
-        note: 'Les 57 sont les anges : ils font grandir la matrix, ils s’actualisent, ils forment le carré qui protège.',
-        quotes: ['La matrix est vivante, elle grandit grâce aux anges. (13h20)',
-                 'Mon carré d’anges est là pour me protéger. (Orange)'],
-      },
       {
         id: 'n-a-2',
         label: 'Signes',
@@ -91,12 +141,20 @@ export const NODES = [
                  'Sans indices dans les dés, je laisse des signes cachés. (Sans indices dans les dés)'],
       },
       {
+        id: 'n-a-1',
+        label: 'Anges',
+        // « anges » et « archanges » ouvrent le même mot de passe.
+        match: (n) => /^(les |des |le |la |l |un |une )?(arch)?anges?$/.test(n),
+        note: 'Les 57 sont les anges : ils font grandir la matrix, ils s’actualisent, ils forment le carré qui protège. Archanges vaut anges.',
+        quotes: ['La matrix est vivante, elle grandit grâce aux anges. (13h20)',
+                 'Mon carré d’anges est là pour me protéger. (Orange)'],
+      },
+      {
         id: 'n-a-3',
-        label: 'Archanges (7 et 12)',
-        // « archanges » suffit, avec ou sans nombre ; « les 12 anges » aussi.
-        match: (n) => /archange/.test(n) || (/\bange/.test(n) && /\b(7|12|sept|douze)\b/.test(n)),
-        note: '5 + 7 = 12, et les 57 sont déjà les anges : ce sont donc les 12 archanges. Selon les prismes ils sont 7 ou 12 — 57 porte les deux nombres à la fois, et les deux désignent les archanges.',
-        quotes: ['La matrix est vivante, elle grandit grâce aux anges. (13h20)'],
+        label: '12',
+        match: (n) => numbersIn(n).includes(12) || /\bdouze\b/.test(n),
+        note: '5 + 7 = 12. Relié aux anges, cela donne les 12 archanges — 7 ou 12 selon les prismes.',
+        quotes: [],
       },
     ],
   },
@@ -237,22 +295,6 @@ export const NODES = [
     ],
   },
 
-  {
-    id: 'n-k',
-    source: 'White Cadae',
-    requires: [],
-    answers: [
-      {
-        id: 'n-k-1',
-        label: 'Infini blanc',
-        // les deux mots, dans l'ordre qu'on veut
-        match: (n) => /infini/.test(n) && /blanc/.test(n),
-        note: 'White : blanc. Cadae : C=3, A=1, D=4, A=1, E=5 — les décimales de pi, qui ne s’arrêtent jamais.',
-        quotes: ['J’harmonise l’infini, l’infini devient fini. (Multivers)',
-                 'Je ne suis qu’un fil qui relie deux infinis. (Un fil entre deux infinis)'],
-      },
-    ],
-  },
 ];
 
 /* ----------------------------------------------------------------- API */
@@ -295,8 +337,21 @@ function sourceOf(node, locked) {
   return locked && node.lockedLabel ? node.lockedLabel : node.source;
 }
 
+// On monte d'un échelon tous les trois mots de passe trouvés : on commence à
+// l'échelon 1, le troisième fait passer au 2, et ainsi de suite.
+export const PAR_ECHELON = 3;
+
+export function echelonOf(solvedCount) {
+  return Math.floor(solvedCount / PAR_ECHELON) + 1;
+}
+
 // L'état complet du jeu pour un membre. `rows` vient de riddle_progress ;
 // les identifiants inconnus (anciennes parties) sont simplement ignorés.
+//
+// Ce qui part au client est volontairement pauvre : jamais le nombre total de
+// mots de passe du jeu, et pas même celui d'un bloc silencieux. Un bloc
+// encore ouvert se signale par `open`, ce qui suffit à afficher le champ sans
+// dire combien il reste à trouver.
 export function buildState(rows) {
   const solved = new Set(
     rows.filter((r) => r.solved_at && NODE_OF_ANSWER.has(r.riddle_id)).map((r) => r.riddle_id)
@@ -309,7 +364,8 @@ export function buildState(rows) {
       id: node.id,
       source: sourceOf(node, locked),
       locked: locked && found.length === 0,
-      total: node.answers.length,
+      total: node.silent ? null : node.answers.length,
+      open: found.length < node.answers.length,
       found,
       // de quoi afficher un cadenas cliquable, sans rien révéler d'autre
       requires: node.requires.map((answerId) => {
@@ -319,5 +375,11 @@ export function buildState(rows) {
     };
   });
 
-  return { nodes, total: TOTAL_ANSWERS, solved: solved.size };
+  return {
+    nodes,
+    solved: solved.size,
+    echelon: echelonOf(solved.size),
+    step: solved.size % PAR_ECHELON,
+    perEchelon: PAR_ECHELON,
+  };
 }

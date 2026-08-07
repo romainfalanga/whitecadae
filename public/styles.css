@@ -618,9 +618,8 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 
 /* --------------------------------------------------------------- profil */
 
-.profile-head { display: flex; align-items: center; gap: 1.1rem; margin-bottom: 0.5rem; }
-.profile-head-text { flex: 1; min-width: 0; }
-.profile-head-text .subtitle { margin-bottom: 0; }
+.profile-head { display: flex; align-items: center; gap: 1.1rem; margin-bottom: 1.1rem; }
+.profile-head h1 { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .profile-avatar, .settings-avatar-preview {
   width: 68px;
   height: 68px;
@@ -653,24 +652,9 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
   white-space: nowrap;
 }
 
-.publish-box {
-  background: var(--bg-card);
-  border: 1px dashed var(--accent);
-  border-radius: var(--radius);
-  padding: 1rem 1.25rem;
-  margin-bottom: 1rem;
-}
-.publish-box p { margin-bottom: 0.6rem; }
-
-.version-list { list-style: none; margin-bottom: 1.5rem; }
-.version-list li {
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.92rem;
-}
-.version-list li:last-child { border-bottom: none; }
-.version-list strong { color: var(--accent); }
-.version-count { color: var(--text-dim); font-size: 0.82rem; margin-left: 0.3rem; }
+.profile-publish { margin-bottom: 1.75rem; }
+.profile-publish button[disabled] { opacity: 0.4; cursor: default; }
+.profile-publish button[disabled]:hover { filter: none; }
 
 /* ------------------------------------------------------- modale (paramètres) */
 
@@ -718,28 +702,88 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .settings-avatar-row { display: flex; align-items: center; gap: 1rem; }
 .settings-avatar-row label.btn { margin: 0; }
 
-/* -------------------------------------------------- profils & le livre */
+/* ---------------------------------------------------- le fil d'un profil
 
-.book-song {
+   Un rail vertical, une pastille par entrée : la page se lit comme une
+   descente dans le temps. La couleur de la pastille dit la nature de ce
+   qui a été fait ce jour-là.                                            */
+
+.timeline {
+  position: relative;
+  margin-left: 0.4rem;
+  padding-left: 1.35rem;
+  border-left: 1px solid var(--border);
+}
+.tl-entry {
+  position: relative;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 1.25rem 1.5rem;
-  margin-bottom: 1.25rem;
+  padding: 0.9rem 1.15rem;
+  margin-bottom: 0.9rem;
 }
-.book-album {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
+.tl-entry::before {
+  content: '';
+  position: absolute;
+  left: calc(-1.35rem - 6px);
+  top: 1.05rem;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--bg);
+}
+.tl-ensemble::before { background: #8aa8c8; }
+.tl-reference::before { background: #b58ac8; }
+.tl-connexion::before { background: #7fc3a4; }
+.tl-reprise::before { background: #e07a7a; }
+.tl-publication::before { background: var(--text-dim); }
+
+.tl-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
   color: var(--text-dim);
 }
-.book-song h3 { font-family: var(--serif); font-weight: normal; font-size: 1.25rem; margin: 0.15rem 0 0.6rem; }
-.book-song h3 a { color: var(--accent); }
-.book-block { border-left: 2px solid var(--accent); padding: 0.4rem 0 0.4rem 0.9rem; margin-bottom: 0.9rem; }
-.book-passage { font-family: var(--serif); font-style: italic; color: var(--text-dim); font-size: 0.95rem; display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
-.book-content { margin-top: 0.3rem; white-space: pre-wrap; font-size: 0.95rem; }
-.book-essay { border-left-color: var(--text-dim); }
-.book-draft { border-left-style: dashed; border-left-color: #e0a850; }
+.tl-kind {
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  font-size: 0.67rem;
+}
+.tl-grid, .tl-version { color: var(--accent); font-size: 0.72rem; }
+.tl-where {
+  margin-top: 0.3rem;
+  font-family: var(--serif);
+  font-size: 1.03rem;
+  overflow-wrap: anywhere;
+}
+.tl-body { margin-top: 0.55rem; }
+.tl-quote {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  border-left: 2px solid var(--border);
+  padding-left: 0.7rem;
+  margin-bottom: 0.5rem;
+}
+.tl-ref-target { font-family: var(--serif); color: var(--accent); margin-bottom: 0.3rem; }
+.tl-count { font-size: 0.9rem; color: var(--text-dim); }
+.tl-links { margin-top: 0.6rem; }
+/* une publication n'a rien à montrer d'autre que sa date et son numéro */
+.tl-publication { padding: 0.7rem 1.15rem; }
+/* la reprise porte déjà sa propre carte : elle ne se redouble pas ici */
+.tl-reprise .cover-card { background: none; border: none; border-radius: 0; padding: 0; }
+/* et sa vidéo ne mange pas toute la largeur du fil */
+.tl-reprise .cover-embed { max-width: 440px; }
+
+@media (max-width: 620px) {
+  .timeline { margin-left: 0.2rem; padding-left: 1rem; }
+  .tl-entry { padding: 0.8rem 0.9rem; }
+  .tl-entry::before { left: calc(-1rem - 6px); }
+}
 
 .ref-internal-row { flex-wrap: wrap; }
 .ref-internal-row select { flex: 1; min-width: 130px; font-size: 0.85rem; padding: 0.35rem 0.5rem; }

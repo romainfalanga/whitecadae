@@ -3,9 +3,13 @@
 Plateforme communautaire d'explications des textes de **White Cadae**
 ([chaîne YouTube](https://www.youtube.com/@WhiteCadae)).
 
-La page **Interprétations** ouvre sur les dernières lectures publiées par
-les membres — le passage visé, puis ce qu’on en dit — avec un lien vers le
-**fil** (`/fil`), qui les déroule toutes de la plus récente à la plus ancienne.
+**On arrive par le 57.** La racine `/` ouvre l'escape game (voir plus bas) :
+c'est lui qui commande l'accès au reste, échelon par échelon.
+
+La page **Interprétations** (`/interpretations`) ouvre sur les dernières
+lectures publiées par les membres — le passage visé, puis ce qu’on en dit —
+avec un lien vers le **fil** (`/fil`), qui les déroule toutes de la plus
+récente à la plus ancienne.
 
 La page **Reprises** fonctionne pareil : les dernières reprises des membres
 en tête, et le fil complet sur `/reprises/fil`.
@@ -26,9 +30,18 @@ l'interprétation qui la pose, et sur la page du morceau visé. Chacune se
 compose dans son propre éditeur et se publie avec son propre bouton, y
 compris après coup sur une interprétation déjà en ligne.
 
-Le sens général du morceau, les interprétations d'ensemble et les connexions
-entre chansons vivent dans une **fenêtre ouverte par le bouton flottant** en
-bas à droite de chaque page de chanson.
+Le titre, le sens général du morceau, les interprétations d'ensemble et les
+connexions entre chansons vivent dans une **fenêtre ouverte par la pastille
+« Interpréter le titre »**, en haut de chaque page de chanson : un seul point
+d'entrée pour tout ce qui concerne le morceau pris en entier.
+
+La **page de profil est un fil**, et rien d'autre : tout ce qu'un membre a
+fait ici, du plus récent au plus ancien, daté entrée par entrée —
+interprétations (jusqu'au passage), interprétations d'ensemble, références,
+connexions, reprises, et les publications qui ont rendu tout cela visible.
+Ni compteurs, ni présentation, ni sections. Le membre y trouve le bouton qui
+publie l'état actuel de ses interprétations : tant qu'il ne l'a pas pressé,
+ce qu'il écrit reste en brouillon, visible de lui seul.
 
 Dimension sociale : tout est public en lecture, et chaque interprétation
 ou connexion peut recevoir des **favoris (♥)** et des **commentaires**
@@ -47,6 +60,16 @@ champ, et les réponses s'y ajoutent une à une, dans n'importe quel ordre
 **verrouillent** tant que leurs prérequis ne sont pas trouvés, en masquant
 même leur libellé quand celui-ci est la réponse du précédent. Un refus ne
 dit rien : la carte tressaille, rougit et vibre.
+
+Le tout premier bloc est **muet** (`silent`) : pas de libellé, et le serveur
+ne dit pas non plus combien de mots de passe il cache — il envoie seulement
+`open`, qui suffit à savoir s'il faut encore afficher le champ. Le nombre
+total de mots de passe du jeu ne quitte jamais le Worker.
+
+On monte d'un **échelon** tous les trois mots de passe trouvés : on commence
+au 1, le troisième fait passer au 2. La barre de progression montre le chemin
+restant dans l'échelon en cours — jamais la progression dans le jeu entier.
+C'est cet échelon qui, à terme, ouvrira les fonctionnalités de la plateforme.
 
 La page est réservée aux membres : la progression est enregistrée sur le
 compte (`riddle_progress`, une ligne par mot de passe trouvé), donc

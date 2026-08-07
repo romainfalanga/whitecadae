@@ -795,6 +795,25 @@ async function getProfile(env, request, username) {
   ).bind(user.id).all()).results;
   for (const e of essays) e.links = essayLinks.filter((l) => l.essay_id === e.id);
 
+  // Les références autonomes posées par ce membre : le passage visé vit dans
+  // un morceau, la référence elle-même pointe soit vers un autre passage,
+  // soit vers une œuvre extérieure.
+  await ensurePassageRefTable(env);
+  const passageRefs = (await env.DB.prepare(
+    `SELECT pr.id, pr.kind, pr.label, pr.artist, pr.note, pr.created_at,
+            pr.target_type, pr.word_start, pr.word_end,
+            s.title AS song_title, s.slug AS song_slug,
+            l.text AS line_text, le.text AS end_line_text,
+            rs.title AS ref_song_title, rs.slug AS ref_song_slug
+       FROM passage_references pr
+       JOIN songs s ON s.id = pr.song_id
+       LEFT JOIN lyric_lines l ON l.id = pr.line_id
+       LEFT JOIN lyric_lines le ON le.id = pr.end_line_id
+       LEFT JOIN songs rs ON rs.id = pr.ref_song_id
+      WHERE pr.user_id = ?1
+      ORDER BY pr.created_at DESC`
+  ).bind(user.id).all()).results;
+
   const connections = (await env.DB.prepare(
     `SELECT c.id, c.explanation, c.created_at,
             sa.title AS song_a_title, sa.slug AS song_a_slug,
@@ -847,7 +866,7 @@ async function getProfile(env, request, username) {
 
   return json({
     user: { username: user.username, created_at: user.created_at, is_admin: !!user.is_admin },
-    stats, annotations, essays, connections, versions, covers,
+    stats, annotations, essays, passageRefs, connections, versions, covers,
   });
 }
 
