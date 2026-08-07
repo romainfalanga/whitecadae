@@ -54,18 +54,6 @@ function isDecemberDay(n, day) {
   return /\bdec/.test(n) || nums.includes(12);
 }
 
-/* -------------------------------------------------------------- branches */
-
-export const BRANCHES = [
-  { id: 'les-57', title: 'Les 57' },
-  { id: 'vins-divins', title: 'Les vins divins' },
-  { id: 'heure', title: 'L’heure' },
-  { id: 'la-date', title: 'La date' },
-  { id: 'la-bete', title: 'La bête' },
-  { id: 'equation', title: 'L’équation' },
-  { id: 'le-nom', title: 'Le nom' },
-];
-
 /* ----------------------------------------------------------------- nœuds */
 
 // Un nœud = un élément de l'arborescence, avec un seul champ de saisie même
@@ -83,7 +71,6 @@ export const BRANCHES = [
 export const NODES = [
   {
     id: 'n-a',
-    branch: 'les-57',
     source: '57',
     requires: [],
     answers: [
@@ -107,7 +94,6 @@ export const NODES = [
   },
   {
     id: 'n-b',
-    branch: 'les-57',
     source: 'Trompette',
     requires: [],
     answers: [
@@ -124,7 +110,6 @@ export const NODES = [
 
   {
     id: 'n-c',
-    branch: 'vins-divins',
     source: '5 vins divins',
     requires: [],
     answers: [
@@ -139,7 +124,6 @@ export const NODES = [
   },
   {
     id: 'n-d',
-    branch: 'vins-divins',
     source: '30 vins divins',
     requires: [],
     answers: [
@@ -166,7 +150,6 @@ export const NODES = [
 
   {
     id: 'n-e',
-    branch: 'heure',
     source: '13h20',
     requires: [],
     answers: [
@@ -189,7 +172,6 @@ export const NODES = [
 
   {
     id: 'n-f',
-    branch: 'la-date',
     source: '5 vins divins + 30 vins divins + 13h20',
     requires: ['n-c-1', 'n-d-2', 'n-e-1'],
     answers: [
@@ -208,7 +190,6 @@ export const NODES = [
 
   {
     id: 'n-g',
-    branch: 'la-bete',
     source: 'Sans indices dans les dés',
     requires: [],
     answers: [
@@ -223,7 +204,6 @@ export const NODES = [
   },
   {
     id: 'n-h',
-    branch: 'la-bete',
     source: 'Prends la bête à …',
     requires: [],
     answers: [
@@ -239,7 +219,6 @@ export const NODES = [
   },
   {
     id: 'n-i',
-    branch: 'la-bete',
     source: '10 mains',
     // Sa source EST la réponse du nœud précédent : masquée tant qu'il est
     // verrouillé.
@@ -258,7 +237,6 @@ export const NODES = [
 
   {
     id: 'n-j',
-    branch: 'equation',
     source: 'M = M',
     requires: [],
     answers: [
@@ -275,7 +253,6 @@ export const NODES = [
 
   {
     id: 'n-k',
-    branch: 'le-nom',
     source: 'White Cadae',
     requires: [],
     answers: [
@@ -296,16 +273,6 @@ export const NODES = [
       },
     ],
   },
-];
-
-/* --------------------------------------------------------- convergences */
-
-// Deux nœuds différents qui aboutissent au même mot : c'est là que
-// l'arborescence se referme. Le libellé n'est envoyé au client que lorsque
-// toutes les réponses concernées ont été trouvées.
-export const CONVERGENCES = [
-  { id: 'conv-les-57', branch: 'les-57', from: ['n-a-2', 'n-b-1'], label: 'Signe' },
-  { id: 'conv-vins-divins', branch: 'vins-divins', from: ['n-c-1', 'n-d-2'], label: '25 décembre' },
 ];
 
 /* ----------------------------------------------------------------- API */
@@ -352,7 +319,6 @@ export function buildState(rows) {
     const found = node.answers.filter((a) => solved.has(a.id)).map((a) => ({ id: a.id, label: a.label }));
     return {
       id: node.id,
-      branch: node.branch,
       source: sourceOf(node, locked),
       locked: locked && found.length === 0,
       total: node.answers.length,
@@ -365,12 +331,5 @@ export function buildState(rows) {
     };
   });
 
-  const convergences = CONVERGENCES.map((c) => {
-    const open = c.from.every((id) => solved.has(id));
-    return open
-      ? { id: c.id, branch: c.branch, open: true, label: c.label }
-      : { id: c.id, branch: c.branch, open: false };
-  });
-
-  return { branches: BRANCHES, nodes, convergences, total: TOTAL_ANSWERS, solved: solved.size };
+  return { nodes, total: TOTAL_ANSWERS, solved: solved.size };
 }

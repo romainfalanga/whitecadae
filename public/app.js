@@ -2267,16 +2267,6 @@ function nodeCardHtml(n) {
     <p class="enigme-msg" role="status" aria-live="polite"></p>`;
 }
 
-function convergenceHtml(c) {
-  return c.open
-    ? `<div class="convergence convergence--open" id="${esc(c.id)}">
-         <span class="conv-mark">✦</span><strong>${esc(c.label)}</strong>
-       </div>`
-    : `<div class="convergence" id="${esc(c.id)}">
-         <span class="conv-mark">✦</span><span class="enigme-blank">?</span>
-       </div>`;
-}
-
 function enigmesProgressHtml() {
   const d = state.enigmes;
   const pct = d.total ? Math.round((d.solved / d.total) * 100) : 0;
@@ -2288,28 +2278,18 @@ function enigmesProgressHtml() {
 function renderEnigmesPage() {
   const d = state.enigmes;
 
-  const toc = d.branches
-    .map((b) => `<button type="button" class="target-chip" data-branch="${esc(b.id)}">${esc(b.title)}</button>`)
-    .join('');
-
-  const branches = d.branches.map((b) => `
-    <section class="enigme-branch" id="branche-${esc(b.id)}">
-      <h2>${esc(b.title)}</h2>
-      ${d.nodes.filter((n) => n.branch === b.id).map((n) => `
-        <div class="node-group">
-          <div class="node-source" id="src-${esc(n.id)}"><span>${esc(n.source)}</span></div>
-          <div class="node-leaves">
-            <article class="${nodeClass(n)}" id="e-${esc(n.id)}">${nodeCardHtml(n)}</article>
-          </div>
-        </div>`).join('')}
-      ${d.convergences.filter((c) => c.branch === b.id).map(convergenceHtml).join('')}
-    </section>`).join('');
+  const nodes = d.nodes.map((n) => `
+    <div class="node-group">
+      <div class="node-source" id="src-${esc(n.id)}"><span>${esc(n.source)}</span></div>
+      <div class="node-leaves">
+        <article class="${nodeClass(n)}" id="e-${esc(n.id)}">${nodeCardHtml(n)}</article>
+      </div>
+    </div>`).join('');
 
   app.innerHTML = `
     <h1>57</h1>
     <div class="enigmes-progress" id="enigmes-progress">${enigmesProgressHtml()}</div>
-    <nav class="enigmes-toc">${toc}</nav>
-    ${branches}`;
+    ${nodes}`;
 
   d.nodes.forEach((n) => {
     const el = document.getElementById('e-' + n.id);
@@ -2317,7 +2297,6 @@ function renderEnigmesPage() {
     el.dataset.sig = JSON.stringify(n);
     bindEnigmeCard(el, n);
   });
-  bindEnigmesChrome();
 }
 
 // Après chaque tentative, le serveur renvoie l'état complet : on ne réécrit
@@ -2344,11 +2323,6 @@ function applyEnigmesState(data, focusId) {
     bindEnigmeCard(el, n);
   });
 
-  data.convergences.forEach((c) => {
-    const el = document.getElementById(c.id);
-    if (el) el.outerHTML = convergenceHtml(c);
-  });
-
   if (focusId) flashEnigme(focusId);
 }
 
@@ -2362,11 +2336,12 @@ function flashEnigme(id) {
   setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
 }
 
+// Le refus ne dit rien : la carte tressaille, rougit et vibre. La couleur
+// reste jusqu'à la frappe suivante, le tressaillement ne dure qu'un instant.
 function enigmeWrong(el, input) {
   el.classList.remove('enigme--wrong');
   void el.offsetWidth; // force le redémarrage de l'animation
   el.classList.add('enigme--wrong');
-  setTimeout(() => el.classList.remove('enigme--wrong'), 600);
   if (input) input.select();
   if (navigator.vibrate) navigator.vibrate(40);
 }
@@ -2380,6 +2355,7 @@ function bindEnigmeCard(el, n) {
       const btn = form.querySelector('button[type="submit"]');
       const answer = input.value.trim();
       if (!answer) return;
+      el.classList.remove('enigme--wrong');
       btn.disabled = true;
       try {
         const res = await api('/api/57/guess', { method: 'POST', body: { id: n.id, answer } });
@@ -2398,6 +2374,9 @@ function bindEnigmeCard(el, n) {
     };
   }
 
+  const field = el.querySelector('.enigme-input');
+  if (field) field.oninput = () => el.classList.remove('enigme--wrong');
+
   el.querySelectorAll('.enigme-goto').forEach((b) => {
     b.onclick = () => {
       const target = document.getElementById('e-' + b.dataset.goto);
@@ -2410,15 +2389,6 @@ function bindEnigmeCard(el, n) {
         const input = target.querySelector('.enigme-input');
         if (input) setTimeout(() => input.focus(), 450);
       }
-    };
-  });
-}
-
-function bindEnigmesChrome() {
-  document.querySelectorAll('.enigmes-toc .target-chip').forEach((b) => {
-    b.onclick = () => {
-      const section = document.getElementById('branche-' + b.dataset.branch);
-      if (section) section.scrollIntoView({ block: 'start', behavior: 'smooth' });
     };
   });
 }

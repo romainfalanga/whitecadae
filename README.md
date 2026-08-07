@@ -27,12 +27,13 @@ cachés dans l'EP **57**. Partout où il y a un « = », il y a un mot de passe
 à trouver. Aucun texte, aucune explication, aucun indice — un élément, un
 « = », un champ.
 
-Un même élément peut porter plusieurs sens : dans ce cas il n'a qu'un seul
+La page est une liste plate : ni titres, ni sections, ni sommaire. Un
+même élément peut porter plusieurs sens ; dans ce cas il n'a qu'un seul
 champ, et les réponses s'y ajoutent une à une, dans n'importe quel ordre
-(un compteur `1/2` indique combien il en reste). Certaines branches se
-**rejoignent** — deux éléments différents aboutissent au même mot — et
-d'autres se **verrouillent** tant que leurs prérequis ne sont pas trouvés,
-en masquant même leur libellé quand celui-ci est la réponse du précédent.
+(un compteur `1/2` indique combien il en reste). Certains éléments se
+**verrouillent** tant que leurs prérequis ne sont pas trouvés, en masquant
+même leur libellé quand celui-ci est la réponse du précédent. Un refus ne
+dit rien : la carte tressaille, rougit et vibre.
 
 La page est réservée aux membres : la progression est enregistrée sur le
 compte (`riddle_progress`, une ligne par mot de passe trouvé), donc
