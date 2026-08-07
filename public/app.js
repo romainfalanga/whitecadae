@@ -349,12 +349,22 @@ function renderNav() {
 
 /* ---------------------------------------------------------------- accueil */
 
+// L'API sert les albums du plus ancien au plus récent (colonne `position`).
+// L'accueil et les reprises les présentent dans l'autre sens : la dernière
+// sortie en premier. L'ordre des morceaux à l'intérieur d'un album ne change
+// pas — il suit toujours le numéro de piste.
+function newestFirst(albums) {
+  return [...albums].reverse();
+}
+
 async function pageHome() {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
   const data = await api('/api/albums');
   if (stale(epoch)) return;
-  const albums = data.albums.map((al) => `
+  // L'API renvoie la discographie dans l'ordre de sortie ; à l'affichage on
+  // part du plus récent.
+  const albums = newestFirst(data.albums).map((al) => `
     <section class="album-card">
       <div class="album-head">
         <h2>${esc(al.title)}</h2>
@@ -2169,7 +2179,7 @@ async function pageCovers() {
       <span class="song-meta">${s.covers.length ? `${s.covers.length} reprise${s.covers.length > 1 ? 's' : ''}` : ''}</span>
     </li>`;
 
-  const albums = data.albums.map((al) => `
+  const albums = newestFirst(data.albums).map((al) => `
     <section class="album-card">
       <div class="album-head">
         <h2>${esc(al.title)}</h2>
