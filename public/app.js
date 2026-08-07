@@ -14,6 +14,7 @@ const state = {
   sheetOpen: false, // feuille du bas ouverte (mobile)
   songModalOpen: false, // fenêtre « l'ensemble du morceau » ouverte
   feed: null, // fil des interprétations récentes
+  coverFeed: null, // fil des reprises récentes
   enigmes: null, // état des énigmes de la page /57
 };
 
@@ -127,6 +128,7 @@ async function route() {
   if (path === '/connexion') return pageLogin();
   if (path === '/inscription') return pageRegister();
   if (path === '/admin') return pageAdmin();
+  if (path === '/reprises/fil') return pageCoverFeed();
   if (path === '/reprises') return pageCovers();
   if (path === '/57') return pageEnigmes();
   if (path === '/fil') return pageFeed();
@@ -2470,6 +2472,38 @@ async function pageProfile(username) {
 // morceau (ordre de piste) → reprises, de la plus récente à la plus ancienne.
 // Même mise en page que l'accueil (albums → morceaux) : c'est en ouvrant un
 // morceau qu'on retrouve toutes ses reprises, sur sa page dédiée.
+// Le fil des reprises, sur le même modèle que celui des interprétations.
+async function pageCoverFeed() {
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  const data = await api('/api/covers/feed?limit=12');
+  if (stale(epoch)) return;
+  state.coverFeed = { items: data.items, more: data.more };
+  renderCoverFeedPage();
+}
+
+function renderCoverFeedPage() {
+  const { items, more } = state.coverFeed;
+  app.innerHTML = `
+    <div class="breadcrumb"><a href="/reprises" data-link>Reprises</a></div>
+    <h1>Le fil des reprises</h1>
+    <p class="subtitle">Toutes les reprises des membres, de la plus récente à la plus ancienne.</p>
+    <div class="covers-grid" id="cover-feed">${items.map(coverCard).join('')
+      || '<p class="empty-note">Aucune reprise pour l’instant.</p>'}</div>
+    ${more ? '<p class="feed-more"><button type="button" class="btn" id="cover-more">Voir les précédentes</button></p>' : ''}`;
+  const list = document.getElementById('cover-feed');
+  bindSocial(list);
+  bindCoverDeletes(list, pageCoverFeed);
+  const btn = document.getElementById('cover-more');
+  if (btn) btn.onclick = async () => {
+    btn.disabled = true;
+    const data = await api(`/api/covers/feed?limit=12&offset=${state.coverFeed.items.length}`);
+    state.coverFeed.items = state.coverFeed.items.concat(data.items);
+    state.coverFeed.more = data.more;
+    renderCoverFeedPage();
+  };
+}
+
 async function pageCovers() {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
@@ -2491,7 +2525,23 @@ async function pageCovers() {
       <ol class="song-list">${al.songs.map(songRow).join('')}</ol>
     </section>`).join('');
 
-  app.innerHTML = `<h1>Reprises</h1>${albums}`;
+  let recent = { items: [] };
+  try { recent = await api('/api/covers/feed?limit=3'); } catch { /* le fil n'est pas vital */ }
+  if (stale(epoch)) return;
+
+  const feedBlock = `<section class="feed-block">
+    <div class="feed-block-head">
+      <h2>Les dernières reprises</h2>
+      <a class="btn" href="/reprises/fil" data-link>Voir le fil →</a>
+    </div>
+    <div class="covers-grid" id="recent-covers">${recent.items.map(coverCard).join('')
+      || '<p class="empty-note">Aucune reprise pour l’instant.</p>'}</div>
+  </section>`;
+
+  app.innerHTML = `<h1>Reprises</h1>${feedBlock}<h2 class="albums-title">Les morceaux</h2>${albums}`;
+  const list = document.getElementById('recent-covers');
+  bindSocial(list);
+  bindCoverDeletes(list, pageCovers);
 }
 
 /* --------------------------------------------------- les énigmes (/57) */

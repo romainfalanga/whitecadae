@@ -7,6 +7,9 @@ La page **Interprétations** ouvre sur les dernières lectures publiées par
 les membres — le passage visé, puis ce qu’on en dit — avec un lien vers le
 **fil** (`/fil`), qui les déroule toutes de la plus récente à la plus ancienne.
 
+La page **Reprises** fonctionne pareil : les dernières reprises des membres
+en tête, et le fil complet sur `/reprises/fil`.
+
 Les utilisateurs créent un compte, lisent les paroles et proposent des
 interprétations à quatre niveaux :
 

@@ -46,6 +46,7 @@ async function handleApi(request, env, url) {
   if (route('GET', '/api/albums')) return listAlbums(env);
   if (route('GET', '/api/corpus')) return getCorpus(env);
   if (route('GET', '/api/feed')) return getFeed(env, request, url);
+  if (route('GET', '/api/covers/feed')) return getCoverFeed(env, request, url);
   if (route('GET', '/api/covers')) return listCovers(env, request);
   if ((p = route('GET', '/api/songs/:slug/covers'))) return getSongCovers(env, request, p[0]);
   if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
@@ -1123,6 +1124,31 @@ async function deleteEssay(request, env, id) {
 
 // Arborescence complète des reprises : albums (ordre de sortie) → morceaux
 // (ordre de piste) → reprises (de la plus récente à la plus ancienne).
+// Le fil des reprises : les plus récentes d'abord, à plat, avec le morceau
+// repris. Même forme que /api/feed — un élément de plus pour savoir s'il en
+// reste.
+async function getCoverFeed(env, request, url) {
+  const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 5, 1), 30);
+  const offset = Math.max(Number(url.searchParams.get('offset')) || 0, 0);
+
+  const items = (await env.DB.prepare(
+    `SELECT c.id, c.song_id, c.user_id, c.title, c.url, c.description, c.created_at,
+            u.username, s.title AS song_title, s.slug AS song_slug
+       FROM covers c
+       JOIN users u ON u.id = c.user_id
+       JOIN songs s ON s.id = c.song_id
+      ORDER BY c.created_at DESC, c.id DESC
+      LIMIT ?1 OFFSET ?2`
+  ).bind(limit + 1, offset).all()).results;
+
+  const more = items.length > limit;
+  if (more) items.pop();
+
+  const viewer = await getUser(request, env);
+  await attachSocial(env, viewer, 'cover', 'SELECT id FROM covers', items);
+  return json({ items, more });
+}
+
 async function listCovers(env, request) {
   const albums = (await env.DB.prepare(
     'SELECT id, title, slug, release_date, is_single FROM albums ORDER BY position, release_date'

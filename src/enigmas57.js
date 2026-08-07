@@ -76,7 +76,7 @@ export const NODES = [
     answers: [
       {
         id: 'n-a-1',
-        label: 'Ange',
+        label: 'Anges',
         match: (n) => /^(les |des |le |la |l |un |une )?anges?$/.test(n),
         note: 'Les 57 sont les anges : ils font grandir la matrix, ils s’actualisent, ils forment le carré qui protège.',
         quotes: ['La matrix est vivante, elle grandit grâce aux anges. (13h20)',
@@ -84,7 +84,7 @@ export const NODES = [
       },
       {
         id: 'n-a-2',
-        label: 'Signe',
+        label: 'Signes',
         match: (n) => /^(les |des |le |la |l |un |une )?signes?$/.test(n),
         note: '« Tu verras les 57 » : ce que l’on voit apparaître partout, ce sont les signes laissés là exprès.',
         quotes: ['Je vois des signes partout sur le chantier du paradis. (Orange)',
@@ -94,12 +94,12 @@ export const NODES = [
   },
   {
     id: 'n-b',
-    source: 'Trompette',
+    source: 'Trompettes',
     requires: [],
     answers: [
       {
         id: 'n-b-1',
-        label: 'Signe',
+        label: 'Signes',
         match: (n) => /^(les |des |le |la |l |un |une )?signes?$/.test(n),
         note: 'Même vers, deux versions : « tu verras les 57 » (30 vins divins) et « t’entendras les trompettes » (Sans indices dans les dés). Les trompettes sont les 57, donc les signes.',
         quotes: ['30 vins divins, tu verras les 57. (30 vins divins)',
