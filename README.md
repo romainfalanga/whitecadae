@@ -5,8 +5,8 @@ Plateforme communautaire d'explications des textes de **White Cadae**
 
 **On arrive par le 57.** La racine `/` ouvre l'escape game (voir plus bas) :
 c'est lui qui commande l'accès au reste, échelon par échelon. Il se lit sans
-compte, mais rien ne s'y saisit sans être connecté. Tant qu'aucun mot de passe
-n'a été trouvé, il n'y a que lui — ni interprétations, ni reprises, ni
+compte, à pleine encre — seul le bouton Valider y est éteint. Tant qu'aucun mot
+de passe n'a été trouvé, il n'y a que lui — ni interprétations, ni reprises, ni
 profil.
 
 La page **Interprétations** (`/interpretations`) ouvre sur les dernières

@@ -360,6 +360,7 @@ function openSettings() {
     await api('/api/logout', { method: 'POST' });
     state.user = null;
     state.access = { interpretations: false, reprises: false };
+    oublieAttente();
     closeSettings();
     navigate('/');
   };
@@ -3029,6 +3030,16 @@ function armeAttente(ms) {
   if (ms > 0 && !attenteTimer) attenteTimer = setInterval(appliqueAttente, 1000);
 }
 
+// L'attente appartient à une session. Se déconnecter sans recharger la page
+// laissait le décompte battre sur le 57 redevenu anonyme : il y grisait le
+// champ et remplaçait « Valider » par des minutes qui ne voulaient plus rien
+// dire. On le coupe donc avec la session.
+function oublieAttente() {
+  if (attenteTimer) { clearInterval(attenteTimer); attenteTimer = null; }
+  state.enigmesAttenteFin = 0;
+  state.attenteMs = 0;
+}
+
 function renderEnigmesPage() {
   const d = state.enigmes;
 
@@ -3055,9 +3066,13 @@ function renderEnigmesPage() {
     const el = document.getElementById('e-' + n.id);
     if (!el) return;
     el.dataset.sig = JSON.stringify(n);
-    if (!d.anonyme) bindEnigmeCard(el, n);
+    // Les renvois d'une carte verrouillée vers ce qui lui manque ne sont pas
+    // un geste de jeu : ils marchent aussi sans compte, sinon un lien de la
+    // couleur de l'accent resterait mort sous le doigt.
+    if (d.anonyme) bindEnigmeGoto(el);
+    else bindEnigmeCard(el, n);
   });
-  if (d.anonyme) figeChamps();
+  if (d.anonyme) { oublieAttente(); figeChamps(); }
   else armeAttente(d.attenteMs || 0);
 }
 
@@ -3163,6 +3178,13 @@ function bindEnigmeCard(el, n) {
   const field = el.querySelector('.enigme-input');
   if (field) field.oninput = () => el.classList.remove('enigme--wrong');
 
+  bindEnigmeGoto(el);
+}
+
+// Le renvoi d'une carte verrouillée vers l'élément qui lui manque : il ne
+// touche pas au jeu, il ne fait que déplacer le regard. À part, donc, pour
+// servir aussi les visiteurs sans compte.
+function bindEnigmeGoto(el) {
   el.querySelectorAll('.enigme-goto').forEach((b) => {
     b.onclick = () => {
       const target = document.getElementById('e-' + b.dataset.goto);
