@@ -3036,8 +3036,9 @@ function renderEnigmesPage() {
     .map((n) => `<article class="${nodeClass(n)}" id="e-${esc(n.id)}">${nodeCardHtml(n)}</article>`)
     .join('');
 
-  // Sans compte on voit les éléments, mais on n'écrit pas : les champs sont
-  // inertes et les deux boutons disent quoi faire, sans une phrase.
+  // Sans compte on lit la page entière, à pleine encre. Seul le bouton
+  // Valider est éteint, et les deux boutons disent quoi faire, sans une
+  // phrase.
   const invite = d.anonyme ? `
     <p class="enigmes-gate-actions">
       <a href="/connexion" data-link class="btn">Se connecter</a>
@@ -3048,7 +3049,7 @@ function renderEnigmesPage() {
     <h1>57</h1>
     <div class="enigmes-progress" id="enigmes-progress">${enigmesProgressHtml()}</div>
     ${invite}
-    <div class="enigmes-grid${d.anonyme ? ' enigmes-grid--lecture' : ''}">${nodes}</div>`;
+    <div class="enigmes-grid">${nodes}</div>`;
 
   d.nodes.forEach((n) => {
     const el = document.getElementById('e-' + n.id);
@@ -3060,11 +3061,16 @@ function renderEnigmesPage() {
   else armeAttente(d.attenteMs || 0);
 }
 
-// Aucun compte : rien n'est saisissable, et le bouton ne porte plus de
-// promesse d'action.
+// Aucun compte : on ferme le geste, pas la lecture. Le champ garde son encre
+// et son « mot de passe » — seul le bouton s'éteint. La touche Entrée ne doit
+// pas non plus emporter la page : sans compte, aucune carte n'est branchée,
+// donc rien n'arrêterait l'envoi natif du formulaire.
 function figeChamps() {
-  document.querySelectorAll('.enigme-input').forEach((c) => { c.disabled = true; });
-  document.querySelectorAll('.enigme-form button').forEach((b) => { b.disabled = true; });
+  document.querySelectorAll('.enigme-form').forEach((f) => {
+    const bouton = f.querySelector('button[type="submit"]');
+    if (bouton) bouton.disabled = true;
+    f.addEventListener('submit', (e) => e.preventDefault());
+  });
 }
 
 // Après chaque tentative, le serveur renvoie l'état complet : on ne réécrit

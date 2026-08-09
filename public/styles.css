@@ -1039,10 +1039,11 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 
 /* ------------------------------------------------------ les énigmes (/57) */
 
-/* Sans compte : les éléments se lisent, rien ne se saisit. Les deux boutons
-   suffisent à dire quoi faire — la page 57 n'explique jamais rien. */
+/* Sans compte : la page se lit entièrement, sans voile. Rien n'y est grisé —
+   ni les éléments, ni le champ, ni son « mot de passe ». Le seul signe est le
+   bouton Valider, éteint : c'est le geste qui est fermé, pas la lecture. Les
+   deux boutons disent quoi faire, et la page 57 n'explique jamais rien. */
 .enigmes-gate-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
-.enigmes-grid--lecture .enigme-form { opacity: 0.5; }
 
 /* La porte d'une page : une seule carte, au même dessin que celles du 57. */
 .porte-grid { max-width: 32rem; }

@@ -75,10 +75,12 @@ des autres membres.
 cachés dans l'EP **57**. Aucun texte, aucune explication, aucun indice :
 un élément, un champ, et ce qu'il veut dire.
 
-**Elle se lit sans compte.** Un visiteur voit les éléments et leur structure,
-mais aucun champ n'est saisissable : deux boutons, se connecter ou créer un
-compte, tiennent lieu de toute explication. Le serveur renvoie alors un état
-vide (`anonyme: true`), et refuse toute tentative.
+**Elle se lit sans compte**, et sans le moindre voile : rien n'y est grisé, ni
+les éléments, ni le champ, ni son « mot de passe ». Le seul signe est le bouton
+Valider, éteint — c'est le geste qui est fermé, pas la lecture — et deux
+boutons, se connecter ou créer un compte, tiennent lieu de toute explication.
+Le serveur renvoie alors un état vide (`anonyme: true`), et refuse toute
+tentative.
 
 La page est une liste plate : ni titres, ni sections, ni sommaire. Un
 même élément peut porter plusieurs sens ; dans ce cas il n'a qu'un seul
