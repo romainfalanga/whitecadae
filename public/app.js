@@ -187,9 +187,20 @@ const DEFAULT_AVATAR = 'data:image/svg+xml;utf8,' + encodeURIComponent(
 );
 
 function avatarImg(username, className) {
-  return `<img class="${className}" src="${avatarHref(username)}" alt=""
-    onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}'">`;
+  return `<img class="${className}" src="${avatarHref(username)}" alt="" data-avatar>`;
 }
+
+// Le repli quand un membre n'a pas de photo. Il était écrit dans un attribut
+// `onerror`, ce que la politique de sécurité du site interdit désormais : on
+// écoute donc à la capture, puisque `error` ne remonte pas depuis une image.
+// L'attribut est retiré au passage — si le repli lui-même échouait, on
+// tournerait en boucle.
+document.addEventListener('error', (e) => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.hasAttribute('data-avatar')) return;
+  img.removeAttribute('data-avatar');
+  img.src = DEFAULT_AVATAR;
+}, true);
 
 // Recadre l'image en carré (centré) et la compresse en JPEG avant l'envoi :
 // on ne transmet jamais un fichier brut potentiellement lourd au serveur.
@@ -478,10 +489,10 @@ function pagePorte(nom, titre) {
         <div class="enigme-head"><span class="enigme-source">${esc(source)}</span></div>
         <div class="enigme-body">
           <form class="enigme-form">
-            <input class="enigme-input" type="text" placeholder="mot de passe"
+            <input class="enigme-input" type="text" placeholder="signe"
                    autocomplete="off" autocapitalize="off" autocorrect="off"
                    spellcheck="false" enterkeyhint="go" maxlength="200"
-                   aria-label="Mot de passe pour ${esc(source)}">
+                   aria-label="Signe pour ${esc(source)}">
             <button type="submit" class="primary" aria-label="Valider">
               <span class="enigme-go">→</span><span class="enigme-go-text">Valider</span>
             </button>
@@ -2968,10 +2979,10 @@ function nodeCardHtml(n) {
 
   const form = !n.open ? '' : `
     <form class="enigme-form">
-      <input class="enigme-input" type="text" placeholder="mot de passe"
+      <input class="enigme-input" type="text" placeholder="signe"
              autocomplete="off" autocapitalize="off" autocorrect="off"
              spellcheck="false" enterkeyhint="go" maxlength="200"
-             aria-label="Mot de passe${n.source ? ` pour ${esc(n.source)}` : ''}">
+             aria-label="Signe${n.source ? ` pour ${esc(n.source)}` : ''}">
       <button type="submit" class="primary" aria-label="Valider">
         <span class="enigme-go">→</span><span class="enigme-go-text">Valider</span>
       </button>

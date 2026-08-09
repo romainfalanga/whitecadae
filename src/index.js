@@ -14,16 +14,64 @@ export default {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) {
       try {
-        return await handleApi(request, env, url);
+        return avecSecurite(await handleApi(request, env, url));
       } catch (err) {
         console.error(err.stack || String(err));
-        return json({ error: 'Erreur interne du serveur.' }, 500);
+        return avecSecurite(json({ error: 'Erreur interne du serveur.' }, 500));
       }
     }
     // Tout le reste est servi par les assets statiques (mode SPA).
-    return env.ASSETS.fetch(request);
+    return avecSecurite(await env.ASSETS.fetch(request));
   },
 };
+
+/* ------------------------------------------------- en-têtes de sécurité ---
+
+   Le vrai verrou est `script-src 'self'` : le site n'exécute que ses propres
+   fichiers. Si une chaîne écrite par un membre parvenait un jour à s'échapper
+   de l'échappement du client, le navigateur refuserait quand même de la
+   lancer. Il n'y a aucun script en ligne dans le site — c'est pourquoi le
+   repli d'avatar, qui vivait dans un attribut `onerror`, a été déplacé dans
+   app.js.
+
+   Les styles gardent 'unsafe-inline' : trois barres de progression posent leur
+   largeur en attribut. C'est sans danger comparé aux scripts.
+
+   Deux origines extérieures sont nécessaires et strictement bornées : le
+   lecteur YouTube des reprises (`frame-src`), et rien d'autre. `frame-ancestors
+   'none'` interdit en retour de mettre le site dans le cadre de quelqu'un
+   d'autre, donc de faire cliquer un membre à son insu.                      */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "worker-src 'self'",
+  "manifest-src 'self'",
+  'frame-src https://www.youtube.com https://www.youtube-nocookie.com',
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'none'",
+  "object-src 'none'",
+].join('; ');
+
+const SECURITE = {
+  'Content-Security-Policy': CSP,
+  // sans quoi un fichier déposé par un membre pourrait être deviné exécutable
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'geolocation=(), microphone=(), camera=(), payment=(), usb=()',
+};
+
+function avecSecurite(reponse) {
+  // 204 et 304 n'ont pas de corps : le recopier ferait échouer la construction.
+  const sansCorps = [101, 204, 205, 304].includes(reponse.status);
+  const sortie = new Response(sansCorps ? null : reponse.body, reponse);
+  for (const [nom, valeur] of Object.entries(SECURITE)) sortie.headers.set(nom, valeur);
+  return sortie;
+}
 
 /* ---------------------------------------------------------------- routing */
 
@@ -406,7 +454,89 @@ async function deleteReference(request, env, id) {
 
 /* ------------------------------------------------------------------- auth */
 
+/* ------------------------------------------------- le barrage des essais ---
+
+   Deux portes s'ouvrent sans rien prouver : la connexion et l'inscription. Sans
+   compteur, on peut y taper indéfiniment — essayer des mots de passe de
+   membres d'un côté, fabriquer des comptes jetables de l'autre. Or un compte
+   jetable, c'est un essai de plus sur les signes du 57 : le minuteur du jeu ne
+   tient que par compte, il ne coûte donc rien à qui sait en créer mille.
+
+   Le compteur est tenu par adresse, dans une fenêtre glissante, avec des seuils
+   qu'aucun humain n'atteint. Il ne remplace pas le minuteur du jeu : il enlève
+   le moyen de le contourner en masse.
+
+   L'adresse vient de `CF-Connecting-IP`, que le réseau de Cloudflare pose
+   lui-même : elle ne peut pas être forgée par le visiteur, contrairement à
+   `X-Forwarded-For`, qu'on se garde bien de lire. En développement, wrangler
+   la pose aussi. Le garde-fou sur son absence n'est donc qu'une ceinture de
+   plus : sans adresse, on ne saurait de toute façon pas quoi compter.       */
+
+let barrageTableReady = false;
+async function ensureBarrageTable(env) {
+  if (barrageTableReady) return;
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS auth_attempts (
+       cle TEXT PRIMARY KEY,
+       compte INTEGER NOT NULL DEFAULT 0,
+       fenetre TEXT NOT NULL DEFAULT (datetime('now'))
+     )`
+  ).run();
+  barrageTableReady = true;
+}
+
+function adresseDe(request) {
+  return request.headers.get('CF-Connecting-IP') || null;
+}
+
+// Renvoie une réponse 429 si le seuil est franchi, sinon null.
+async function barrage(request, env, quoi, max, fenetreSecondes) {
+  const ip = adresseDe(request);
+  if (!ip) return null;
+  await ensureBarrageTable(env);
+  const row = await env.DB.prepare(
+    `SELECT compte, (julianday('now') - julianday(fenetre)) * 86400 AS age
+       FROM auth_attempts WHERE cle = ?1`
+  ).bind(`${quoi}:${ip}`).first();
+  if (!row || row.age >= fenetreSecondes) return null;
+  if (row.compte < max) return null;
+  const reste = Math.max(1, Math.ceil(fenetreSecondes - row.age));
+  return json(
+    { error: 'Trop de tentatives. Réessayez plus tard.' },
+    429,
+    { 'Retry-After': String(reste) }
+  );
+}
+
+// Incrémente, en repartant de zéro si la fenêtre précédente est écoulée.
+async function noteEssai(request, env, quoi, fenetreSecondes) {
+  const ip = adresseDe(request);
+  if (!ip) return;
+  await ensureBarrageTable(env);
+  await env.DB.prepare(
+    `INSERT INTO auth_attempts (cle, compte, fenetre) VALUES (?1, 1, datetime('now'))
+     ON CONFLICT(cle) DO UPDATE SET
+       compte = CASE WHEN (julianday('now') - julianday(fenetre)) * 86400 >= ?2
+                     THEN 1 ELSE compte + 1 END,
+       fenetre = CASE WHEN (julianday('now') - julianday(fenetre)) * 86400 >= ?2
+                      THEN datetime('now') ELSE fenetre END`
+  ).bind(`${quoi}:${ip}`, fenetreSecondes).run();
+  // ménage opportuniste : une fenêtre d'un jour ne sert plus à rien
+  await env.DB.prepare(
+    `DELETE FROM auth_attempts WHERE julianday('now') - julianday(fenetre) > 1`
+  ).run();
+}
+
+// Assez large pour une famille derrière une même adresse, assez étroit pour
+// qu'on ne fabrique pas une armée de comptes jetables.
+const BARRAGE_CONNEXION = { max: 20, fenetre: 15 * 60 };
+const BARRAGE_INSCRIPTION = { max: 6, fenetre: 60 * 60 };
+
 async function register(request, env) {
+  const stop = await barrage(request, env, 'inscription', BARRAGE_INSCRIPTION.max, BARRAGE_INSCRIPTION.fenetre);
+  if (stop) return stop;
+  await noteEssai(request, env, 'inscription', BARRAGE_INSCRIPTION.fenetre);
+
   const body = await readJson(request);
   if (!body) return json({ error: 'Requête invalide.' }, 400);
   const email = String(body.email || '').trim().toLowerCase();
@@ -438,6 +568,11 @@ async function register(request, env) {
 }
 
 async function login(request, env) {
+  // On ne compte que les échecs : se connecter souvent n'est pas suspect,
+  // se tromper vingt fois en un quart d'heure l'est.
+  const stop = await barrage(request, env, 'connexion', BARRAGE_CONNEXION.max, BARRAGE_CONNEXION.fenetre);
+  if (stop) return stop;
+
   const body = await readJson(request);
   if (!body) return json({ error: 'Requête invalide.' }, 400);
   const email = String(body.email || '').trim().toLowerCase();
@@ -447,6 +582,7 @@ async function login(request, env) {
     'SELECT id, email, username, password_hash, is_admin FROM users WHERE email = ?1'
   ).bind(email).first();
   if (!user || !(await verifyPassword(password, user.password_hash))) {
+    await noteEssai(request, env, 'connexion', BARRAGE_CONNEXION.fenetre);
     return json({ error: 'Email ou mot de passe incorrect.' }, 401);
   }
   return openSession(env, user);

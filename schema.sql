@@ -255,3 +255,13 @@ CREATE TABLE IF NOT EXISTS passage_references (
 
 CREATE INDEX IF NOT EXISTS idx_passage_refs_song ON passage_references(song_id);
 CREATE INDEX IF NOT EXISTS idx_passage_refs_target ON passage_references(ref_song_id);
+
+-- Le barrage des tentatives : une ligne par (nature, adresse) et par fenêtre
+-- glissante. Sert à empêcher qu'on essaie des mots de passe de membres à la
+-- chaîne, et qu'on fabrique des comptes jetables pour contourner le minuteur
+-- des signes du 57.
+CREATE TABLE IF NOT EXISTS auth_attempts (
+  cle TEXT PRIMARY KEY,
+  compte INTEGER NOT NULL DEFAULT 0,
+  fenetre TEXT NOT NULL DEFAULT (datetime('now'))
+);

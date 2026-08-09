@@ -1,0 +1,19 @@
+# En-têtes de sécurité pour les fichiers statiques.
+#
+# Ce fichier n'est pas servi : Cloudflare le lit et applique ces en-têtes.
+# Il est nécessaire parce qu'un fichier qui existe vraiment dans public/
+# (/, /index.html, /styles.css, /app.js…) est servi par le réseau SANS passer
+# par le Worker — src/index.js ne peut donc pas les poser lui-même. Le Worker
+# garde les siens pour l'API et pour les routes de l'application (/57,
+# /chanson/…), qui n'existent pas en tant que fichiers.
+#
+# Les deux listes doivent rester identiques. Si vous touchez à la CSP ici,
+# touchez aussi à la constante CSP de src/index.js, et réciproquement.
+# C'est la CSP portée par le document HTML qui commande ce que la page a le
+# droit d'exécuter : celle-ci est donc la plus importante des deux.
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src https://www.youtube.com https://www.youtube-nocookie.com; form-action 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()

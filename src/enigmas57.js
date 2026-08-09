@@ -245,7 +245,7 @@ export const NODES = [
     source: '10 mains',
     // Sa source EST la réponse du nœud précédent : masquée tant qu'il est
     // verrouillé.
-    lockedLabel: 'Le mot de passe précédent',
+    lockedLabel: 'Le signe précédent',
     requires: ['n-h-1'],
     answers: [
       {

@@ -5,8 +5,8 @@ Plateforme communautaire d'explications des textes de **White Cadae**
 
 **On arrive par le 57.** La racine `/` ouvre l'escape game (voir plus bas) :
 c'est lui qui commande l'accès au reste, échelon par échelon. Il se lit sans
-compte, à pleine encre — seul le bouton Valider y est éteint. Tant qu'aucun mot
-de passe n'a été trouvé, il n'y a que lui — ni interprétations, ni reprises, ni
+compte, à pleine encre — seul le bouton Valider y est éteint. Tant qu'aucun
+signe n'a été trouvé, il n'y a que lui — ni interprétations, ni reprises, ni
 profil.
 
 La page **Interprétations** (`/interpretations`) ouvre sur les dernières
@@ -50,7 +50,7 @@ page-là ouverte par l'échelon.
 
 La **page de profil est publique** : n'importe qui, même sans compte, y lit
 l'échelon d'un membre et les énigmes qu'il a percées — le nom de l'élément et
-le nombre de mots de passe trouvés, **jamais les réponses**. Un élément dont
+le nombre de signes trouvés, **jamais les réponses**. Un élément dont
 le libellé est lui-même la réponse d'un autre y reste masqué tant que *celui
 qui regarde* ne l'a pas ouvert de son côté, sans quoi un profil deviendrait
 une antisèche.
@@ -71,13 +71,17 @@ des autres membres.
 
 ## La page « 57 »
 
-`/57` est un escape game : reconstituer l'arborescence des mots de passe
+`/57` est un escape game : reconstituer l'arborescence des signes
 cachés dans l'EP **57**. Aucun texte, aucune explication, aucun indice :
 un élément, un champ, et ce qu'il veut dire.
 
+Ce ne sont pas des mots de passe mais des **signes** : c'est le mot qu'attend
+chaque champ, et le mot par lequel on en parle ici. Un mot de passe garde, un
+signe se lit.
+
 **Elle se lit sans compte**, et sans le moindre voile : rien n'y est grisé, ni
-les éléments, ni le champ, ni son « mot de passe ». Le seul signe est le bouton
-Valider, éteint — c'est le geste qui est fermé, pas la lecture — et deux
+les éléments, ni le champ, ni son invite. Le seul signe de fermeture est le
+bouton Valider, éteint — c'est le geste qui est clos, pas la lecture — et deux
 boutons, se connecter ou créer un compte, tiennent lieu de toute explication.
 Le serveur renvoie alors un état vide (`anonyme: true`), et refuse toute
 tentative.
@@ -91,11 +95,11 @@ même leur libellé quand celui-ci est la réponse du précédent. Un refus ne
 dit rien : la carte tressaille, rougit et vibre.
 
 Le tout premier bloc est **muet** (`silent`) : pas de libellé, et le serveur
-ne dit pas non plus combien de mots de passe il cache — il envoie seulement
+ne dit pas non plus combien de signes il cache — il envoie seulement
 `open`, qui suffit à savoir s'il faut encore afficher le champ. Le nombre
-total de mots de passe du jeu ne quitte jamais le Worker.
+total de signes du jeu ne quitte jamais le Worker.
 
-**Un essai à la fois.** Proposer un mot de passe, juste ou faux, ferme tous
+**Un essai à la fois.** Proposer un signe, juste ou faux, ferme tous
 les champs du site : il faut donc choisir ce qu'on tente. Le délai est tenu
 par le serveur (une ligne réservée de `riddle_progress`, dont le `riddle_id`
 ne correspond à aucune réponse), donc un rechargement ne le fait pas sauter.
@@ -122,7 +126,7 @@ l'on a tenté.
 `echelon = ⌊ordinaires / 3⌋ × 3^multiplicateurs + 1`
 
 On est à l'échelon **1** dès l'arrivée : c'est le sol, pas une récompense. Ce
-qu'on gravit ensuite, ce sont les **crans** — trois mots de passe ordinaires
+qu'on gravit ensuite, ce sont les **crans** — trois signes ordinaires
 chacun — et ce sont eux que les mots du bloc muet **triplent**. Deux d'entre
 eux multiplient donc par neuf. Multiplier zéro cran ne fait pas décoller : il
 faut d'abord en gravir un. La barre de progression montre le chemin restant
@@ -146,18 +150,18 @@ ligne de texte ait à le dire.
 
 ### Les portes
 
-Certains mots de passe n'ouvrent pas un échelon mais une **fonctionnalité**.
+Certains signes n'ouvrent pas un échelon mais une **fonctionnalité**.
 Ils vivent dans `PORTES`, hors de `NODES` : ni `buildState` ni `echelonOf` ne
 les connaissent, donc ils ne comptent pas dans le calcul, et ils ne
 s'affichent pas sur la page 57 — ils vivent sur la page qu'ils gardent.
 
 L'échelon donne la clé, la porte donne la pièce. **White Cadae** garde les
 Interprétations : à l'échelon 1 la page apparaît dans le menu, mais elle ne
-montre que ce mot de passe, dans la même carte que celles du 57. Tant qu'il
+montre que ce signe, dans la même carte que celles du 57. Tant qu'il
 n'est pas trouvé, tout le reste est refusé — les albums, le fil, les chansons,
 le profil — et le menu n'affiche pas encore « Mon profil ».
 
-Le **minuteur est commun** à tous les mots de passe du site : un essai sur une
+Le **minuteur est commun** à tous les signes du site : un essai sur une
 porte ferme aussi ceux du 57, et réciproquement. Une porte déjà franchie ne
 consomme pas d'essai.
 
@@ -168,7 +172,7 @@ déconnecter, et **l'artiste (`is_admin`) en est exempté** : il ne peut pas se
 retrouver enfermé dehors par un jeu dont il connaît les réponses.
 
 Jouer demande un compte : la progression est enregistrée dessus
-(`riddle_progress`, une ligne par mot de passe trouvé), donc conservée d'un
+(`riddle_progress`, une ligne par signe trouvé), donc conservée d'un
 appareil à l'autre. Il n'y a pas de bouton de remise à
 zéro dans l'interface ; la route `DELETE /api/57/progress` existe toujours.
 
@@ -178,8 +182,53 @@ qu'une fois trouvée. C'est aussi pour ça que rien de ce qui est à trouver
 n'apparaît dans `public/` — ni dans un texte, ni dans un nom de classe, ni
 dans un identifiant. Les champs `note` et `quotes` du fichier ne sont pas
 affichés : ils documentent, sur place, pourquoi telle réponse est la bonne.
-Pour ajouter un mot de passe, il suffit d'ajouter une entrée dans
+Pour ajouter un signe, il suffit d'ajouter une entrée dans
 `answers` : ni l'API ni l'interface n'ont à changer.
+
+## Sécurité
+
+Ce qui protège les signes, et ce qui protège le reste.
+
+**Les réponses ne sortent pas du Worker.** `src/enigmas57.js` n'est jamais
+servi ; aucun fichier de `public/` ne contient de réponse, ni en texte, ni en
+nom de classe, ni en identifiant. L'API n'envoie le libellé d'une réponse
+qu'une fois celle-ci trouvée, et le libellé d'un élément qui *est* la réponse
+d'un autre reste masqué — y compris sur le profil public d'un membre plus
+avancé, où le masque suit **celui qui regarde**.
+
+**Le barrage des tentatives** (`auth_attempts`). Le minuteur du jeu ne tient
+que par compte : sans garde-fou, il suffirait de fabriquer des comptes jetables
+pour essayer les signes en rafale. Deux compteurs par adresse, en fenêtre
+glissante, ferment cette porte sans gêner personne :
+
+| | Seuil | Fenêtre |
+| --- | --- | --- |
+| Connexions **échouées** | 20 | 15 minutes |
+| Inscriptions | 6 | 1 heure |
+
+L'adresse vient de `CF-Connecting-IP`, que le réseau pose lui-même ;
+`X-Forwarded-For`, qui se forge à volonté, n'est jamais lu.
+
+**Les en-têtes.** Une politique de sécurité du contenu (CSP) stricte sur les
+scripts : `script-src 'self'`, aucun script en ligne nulle part — c'est
+pourquoi le repli d'avatar, jadis dans un attribut `onerror`, est aujourd'hui
+un écouteur d'`error` posé à la capture. Les styles gardent `'unsafe-inline'`
+(trois barres de progression posent leur largeur en attribut). Seule origine
+extérieure autorisée : le lecteur YouTube des reprises, en `frame-src`.
+S'y ajoutent `nosniff`, `frame-ancestors 'none'`, `Referrer-Policy` et
+`Permissions-Policy`.
+
+Ces en-têtes vivent à **deux endroits qu'il faut garder identiques** : la
+constante `CSP` de `src/index.js` pour l'API et les routes de l'application, et
+`public/_headers` pour les fichiers qui existent vraiment sur disque — ceux-là
+sont servis par le réseau sans passer par le Worker.
+
+**Le reste** : mots de passe de compte en PBKDF2‑SHA256 (100 000 itérations,
+sel aléatoire, comparaison à temps constant) ; session par cookie
+`HttpOnly`/`Secure`/`SameSite=Lax` ; toutes les requêtes SQL paramétrées (les
+rares noms de table interpolés viennent d'une liste fermée, jamais d'une
+saisie) ; avatar contraint à `image/jpeg|png|webp` par expression régulière ;
+échappement systématique côté client, la CSP servant de seconde barrière.
 
 ## Architecture
 
