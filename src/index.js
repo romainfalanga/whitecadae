@@ -2,8 +2,11 @@
 
 import {
   getNode, isLocked, matchAnswer, buildState, currentAnswerId, echelonOf, accessOf,
-  getPorte, matchPorte, porteOuverte, PORTES, delaiEssaiMs, enigmesTrouvees,
+  delaiEssaiMs, enigmesTrouvees,
+  ECHELON_CONVERSATION, ECHELON_PENSE_MIEUX, ECHELON_VIDEOGRAPHIE,
+  ECHELON_CARRE, ECHELON_BRAINSTORM, ECHELON_GMO,
 } from './enigmas57.js';
+import { MISSIONS_CARRE, ROLES_CARRE, DOMAINES_CARRE, MECANISMES_GMO } from './contenus.js';
 
 const SESSION_COOKIE = 'wc_session';
 const SESSION_DAYS = 30;
@@ -111,12 +114,42 @@ async function handleApi(request, env, url) {
   if (route('PUT', '/api/account/password')) return updatePassword(request, env);
   if (route('POST', '/api/account/avatar')) return updateAvatar(request, env);
 
-  // --- la porte d'une page : on ne peut l'essayer qu'une fois l'échelon
-  //     atteint, et c'est elle qui découvre le contenu.
-  if ((p = route('POST', '/api/portes/:nom/guess'))) return porteGuess(request, env, p[0]);
+  // --- les pièces hautes : chacune exige son échelon, vérifié dans son
+  //     gestionnaire (le corps de la requête et l'échelon du visiteur s'y
+  //     lisent ensemble). L'ordre n'a pas d'importance : rien ici n'est
+  //     couvert par le barrage plus bas.
+  if (route('GET', '/api/conversation')) return conversationList(request, env);
+  if (route('POST', '/api/conversation')) return conversationPost(request, env);
 
-  // --- tout ce qui suit demande un échelon. Les reprises sont la porte la
-  //     plus haute ; le reste demande l'échelon ET le mot de passe de la page.
+  if (route('GET', '/api/arbres')) return arbresList(request, env, url);
+  if (route('POST', '/api/arbres')) return arbresCreate(request, env);
+  if ((p = route('GET', '/api/arbres/:id'))) return arbresGet(request, env, +p[0]);
+  if ((p = route('PUT', '/api/arbres/:id'))) return arbresUpdate(request, env, +p[0]);
+  if ((p = route('DELETE', '/api/arbres/:id'))) return arbresDelete(request, env, +p[0]);
+  if ((p = route('POST', '/api/arbres/:id/branches'))) return branchesCreate(request, env, +p[0]);
+  if ((p = route('PUT', '/api/branches/:id'))) return branchesUpdate(request, env, +p[0]);
+  if ((p = route('DELETE', '/api/branches/:id'))) return branchesDelete(request, env, +p[0]);
+  if ((p = route('GET', '/api/videographie/membre/:id'))) return videographieDuMembre(request, env, +p[0]);
+
+  if (route('GET', '/api/carre')) return carreGet(request, env);
+  if (route('POST', '/api/carre')) return carreCreate(request, env);
+  if ((p = route('POST', '/api/carre/:id/rejoindre'))) return carreJoin(request, env, +p[0]);
+  if (route('PUT', '/api/carre/moi')) return carreUpdateMoi(request, env);
+  if (route('POST', '/api/carre/quitter')) return carreLeave(request, env);
+
+  if (route('GET', '/api/brainstorms')) return brainstormsList(request, env);
+  if (route('POST', '/api/brainstorms')) return brainstormsCreate(request, env);
+  if ((p = route('GET', '/api/brainstorms/:id'))) return brainstormGet(request, env, +p[0]);
+  if ((p = route('PUT', '/api/brainstorms/:id'))) return brainstormUpdate(request, env, +p[0]);
+  if ((p = route('POST', '/api/brainstorms/:id/idees'))) return brainstormIdee(request, env, +p[0]);
+  if ((p = route('POST', '/api/brainstorms/:id/votes'))) return brainstormVote(request, env, +p[0]);
+
+  if (route('GET', '/api/gmo')) return gmoGet(request, env);
+
+  // --- le tronc commun : interprétations et reprises. Ouvert dès l'échelon 1,
+  //     donc à tout le monde, visiteur compris — le barrage ne ferme plus que
+  //     ce qui est au-dessus. On le garde en place : si un jour un échelon
+  //     doit se refermer, il suffit de relever la constante.
   const coversRoute = route('GET', '/api/covers/feed') || route('GET', '/api/covers')
     || route('GET', '/api/songs/:slug/covers') || route('POST', '/api/covers')
     || route('DELETE', '/api/covers/:id');
@@ -124,7 +157,7 @@ async function handleApi(request, env, url) {
     const refus = await requireAccess(request, env, 'reprises');
     if (refus) return refus;
   } else if (path.startsWith('/api/') && !path.startsWith('/api/admin/')) {
-    const refus = await requireAccess(request, env, 'interpretations', 'porteInterpretations');
+    const refus = await requireAccess(request, env, 'interpretations');
     if (refus) return refus;
   }
 
@@ -286,19 +319,24 @@ async function requireAdmin(request, env) {
 
 async function viewerAccess(request, env) {
   const user = await getUser(request, env);
-  if (!user) return { user: null, echelon: 0, solved: new Set(), access: accessOf(0) };
+  // Sans compte on est au sol, comme tout le monde : l'échelon 1 ouvre déjà
+  // les interprétations et les reprises, en lecture.
+  if (!user) return { user: null, echelon: 1, solved: new Set(), access: accessOf(1) };
   if (user.is_admin) {
-    return {
-      user,
-      echelon: Infinity,
-      solved: new Set(),
-      access: { interpretations: true, reprises: true, porteInterpretations: true },
-    };
+    return { user, echelon: Infinity, solved: new Set(), access: accessOf(Infinity) };
   }
   const rows = await riddleRows(env, user.id);
   const solved = new Set(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
   const echelon = echelonOf(solved);
-  return { user, echelon, solved, access: accessOf(echelon, solved) };
+  return { user, echelon, solved, access: accessOf(echelon) };
+}
+
+// L'échelon exigé par une pièce, et un refus prêt à servir. Le message ne dit
+// jamais ce qu'il faudrait trouver.
+async function requireEchelon(request, env, minimum, cle) {
+  const vu = await viewerAccess(request, env);
+  if (vu.echelon >= minimum) return { vu, refus: null };
+  return { vu, refus: json({ error: 'Ce n’est pas encore ouvert.', locked: cle }, 403) };
 }
 
 // Renvoie null si tout est ouvert, sinon la réponse à servir telle quelle.
@@ -609,15 +647,15 @@ async function logout(request, env) {
   return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
 }
 
-// La session porte aussi ce que l'échelon ouvre, le libellé des portes encore
-// fermées, et le minuteur d'essai — commun à tous les mots de passe du site.
-// L'interface s'y règle dès le chargement, sans attendre l'état du jeu.
+// La session porte aussi ce que l'échelon ouvre et le minuteur d'essai —
+// commun à tous les signes du site. L'interface s'y règle dès le chargement,
+// sans attendre l'état du jeu.
 async function me(request, env) {
   const { user, access, echelon } = await viewerAccess(request, env);
   return json({
     user: user ? { ...user, is_admin: !!user.is_admin } : null,
     access,
-    portes: Object.fromEntries(Object.entries(PORTES).map(([nom, p]) => [nom, p.source])),
+    echelon: Number.isFinite(echelon) ? echelon : ECHELON_GMO,
     attenteMs: user && Number.isFinite(echelon) ? await attenteRestante(env, user.id, echelon) : 0,
   });
 }
@@ -970,16 +1008,6 @@ async function getProfile(env, request, username) {
     echelon: echelonOf(solvedCible),
     enigmes: enigmesTrouvees(solvedCible, vu.solved),
   };
-
-  if (!(vu.access.interpretations && vu.access.porteInterpretations)) {
-    return json({
-      user: { username: user.username, created_at: user.created_at, is_admin: !!user.is_admin },
-      jeu,
-      restreint: true,
-      stats: { draft_count: 0 },
-      annotations: [], essays: [], passageRefs: [], connections: [], versions: [], covers: [],
-    });
-  }
 
   const annotations = (await env.DB.prepare(
     `SELECT a.id, a.target_type, a.content, a.created_at, a.updated_at, a.is_published, a.grid_number,
@@ -1752,44 +1780,6 @@ async function signsGuess(request, env) {
   return json({ ok: true, id: node.id, state: await riddleState(env, user.id) });
 }
 
-// Le mot de passe d'une page. Même minuteur que le 57 : un essai par heure,
-// tous champs confondus — proposer, c'est jouer, où que ce soit.
-async function porteGuess(request, env, nom) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
-
-  const porte = getPorte(nom);
-  if (!porte) return json({ error: 'Porte introuvable.' }, 404);
-
-  const body = await readJson(request);
-  const answer = String(body?.answer ?? '');
-  if (answer.length > 200) return json({ error: 'Réponse trop longue.' }, 400);
-  if (!answer.trim()) return json({ error: 'Réponse vide.' }, 400);
-
-  // On ne peut pas essayer une porte qu'on n'a pas encore atteinte.
-  const { echelon, solved } = await viewerAccess(request, env);
-  if (echelon < porte.echelon) return json({ error: 'Ce n’est pas encore ouvert.', locked: nom }, 403);
-  // Déjà franchie : on ne consomme pas l'essai pour rien.
-  if (porteOuverte(nom, solved)) return json({ ok: true, deja: true });
-
-  const attente = await attenteRestante(env, user.id, echelon);
-  if (attente > 0) return json({ error: 'Trop tôt.', attenteMs: attente }, 429);
-  await marquerEssai(env, user.id);
-
-  const hit = matchPorte(nom, answer, solved);
-  if (!hit) return json({ ok: false, attenteMs: delaiEssaiMs(echelon) });
-
-  await env.DB.prepare(
-    `INSERT INTO riddle_progress (user_id, riddle_id, solved_at)
-     VALUES (?1, ?2, datetime('now'))
-     ON CONFLICT(user_id, riddle_id) DO UPDATE
-       SET solved_at = COALESCE(solved_at, datetime('now')), updated_at = datetime('now')`
-  ).bind(user.id, hit).run();
-
-  const apres = await viewerAccess(request, env);
-  return json({ ok: true, access: apres.access, attenteMs: delaiEssaiMs(apres.echelon) });
-}
-
 // Plus proposé dans l'interface, mais conservé : c'est le seul moyen de
 // repartir de zéro.
 async function signsReset(request, env) {
@@ -1956,6 +1946,681 @@ async function deleteComment(request, env, id) {
   }
   await env.DB.prepare('DELETE FROM comments WHERE id = ?1').bind(id).run();
   return json({ ok: true });
+}
+
+/* ------------------------------------------------------ les pièces hautes
+   Chaque échelon franchi découvre une pièce de plus. Le contrôle est fait
+   ici, dans chaque gestionnaire : l'échelon du visiteur est relu à chaque
+   requête, jamais supposé.
+
+   Toutes les tables se créent d'elles-mêmes au premier passage, comme
+   riddle_progress : le site ne doit pas dépendre d'une migration manuelle. */
+
+let hautesTablesReady = false;
+async function ensureHautesTables(env) {
+  if (hautesTablesReady) return;
+  await env.DB.batch([
+    // la conversation : un message, et l'échelon minimal pour le lire
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS conversation_messages (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         body TEXT NOT NULL,
+         min_echelon INTEGER NOT NULL DEFAULT 2,
+         created_at TEXT NOT NULL DEFAULT (datetime('now'))
+       )`
+    ),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_conv_created ON conversation_messages(created_at)'),
+    // les arbres de réflexion : un tronc (le sujet), des branches emboîtées.
+    // kind distingue Pense Mieux ('pensee') de la Vidéographie ('video').
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS reflection_trees (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         kind TEXT NOT NULL,
+         title TEXT NOT NULL,
+         trunk TEXT NOT NULL DEFAULT '',
+         created_at TEXT NOT NULL DEFAULT (datetime('now')),
+         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+       )`
+    ),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_trees_user ON reflection_trees(user_id, kind)'),
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS reflection_branches (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         tree_id INTEGER NOT NULL REFERENCES reflection_trees(id) ON DELETE CASCADE,
+         parent_id INTEGER REFERENCES reflection_branches(id) ON DELETE CASCADE,
+         body TEXT NOT NULL DEFAULT '',
+         url TEXT,
+         created_at TEXT NOT NULL DEFAULT (datetime('now'))
+       )`
+    ),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_branches_tree ON reflection_branches(tree_id)'),
+    // les carrés d'as : quatre membres, un rôle et une connaissance chacun
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS carres (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         nom TEXT NOT NULL,
+         created_at TEXT NOT NULL DEFAULT (datetime('now'))
+       )`
+    ),
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS carre_membres (
+         user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+         carre_id INTEGER NOT NULL REFERENCES carres(id) ON DELETE CASCADE,
+         role TEXT,
+         domaine TEXT,
+         joined_at TEXT NOT NULL DEFAULT (datetime('now'))
+       )`
+    ),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_carre_membres ON carre_membres(carre_id)'),
+    // les brainstorms : un live porté par un carré, des idées, des votes
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS brainstorms (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         carre_id INTEGER NOT NULL REFERENCES carres(id) ON DELETE CASCADE,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         sujet TEXT NOT NULL,
+         plateforme TEXT NOT NULL,
+         url TEXT NOT NULL,
+         statut TEXT NOT NULL DEFAULT 'annonce',
+         created_at TEXT NOT NULL DEFAULT (datetime('now')),
+         live_depuis TEXT
+       )`
+    ),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_brainstorms_statut ON brainstorms(statut, created_at)'),
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS brainstorm_idees (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         brainstorm_id INTEGER NOT NULL REFERENCES brainstorms(id) ON DELETE CASCADE,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         body TEXT NOT NULL,
+         created_at TEXT NOT NULL DEFAULT (datetime('now'))
+       )`
+    ),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_idees_brainstorm ON brainstorm_idees(brainstorm_id, created_at)'),
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS brainstorm_votes (
+         idee_id INTEGER NOT NULL REFERENCES brainstorm_idees(id) ON DELETE CASCADE,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         created_at TEXT NOT NULL DEFAULT (datetime('now')),
+         PRIMARY KEY (idee_id, user_id)
+       )`
+    ),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_votes_idee ON brainstorm_votes(idee_id, created_at)'),
+  ]);
+  hautesTablesReady = true;
+}
+
+/* --------------------------------------------- la conversation (échelon 2)
+   Une seule conversation, pour tout le monde à partir de l'échelon 2. Mais
+   chaque message porte l'échelon minimal pour le lire, choisi par son auteur
+   entre 2 et son propre échelon : plus on monte, plus on entend.           */
+
+async function conversationList(request, env) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_CONVERSATION, 'conversation');
+  if (refus) return refus;
+  await ensureHautesTables(env);
+  const plafond = Number.isFinite(vu.echelon) ? vu.echelon : ECHELON_GMO;
+  const { results } = await env.DB.prepare(
+    `SELECT m.id, m.body, m.min_echelon, m.created_at, u.username
+       FROM conversation_messages m JOIN users u ON u.id = m.user_id
+      WHERE m.min_echelon <= ?1
+      ORDER BY m.id DESC LIMIT 100`
+  ).bind(plafond).all();
+  return json({ messages: (results || []).reverse(), echelon: plafond });
+}
+
+async function conversationPost(request, env) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_CONVERSATION, 'conversation');
+  if (refus) return refus;
+  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
+  await ensureHautesTables(env);
+
+  const body = await readJson(request);
+  const texte = String(body?.body || '').trim();
+  if (!texte) return json({ error: 'Message vide.' }, 400);
+  if (texte.length > 2000) return json({ error: 'Message trop long (2000 caractères).' }, 400);
+
+  // L'auteur choisit qui peut lire : jamais en dessous de la porte de la
+  // page, jamais au-dessus de son propre échelon.
+  const plafond = Number.isFinite(vu.echelon) ? vu.echelon : ECHELON_GMO;
+  const demande = Number(body?.min_echelon) || ECHELON_CONVERSATION;
+  const minEchelon = Math.max(ECHELON_CONVERSATION, Math.min(demande, plafond));
+
+  const r = await env.DB.prepare(
+    'INSERT INTO conversation_messages (user_id, body, min_echelon) VALUES (?1, ?2, ?3)'
+  ).bind(vu.user.id, texte, minEchelon).run();
+  return json({ ok: true, id: r.meta.last_row_id }, 201);
+}
+
+/* ------------------- les arbres : Pense Mieux (3) et Vidéographie (4) ---
+   Même moteur pour les deux : un tronc (le sujet) et des branches emboîtées
+   qui se font grandir. En Vidéographie, chaque branche est une vidéo
+   YouTube ; l'arbre y organise ce qu'on a extériorisé en vidéo.           */
+
+const ARBRE_KINDS = {
+  pensee: { echelon: () => ECHELON_PENSE_MIEUX, cle: 'penseMieux' },
+  video: { echelon: () => ECHELON_VIDEOGRAPHIE, cle: 'videographie' },
+};
+
+function kindDe(raw) {
+  return ARBRE_KINDS[raw] ? raw : null;
+}
+
+async function gateArbre(request, env, kind) {
+  const def = ARBRE_KINDS[kind];
+  const { vu, refus } = await requireEchelon(request, env, def.echelon(), def.cle);
+  if (refus) return { refus };
+  if (!vu.user) return { refus: json({ error: 'Connexion requise.' }, 401) };
+  await ensureHautesTables(env);
+  return { vu };
+}
+
+// Une URL de vidéo YouTube, et rien d'autre : c'est le matériau imposé de la
+// Vidéographie.
+function urlYoutubeValide(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\.|^m\./, '');
+    if (host === 'youtu.be') return u.pathname.length > 1;
+    return host === 'youtube.com' && (u.pathname.startsWith('/watch') || u.pathname.startsWith('/shorts/') || u.pathname.startsWith('/live/') || u.pathname.startsWith('/embed/'));
+  } catch { return false; }
+}
+
+async function arbresList(request, env, url) {
+  const kind = kindDe(url.searchParams.get('kind'));
+  if (!kind) return json({ error: 'Nature d’arbre inconnue.' }, 400);
+  const { vu, refus } = await gateArbre(request, env, kind);
+  if (refus) return refus;
+  const { results } = await env.DB.prepare(
+    `SELECT t.id, t.title, t.trunk, t.created_at, t.updated_at,
+            (SELECT COUNT(*) FROM reflection_branches b WHERE b.tree_id = t.id) AS branches
+       FROM reflection_trees t WHERE t.user_id = ?1 AND t.kind = ?2
+      ORDER BY t.updated_at DESC`
+  ).bind(vu.user.id, kind).all();
+  return json({ arbres: results || [] });
+}
+
+async function arbresCreate(request, env) {
+  const body = await readJson(request);
+  const kind = kindDe(body?.kind);
+  if (!kind) return json({ error: 'Nature d’arbre inconnue.' }, 400);
+  const { vu, refus } = await gateArbre(request, env, kind);
+  if (refus) return refus;
+
+  const title = String(body?.title || '').trim();
+  const trunk = String(body?.trunk || '').trim();
+  if (!title) return json({ error: 'Un arbre commence par son sujet.' }, 400);
+  if (title.length > 120) return json({ error: 'Sujet trop long (120 caractères).' }, 400);
+  if (trunk.length > 4000) return json({ error: 'Tronc trop long (4000 caractères).' }, 400);
+
+  const r = await env.DB.prepare(
+    'INSERT INTO reflection_trees (user_id, kind, title, trunk) VALUES (?1, ?2, ?3, ?4)'
+  ).bind(vu.user.id, kind, title, trunk).run();
+  return json({ ok: true, id: r.meta.last_row_id }, 201);
+}
+
+// L'arbre entier, branches comprises. `proprietaire` distingue le sien
+// (modifiable) de celui d'un membre de son carré (lecture seule).
+async function chargeArbre(env, id) {
+  const tree = await env.DB.prepare(
+    'SELECT id, user_id, kind, title, trunk, created_at, updated_at FROM reflection_trees WHERE id = ?1'
+  ).bind(id).first();
+  if (!tree) return null;
+  const { results } = await env.DB.prepare(
+    'SELECT id, parent_id, body, url, created_at FROM reflection_branches WHERE tree_id = ?1 ORDER BY id'
+  ).bind(id).all();
+  return { ...tree, branches: results || [] };
+}
+
+async function arbresGet(request, env, id) {
+  await ensureHautesTables(env);
+  const arbre = await chargeArbre(env, id);
+  if (!arbre) return json({ error: 'Arbre introuvable.' }, 404);
+  const { vu, refus } = await gateArbre(request, env, arbre.kind);
+  if (refus) return refus;
+
+  if (arbre.user_id === vu.user.id) {
+    return json({ arbre: { ...arbre, proprietaire: true } });
+  }
+  // Une vidéographie se partage au sein d'un carré : « analysez mutuellement
+  // vos vidéographies ». Un arbre de pensée, lui, reste à son auteur.
+  if (arbre.kind === 'video' && await memeCarre(env, vu.user.id, arbre.user_id)) {
+    return json({ arbre: { ...arbre, proprietaire: false } });
+  }
+  return json({ error: 'Arbre introuvable.' }, 404);
+}
+
+async function arbresUpdate(request, env, id) {
+  await ensureHautesTables(env);
+  const tree = await env.DB.prepare('SELECT id, user_id, kind FROM reflection_trees WHERE id = ?1').bind(id).first();
+  if (!tree) return json({ error: 'Arbre introuvable.' }, 404);
+  const { vu, refus } = await gateArbre(request, env, tree.kind);
+  if (refus) return refus;
+  if (tree.user_id !== vu.user.id) return json({ error: 'Cet arbre n’est pas le vôtre.' }, 403);
+
+  const body = await readJson(request);
+  const title = String(body?.title || '').trim();
+  const trunk = String(body?.trunk || '').trim();
+  if (!title || title.length > 120) return json({ error: 'Sujet invalide.' }, 400);
+  if (trunk.length > 4000) return json({ error: 'Tronc trop long.' }, 400);
+  await env.DB.prepare(
+    `UPDATE reflection_trees SET title = ?1, trunk = ?2, updated_at = datetime('now') WHERE id = ?3`
+  ).bind(title, trunk, id).run();
+  return json({ ok: true });
+}
+
+async function arbresDelete(request, env, id) {
+  await ensureHautesTables(env);
+  const tree = await env.DB.prepare('SELECT id, user_id, kind FROM reflection_trees WHERE id = ?1').bind(id).first();
+  if (!tree) return json({ error: 'Arbre introuvable.' }, 404);
+  const { vu, refus } = await gateArbre(request, env, tree.kind);
+  if (refus) return refus;
+  if (tree.user_id !== vu.user.id) return json({ error: 'Cet arbre n’est pas le vôtre.' }, 403);
+  await env.DB.prepare('DELETE FROM reflection_trees WHERE id = ?1').bind(id).run();
+  return json({ ok: true });
+}
+
+async function branchesCreate(request, env, treeId) {
+  await ensureHautesTables(env);
+  const tree = await env.DB.prepare('SELECT id, user_id, kind FROM reflection_trees WHERE id = ?1').bind(treeId).first();
+  if (!tree) return json({ error: 'Arbre introuvable.' }, 404);
+  const { vu, refus } = await gateArbre(request, env, tree.kind);
+  if (refus) return refus;
+  if (tree.user_id !== vu.user.id) return json({ error: 'Cet arbre n’est pas le vôtre.' }, 403);
+
+  const body = await readJson(request);
+  const texte = String(body?.body || '').trim();
+  const url = String(body?.url || '').trim();
+  const parentId = body?.parent_id == null ? null : Number(body.parent_id);
+
+  if (tree.kind === 'video') {
+    if (!urlYoutubeValide(url)) return json({ error: 'Chaque branche d’une vidéographie est une vidéo YouTube.' }, 400);
+  } else if (!texte) {
+    return json({ error: 'Branche vide.' }, 400);
+  }
+  if (texte.length > 2000) return json({ error: 'Branche trop longue (2000 caractères).' }, 400);
+
+  if (parentId != null) {
+    const parent = await env.DB.prepare(
+      'SELECT id FROM reflection_branches WHERE id = ?1 AND tree_id = ?2'
+    ).bind(parentId, treeId).first();
+    if (!parent) return json({ error: 'Branche mère introuvable.' }, 404);
+  }
+
+  const r = await env.DB.prepare(
+    'INSERT INTO reflection_branches (tree_id, parent_id, body, url) VALUES (?1, ?2, ?3, ?4)'
+  ).bind(treeId, parentId, texte, tree.kind === 'video' ? url : null).run();
+  await env.DB.prepare(`UPDATE reflection_trees SET updated_at = datetime('now') WHERE id = ?1`).bind(treeId).run();
+  return json({ ok: true, id: r.meta.last_row_id }, 201);
+}
+
+async function brancheEtArbre(env, id) {
+  return env.DB.prepare(
+    `SELECT b.id, b.tree_id, t.user_id, t.kind
+       FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
+      WHERE b.id = ?1`
+  ).bind(id).first();
+}
+
+async function branchesUpdate(request, env, id) {
+  await ensureHautesTables(env);
+  const row = await brancheEtArbre(env, id);
+  if (!row) return json({ error: 'Branche introuvable.' }, 404);
+  const { vu, refus } = await gateArbre(request, env, row.kind);
+  if (refus) return refus;
+  if (row.user_id !== vu.user.id) return json({ error: 'Cette branche n’est pas la vôtre.' }, 403);
+
+  const body = await readJson(request);
+  const texte = String(body?.body || '').trim();
+  const url = String(body?.url || '').trim();
+  if (row.kind === 'video' && !urlYoutubeValide(url)) return json({ error: 'La branche doit rester une vidéo YouTube.' }, 400);
+  if (row.kind !== 'video' && !texte) return json({ error: 'Branche vide.' }, 400);
+  if (texte.length > 2000) return json({ error: 'Branche trop longue.' }, 400);
+
+  await env.DB.prepare('UPDATE reflection_branches SET body = ?1, url = ?2 WHERE id = ?3')
+    .bind(texte, row.kind === 'video' ? url : null, id).run();
+  return json({ ok: true });
+}
+
+async function branchesDelete(request, env, id) {
+  await ensureHautesTables(env);
+  const row = await brancheEtArbre(env, id);
+  if (!row) return json({ error: 'Branche introuvable.' }, 404);
+  const { vu, refus } = await gateArbre(request, env, row.kind);
+  if (refus) return refus;
+  if (row.user_id !== vu.user.id) return json({ error: 'Cette branche n’est pas la vôtre.' }, 403);
+  await env.DB.prepare('DELETE FROM reflection_branches WHERE id = ?1').bind(id).run();
+  return json({ ok: true });
+}
+
+// La forêt vidéo d'un membre de son propre carré, en lecture : c'est la
+// matière du travail mutuel des As.
+async function videographieDuMembre(request, env, membreId) {
+  const { vu, refus } = await gateArbre(request, env, 'video');
+  if (refus) return refus;
+  if (!(await memeCarre(env, vu.user.id, membreId))) return json({ error: 'Membre introuvable.' }, 404);
+  const membre = await env.DB.prepare('SELECT username FROM users WHERE id = ?1').bind(membreId).first();
+  const { results } = await env.DB.prepare(
+    `SELECT t.id, t.title, t.trunk, t.updated_at,
+            (SELECT COUNT(*) FROM reflection_branches b WHERE b.tree_id = t.id) AS branches
+       FROM reflection_trees t WHERE t.user_id = ?1 AND t.kind = 'video'
+      ORDER BY t.updated_at DESC`
+  ).bind(membreId).all();
+  return json({ membre: membre?.username || '', arbres: results || [] });
+}
+
+/* --------------------------------------------- le carré d'as (échelon 5)
+   Quatre As, un équilibre : infinisseurs et harmonisateurs d'un côté, les
+   quatre connaissances fondamentales de l'autre. On crée un carré ou on en
+   rejoint un qui a encore une place ; chacun règle son rôle et sa
+   connaissance, et la page montre ce qui manque à l'équilibre.            */
+
+async function monCarre(env, userId) {
+  return env.DB.prepare(
+    `SELECT c.id, c.nom, c.created_at FROM carres c
+       JOIN carre_membres m ON m.carre_id = c.id WHERE m.user_id = ?1`
+  ).bind(userId).first();
+}
+
+async function membresDe(env, carreId) {
+  const { results } = await env.DB.prepare(
+    `SELECT m.user_id, m.role, m.domaine, m.joined_at, u.username
+       FROM carre_membres m JOIN users u ON u.id = m.user_id
+      WHERE m.carre_id = ?1 ORDER BY m.joined_at`
+  ).bind(carreId).all();
+  return results || [];
+}
+
+async function memeCarre(env, a, b) {
+  if (a === b) return true;
+  await ensureHautesTables(env);
+  const row = await env.DB.prepare(
+    `SELECT 1 AS oui FROM carre_membres ma JOIN carre_membres mb ON ma.carre_id = mb.carre_id
+      WHERE ma.user_id = ?1 AND mb.user_id = ?2`
+  ).bind(a, b).first();
+  return !!row;
+}
+
+async function carreGet(request, env) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
+  if (refus) return refus;
+  await ensureHautesTables(env);
+
+  const reponse = { missions: MISSIONS_CARRE, roles: ROLES_CARRE, domaines: DOMAINES_CARRE, carre: null, ouverts: [] };
+  if (vu.user) {
+    const carre = await monCarre(env, vu.user.id);
+    if (carre) reponse.carre = { ...carre, membres: await membresDe(env, carre.id) };
+  }
+  if (!reponse.carre) {
+    // les carrés où il reste une place, pour rejoindre plutôt que fonder
+    const { results } = await env.DB.prepare(
+      `SELECT c.id, c.nom, COUNT(m.user_id) AS membres FROM carres c
+         LEFT JOIN carre_membres m ON m.carre_id = c.id
+        GROUP BY c.id HAVING membres < 4 ORDER BY c.created_at DESC LIMIT 25`
+    ).all();
+    reponse.ouverts = results || [];
+  }
+  return json(reponse);
+}
+
+async function carreCreate(request, env) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
+  if (refus) return refus;
+  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
+  await ensureHautesTables(env);
+  if (await monCarre(env, vu.user.id)) return json({ error: 'Vous avez déjà un carré.' }, 409);
+
+  const body = await readJson(request);
+  const nom = String(body?.nom || '').trim();
+  if (!nom || nom.length > 60) return json({ error: 'Donnez un nom à votre carré (60 caractères au plus).' }, 400);
+
+  const r = await env.DB.prepare('INSERT INTO carres (nom) VALUES (?1)').bind(nom).run();
+  await env.DB.prepare('INSERT INTO carre_membres (user_id, carre_id) VALUES (?1, ?2)')
+    .bind(vu.user.id, r.meta.last_row_id).run();
+  return json({ ok: true, id: r.meta.last_row_id }, 201);
+}
+
+async function carreJoin(request, env, carreId) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
+  if (refus) return refus;
+  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
+  await ensureHautesTables(env);
+  if (await monCarre(env, vu.user.id)) return json({ error: 'Vous avez déjà un carré.' }, 409);
+
+  const carre = await env.DB.prepare('SELECT id FROM carres WHERE id = ?1').bind(carreId).first();
+  if (!carre) return json({ error: 'Carré introuvable.' }, 404);
+  const membres = await membresDe(env, carreId);
+  if (membres.length >= 4) return json({ error: 'Ce carré est complet.' }, 409);
+
+  await env.DB.prepare('INSERT INTO carre_membres (user_id, carre_id) VALUES (?1, ?2)')
+    .bind(vu.user.id, carreId).run();
+  return json({ ok: true });
+}
+
+async function carreUpdateMoi(request, env) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
+  if (refus) return refus;
+  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
+  await ensureHautesTables(env);
+  const carre = await monCarre(env, vu.user.id);
+  if (!carre) return json({ error: 'Vous n’avez pas encore de carré.' }, 404);
+
+  const body = await readJson(request);
+  const role = body?.role == null || body.role === '' ? null : String(body.role);
+  const domaine = body?.domaine == null || body.domaine === '' ? null : String(body.domaine);
+  if (role && !ROLES_CARRE.includes(role)) return json({ error: 'Rôle inconnu.' }, 400);
+  if (domaine && !DOMAINES_CARRE.includes(domaine)) return json({ error: 'Connaissance inconnue.' }, 400);
+
+  await env.DB.prepare('UPDATE carre_membres SET role = ?1, domaine = ?2 WHERE user_id = ?3')
+    .bind(role, domaine, vu.user.id).run();
+  return json({ ok: true });
+}
+
+async function carreLeave(request, env) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
+  if (refus) return refus;
+  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
+  await ensureHautesTables(env);
+  const carre = await monCarre(env, vu.user.id);
+  if (!carre) return json({ error: 'Vous n’avez pas de carré.' }, 404);
+  await env.DB.prepare('DELETE FROM carre_membres WHERE user_id = ?1').bind(vu.user.id).run();
+  // un carré vide ne garde pas de coquille
+  const restants = await membresDe(env, carre.id);
+  if (!restants.length) await env.DB.prepare('DELETE FROM carres WHERE id = ?1').bind(carre.id).run();
+  return json({ ok: true });
+}
+
+/* ---------------------------------------------- le brainstorm (échelon 6)
+   Un carré complet annonce un live (TikTok, YouTube ou Twitch). Pendant le
+   live, la salle propose des réflexions et vote ; le carré voit monter les
+   plus soutenues du moment. Tout marche par relecture périodique côté
+   client — aucun serveur temps réel, aucune connexion tenue ouverte : le
+   coût d'un brainstorm à mille personnes est celui de requêtes ordinaires. */
+
+const PLATEFORMES_LIVE = {
+  youtube: (u) => /(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(u.hostname.replace(/^www\.|^m\./, '')),
+  twitch: (u) => /(^|\.)twitch\.tv$/.test(u.hostname.replace(/^www\./, '')),
+  tiktok: (u) => /(^|\.)tiktok\.com$/.test(u.hostname.replace(/^www\./, '')),
+};
+
+async function brainstormsList(request, env) {
+  const { refus } = await requireEchelon(request, env, ECHELON_BRAINSTORM, 'brainstorm');
+  if (refus) return refus;
+  await ensureHautesTables(env);
+  const { results } = await env.DB.prepare(
+    `SELECT b.id, b.sujet, b.plateforme, b.url, b.statut, b.created_at, b.live_depuis,
+            c.nom AS carre_nom,
+            (SELECT COUNT(*) FROM brainstorm_idees i WHERE i.brainstorm_id = b.id) AS idees
+       FROM brainstorms b JOIN carres c ON c.id = b.carre_id
+      ORDER BY CASE b.statut WHEN 'live' THEN 0 WHEN 'annonce' THEN 1 ELSE 2 END,
+               COALESCE(b.live_depuis, b.created_at) DESC
+      LIMIT 50`
+  ).all();
+  return json({ brainstorms: results || [] });
+}
+
+async function brainstormsCreate(request, env) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_BRAINSTORM, 'brainstorm');
+  if (refus) return refus;
+  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
+  await ensureHautesTables(env);
+
+  // un brainstorm est porté par un carré d'as — complet : quatre As
+  const carre = await monCarre(env, vu.user.id);
+  if (!carre) return json({ error: 'Un brainstorm est porté par un carré d’as.' }, 403);
+  const membres = await membresDe(env, carre.id);
+  if (membres.length < 4) return json({ error: 'Votre carré doit être complet : quatre As.' }, 403);
+
+  const body = await readJson(request);
+  const sujet = String(body?.sujet || '').trim();
+  const plateforme = String(body?.plateforme || '');
+  const url = String(body?.url || '').trim();
+  if (!sujet || sujet.length > 200) return json({ error: 'Donnez un sujet (200 caractères au plus).' }, 400);
+  if (!PLATEFORMES_LIVE[plateforme]) return json({ error: 'Plateforme inconnue : YouTube, Twitch ou TikTok.' }, 400);
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:' || !PLATEFORMES_LIVE[plateforme](u)) {
+      return json({ error: 'Le lien ne correspond pas à la plateforme.' }, 400);
+    }
+  } catch { return json({ error: 'Lien invalide.' }, 400); }
+
+  const r = await env.DB.prepare(
+    'INSERT INTO brainstorms (carre_id, user_id, sujet, plateforme, url) VALUES (?1, ?2, ?3, ?4, ?5)'
+  ).bind(carre.id, vu.user.id, sujet, plateforme, url).run();
+  return json({ ok: true, id: r.meta.last_row_id }, 201);
+}
+
+/* Le classement du direct. Une réflexion monte parce qu'on vient de la
+   soutenir : chaque vote pèse selon son âge — la dernière minute pèse 8, les
+   cinq dernières 4, les dix dernières 2, le reste 1. C'est tout l'algorithme,
+   et il tient dans une requête : rien à maintenir, rien qui tourne en fond,
+   le classement se recalcule à la lecture.                                 */
+async function brainstormGet(request, env, id) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_BRAINSTORM, 'brainstorm');
+  if (refus) return refus;
+  await ensureHautesTables(env);
+
+  const b = await env.DB.prepare(
+    `SELECT b.id, b.sujet, b.plateforme, b.url, b.statut, b.created_at, b.live_depuis,
+            b.carre_id, c.nom AS carre_nom
+       FROM brainstorms b JOIN carres c ON c.id = b.carre_id WHERE b.id = ?1`
+  ).bind(id).first();
+  if (!b) return json({ error: 'Brainstorm introuvable.' }, 404);
+
+  const viewerId = vu.user ? vu.user.id : 0;
+  const enAvant = (await env.DB.prepare(
+    `SELECT i.id, i.body, i.created_at, u.username,
+            COUNT(v.user_id) AS votes,
+            COALESCE(SUM(CASE
+              WHEN (julianday('now') - julianday(v.created_at)) * 1440 <= 1 THEN 8
+              WHEN (julianday('now') - julianday(v.created_at)) * 1440 <= 5 THEN 4
+              WHEN (julianday('now') - julianday(v.created_at)) * 1440 <= 10 THEN 2
+              ELSE 1 END), 0) AS score,
+            MAX(CASE WHEN v.user_id = ?2 THEN 1 ELSE 0 END) AS mon_vote
+       FROM brainstorm_idees i
+       JOIN users u ON u.id = i.user_id
+       LEFT JOIN brainstorm_votes v ON v.idee_id = i.id
+      WHERE i.brainstorm_id = ?1
+      GROUP BY i.id
+      ORDER BY score DESC, i.id DESC
+      LIMIT 20`
+  ).bind(id, viewerId).all()).results || [];
+
+  const recentes = (await env.DB.prepare(
+    `SELECT i.id, i.body, i.created_at, u.username,
+            (SELECT COUNT(*) FROM brainstorm_votes v WHERE v.idee_id = i.id) AS votes,
+            EXISTS(SELECT 1 FROM brainstorm_votes v WHERE v.idee_id = i.id AND v.user_id = ?2) AS mon_vote
+       FROM brainstorm_idees i JOIN users u ON u.id = i.user_id
+      WHERE i.brainstorm_id = ?1 ORDER BY i.id DESC LIMIT 20`
+  ).bind(id, viewerId).all()).results || [];
+
+  const duCarre = vu.user ? !!(await env.DB.prepare(
+    'SELECT 1 AS oui FROM carre_membres WHERE user_id = ?1 AND carre_id = ?2'
+  ).bind(vu.user.id, b.carre_id).first()) : false;
+
+  return json({ brainstorm: b, enAvant, recentes, duCarre });
+}
+
+async function brainstormUpdate(request, env, id) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_BRAINSTORM, 'brainstorm');
+  if (refus) return refus;
+  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
+  await ensureHautesTables(env);
+
+  const b = await env.DB.prepare('SELECT id, carre_id, statut FROM brainstorms WHERE id = ?1').bind(id).first();
+  if (!b) return json({ error: 'Brainstorm introuvable.' }, 404);
+  const membre = await env.DB.prepare(
+    'SELECT 1 AS oui FROM carre_membres WHERE user_id = ?1 AND carre_id = ?2'
+  ).bind(vu.user.id, b.carre_id).first();
+  if (!membre && !vu.user.is_admin) return json({ error: 'Seul le carré qui le porte peut le piloter.' }, 403);
+
+  const body = await readJson(request);
+  const statut = String(body?.statut || '');
+  if (!['annonce', 'live', 'termine'].includes(statut)) return json({ error: 'Statut inconnu.' }, 400);
+  await env.DB.prepare(
+    `UPDATE brainstorms SET statut = ?1,
+            live_depuis = CASE WHEN ?1 = 'live' THEN COALESCE(live_depuis, datetime('now')) ELSE live_depuis END
+      WHERE id = ?2`
+  ).bind(statut, id).run();
+  return json({ ok: true });
+}
+
+async function brainstormIdee(request, env, id) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_BRAINSTORM, 'brainstorm');
+  if (refus) return refus;
+  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
+  await ensureHautesTables(env);
+
+  const b = await env.DB.prepare('SELECT id, statut FROM brainstorms WHERE id = ?1').bind(id).first();
+  if (!b) return json({ error: 'Brainstorm introuvable.' }, 404);
+  if (b.statut === 'termine') return json({ error: 'Ce brainstorm est terminé.' }, 409);
+
+  const body = await readJson(request);
+  const texte = String(body?.body || '').trim();
+  if (!texte) return json({ error: 'Réflexion vide.' }, 400);
+  if (texte.length > 500) return json({ error: 'Une réflexion tient en 500 caractères.' }, 400);
+
+  const r = await env.DB.prepare(
+    'INSERT INTO brainstorm_idees (brainstorm_id, user_id, body) VALUES (?1, ?2, ?3)'
+  ).bind(id, vu.user.id, texte).run();
+  return json({ ok: true, id: r.meta.last_row_id }, 201);
+}
+
+// Voter, ou reprendre son vote : le même geste.
+async function brainstormVote(request, env, id) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_BRAINSTORM, 'brainstorm');
+  if (refus) return refus;
+  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
+  await ensureHautesTables(env);
+
+  const body = await readJson(request);
+  const ideeId = Number(body?.idee_id);
+  const idee = await env.DB.prepare(
+    'SELECT id FROM brainstorm_idees WHERE id = ?1 AND brainstorm_id = ?2'
+  ).bind(ideeId, id).first();
+  if (!idee) return json({ error: 'Réflexion introuvable.' }, 404);
+
+  const existe = await env.DB.prepare(
+    'SELECT 1 AS oui FROM brainstorm_votes WHERE idee_id = ?1 AND user_id = ?2'
+  ).bind(ideeId, vu.user.id).first();
+  if (existe) {
+    await env.DB.prepare('DELETE FROM brainstorm_votes WHERE idee_id = ?1 AND user_id = ?2')
+      .bind(ideeId, vu.user.id).run();
+    return json({ ok: true, vote: false });
+  }
+  await env.DB.prepare('INSERT INTO brainstorm_votes (idee_id, user_id) VALUES (?1, ?2)')
+    .bind(ideeId, vu.user.id).run();
+  return json({ ok: true, vote: true });
+}
+
+/* ------------------------------------ Game Master Orange (échelon 7) --- */
+
+async function gmoGet(request, env) {
+  const { refus } = await requireEchelon(request, env, ECHELON_GMO, 'gmo');
+  if (refus) return refus;
+  return json({ mecanismes: MECANISMES_GMO });
 }
 
 /* ---------------------------------------------------------------- admin */

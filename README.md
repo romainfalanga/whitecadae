@@ -5,9 +5,10 @@ Plateforme communautaire d'explications des textes de **White Cadae**
 
 **On arrive par le 57.** La racine `/` ouvre l'escape game (voir plus bas) :
 c'est lui qui commande l'accès au reste, échelon par échelon. Il se lit sans
-compte, à pleine encre — seul le bouton Valider y est éteint. Tant qu'aucun
-signe n'a été trouvé, il n'y a que lui — ni interprétations, ni reprises, ni
-profil.
+compte, à pleine encre — seul le bouton Valider y est éteint. Dès le sol
+(échelon 1, compte ou pas), les **Interprétations** et les **Reprises** sont
+ouvertes ; chaque cran gravi découvre ensuite une pièce de plus, jusqu'au
+sommet (échelon 7).
 
 La page **Interprétations** (`/interpretations`) ouvre sur les dernières
 lectures publiées par les membres — le passage visé, puis ce qu’on en dit —
@@ -109,13 +110,12 @@ place du bouton, et tout revient de soi-même.
 Il grandit avec l'échelon (`delaiEssaiMs`), sur les trois nombres du disque —
 **12, 33, 57** — repris d'une unité à l'autre :
 
-| Échelon | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 et au-delà |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Attente | 33 s | 57 s | 12 min | 33 min | 57 min | 12 h | 33 h | 57 h |
+| Échelon | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Attente | 33 s | 57 s | 12 min | 33 min | 57 min | 12 h | 33 h |
 
-La suite s'arrête sur son dernier palier plutôt que de passer aux jours : les
-multiplicateurs font bondir l'échelon (jusqu'à 37) et un seul essai malheureux
-ne doit pas fermer la porte des semaines.
+Le sommet du jeu étant l'échelon 7, l'attente la plus longue réellement
+atteignable est 33 h.
 
 Le délai est relu à chaque vérification : monter d'un cran allonge donc
 l'attente en cours. C'est une propriété de là où l'on est, pas du moment où
@@ -123,53 +123,78 @@ l'on a tenté.
 
 ### Les échelons
 
-`echelon = ⌊ordinaires / 3⌋ × 3^multiplicateurs + 1`
+`echelon = ⌊signes / 3⌋ + 1`, où chaque signe titré vaut 1 et chaque signe du
+**bloc muet vaut 3** — un cran entier, donc un échelon gagné mécaniquement.
 
-On est à l'échelon **1** dès l'arrivée : c'est le sol, pas une récompense. Ce
-qu'on gravit ensuite, ce sont les **crans** — trois signes ordinaires
-chacun — et ce sont eux que les mots du bloc muet **triplent**. Deux d'entre
-eux multiplient donc par neuf. Multiplier zéro cran ne fait pas décoller : il
-faut d'abord en gravir un. La barre de progression montre le chemin restant
-dans le cran en cours, jamais la progression dans le jeu entier.
+On est à l'échelon **1** dès l'arrivée : c'est le sol, pas une récompense.
+Treize signes titrés font quatre crans pleins (il en reste un de libre), les
+deux signes muets en ajoutent deux : le sommet est l'échelon **7**. La barre
+de progression montre le chemin restant dans le cran en cours, jamais la
+progression dans le jeu entier.
 
 L'échelon **commande l'accès au site**, et pas seulement l'affichage des liens
-(`accessOf`) :
+(`accessOf`) — chaque page a sa constante (`ECHELON_*`) :
 
 | Échelon | Ce qui s'ouvre |
 | --- | --- |
-| 1 | la page 57, et rien d'autre |
-| 2 | la page Interprétations apparaît — mais vide, voir les portes |
-| 3 | les Reprises |
-
-Le maximum atteignable est 37 (douze ordinaires, deux multiplicateurs).
+| 1 | le 57, les Interprétations et les Reprises — même sans compte |
+| 2 | la **Conversation** |
+| 3 | **Pense Mieux** |
+| 4 | la **Vidéographie** |
+| 5 | le **Carré d'As** |
+| 6 | le **Brainstorm** |
+| 7 | **Game Master Orange** |
 
 Le tout premier bloc **occupe toute la largeur** et s'entoure d'un halo doré
 (`.enigme--graal`, posé sur les blocs dont le serveur ne donne pas le total) :
 on doit voir au premier regard qu'il n'est pas de la même espèce, sans qu'une
-ligne de texte ait à le dire.
+ligne de texte ait à le dire. **White Cadae** vient juste en dessous, premier
+bloc titré.
 
-### Les portes
+### Les pièces hautes
 
-Certains signes n'ouvrent pas un échelon mais une **fonctionnalité**.
-Ils vivent dans `PORTES`, hors de `NODES` : ni `buildState` ni `echelonOf` ne
-les connaissent, donc ils ne comptent pas dans le calcul, et ils ne
-s'affichent pas sur la page 57 — ils vivent sur la page qu'ils gardent.
+La **Conversation** (échelon 2) est unique et commune, mais chaque message
+porte l'**échelon minimal pour le lire**, choisi par son auteur entre 2 et son
+propre échelon : plus on monte, plus on entend de ce qui se dit. La page se
+relit toutes les 20 secondes quand l'onglet est visible.
 
-L'échelon donne la clé, la porte donne la pièce. **White Cadae** garde les
-Interprétations : à l'échelon 1 la page apparaît dans le menu, mais elle ne
-montre que ce signe, dans la même carte que celles du 57. Tant qu'il
-n'est pas trouvé, tout le reste est refusé — les albums, le fil, les chansons,
-le profil — et le menu n'affiche pas encore « Mon profil ».
+**Pense Mieux** (échelon 3) est l'outil de réflexion : un sujet devient un
+**arbre** — un tronc, des branches emboîtées qui se font grandir — et
+l'ensemble de ses arbres, une forêt. La **Vidéographie** (échelon 4) est le
+même moteur, mais chaque branche est une **vidéo YouTube** (publique ou
+privée) : on y organise ce qu'on a extériorisé en vidéo. Les arbres de pensée
+restent à leur auteur ; les vidéographies se partagent **en lecture au sein de
+son carré**, puisque les As doivent les analyser mutuellement.
 
-Le **minuteur est commun** à tous les signes du site : un essai sur une
-porte ferme aussi ceux du 57, et réciproquement. Une porte déjà franchie ne
-consomme pas d'essai.
+Le **Carré d'As** (échelon 5) porte les missions des carrés et les outils pour
+les accomplir : fonder un carré ou rejoindre un carré incomplet, choisir sa
+nature (**infinisseur** ou **harmonisateur**) et sa connaissance fondamentale
+(**Psychologie, Univers, IA, Religions**), et voir d'un regard l'équilibre du
+carré — natures comptées, connaissances couvertes ou manquantes.
 
-Le barrage est appliqué dans le routeur du Worker, pas
-seulement dans l'interface — masquer un lien n'a jamais fermé une porte. Le
-compte et son avatar y échappent, sans quoi on ne pourrait plus se
-déconnecter, et **l'artiste (`is_admin`) en est exempté** : il ne peut pas se
-retrouver enfermé dehors par un jeu dont il connaît les réponses.
+Le **Brainstorm** (échelon 6) est la place des lives : un **carré complet**
+(quatre As) annonce un brainstorming sur YouTube, Twitch ou TikTok ; la salle
+propose des **réflexions** et **vote** ; le carré voit monter les plus
+soutenues du moment. Le classement pondère chaque vote par son âge (dernière
+minute ×8, cinq dernières ×4, dix dernières ×2, sinon ×1) et se recalcule à
+la lecture — une seule requête SQL, rien qui tourne en fond. Le direct
+fonctionne par **relecture périodique** (12 s, onglet visible) : pas de
+serveur temps réel, pas de connexion tenue ouverte, un brainstorm à mille
+personnes coûte des requêtes ordinaires.
+
+**Game Master Orange** (échelon 7) expose les **7 mécanismes orange** — ce
+qu'on attend d'un joueur arrivé au sommet — avec, quand un mécanisme a son
+outil sur la plateforme (la vidéographie, le carré), le lien qui y mène. Les
+textes des missions et des mécanismes vivent dans `src/contenus.js`, côté
+Worker, servis uniquement à l'échelon requis : les lire dans le code source
+du navigateur est impossible.
+
+Le **minuteur est commun** à tous les signes du site, et le barrage d'échelon
+est appliqué dans le routeur du Worker, pas seulement dans l'interface —
+masquer un lien n'a jamais fermé une porte. Le compte et son avatar y
+échappent, sans quoi on ne pourrait plus se déconnecter, et **l'artiste
+(`is_admin`) en est exempté** : il ne peut pas se retrouver enfermé dehors par
+un jeu dont il connaît les réponses.
 
 Jouer demande un compte : la progression est enregistrée dessus
 (`riddle_progress`, une ligne par signe trouvé), donc conservée d'un

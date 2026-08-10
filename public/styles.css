@@ -1045,9 +1045,6 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
    deux boutons disent quoi faire, et la page 57 n'explique jamais rien. */
 .enigmes-gate-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
 
-/* La porte d'une page : une seule carte, au même dessin que celles du 57. */
-.porte-grid { max-width: 32rem; }
-
 
 /* Un fil fin sous le titre, collé en haut : on garde toujours sous les yeux
    le nombre de mots de passe trouvés, sans manger la hauteur d'écran. */
@@ -1375,3 +1372,229 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 /* Choisir un passage : où l'on en est de la sélection. */
 .ref-hint { color: var(--text-dim); font-size: 0.82rem; margin-top: 0.45rem; }
 .ref-hint[hidden] { display: none; }
+
+/* ------------------------------------------------ les pièces hautes ------
+   Conversation (2), Pense Mieux (3), Vidéographie (4), Carré d'As (5),
+   Brainstorm (6), Game Master Orange (7). */
+
+.page-invite { color: var(--text-dim); max-width: 46rem; margin-bottom: 1.6rem; }
+.fil-retour { margin-bottom: 0.8rem; font-size: 0.9rem; }
+.form-error { color: var(--danger); font-size: 0.85rem; margin-top: 0.4rem; }
+.form-error:empty { display: none; }
+
+/* -- la conversation -- */
+.conv-list {
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.4rem 0.2rem;
+  margin-bottom: 1rem;
+}
+.msg {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.6rem 0.9rem;
+  max-width: 46rem;
+}
+.msg-head { display: flex; align-items: baseline; gap: 0.6rem; font-size: 0.8rem; color: var(--text-dim); }
+.msg-head time { margin-left: auto; white-space: nowrap; }
+.msg-echelon {
+  border: 1px solid rgba(216, 192, 122, 0.4);
+  color: var(--accent);
+  border-radius: 99px;
+  padding: 0 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.msg-body { white-space: pre-wrap; margin-top: 0.15rem; }
+.conv-form textarea { min-height: 56px; }
+.conv-form-foot { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.5rem; }
+.conv-vis { display: flex; align-items: center; gap: 0.5rem; margin: 0; white-space: nowrap; }
+.conv-vis select { width: auto; }
+.conv-form-foot button[type="submit"] { margin-left: auto; }
+
+/* -- les arbres -- */
+.arbre-form { max-width: 34rem; margin-bottom: 2rem; display: grid; gap: 0.6rem; }
+.arbre-form textarea { min-height: 60px; }
+.arbre-form button { justify-self: start; }
+.foret { display: grid; gap: 0.9rem; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.arbre-card {
+  display: block;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem 1.2rem;
+  color: var(--text);
+}
+.arbre-card:hover { border-color: var(--accent); text-decoration: none; }
+.arbre-card h2 { margin: 0 0 0.3rem; font-size: 1.15rem; color: var(--text); }
+.arbre-tronc-apercu {
+  color: var(--text-dim);
+  font-size: 0.88rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.arbre-meta { color: var(--accent); font-size: 0.8rem; }
+.tronc {
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  border-left: 3px solid var(--accent);
+  padding: 0.4rem 0 0.4rem 1rem;
+  margin: 0.6rem 0 1.2rem;
+  max-width: 46rem;
+  white-space: pre-wrap;
+}
+.branche { border-left: 2px solid var(--border); padding: 0.5rem 0 0.2rem 1rem; margin: 0.6rem 0; }
+.branche:hover { border-left-color: rgba(216, 192, 122, 0.5); }
+.branche-texte { white-space: pre-wrap; max-width: 42rem; }
+.branche-video { max-width: 30rem; }
+.branche-video p { color: var(--text-dim); font-size: 0.9rem; margin-top: 0.3rem; white-space: pre-wrap; }
+.branche-actions { margin-top: 0.15rem; }
+.branche-enfants { margin-left: 0.4rem; }
+.branche-form { max-width: 34rem; margin-top: 1.6rem; display: grid; gap: 0.5rem; }
+.branche-ou { color: var(--text-dim); font-size: 0.85rem; }
+.branche-form .conv-form-foot { margin-top: 0; }
+.arbre-suppr { margin-top: 2.5rem; }
+
+/* -- le carré d'as -- */
+.mon-carre {
+  background: var(--bg-card);
+  border: 1px solid rgba(216, 192, 122, 0.3);
+  border-radius: 14px;
+  padding: 1.2rem 1.4rem;
+  margin: 1rem 0 2rem;
+}
+.mon-carre > h2 { margin-top: 0; }
+.carre-membres { display: grid; gap: 0.7rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.carre-membre {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.carre-membre.moi { border-color: rgba(216, 192, 122, 0.5); }
+.carre-membre.carre-vide { color: var(--text-dim); border-style: dashed; justify-content: center; text-align: center; }
+.carre-role { font-size: 0.85rem; color: var(--accent); }
+.carre-domaine { font-size: 0.8rem; color: var(--text-dim); }
+.carre-equilibre {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+  margin: 0.9rem 0;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+}
+.carre-domaines { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.carre-domaines .dom {
+  border: 1px dashed var(--border);
+  border-radius: 99px;
+  padding: 0 0.6rem;
+  font-size: 0.78rem;
+}
+.carre-domaines .dom.couvert { border-style: solid; border-color: var(--accent); color: var(--accent); }
+.carre-moi { display: flex; align-items: end; gap: 0.9rem; flex-wrap: wrap; }
+.carre-moi label { margin: 0; }
+.carre-moi select { width: auto; }
+.carre-cree { display: flex; gap: 0.6rem; flex-wrap: wrap; max-width: 34rem; }
+.carre-cree input { flex: 1; min-width: 200px; }
+.carres-ouverts { list-style: none; }
+.carres-ouverts li {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0.2rem;
+  border-bottom: 1px solid var(--border);
+}
+.carres-ouverts li:last-child { border-bottom: none; }
+.carres-ouverts li span { color: var(--text-dim); font-size: 0.85rem; }
+.carres-ouverts li button { margin-left: auto; }
+.missions { max-width: 46rem; }
+.mission-bloc { margin-bottom: 1.4rem; }
+.mission-bloc h3 { color: var(--accent); font-family: var(--serif); font-size: 1.1rem; font-weight: normal; }
+.mission-bloc p { color: var(--text); }
+
+/* -- le brainstorm -- */
+.bs-form {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem 1.2rem 1.2rem;
+  max-width: 40rem;
+  margin-bottom: 1.6rem;
+  display: grid;
+  gap: 0.6rem;
+}
+.bs-form h2 { margin: 0; font-size: 1.1rem; }
+.bs-form-ligne { display: flex; gap: 0.6rem; }
+.bs-form-ligne select { width: auto; }
+.bs-form button { justify-self: start; }
+.bs-liste { display: grid; gap: 0.9rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.bs-card {
+  display: block;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem 1.2rem;
+  color: var(--text);
+}
+.bs-card:hover { border-color: var(--accent); text-decoration: none; }
+.bs-card h2 { margin: 0.2rem 0; font-size: 1.15rem; color: var(--text); }
+.bs-statut { font-size: 0.78rem; letter-spacing: 0.08em; color: var(--text-dim); }
+.bs-live .bs-statut, .bs-tete.bs-live .bs-statut { color: #e0876a; }
+.bs-meta { color: var(--text-dim); font-size: 0.85rem; }
+.bs-tete { margin-bottom: 1.2rem; }
+.bs-pilote { margin-top: 0.7rem; display: flex; gap: 0.6rem; }
+.idee-form { max-width: 40rem; display: grid; gap: 0.5rem; margin-bottom: 1.6rem; }
+.idee-form textarea { min-height: 54px; }
+.idee-form button { justify-self: start; }
+.bs-colonnes { display: grid; gap: 1.6rem; }
+@media (min-width: 820px) { .bs-colonnes { grid-template-columns: 1fr 1fr; } }
+.bs-colonnes h2 { margin-top: 0; }
+.idee {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 0.6rem;
+}
+.idee-vote {
+  flex-shrink: 0;
+  min-width: 3.2rem;
+  font-variant-numeric: tabular-nums;
+  border-radius: 8px;
+}
+.idee-vote.votee { border-color: var(--accent); color: var(--accent); }
+.idee-corps p { white-space: pre-wrap; }
+.idee-meta { color: var(--text-dim); font-size: 0.78rem; margin-top: 0.2rem; }
+
+/* -- game master orange -- */
+.gmo-liste { max-width: 46rem; display: grid; gap: 1rem; }
+.gmo-mecanisme {
+  display: flex;
+  gap: 1.1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.1rem 1.3rem;
+}
+.gmo-numero {
+  font-family: var(--serif);
+  font-size: 2rem;
+  color: #e0876a;
+  line-height: 1;
+  min-width: 2rem;
+  text-align: center;
+}
+.gmo-corps h2 { margin: 0 0 0.4rem; font-size: 1.2rem; }
+.gmo-etapes { margin-left: 1.1rem; display: grid; gap: 0.3rem; }
+.gmo-outil { display: inline-block; margin-top: 0.7rem; font-size: 0.88rem; }

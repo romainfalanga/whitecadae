@@ -7,6 +7,7 @@ const state = {
   user: null,
   // ce que l'échelon atteint sur la page 57 a ouvert du reste du site
   access: { interpretations: false, reprises: false },
+  echelon: 1, // l'échelon du visiteur, tenu par le serveur
   song: null, // données de la page chanson en cours
   sel: null, // sélection : {type:'line'|'word'|'title'|'duration', lineId?, start?, end?}
   openComments: new Set(), // espaces commentaires ouverts, clés "kind:id"
@@ -119,9 +120,17 @@ function bindNavToggle() {
   });
 }
 
+// Le battement d'une page vivante (conversation, brainstorm) : un seul à la
+// fois, toujours coupé quand on quitte la page.
+let pageTimer = null;
+function coupePageTimer() {
+  if (pageTimer) { clearInterval(pageTimer); pageTimer = null; }
+}
+
 async function route() {
   window.scrollTo(0, 0);
   closeNav();
+  coupePageTimer();
   const path = location.pathname;
   // toute navigation ferme la sélection en cours
   state.sheetOpen = false;
@@ -147,16 +156,29 @@ async function route() {
   if ((m = path.match(/^\/membre\/([^/]+)$/))) return pageProfile(decodeURIComponent(m[1]));
 
   // Une page qu'on n'a pas encore atteinte ne se discute pas : on revient au
-  // 57, sans un mot.
-  const cle = (path === '/reprises' || path === '/reprises/fil'
-    || /^\/chanson\/[^/]+\/reprises$/.test(path)) ? 'reprises' : 'interpretations';
+  // 57, sans un mot. Chaque pièce haute a sa clé d'accès ; le serveur revérifie
+  // de toute façon à chaque appel.
+  const cle =
+    (path === '/reprises' || path === '/reprises/fil' || /^\/chanson\/[^/]+\/reprises$/.test(path)) ? 'reprises'
+    : path === '/conversation' ? 'conversation'
+    : path.startsWith('/pense-mieux') ? 'penseMieux'
+    : path.startsWith('/videographie') ? 'videographie'
+    : path === '/carre-d-as' ? 'carre'
+    : path.startsWith('/brainstorm') ? 'brainstorm'
+    : path === '/game-master-orange' ? 'gmo'
+    : 'interpretations';
   if (!state.access[cle]) return navigate('/57', true);
 
   if (path === '/interpretations') return pageInterpretations();
-
-  // La page est atteinte mais son mot de passe n'est pas trouvé : tout ce
-  // qu'elle contient reste invisible, et l'on ne voit que la porte.
-  if (!state.access.porteInterpretations) return navigate('/interpretations', true);
+  if (path === '/conversation') return pageConversation();
+  if (path === '/pense-mieux') return pageArbres('pensee');
+  if (path === '/videographie') return pageArbres('video');
+  if ((m = path.match(/^\/pense-mieux\/(\d+)$/))) return pageArbre('pensee', +m[1]);
+  if ((m = path.match(/^\/videographie\/(\d+)$/))) return pageArbre('video', +m[1]);
+  if (path === '/carre-d-as') return pageCarre();
+  if (path === '/brainstorm') return pageBrainstorms();
+  if ((m = path.match(/^\/brainstorm\/(\d+)$/))) return pageBrainstorm(+m[1]);
+  if (path === '/game-master-orange') return pageGmo();
   if (path === '/reprises/fil') return pageCoverFeed();
   if (path === '/reprises') return pageCovers();
   if (path === '/fil') return pageFeed();
@@ -370,7 +392,9 @@ function openSettings() {
   document.getElementById('settings-logout').onclick = async () => {
     await api('/api/logout', { method: 'POST' });
     state.user = null;
-    state.access = { interpretations: false, reprises: false };
+    // sans compte on garde le sol : interprétations et reprises restent là
+    state.access = { interpretations: true, reprises: true };
+    state.echelon = 1;
     oublieAttente();
     closeSettings();
     navigate('/');
@@ -385,6 +409,12 @@ function renderNav() {
   const liens = ['<a href="/57" data-link>57</a>'];
   if (a.interpretations) liens.push('<a href="/interpretations" data-link>Interprétations</a>');
   if (a.reprises) liens.push('<a href="/reprises" data-link>Reprises</a>');
+  if (a.conversation) liens.push('<a href="/conversation" data-link>Conversation</a>');
+  if (a.penseMieux) liens.push('<a href="/pense-mieux" data-link>Pense Mieux</a>');
+  if (a.videographie) liens.push('<a href="/videographie" data-link>Vidéographie</a>');
+  if (a.carre) liens.push('<a href="/carre-d-as" data-link>Carré d’As</a>');
+  if (a.brainstorm) liens.push('<a href="/brainstorm" data-link>Brainstorm</a>');
+  if (a.gmo) liens.push('<a href="/game-master-orange" data-link>Game Master Orange</a>');
   // La déconnexion se fait depuis les paramètres du compte (page profil) :
   // pas besoin de la dupliquer dans le menu.
   if (u) {
@@ -399,6 +429,594 @@ function renderNav() {
   nav.innerHTML = liens.join('\n       ');
   const reglages = document.getElementById('nav-settings');
   if (reglages) reglages.onclick = () => openSettings();
+}
+
+/* --------------------------------------------- la conversation (échelon 2)
+   Une seule conversation. Chaque message porte l'échelon minimal pour le
+   lire, choisi par son auteur : plus on monte, plus on entend. La page se
+   relit toute seule, mais seulement quand elle est visible.               */
+
+function messageHtml(m) {
+  const badge = m.min_echelon > 2
+    ? `<span class="msg-echelon" title="Visible dès l’échelon ${m.min_echelon}">≥ ${m.min_echelon}</span>` : '';
+  return `<article class="msg">
+    <div class="msg-head">${authorLink(m.username)}${badge}
+      <time>${esc(formatDate(m.created_at))}</time></div>
+    <p class="msg-body">${esc(m.body)}</p>
+  </article>`;
+}
+
+async function pageConversation() {
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  let data;
+  try { data = await api('/api/conversation'); }
+  catch { return navigate('/57', true); }
+  if (stale(epoch)) return;
+
+  // du plus ancien au plus récent, comme une conversation se lit
+  const composer = state.user ? `
+    <form id="conv-form" class="conv-form">
+      <textarea id="conv-body" maxlength="2000" rows="2"
+        placeholder="Ton message…"></textarea>
+      <div class="conv-form-foot">
+        <label class="conv-vis">Visible dès l’échelon
+          <select id="conv-min">${Array.from({ length: Math.max(1, (state.echelon || 2) - 1) },
+            (_, i) => `<option value="${i + 2}">${i + 2}</option>`).join('')}</select>
+        </label>
+        <button type="submit" class="primary">Envoyer</button>
+      </div>
+      <p class="form-error" id="conv-err"></p>
+    </form>` : '';
+
+  app.innerHTML = `
+    <h1>Conversation</h1>
+    <div class="conv-list" id="conv-list">
+      ${data.messages.length ? data.messages.map(messageHtml).join('') : '<p class="empty-note">Personne n’a encore parlé.</p>'}
+    </div>
+    ${composer}`;
+  const liste = document.getElementById('conv-list');
+  liste.scrollTop = liste.scrollHeight;
+
+  const form = document.getElementById('conv-form');
+  if (form) {
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const champ = document.getElementById('conv-body');
+      const texte = champ.value.trim();
+      if (!texte) return;
+      try {
+        await api('/api/conversation', {
+          method: 'POST',
+          body: { body: texte, min_echelon: +document.getElementById('conv-min').value },
+        });
+        champ.value = '';
+        await rechargeConversation(epoch);
+      } catch (err) { document.getElementById('conv-err').textContent = err.message; }
+    };
+  }
+
+  // le battement : toutes les 20 s, si l'onglet est visible
+  pageTimer = setInterval(() => {
+    if (!document.hidden) rechargeConversation(epoch);
+  }, 20000);
+}
+
+async function rechargeConversation(epoch) {
+  let data;
+  try { data = await api('/api/conversation'); } catch { return; }
+  if (stale(epoch)) return;
+  const liste = document.getElementById('conv-list');
+  if (!liste) return;
+  const enBas = liste.scrollHeight - liste.scrollTop - liste.clientHeight < 60;
+  liste.innerHTML = data.messages.length
+    ? data.messages.map(messageHtml).join('')
+    : '<p class="empty-note">Personne n’a encore parlé.</p>';
+  if (enBas) liste.scrollTop = liste.scrollHeight;
+}
+
+/* ------------------- les arbres : Pense Mieux (3) et Vidéographie (4) ---
+   Un arbre par sujet : un tronc, des branches emboîtées qui se font grandir.
+   La forêt, c'est l'ensemble de ses arbres. En Vidéographie chaque branche
+   est une vidéo YouTube : on y organise ce qu'on a extériorisé en vidéo.  */
+
+const ARBRES_PAGES = {
+  pensee: {
+    titre: 'Pense Mieux',
+    chemin: '/pense-mieux',
+    invite: 'Un sujet de réflexion devient un arbre : un tronc, puis des branches qui se font grandir les unes les autres.',
+    vide: 'Ta forêt est vide. Plante ton premier arbre.',
+  },
+  video: {
+    titre: 'Vidéographie',
+    chemin: '/videographie',
+    invite: 'Extériorise tes réflexions en vidéo, puis relie-les : chaque branche est une vidéo YouTube, publique ou privée.',
+    vide: 'Aucune vidéo pour l’instant. Plante ton premier arbre.',
+  },
+};
+
+async function pageArbres(kind) {
+  const def = ARBRES_PAGES[kind];
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  let data;
+  try { data = await api(`/api/arbres?kind=${kind}`); }
+  catch (err) {
+    if (err.status === 401) { app.innerHTML = `<h1>${esc(def.titre)}</h1><p class="empty-note">Connecte-toi pour planter tes arbres.</p>`; return; }
+    return navigate('/57', true);
+  }
+  if (stale(epoch)) return;
+
+  app.innerHTML = `
+    <h1>${esc(def.titre)}</h1>
+    <p class="page-invite">${esc(def.invite)}</p>
+    <form id="arbre-form" class="arbre-form">
+      <input id="arbre-titre" maxlength="120" placeholder="Le sujet de l’arbre" required>
+      <textarea id="arbre-tronc" maxlength="4000" rows="2"
+        placeholder="Le tronc : d’où part ta réflexion ?"></textarea>
+      <button type="submit" class="primary">Planter</button>
+      <p class="form-error" id="arbre-err"></p>
+    </form>
+    <div class="foret">
+      ${data.arbres.length ? data.arbres.map((a) => `
+        <a class="arbre-card" href="${def.chemin}/${a.id}" data-link>
+          <h2>${esc(a.title)}</h2>
+          ${a.trunk ? `<p class="arbre-tronc-apercu">${esc(a.trunk)}</p>` : ''}
+          <span class="arbre-meta">${a.branches} branche${a.branches > 1 ? 's' : ''}</span>
+        </a>`).join('') : `<p class="empty-note">${esc(def.vide)}</p>`}
+    </div>`;
+
+  document.getElementById('arbre-form').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api('/api/arbres', {
+        method: 'POST',
+        body: { kind, title: document.getElementById('arbre-titre').value, trunk: document.getElementById('arbre-tronc').value },
+      });
+      navigate(`${def.chemin}/${r.id}`);
+    } catch (err) { document.getElementById('arbre-err').textContent = err.message; }
+  };
+}
+
+// Les branches s'emboîtent : on dessine l'arbre en profondeur.
+function brancheHtml(b, enfants, kind, editable) {
+  const contenu = kind === 'video'
+    ? `<div class="branche-video">${videoEmbed(b.url)}${b.body ? `<p>${esc(b.body)}</p>` : ''}</div>`
+    : `<p class="branche-texte">${esc(b.body)}</p>`;
+  const boutons = editable ? `
+    <div class="branche-actions">
+      <button type="button" class="link-btn" data-pousse="${b.id}">+ branche</button>
+      <button type="button" class="link-btn danger" data-coupe="${b.id}">couper</button>
+    </div>` : '';
+  return `<div class="branche" data-branche="${b.id}">
+    ${contenu}${boutons}
+    <div class="branche-enfants">${(enfants.get(b.id) || []).map((e) => brancheHtml(e, enfants, kind, editable)).join('')}</div>
+  </div>`;
+}
+
+function videoEmbed(url) {
+  const id = youtubeEmbedId(url || '');
+  if (!id) return `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`;
+  return `<div class="cover-embed"><iframe src="https://www.youtube.com/embed/${esc(id)}"
+    title="Vidéo" loading="lazy" allowfullscreen
+    allow="accelerometer; encrypted-media; picture-in-picture"></iframe></div>`;
+}
+
+async function pageArbre(kind, id) {
+  const def = ARBRES_PAGES[kind];
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  let data;
+  try { data = await api(`/api/arbres/${id}`); }
+  catch { return navigate(def.chemin, true); }
+  if (stale(epoch)) return;
+  const arbre = data.arbre;
+  const editable = arbre.proprietaire;
+
+  const enfants = new Map();
+  for (const b of arbre.branches) {
+    const cle = b.parent_id || 0;
+    if (!enfants.has(cle)) enfants.set(cle, []);
+    enfants.get(cle).push(b);
+  }
+
+  app.innerHTML = `
+    <p class="fil-retour"><a href="${def.chemin}" data-link>← ${esc(def.titre)}</a></p>
+    <h1>${esc(arbre.title)}</h1>
+    ${arbre.trunk ? `<p class="tronc">${esc(arbre.trunk)}</p>` : ''}
+    <div class="arbre" id="arbre">
+      ${(enfants.get(0) || []).map((b) => brancheHtml(b, enfants, kind, editable)).join('')
+        || '<p class="empty-note">Le tronc attend ses premières branches.</p>'}
+    </div>
+    ${editable ? `
+    <form id="branche-form" class="branche-form">
+      <input type="hidden" id="branche-parent" value="">
+      <p class="branche-ou" id="branche-ou">Nouvelle branche sur le tronc</p>
+      ${kind === 'video' ? '<input id="branche-url" type="url" placeholder="https://www.youtube.com/watch?v=…" required>' : ''}
+      <textarea id="branche-body" maxlength="2000" rows="2"
+        placeholder="${kind === 'video' ? 'Quelques mots sur cette vidéo (facultatif)…' : 'Ce que cette branche ajoute…'}"></textarea>
+      <div class="conv-form-foot">
+        <button type="button" class="link-btn" id="branche-annule" hidden>Revenir au tronc</button>
+        <button type="submit" class="primary">Faire pousser</button>
+      </div>
+      <p class="form-error" id="branche-err"></p>
+    </form>
+    <p class="arbre-suppr"><button type="button" class="link-btn danger" id="arbre-suppr">Abattre cet arbre</button></p>
+    ` : `<p class="empty-note">L’arbre d’un As de ton carré — en lecture.</p>`}`;
+
+  if (!editable) return;
+
+  const parentField = document.getElementById('branche-parent');
+  const ou = document.getElementById('branche-ou');
+  const annule = document.getElementById('branche-annule');
+  document.getElementById('arbre').addEventListener('click', async (e) => {
+    const pousse = e.target.closest('[data-pousse]');
+    const coupe = e.target.closest('[data-coupe]');
+    if (pousse) {
+      parentField.value = pousse.dataset.pousse;
+      ou.textContent = 'Nouvelle branche sur la branche choisie';
+      annule.hidden = false;
+      document.getElementById(kind === 'video' ? 'branche-url' : 'branche-body').focus();
+    } else if (coupe && confirm('Couper cette branche et tout ce qui pousse dessus ?')) {
+      await api(`/api/branches/${coupe.dataset.coupe}`, { method: 'DELETE' });
+      pageArbre(kind, id);
+    }
+  });
+  annule.onclick = () => { parentField.value = ''; ou.textContent = 'Nouvelle branche sur le tronc'; annule.hidden = true; };
+
+  document.getElementById('branche-form').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api(`/api/arbres/${id}/branches`, {
+        method: 'POST',
+        body: {
+          parent_id: parentField.value ? +parentField.value : null,
+          body: document.getElementById('branche-body').value,
+          url: kind === 'video' ? document.getElementById('branche-url').value : '',
+        },
+      });
+      pageArbre(kind, id);
+    } catch (err) { document.getElementById('branche-err').textContent = err.message; }
+  };
+
+  document.getElementById('arbre-suppr').onclick = async () => {
+    if (!confirm('Abattre cet arbre, tronc et branches ?')) return;
+    await api(`/api/arbres/${id}`, { method: 'DELETE' });
+    navigate(def.chemin);
+  };
+}
+
+/* --------------------------------------------- le carré d'as (échelon 5) */
+
+async function pageCarre() {
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  let data;
+  try { data = await api('/api/carre'); }
+  catch { return navigate('/57', true); }
+  if (stale(epoch)) return;
+
+  const missions = `
+    <section class="missions">
+      <h2>${esc(data.missions.titre)}</h2>
+      ${data.missions.blocs.map((b) => `
+        <article class="mission-bloc">
+          <h3>${esc(b.titre)}</h3>
+          <p>${esc(b.texte)}</p>
+        </article>`).join('')}
+    </section>`;
+
+  let outil;
+  if (data.carre) {
+    const c = data.carre;
+    // les deux natures viennent du serveur avec le reste : rien de la page
+    // n'est écrit ici en clair
+    const parRole = data.roles.map((r) => {
+      const total = c.membres.filter((m) => m.role === r).length;
+      return `${total} ${r}${total > 1 ? 's' : ''}`;
+    });
+    const pris = new Set(c.membres.map((m) => m.domaine).filter(Boolean));
+    outil = `
+      <section class="mon-carre">
+        <h2>${esc(c.nom)}</h2>
+        <div class="carre-membres">
+          ${c.membres.map((m) => `
+            <div class="carre-membre${state.user && m.user_id === state.user.id ? ' moi' : ''}">
+              ${authorLink(m.username)}
+              <span class="carre-role">${esc(m.role || 'rôle à choisir')}</span>
+              <span class="carre-domaine">${esc(m.domaine || 'connaissance à choisir')}</span>
+              ${m.user_id !== (state.user && state.user.id) && state.access.videographie
+                ? `<a class="link-btn" href="#" data-video-de="${m.user_id}">sa vidéographie</a>` : ''}
+            </div>`).join('')}
+          ${Array.from({ length: 4 - c.membres.length }, () => '<div class="carre-membre carre-vide">place libre</div>').join('')}
+        </div>
+        <div class="carre-equilibre">
+          <span>${parRole.map(esc).join(' · ')}</span>
+          <span class="carre-domaines">${data.domaines.map((d) => `<span class="dom${pris.has(d) ? ' couvert' : ''}">${esc(d)}</span>`).join('')}</span>
+        </div>
+        <form id="carre-moi" class="carre-moi">
+          <label>Ma nature
+            <select id="carre-role"><option value="">—</option>
+              ${data.roles.map((r) => `<option value="${esc(r)}"${c.membres.find((m) => state.user && m.user_id === state.user.id)?.role === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}
+            </select></label>
+          <label>Ma connaissance
+            <select id="carre-domaine"><option value="">—</option>
+              ${data.domaines.map((d) => `<option value="${esc(d)}"${c.membres.find((m) => state.user && m.user_id === state.user.id)?.domaine === d ? ' selected' : ''}>${esc(d)}</option>`).join('')}
+            </select></label>
+          <button type="submit">Enregistrer</button>
+          <button type="button" class="link-btn danger" id="carre-quitter">Quitter le carré</button>
+        </form>
+        <div id="video-carre"></div>
+      </section>`;
+  } else if (state.user) {
+    outil = `
+      <section class="mon-carre">
+        <h2>Ton carré</h2>
+        <form id="carre-cree" class="carre-cree">
+          <input id="carre-nom" maxlength="60" placeholder="Le nom de ton carré" required>
+          <button type="submit" class="primary">Fonder un carré</button>
+          <p class="form-error" id="carre-err"></p>
+        </form>
+        ${data.ouverts.length ? `
+        <h3>Carrés où il reste une place</h3>
+        <ul class="carres-ouverts">
+          ${data.ouverts.map((o) => `<li>${esc(o.nom)} <span>(${o.membres}/4)</span>
+            <button type="button" data-rejoint="${o.id}">Rejoindre</button></li>`).join('')}
+        </ul>` : '<p class="empty-note">Aucun carré n’attend de quatrième As : fonde le tien.</p>'}
+      </section>`;
+  } else {
+    outil = '<p class="empty-note">Connecte-toi pour fonder ou rejoindre un carré.</p>';
+  }
+
+  app.innerHTML = `<h1>Carré d’As</h1>${outil}${missions}`;
+
+  const moi = document.getElementById('carre-moi');
+  if (moi) {
+    moi.onsubmit = async (e) => {
+      e.preventDefault();
+      await api('/api/carre/moi', {
+        method: 'PUT',
+        body: { role: document.getElementById('carre-role').value, domaine: document.getElementById('carre-domaine').value },
+      });
+      pageCarre();
+    };
+    document.getElementById('carre-quitter').onclick = async () => {
+      if (!confirm('Quitter ton carré ?')) return;
+      await api('/api/carre/quitter', { method: 'POST' });
+      pageCarre();
+    };
+    // la vidéographie d'un As du carré, dépliée sur place. L'écouteur vit sur
+    // la section, qui disparaît avec elle au rendu suivant — jamais sur #app,
+    // où il s'empilerait à chaque visite.
+    document.querySelector('.mon-carre').addEventListener('click', async (e) => {
+      const lien = e.target.closest('[data-video-de]');
+      if (!lien) return;
+      e.preventDefault();
+      const zone = document.getElementById('video-carre');
+      try {
+        const v = await api(`/api/videographie/membre/${lien.dataset.videoDe}`);
+        zone.innerHTML = `<h3>La vidéographie de ${esc(v.membre)}</h3>` + (v.arbres.length
+          ? v.arbres.map((a) => `<a class="arbre-card" href="/videographie/${a.id}" data-link>
+              <h2>${esc(a.title)}</h2><span class="arbre-meta">${a.branches} vidéo${a.branches > 1 ? 's' : ''}</span></a>`).join('')
+          : '<p class="empty-note">Sa forêt est encore vide.</p>');
+      } catch (err) { zone.innerHTML = `<p class="empty-note">${esc(err.message)}</p>`; }
+    });
+  }
+  const cree = document.getElementById('carre-cree');
+  if (cree) {
+    cree.onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        await api('/api/carre', { method: 'POST', body: { nom: document.getElementById('carre-nom').value } });
+        pageCarre();
+      } catch (err) { document.getElementById('carre-err').textContent = err.message; }
+    };
+    app.querySelectorAll('[data-rejoint]').forEach((b) => {
+      b.onclick = async () => {
+        try {
+          await api(`/api/carre/${b.dataset.rejoint}/rejoindre`, { method: 'POST', body: {} });
+          pageCarre();
+        } catch (err) { document.getElementById('carre-err').textContent = err.message; }
+      };
+    });
+  }
+}
+
+/* ---------------------------------------------- le brainstorm (échelon 6)
+   Les lives des carrés, et la salle qui réfléchit avec eux. Tout marche par
+   relecture périodique : douze secondes quand un live est ouvert et que
+   l'onglet est visible — pas de connexion tenue, pas de serveur en plus.  */
+
+const PLATEFORME_LABELS = { youtube: 'YouTube', twitch: 'Twitch', tiktok: 'TikTok' };
+
+async function pageBrainstorms() {
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  let data;
+  try { data = await api('/api/brainstorms'); }
+  catch { return navigate('/57', true); }
+  if (stale(epoch)) return;
+
+  const carte = (b) => `
+    <a class="bs-card bs-${esc(b.statut)}" href="/brainstorm/${b.id}" data-link>
+      <div class="bs-statut">${b.statut === 'live' ? '● EN DIRECT' : b.statut === 'annonce' ? 'Annoncé' : 'Terminé'}</div>
+      <h2>${esc(b.sujet)}</h2>
+      <div class="bs-meta">${esc(b.carre_nom)} · ${esc(PLATEFORME_LABELS[b.plateforme] || b.plateforme)}
+        · ${b.idees} réflexion${b.idees > 1 ? 's' : ''}</div>
+    </a>`;
+
+  app.innerHTML = `
+    <h1>Brainstorm</h1>
+    <p class="page-invite">Quatre As en direct, une salle qui réfléchit avec eux : propose tes réflexions,
+      vote pour celles des autres — les plus soutenues montent sous leurs yeux.</p>
+    <form id="bs-form" class="bs-form">
+      <h2>Annoncer un brainstorm</h2>
+      <input id="bs-sujet" maxlength="200" placeholder="Le sujet du brainstorming" required>
+      <div class="bs-form-ligne">
+        <select id="bs-plateforme">
+          <option value="youtube">YouTube</option><option value="twitch">Twitch</option><option value="tiktok">TikTok</option>
+        </select>
+        <input id="bs-url" type="url" placeholder="Le lien du live" required>
+      </div>
+      <button type="submit" class="primary">Annoncer</button>
+      <p class="form-error" id="bs-err"></p>
+    </form>
+    <div class="bs-liste">
+      ${data.brainstorms.length ? data.brainstorms.map(carte).join('') : '<p class="empty-note">Aucun brainstorm pour l’instant.</p>'}
+    </div>`;
+
+  document.getElementById('bs-form').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api('/api/brainstorms', {
+        method: 'POST',
+        body: {
+          sujet: document.getElementById('bs-sujet').value,
+          plateforme: document.getElementById('bs-plateforme').value,
+          url: document.getElementById('bs-url').value,
+        },
+      });
+      navigate(`/brainstorm/${r.id}`);
+    } catch (err) { document.getElementById('bs-err').textContent = err.message; }
+  };
+}
+
+function ideeHtml(i) {
+  return `<article class="idee">
+    <button type="button" class="idee-vote${i.mon_vote ? ' votee' : ''}" data-vote="${i.id}"
+      aria-label="Soutenir">▲ ${i.votes}</button>
+    <div class="idee-corps">
+      <p>${esc(i.body)}</p>
+      <div class="idee-meta">${authorLink(i.username)} · ${esc(formatDate(i.created_at))}</div>
+    </div>
+  </article>`;
+}
+
+async function pageBrainstorm(id) {
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  const charge = () => api(`/api/brainstorms/${id}`);
+  let data;
+  try { data = await charge(); }
+  catch { return navigate('/brainstorm', true); }
+  if (stale(epoch)) return;
+
+  const rendu = (d) => {
+    const b = d.brainstorm;
+    const pilote = d.duCarre ? `
+      <div class="bs-pilote">
+        ${b.statut !== 'live' ? `<button type="button" data-statut="live" class="primary">Passer en direct</button>` : ''}
+        ${b.statut === 'live' ? `<button type="button" data-statut="termine">Terminer</button>` : ''}
+        ${b.statut === 'termine' ? `<button type="button" data-statut="live">Rouvrir</button>` : ''}
+      </div>` : '';
+    return `
+      <p class="fil-retour"><a href="/brainstorm" data-link>← Brainstorm</a></p>
+      <div class="bs-tete bs-${esc(b.statut)}">
+        <div class="bs-statut">${b.statut === 'live' ? '● EN DIRECT' : b.statut === 'annonce' ? 'Annoncé' : 'Terminé'}</div>
+        <h1>${esc(b.sujet)}</h1>
+        <div class="bs-meta">${esc(b.carre_nom)} ·
+          <a href="${esc(b.url)}" target="_blank" rel="noopener">rejoindre le live sur ${esc(PLATEFORME_LABELS[b.plateforme] || b.plateforme)} ↗</a></div>
+        ${pilote}
+      </div>
+      ${b.statut !== 'termine' && state.user ? `
+      <form id="idee-form" class="idee-form">
+        <textarea id="idee-body" maxlength="500" rows="2"
+          placeholder="Ta réflexion sur ce qui se dit…"></textarea>
+        <button type="submit" class="primary">Proposer</button>
+        <p class="form-error" id="idee-err"></p>
+      </form>` : ''}
+      <div class="bs-colonnes">
+        <section><h2>En avant</h2><div id="bs-avant">
+          ${d.enAvant.length ? d.enAvant.map(ideeHtml).join('') : '<p class="empty-note">Les premières réflexions montent ici.</p>'}
+        </div></section>
+        <section><h2>Récentes</h2><div id="bs-recentes">
+          ${d.recentes.length ? d.recentes.map(ideeHtml).join('') : '<p class="empty-note">Rien encore.</p>'}
+        </div></section>
+      </div>`;
+  };
+
+  app.innerHTML = rendu(data);
+
+  const rebranche = () => {
+    const form = document.getElementById('idee-form');
+    if (form) {
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const champ = document.getElementById('idee-body');
+        if (!champ.value.trim()) return;
+        try {
+          await api(`/api/brainstorms/${id}/idees`, { method: 'POST', body: { body: champ.value } });
+          champ.value = '';
+          await rafraichit();
+        } catch (err) { document.getElementById('idee-err').textContent = err.message; }
+      };
+    }
+    app.querySelectorAll('[data-statut]').forEach((b) => {
+      b.onclick = async () => {
+        await api(`/api/brainstorms/${id}`, { method: 'PUT', body: { statut: b.dataset.statut } });
+        data = await charge();
+        if (stale(epoch)) return;
+        app.innerHTML = rendu(data);
+        rebranche();
+      };
+    });
+    // voter sans redessiner la page : le compte se met à jour sur place.
+    // L'écouteur vit sur les colonnes — le rafraîchissement ne remplace que
+    // leur intérieur, et un nouveau rendu le remplace avec elles.
+    const colonnes = document.querySelector('.bs-colonnes');
+    if (colonnes) colonnes.addEventListener('click', async (e) => {
+      const vote = e.target.closest('[data-vote]');
+      if (!vote || !state.user) return;
+      try {
+        await api(`/api/brainstorms/${id}/votes`, { method: 'POST', body: { idee_id: +vote.dataset.vote } });
+        await rafraichit();
+      } catch { /* le battement suivant remettra tout d'aplomb */ }
+    });
+  };
+  rebranche();
+
+  // pendant un direct la salle bouge : douze secondes, onglet visible
+  async function rafraichit() {
+    let d;
+    try { d = await charge(); } catch { return; }
+    if (stale(epoch)) return;
+    data = d;
+    const avant = document.getElementById('bs-avant');
+    const recentes = document.getElementById('bs-recentes');
+    if (avant) avant.innerHTML = d.enAvant.length ? d.enAvant.map(ideeHtml).join('') : '<p class="empty-note">Les premières réflexions montent ici.</p>';
+    if (recentes) recentes.innerHTML = d.recentes.length ? d.recentes.map(ideeHtml).join('') : '<p class="empty-note">Rien encore.</p>';
+  }
+  pageTimer = setInterval(() => {
+    if (document.hidden) return;
+    if (data.brainstorm.statut === 'live') rafraichit();
+  }, 12000);
+}
+
+/* ------------------------------------ Game Master Orange (échelon 7) --- */
+
+async function pageGmo() {
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  let data;
+  try { data = await api('/api/gmo'); }
+  catch { return navigate('/57', true); }
+  if (stale(epoch)) return;
+
+  const m = data.mecanismes;
+  app.innerHTML = `
+    <h1>Game Master Orange</h1>
+    <p class="page-invite">${esc(m.intro)}</p>
+    <div class="gmo-liste">
+      ${m.mecanismes.map((x) => `
+        <article class="gmo-mecanisme">
+          <div class="gmo-numero">${x.numero}</div>
+          <div class="gmo-corps">
+            <h2>${esc(x.titre)}</h2>
+            <ol class="gmo-etapes">${x.etapes.map((e) => `<li>${esc(e)}</li>`).join('')}</ol>
+            ${x.page ? `<a class="btn gmo-outil" href="${esc(x.page)}" data-link>${esc(x.pageLabel)} →</a>` : ''}
+          </div>
+        </article>`).join('')}
+    </div>`;
 }
 
 /* -------------------------------------------------------- interprétations */
@@ -475,73 +1093,8 @@ function renderFeedPage() {
   };
 }
 
-/* ------------------------------------------------- la porte d'une page ---
-   L'échelon fait apparaître la page ; son mot de passe en découvre le
-   contenu. Tant qu'il n'est pas trouvé, la page ne montre que lui — même
-   carte, même champ, même minuteur que sur le 57. Rien n'est expliqué.   */
-
-function pagePorte(nom, titre) {
-  const source = (state.portes && state.portes[nom]) || '';
-  app.innerHTML = `
-    <h1>${esc(titre)}</h1>
-    <div class="enigmes-grid porte-grid">
-      <article class="enigme" id="porte-${esc(nom)}">
-        <div class="enigme-head"><span class="enigme-source">${esc(source)}</span></div>
-        <div class="enigme-body">
-          <form class="enigme-form">
-            <input class="enigme-input" type="text" placeholder="signe"
-                   autocomplete="off" autocapitalize="off" autocorrect="off"
-                   spellcheck="false" enterkeyhint="go" maxlength="200"
-                   aria-label="Signe pour ${esc(source)}">
-            <button type="submit" class="primary" aria-label="Valider">
-              <span class="enigme-go">→</span><span class="enigme-go-text">Valider</span>
-            </button>
-          </form>
-          <p class="enigme-msg" role="status" aria-live="polite"></p>
-        </div>
-      </article>
-    </div>`;
-
-  const el = document.getElementById('porte-' + nom);
-  const form = el.querySelector('.enigme-form');
-  const champ = form.querySelector('.enigme-input');
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    const answer = champ.value.trim();
-    if (!answer) return;
-    el.classList.remove('enigme--wrong');
-    try {
-      const res = await api(`/api/portes/${encodeURIComponent(nom)}/guess`, {
-        method: 'POST', body: { answer },
-      });
-      champ.blur();
-      if (res.ok) {
-        if (res.access) state.access = res.access;
-        renderNav();
-        route(); // la page se rouvre, cette fois avec son contenu
-      } else {
-        armeAttente(res.attenteMs || 0);
-        enigmeWrong(el, champ);
-      }
-    } catch (err) {
-      if (err.data && err.data.attenteMs) { champ.blur(); armeAttente(err.data.attenteMs); return; }
-      el.querySelector('.enigme-msg').textContent = err.message;
-    }
-  };
-  armeAttente(state.attenteMs || 0);
-}
-
 async function pageInterpretations() {
   const epoch = newEpoch();
-  // La porte a pu être franchie depuis le chargement de la page : on relit la
-  // session avant de conclure qu'elle est fermée.
-  if (!state.access.porteInterpretations) {
-    app.innerHTML = '<div class="loading">Chargement…</div>';
-    await refreshSession();
-    if (stale(epoch)) return;
-    renderNav();
-    if (!state.access.porteInterpretations) return pagePorte('interpretations', 'Interprétations');
-  }
   app.innerHTML = '<div class="loading">Chargement…</div>';
   const data = await api('/api/albums');
   if (stale(epoch)) return;
@@ -589,13 +1142,14 @@ async function refreshSession() {
   try {
     const data = await api('/api/me');
     state.user = data.user;
-    state.access = data.access || { interpretations: false, reprises: false };
-    state.portes = data.portes || {};
+    state.access = data.access || { interpretations: true, reprises: true };
+    state.echelon = data.echelon || 1;
     state.attenteMs = data.attenteMs || 0;
   } catch {
+    // même injoignable, le serveur n'aurait pas refusé le sol
     state.user = null;
-    state.access = { interpretations: false, reprises: false };
-    state.portes = {};
+    state.access = { interpretations: true, reprises: true };
+    state.echelon = 1;
     state.attenteMs = 0;
   }
 }

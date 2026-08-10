@@ -79,12 +79,13 @@ const oneWord = (...formes) => (n) => formes.includes(n.replace(/ /g, ''));
 export const NODES = [
   {
     // Le bloc d'entrée : ni titre, ni compte. On ne sait pas ce qu'on
-    // cherche, ni combien il y en a. Ses mots de passe ne font pas monter
-    // d'un échelon comme les autres — ils multiplient celui qu'on a déjà.
+    // cherche, ni combien il y en a. Ses signes ne comptent pas comme les
+    // autres : chacun vaut un cran entier — trois signes d'un coup, donc un
+    // échelon gagné mécaniquement.
     id: 'n-0',
     source: '',
     silent: true,
-    multiplies: 3,
+    bonus: true,
     requires: [],
     answers: [
       {
@@ -100,6 +101,25 @@ export const NODES = [
         match: oneWord('katikas', 'katikias'),
         note: 'Les deux orthographes valent.',
         quotes: [],
+      },
+    ],
+  },
+  {
+    // Le nom de l'artiste, en tête des blocs titrés. Il a d'abord gardé la
+    // page Interprétations (une « porte ») avant de rejoindre le 57 : son
+    // ancien identifiant est migré dans RENAMED.
+    id: 'n-w',
+    source: 'White Cadae',
+    requires: [],
+    answers: [
+      {
+        id: 'n-w-1',
+        label: 'Infini blanc',
+        // les deux mots, dans l'ordre qu'on veut
+        match: (n) => /infini/.test(n) && /blanc/.test(n),
+        note: 'White : blanc. Cadae : C=3, A=1, D=4, A=1, E=5 — les décimales de pi, qui ne s’arrêtent jamais.',
+        quotes: ['J’harmonise l’infini, l’infini devient fini. (Multivers)',
+                 'Je ne suis qu’un fil qui relie deux infinis. (Un fil entre deux infinis)'],
       },
     ],
   },
@@ -279,9 +299,10 @@ export const NODES = [
 /* ----------------------------------------------------------------- API */
 
 // « 30 vins divins » a eu son propre nœud avant d'être réuni à « 5 vins
-// divins » : ce qui y avait été trouvé vaut toujours, on ne réinitialise
-// personne. Les réponses supprimées, elles, sont simplement ignorées.
-const RENAMED = { 'n-d-2': 'n-c-1' };
+// divins », et « White Cadae » a gardé la page Interprétations avant de
+// rejoindre le 57 : ce qui avait été trouvé vaut toujours, on ne
+// réinitialise personne. Les réponses supprimées, elles, sont ignorées.
+const RENAMED = { 'n-d-2': 'n-c-1', 'porte-interp-1': 'n-w-1' };
 export function currentAnswerId(id) {
   return RENAMED[id] || id;
 }
@@ -318,75 +339,49 @@ function sourceOf(node, locked) {
 
 /* ------------------------------------------------------------- échelons */
 
-// On part de l'échelon 0, et l'on monte d'un cran tous les trois mots de
-// passe ordinaires. Les mots de passe du bloc muet, eux, ne font pas monter :
-// ils multiplient. Chacun triple l'échelon, donc deux d'entre eux le
-// multiplient par neuf. Tant qu'on n'a pas gravi un premier cran, multiplier
-// zéro ne donne rien : il faut d'abord trois mots de passe ordinaires.
+// Trois signes titrés font un cran ; un signe du bloc muet vaut un cran à
+// lui seul.
 export const PAR_ECHELON = 3;
 
-const MULTIPLIER_ANSWERS = new Set();
+const BONUS_ANSWERS = new Set();
 const ORDINARY_ANSWERS = new Set();
 for (const node of NODES) {
-  for (const a of node.answers) (node.multiplies ? MULTIPLIER_ANSWERS : ORDINARY_ANSWERS).add(a.id);
+  for (const a of node.answers) (node.bonus ? BONUS_ANSWERS : ORDINARY_ANSWERS).add(a.id);
 }
 
 // On est à l'échelon 1 dès l'arrivée : c'est le sol, pas une récompense. Ce
-// qu'on gravit ensuite, ce sont les crans — trois mots de passe ordinaires
-// chacun — et ce sont eux que les multiplicateurs triplent. Multiplier zéro
-// cran ne donne toujours rien : il faut d'abord en gravir un.
+// qu'on gravit ensuite, ce sont les crans — trois signes titrés chacun. Un
+// signe du bloc muet apporte l'équivalent de trois signes d'un coup : il fait
+// donc gagner un échelon entier, quel que soit le moment où on le trouve.
+// Avec treize signes titrés (quatre crans pleins) et deux signes muets, le
+// sommet est l'échelon 7.
 export function echelonOf(solved) {
-  let ordinaires = 0;
-  let facteur = 1;
+  let signes = 0;
   for (const id of solved) {
-    if (ORDINARY_ANSWERS.has(id)) ordinaires += 1;
-    else if (MULTIPLIER_ANSWERS.has(id)) facteur *= 3;
+    if (ORDINARY_ANSWERS.has(id)) signes += 1;
+    else if (BONUS_ANSWERS.has(id)) signes += PAR_ECHELON;
   }
-  return Math.floor(ordinaires / PAR_ECHELON) * facteur + 1;
+  return Math.floor(signes / PAR_ECHELON) + 1;
 }
 
-// Ce que l'échelon ouvre. La page 57 est toujours là : c'est par elle qu'on
-// entre, et elle seule tant qu'on n'a gravi aucun cran.
-export const ECHELON_INTERPRETATIONS = 2;
-export const ECHELON_REPRISES = 3;
-
-/* ------------------------------------------------------------- les portes
-
-   Certains mots de passe n'ouvrent pas un échelon mais une fonctionnalité.
-   Ils ne comptent donc pas dans le calcul de l'échelon — leurs identifiants
-   sont volontairement hors de NODES, que buildState et echelonOf ignorent —
-   et ils ne s'affichent pas sur la page 57 : ils vivent sur la page qu'ils
-   gardent.
-
-   L'échelon donne la clé de la porte ; la porte donne la pièce. Atteindre
-   l'échelon fait apparaître la page, mais elle reste vide tant que son mot de
-   passe n'a pas été trouvé.                                               */
-
-export const PORTES = {
-  interpretations: {
-    source: 'White Cadae',
-    // avant cet échelon, la porte n'est même pas proposée
-    echelon: ECHELON_INTERPRETATIONS,
-    answers: [
-      {
-        id: 'porte-interp-1',
-        label: 'Infini blanc',
-        // les deux mots, dans l'ordre qu'on veut
-        match: (n) => /infini/.test(n) && /blanc/.test(n),
-        note: 'White : blanc. Cadae : C=3, A=1, D=4, A=1, E=5 — les décimales de pi, qui ne s’arrêtent jamais.',
-        quotes: ['J’harmonise l’infini, l’infini devient fini. (Multivers)',
-                 'Je ne suis qu’un fil qui relie deux infinis. (Un fil entre deux infinis)'],
-      },
-    ],
-  },
-};
+// Ce que chaque échelon ouvre. La page 57 est toujours là : c'est par elle
+// qu'on entre. Les interprétations et les reprises sont ouvertes dès le sol —
+// même sans compte — et chaque cran suivant découvre une pièce de plus.
+export const ECHELON_INTERPRETATIONS = 1;
+export const ECHELON_REPRISES = 1;
+export const ECHELON_CONVERSATION = 2;
+export const ECHELON_PENSE_MIEUX = 3;
+export const ECHELON_VIDEOGRAPHIE = 4;
+export const ECHELON_CARRE = 5;
+export const ECHELON_BRAINSTORM = 6;
+export const ECHELON_GMO = 7;
 
 /* Ce qu'un membre a trouvé, tel qu'un autre a le droit de le voir : le nom de
    l'élément, jamais la réponse. Un nœud dont le libellé est lui-même la
    réponse d'un autre reste masqué tant que CELUI QUI REGARDE ne l'a pas
    ouvert de son côté — sans quoi un profil deviendrait une antisèche.     */
 export function enigmesTrouvees(solvedCible, solvedVisiteur = new Set()) {
-  const desNoeuds = NODES.map((node) => {
+  return NODES.map((node) => {
     const trouves = node.answers.filter((a) => solvedCible.has(a.id)).length;
     if (!trouves) return null;
     return {
@@ -396,45 +391,11 @@ export function enigmesTrouvees(solvedCible, solvedVisiteur = new Set()) {
       total: node.silent ? null : node.answers.length,
     };
   }).filter(Boolean);
-
-  const desPortes = Object.entries(PORTES).map(([nom, porte]) => {
-    const trouves = porte.answers.filter((a) => solvedCible.has(a.id)).length;
-    return trouves ? { id: `porte-${nom}`, source: porte.source, found: trouves, total: porte.answers.length } : null;
-  }).filter(Boolean);
-
-  return [...desNoeuds, ...desPortes];
-}
-
-export function getPorte(nom) {
-  return Object.prototype.hasOwnProperty.call(PORTES, nom) ? PORTES[nom] : null;
-}
-
-export function porteOuverte(nom, solved) {
-  const porte = getPorte(nom);
-  return !!porte && porte.answers.some((a) => solved.has(a.id));
-}
-
-// Comme pour un nœud : la réponse trouvée, ou null.
-export function matchPorte(nom, answer, solved) {
-  const porte = getPorte(nom);
-  if (!porte) return null;
-  const n = normalize(answer);
-  if (!n) return null;
-  const hit = porte.answers.find((a) => !solved.has(a.id) && a.match(n));
-  return hit ? hit.id : null;
 }
 
 /* -------------------------------------------------------- l'attente ---
    Plus on est haut, plus un essai coûte cher. En bas de l'échelle on peut
-   tâtonner ; en haut, chaque proposition engage la journée.
-
-     échelon 0 → 1 minute
-     échelon 1 → 5 minutes
-     échelon 2 → 1 heure, puis une heure de plus par cran
-
-   Les multiplicateurs font bondir l'échelon (3, 6, 18…) : le plafond de
-   24 heures évite qu'un seul essai malheureux ne ferme la porte plusieurs
-   jours.                                                                 */
+   tâtonner ; en haut, chaque proposition engage la journée.              */
 
 // 12, 33, 57 — les trois nombres du disque, repris d'une unité à l'autre :
 // secondes, puis minutes, puis heures. L'échelon 1 démarre au deuxième cran
@@ -443,8 +404,8 @@ const SUITE = [12, 33, 57];
 const UNITES = [1000, 60 * 1000, 60 * 60 * 1000];
 
 // La suite complète : 12 s, 33 s, 57 s, 12 min, 33 min, 57 min, 12 h, 33 h,
-// 57 h. Au-delà, on s'arrête sur le dernier palier plutôt que de passer aux
-// jours — un seul essai malheureux ne doit pas fermer la porte des semaines.
+// 57 h. Le sommet du jeu étant l'échelon 7, l'attente la plus longue
+// réellement atteignable est 33 h.
 export const PALIERS = UNITES.flatMap((u) => SUITE.map((n) => n * u));
 
 export function delaiEssaiMs(echelon) {
@@ -452,13 +413,16 @@ export function delaiEssaiMs(echelon) {
   return PALIERS[i];
 }
 
-export function accessOf(echelon, solved = new Set()) {
+export function accessOf(echelon) {
   return {
-    // la page apparaît dans le menu
     interpretations: echelon >= ECHELON_INTERPRETATIONS,
     reprises: echelon >= ECHELON_REPRISES,
-    // ... et son contenu se montre
-    porteInterpretations: porteOuverte('interpretations', solved),
+    conversation: echelon >= ECHELON_CONVERSATION,
+    penseMieux: echelon >= ECHELON_PENSE_MIEUX,
+    videographie: echelon >= ECHELON_VIDEOGRAPHIE,
+    carre: echelon >= ECHELON_CARRE,
+    brainstorm: echelon >= ECHELON_BRAINSTORM,
+    gmo: echelon >= ECHELON_GMO,
   };
 }
 
@@ -499,10 +463,11 @@ export function buildState(rows) {
     nodes,
     solved: solved.size,
     echelon,
-    // le chemin qu'il reste dans le cran en cours, jamais dans le jeu entier
+    // le chemin qu'il reste dans le cran en cours, jamais dans le jeu entier.
+    // Les signes du bloc muet valent des crans entiers : ils ne laissent pas
+    // de reste, seuls les signes titrés en laissent un.
     step: ordinaires % PAR_ECHELON,
     perEchelon: PAR_ECHELON,
-    // `rows` porte aussi les portes déjà franchies : accessOf les y retrouve
-    access: accessOf(echelon, new Set(rows.filter((r) => r.solved_at).map((r) => r.riddle_id))),
+    access: accessOf(echelon),
   };
 }
