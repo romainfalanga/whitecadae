@@ -1709,24 +1709,18 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
   max-width: calc(100vw - 1.2rem);
 }
 .sm-tab {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.05rem;
-  padding: 0.35rem 0.85rem;
+  padding: 0.45rem 1.05rem;
   border-radius: 99px;
   color: var(--text-dim);
-  font-size: 0.68rem;
-  letter-spacing: 0.02em;
-  min-width: 4rem;
-  text-align: center;
+  font-size: 0.84rem;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 .sm-tab:hover { color: var(--text); text-decoration: none; }
-.sm-ico { font-size: 1.05rem; line-height: 1.2; }
 .sm-tab.actif { background: var(--accent); color: #17130a; font-weight: 600; }
 .sm-tab.actif:hover { color: #17130a; }
 @media (max-width: 460px) {
-  .sm-tab { min-width: 3.4rem; padding: 0.3rem 0.6rem; }
+  .sm-tab { padding: 0.4rem 0.7rem; font-size: 0.78rem; }
 }
 /* la page respire au-dessus du dock */
 body.avec-dock main { padding-bottom: 7rem; }
@@ -1777,3 +1771,69 @@ body.avec-dock main { padding-bottom: 7rem; }
 
 /* -- la conversation pleine hauteur -- */
 .conv-list--pleine { max-height: 55vh; }
+
+/* -- le salon de recrutement -- */
+.recrut-charte {
+  font-family: var(--serif);
+  color: var(--text-dim);
+  border-left: 3px solid var(--accent);
+  padding-left: 1rem;
+  max-width: 44rem;
+  margin-bottom: 1.4rem;
+}
+.recrut-place { color: var(--accent); margin-bottom: 0.8rem; }
+.recrut-invitations { display: grid; gap: 0.7rem; margin-bottom: 1.2rem; }
+.recrut-invitation {
+  background: var(--bg-card);
+  border: 1px solid rgba(216, 192, 122, 0.45);
+  border-radius: 12px;
+  padding: 0.8rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.recrut-invitation > div:first-child { flex: 1; min-width: 220px; }
+.recrut-choix { display: flex; gap: 0.5rem; }
+.annonce-form { max-width: 40rem; margin-bottom: 1.6rem; display: grid; gap: 0.55rem; }
+.annonce-ligne { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.annonce-ligne select { width: auto; }
+.recrut-envoyees { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.recrut-attente {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  border: 1px dashed var(--border);
+  border-radius: 99px;
+  padding: 0.15rem 0.7rem;
+}
+.recrut-salon { display: grid; gap: 0.8rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.recrut-annonce {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.recrut-annonce.moi { border-color: rgba(216, 192, 122, 0.5); }
+.recrut-tete { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+.recrut-note { font-size: 0.92rem; white-space: pre-wrap; }
+.recrut-annonce button { align-self: flex-start; }
+
+/* -- la liaison inter-arbres -- */
+.liaison-bandeau { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+.liaison-bandeau select { width: auto; font-size: 0.85rem; }
+#liaison-sources { width: 100%; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+#liaison-sources[hidden] { display: none; }
+.liaison-source {
+  font-size: 0.82rem;
+  border-radius: 99px;
+  padding: 0.25rem 0.8rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nourrie-chip.nourrie-ailleurs { border-style: solid; border-color: rgba(216, 192, 122, 0.6); }
+.nourrie-chip a.nourrie-va { display: inline-block; padding: 0.1rem 0.6rem; font-size: 0.78rem; }
+.nourrie-chip a.nourrie-va:hover { text-decoration: underline; }

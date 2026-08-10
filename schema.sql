@@ -361,3 +361,20 @@ CREATE TABLE IF NOT EXISTS carre_messages (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_carre_messages ON carre_messages(carre_id, id);
+CREATE TABLE IF NOT EXISTS carre_annonces (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  note TEXT NOT NULL DEFAULT '',
+  role TEXT,
+  domaine TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS carre_invitations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  carre_id INTEGER NOT NULL REFERENCES carres(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  de_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (carre_id, user_id)
+);

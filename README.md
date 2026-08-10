@@ -156,13 +156,30 @@ bloc titré.
 Pense Mieux, la Vidéographie, le Carré d'As et le Brainstorm ne sont pas des
 pages mais des **applications** : chacune a son propre menu — un **dock fixé
 en bas de l'écran**, au pouce sur mobile, sous les yeux sur ordinateur — qui
-suit l'utilisateur dans toutes ses vues. Pense Mieux : **Forêt** (avec filtre,
-tri et statistiques), **Journal** (toutes ses branches au fil du temps) et
+suit l'utilisateur dans toutes ses vues. Le dock est purement typographique
+(pas d'icônes) et les vues ne s'expliquent pas : on est dans un escape game,
+l'interface se comprend en la touchant. Pense Mieux : **Forêt** (filtre, tri,
+statistiques), **Nouvel arbre** (la création est un geste du menu) et
 **Recherche** (plein texte dans sujets, troncs et branches). Vidéographie :
-**Forêt**, **Journal**, **Mon carré** (les forêts vidéo de ses As). Carré
-d'As : **Mon carré**, **Conversation**, **Annuaire**, **Missions**.
+**Forêt**, **Nouvel arbre**, **Carré** (les forêts vidéo de ses As). Carré
+d'As : **Mon carré**, **Conversation**, **Recrutement**, **Missions**.
 Brainstorm : **La scène** (le direct et l'annoncé), **Archives** (les
 brainstorms passés et leur récolte — rien ne s'évapore), **Annoncer**.
+
+Les nourritures d'une branche peuvent venir d'un **autre arbre de la même
+forêt** : la chip porte alors le nom de l'arbre source et y navigue, branche
+illuminée à l'arrivée. On circule ainsi d'arbre en arbre par les connexions —
+chaque présent est le futur de plusieurs passés, y compris à travers les
+arbres.
+
+Le **Recrutement** est le salon où les carrés se composent : un As libre
+**s'annonce** (ce qu'il apporterait, sa nature, sa connaissance), un carré
+incomplet l'**invite** avec un mot, et l'invité **accepte ou décline** — on
+n'entre dans un carré que voulu des deux côtés. À l'acceptation, la nature et
+la connaissance de l'annonce suivent dans le carré, l'annonce quitte le salon
+et les autres invitations tombent. La charte du bon carré (l'équilibre
+infinisseurs/harmonisateurs et les quatre connaissances) ouvre la page —
+c'est le premier bloc des missions.
 
 La **Conversation** (échelon 2) est unique et commune, mais chaque message
 porte l'**échelon minimal pour le lire**, choisi par son auteur entre 2 et son
