@@ -153,6 +153,17 @@ bloc titré.
 
 ### Les pièces hautes
 
+Pense Mieux, la Vidéographie, le Carré d'As et le Brainstorm ne sont pas des
+pages mais des **applications** : chacune a son propre menu — un **dock fixé
+en bas de l'écran**, au pouce sur mobile, sous les yeux sur ordinateur — qui
+suit l'utilisateur dans toutes ses vues. Pense Mieux : **Forêt** (avec filtre,
+tri et statistiques), **Journal** (toutes ses branches au fil du temps) et
+**Recherche** (plein texte dans sujets, troncs et branches). Vidéographie :
+**Forêt**, **Journal**, **Mon carré** (les forêts vidéo de ses As). Carré
+d'As : **Mon carré**, **Conversation**, **Annuaire**, **Missions**.
+Brainstorm : **La scène** (le direct et l'annoncé), **Archives** (les
+brainstorms passés et leur récolte — rien ne s'évapore), **Annoncer**.
+
 La **Conversation** (échelon 2) est unique et commune, mais chaque message
 porte l'**échelon minimal pour le lire**, choisi par son auteur entre 2 et son
 propre échelon : plus on monte, plus on entend de ce qui se dit. Un **filtre**

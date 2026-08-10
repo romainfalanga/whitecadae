@@ -1686,3 +1686,94 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .bs-retenues h2 { color: var(--accent); }
 .idee--retenue { border-color: rgba(216, 192, 122, 0.5); }
 .idee-badge { color: var(--accent); font-size: 0.78rem; margin-left: 0.3rem; }
+
+/* ------------------------------------------- le dock des applications ---
+   Les quatre pièces hautes sont des applications : chacune a son menu à
+   elle, fixé en bas de l'écran — au pouce sur mobile, sous les yeux sur
+   ordinateur — qui suit l'utilisateur dans toutes ses vues. */
+
+.sous-menu {
+  position: fixed;
+  bottom: max(0.9rem, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.25rem;
+  background: rgba(20, 20, 26, 0.94);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 0.35rem;
+  z-index: 30;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.55);
+  max-width: calc(100vw - 1.2rem);
+}
+.sm-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.05rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 99px;
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  min-width: 4rem;
+  text-align: center;
+}
+.sm-tab:hover { color: var(--text); text-decoration: none; }
+.sm-ico { font-size: 1.05rem; line-height: 1.2; }
+.sm-tab.actif { background: var(--accent); color: #17130a; font-weight: 600; }
+.sm-tab.actif:hover { color: #17130a; }
+@media (max-width: 460px) {
+  .sm-tab { min-width: 3.4rem; padding: 0.3rem 0.6rem; }
+}
+/* la page respire au-dessus du dock */
+body.avec-dock main { padding-bottom: 7rem; }
+
+/* -- la forêt : outils de tri et de filtre -- */
+.foret-outils {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+.foret-stats { color: var(--text-dim); font-size: 0.85rem; white-space: nowrap; }
+.foret-outils input { max-width: 16rem; }
+.foret-outils select { width: auto; font-size: 0.88rem; }
+
+/* -- le journal : ses réflexions au fil du temps -- */
+.journal { display: grid; gap: 0.55rem; max-width: 46rem; }
+.journal-entree {
+  display: block;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem 0.9rem;
+  color: var(--text);
+}
+.journal-entree:hover { border-left-color: var(--accent); text-decoration: none; }
+.journal-corps { display: flex; gap: 0.5rem; align-items: baseline; }
+.journal-corps p {
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.journal-video { color: var(--accent); }
+.journal-meta { display: flex; gap: 0.7rem; margin-top: 0.25rem; font-size: 0.78rem; color: var(--text-dim); }
+.journal-arbre { color: var(--accent); }
+.journal-meta time { margin-left: auto; }
+
+/* -- la recherche -- */
+#rech-q { max-width: 26rem; margin-bottom: 1rem; }
+
+/* -- les vidéographies du carré -- */
+.video-as { margin-bottom: 1.6rem; }
+.video-as h2 { margin-top: 0; }
+
+/* -- la conversation pleine hauteur -- */
+.conv-list--pleine { max-height: 55vh; }

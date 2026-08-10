@@ -123,6 +123,9 @@ async function handleApi(request, env, url) {
 
   if (route('GET', '/api/arbres')) return arbresList(request, env, url);
   if (route('POST', '/api/arbres')) return arbresCreate(request, env);
+  // avant :id, qui avalerait « journal » et « recherche »
+  if (route('GET', '/api/arbres/journal')) return arbresJournal(request, env, url);
+  if (route('GET', '/api/arbres/recherche')) return arbresRecherche(request, env, url);
   if ((p = route('GET', '/api/arbres/:id'))) return arbresGet(request, env, +p[0]);
   if ((p = route('PUT', '/api/arbres/:id'))) return arbresUpdate(request, env, +p[0]);
   if ((p = route('DELETE', '/api/arbres/:id'))) return arbresDelete(request, env, +p[0]);
@@ -2372,6 +2375,48 @@ async function lienDelete(request, env, brancheId, sourceId) {
   return json({ ok: true });
 }
 
+// Le journal : toutes ses branches, tous arbres confondus, du plus récent au
+// plus ancien — naviguer dans ses réflexions comme dans un fil du temps.
+async function arbresJournal(request, env, url) {
+  const kind = kindDe(url.searchParams.get('kind'));
+  if (!kind) return json({ error: 'Nature d’arbre inconnue.' }, 400);
+  const { vu, refus } = await gateArbre(request, env, kind);
+  if (refus) return refus;
+  const { results } = await env.DB.prepare(
+    `SELECT b.id, b.body, b.url, b.created_at, t.id AS tree_id, t.title AS tree_title
+       FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
+      WHERE t.user_id = ?1 AND t.kind = ?2
+      ORDER BY b.id DESC LIMIT 60`
+  ).bind(vu.user.id, kind).all();
+  return json({ journal: results || [] });
+}
+
+// La recherche plein texte dans sa forêt : troncs, sujets et branches.
+async function arbresRecherche(request, env, url) {
+  const kind = kindDe(url.searchParams.get('kind'));
+  if (!kind) return json({ error: 'Nature d’arbre inconnue.' }, 400);
+  const { vu, refus } = await gateArbre(request, env, kind);
+  if (refus) return refus;
+  const q = String(url.searchParams.get('q') || '').trim();
+  if (q.length < 2) return json({ arbres: [], branches: [] });
+  const motif = '%' + q.replace(/[%_\\]/g, ' ') + '%';
+
+  const arbres = (await env.DB.prepare(
+    `SELECT id, title, trunk FROM reflection_trees
+      WHERE user_id = ?1 AND kind = ?2 AND (title LIKE ?3 OR trunk LIKE ?3)
+      ORDER BY updated_at DESC LIMIT 20`
+  ).bind(vu.user.id, kind, motif).all()).results || [];
+
+  const branches = (await env.DB.prepare(
+    `SELECT b.id, b.body, b.url, b.created_at, t.id AS tree_id, t.title AS tree_title
+       FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
+      WHERE t.user_id = ?1 AND t.kind = ?2 AND b.body LIKE ?3
+      ORDER BY b.id DESC LIMIT 30`
+  ).bind(vu.user.id, kind, motif).all()).results || [];
+
+  return json({ arbres, branches });
+}
+
 // La forêt vidéo d'un membre de son propre carré, en lecture : c'est la
 // matière du travail mutuel des As.
 async function videographieDuMembre(request, env, membreId) {
@@ -2619,7 +2664,8 @@ async function brainstormsList(request, env) {
   const { results } = await env.DB.prepare(
     `SELECT b.id, b.sujet, b.plateforme, b.url, b.statut, b.created_at, b.live_depuis,
             c.nom AS carre_nom,
-            (SELECT COUNT(*) FROM brainstorm_idees i WHERE i.brainstorm_id = b.id) AS idees
+            (SELECT COUNT(*) FROM brainstorm_idees i WHERE i.brainstorm_id = b.id) AS idees,
+            (SELECT COUNT(*) FROM brainstorm_idees i WHERE i.brainstorm_id = b.id AND i.retenue = 1) AS retenues
        FROM brainstorms b JOIN carres c ON c.id = b.carre_id
       ORDER BY CASE b.statut WHEN 'live' THEN 0 WHEN 'annonce' THEN 1 ELSE 2 END,
                COALESCE(b.live_depuis, b.created_at) DESC
