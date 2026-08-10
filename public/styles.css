@@ -1598,3 +1598,91 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .gmo-corps h2 { margin: 0 0 0.4rem; font-size: 1.2rem; }
 .gmo-etapes { margin-left: 1.1rem; display: grid; gap: 0.3rem; }
 .gmo-outil { display: inline-block; margin-top: 0.7rem; font-size: 0.88rem; }
+
+/* -- le filtre de la conversation -- */
+.conv-filtre { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.8rem; flex-wrap: wrap; }
+.conv-filtre label { display: flex; align-items: center; gap: 0.5rem; margin: 0; white-space: nowrap; }
+.conv-filtre select { width: auto; font-size: 0.88rem; }
+
+/* -- les nourritures d'une branche : ses autres passés -- */
+.branche-nourritures { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.3rem; }
+.nourrie-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px dashed rgba(216, 192, 122, 0.45);
+  border-radius: 99px;
+  font-size: 0.78rem;
+  overflow: hidden;
+}
+.nourrie-va {
+  border: none;
+  background: none;
+  color: var(--accent);
+  padding: 0.1rem 0.6rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.nourrie-va:hover { text-decoration: underline; }
+.nourrie-oublie {
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  padding: 0.1rem 0.45rem 0.1rem 0;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.nourrie-oublie:hover { color: var(--danger); }
+.liaison-bandeau {
+  background: var(--accent-soft);
+  border: 1px solid rgba(216, 192, 122, 0.4);
+  border-radius: 10px;
+  padding: 0.5rem 0.9rem;
+  margin-bottom: 0.8rem;
+  font-size: 0.9rem;
+}
+.branche--visee { border-left-color: var(--accent) !important; background: var(--accent-soft); }
+
+/* -- la vie et la conversation du carré -- */
+.carre-conv, .carre-vie {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem 1.2rem;
+  margin-bottom: 1.6rem;
+}
+.carre-conv h2, .carre-vie h2, .annuaire h2 { margin-top: 0; font-size: 1.15rem; }
+.conv-list--carre { max-height: 40vh; }
+.vie-liste { list-style: none; }
+.vie-liste li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  padding: 0.35rem 0.1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+.vie-liste li:last-child { border-bottom: none; }
+.vie-meta { margin-left: auto; color: var(--text-dim); font-size: 0.8rem; white-space: nowrap; }
+.vie-arrivee { color: var(--text-dim); }
+
+/* -- l'annuaire des As -- */
+.annuaire { margin-bottom: 2rem; }
+.annuaire input { max-width: 22rem; margin-bottom: 0.7rem; }
+.annuaire-as { list-style: none; }
+.annuaire-as li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  padding: 0.45rem 0.1rem;
+  border-bottom: 1px solid var(--border);
+}
+.annuaire-as li:last-child { border-bottom: none; }
+.as-echelon { color: var(--accent); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.as-carre { margin-left: auto; color: var(--text-dim); font-size: 0.85rem; }
+
+/* -- la récolte d'un brainstorm -- */
+.bs-retenues { margin-bottom: 1.6rem; }
+.bs-retenues h2 { color: var(--accent); }
+.idee--retenue { border-color: rgba(216, 192, 122, 0.5); }
+.idee-badge { color: var(--accent); font-size: 0.78rem; margin-left: 0.3rem; }

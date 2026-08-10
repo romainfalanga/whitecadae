@@ -454,7 +454,27 @@ async function pageConversation() {
   catch { return navigate('/57', true); }
   if (stale(epoch)) return;
 
-  // du plus ancien au plus récent, comme une conversation se lit
+  // Le filtre est une paire (mode, échelon). « jusqu'à l'échelon 4 », c'est
+  // littéralement voir la conversation comme la voit un membre de l'échelon
+  // 4 ; « seulement » isole une strate ; « à partir de » ne garde que les
+  // hauteurs. Tout se filtre sur place : le serveur a déjà tout envoyé.
+  const filtre = { mode: 'tout', niveau: 2 };
+  let derniereCle = '';
+
+  const garde = (m) =>
+    filtre.mode === 'tout' ? true
+    : filtre.mode === 'exact' ? m.min_echelon === filtre.niveau
+    : filtre.mode === 'min' ? m.min_echelon >= filtre.niveau
+    : m.min_echelon <= filtre.niveau;
+
+  const listeHtml = () => {
+    const vus = data.messages.filter(garde);
+    return vus.length ? vus.map(messageHtml).join('')
+      : `<p class="empty-note">${data.messages.length ? 'Rien à ce niveau du filtre.' : 'Personne n’a encore parlé.'}</p>`;
+  };
+
+  const niveauxLisibles = Math.max(2, state.echelon || 2);
+  const optionsNiveaux = Array.from({ length: niveauxLisibles - 1 }, (_, i) => i + 2);
   const composer = state.user ? `
     <form id="conv-form" class="conv-form">
       <textarea id="conv-body" maxlength="2000" rows="2"
@@ -471,12 +491,34 @@ async function pageConversation() {
 
   app.innerHTML = `
     <h1>Conversation</h1>
-    <div class="conv-list" id="conv-list">
-      ${data.messages.length ? data.messages.map(messageHtml).join('') : '<p class="empty-note">Personne n’a encore parlé.</p>'}
+    <div class="conv-filtre">
+      <label>Voir
+        <select id="conv-f-mode">
+          <option value="tout">tout ce qui m’est ouvert</option>
+          <option value="max">jusqu’à l’échelon…</option>
+          <option value="exact">seulement l’échelon…</option>
+          <option value="min">à partir de l’échelon…</option>
+        </select></label>
+      <select id="conv-f-niveau" hidden>
+        ${optionsNiveaux.map((n) => `<option value="${n}">${n}</option>`).join('')}
+      </select>
     </div>
+    <div class="conv-list" id="conv-list">${listeHtml()}</div>
     ${composer}`;
   const liste = document.getElementById('conv-list');
   liste.scrollTop = liste.scrollHeight;
+
+  const modeSel = document.getElementById('conv-f-mode');
+  const niveauSel = document.getElementById('conv-f-niveau');
+  const applique = () => {
+    filtre.mode = modeSel.value;
+    filtre.niveau = +niveauSel.value;
+    niveauSel.hidden = filtre.mode === 'tout';
+    liste.innerHTML = listeHtml();
+    liste.scrollTop = liste.scrollHeight;
+  };
+  modeSel.onchange = applique;
+  niveauSel.onchange = applique;
 
   const form = document.getElementById('conv-form');
   if (form) {
@@ -491,28 +533,31 @@ async function pageConversation() {
           body: { body: texte, min_echelon: +document.getElementById('conv-min').value },
         });
         champ.value = '';
-        await rechargeConversation(epoch);
+        await recharge(true);
       } catch (err) { document.getElementById('conv-err').textContent = err.message; }
     };
   }
 
+  // La relecture ne redessine que si quelque chose a changé : pas de
+  // clignotement pour rien, pas de défilement perdu.
+  async function recharge(force = false) {
+    let d;
+    try { d = await api('/api/conversation'); } catch { return; }
+    if (stale(epoch)) return;
+    data = d;
+    const cle = d.messages.map((m) => m.id).join(',');
+    if (!force && cle === derniereCle) return;
+    derniereCle = cle;
+    const enBas = liste.scrollHeight - liste.scrollTop - liste.clientHeight < 60;
+    liste.innerHTML = listeHtml();
+    if (enBas || force) liste.scrollTop = liste.scrollHeight;
+  }
+  derniereCle = data.messages.map((m) => m.id).join(',');
+
   // le battement : toutes les 20 s, si l'onglet est visible
   pageTimer = setInterval(() => {
-    if (!document.hidden) rechargeConversation(epoch);
+    if (!document.hidden) recharge();
   }, 20000);
-}
-
-async function rechargeConversation(epoch) {
-  let data;
-  try { data = await api('/api/conversation'); } catch { return; }
-  if (stale(epoch)) return;
-  const liste = document.getElementById('conv-list');
-  if (!liste) return;
-  const enBas = liste.scrollHeight - liste.scrollTop - liste.clientHeight < 60;
-  liste.innerHTML = data.messages.length
-    ? data.messages.map(messageHtml).join('')
-    : '<p class="empty-note">Personne n’a encore parlé.</p>';
-  if (enBas) liste.scrollTop = liste.scrollHeight;
 }
 
 /* ------------------- les arbres : Pense Mieux (3) et Vidéographie (4) ---
@@ -524,13 +569,13 @@ const ARBRES_PAGES = {
   pensee: {
     titre: 'Pense Mieux',
     chemin: '/pense-mieux',
-    invite: 'Un sujet de réflexion devient un arbre : un tronc, puis des branches qui se font grandir les unes les autres.',
+    invite: 'Un sujet de réflexion devient un arbre : un tronc, des branches qui se font grandir. Et comme chaque présent est le futur de plusieurs passés, une branche peut être nourrie par d’autres qu’elle relie.',
     vide: 'Ta forêt est vide. Plante ton premier arbre.',
   },
   video: {
     titre: 'Vidéographie',
     chemin: '/videographie',
-    invite: 'Extériorise tes réflexions en vidéo, puis relie-les : chaque branche est une vidéo YouTube, publique ou privée.',
+    invite: 'Extériorise tes réflexions en vidéo, puis relie-les : chaque branche est une vidéo YouTube, publique ou privée — et chacune peut être nourrie par plusieurs autres.',
     vide: 'Aucune vidéo pour l’instant. Plante ton premier arbre.',
   },
 };
@@ -578,19 +623,37 @@ async function pageArbres(kind) {
   };
 }
 
-// Les branches s'emboîtent : on dessine l'arbre en profondeur.
-function brancheHtml(b, enfants, kind, editable) {
+// Le nom court d'une branche, pour les chips de nourriture.
+function brancheEtiquette(b) {
+  const texte = (b.body || '').trim() || (b.url ? 'vidéo' : 'branche');
+  return texte.length > 42 ? texte.slice(0, 40) + '…' : texte;
+}
+
+// Les branches s'emboîtent : on dessine l'arbre en profondeur. Les
+// nourritures (les autres passés d'une branche) s'affichent en chips qui
+// mènent à leur source.
+function brancheHtml(b, enfants, kind, editable, ctx) {
   const contenu = kind === 'video'
     ? `<div class="branche-video">${videoEmbed(b.url)}${b.body ? `<p>${esc(b.body)}</p>` : ''}</div>`
     : `<p class="branche-texte">${esc(b.body)}</p>`;
+  const sources = (ctx.sourcesDe.get(b.id) || []).map((sid) => {
+    const s = ctx.parId.get(sid);
+    if (!s) return '';
+    return `<span class="nourrie-chip"><button type="button" class="nourrie-va" data-va="${sid}"
+      title="Aller à la branche source">⇠ ${esc(brancheEtiquette(s))}</button>${editable
+      ? `<button type="button" class="nourrie-oublie" data-oublie="${b.id}:${sid}" aria-label="Détacher">✕</button>` : ''}</span>`;
+  }).join('');
   const boutons = editable ? `
     <div class="branche-actions">
       <button type="button" class="link-btn" data-pousse="${b.id}">+ branche</button>
+      <button type="button" class="link-btn" data-nourrit="${b.id}">⇠ nourrie par…</button>
       <button type="button" class="link-btn danger" data-coupe="${b.id}">couper</button>
     </div>` : '';
   return `<div class="branche" data-branche="${b.id}">
-    ${contenu}${boutons}
-    <div class="branche-enfants">${(enfants.get(b.id) || []).map((e) => brancheHtml(e, enfants, kind, editable)).join('')}</div>
+    ${contenu}
+    ${sources ? `<div class="branche-nourritures">${sources}</div>` : ''}
+    ${boutons}
+    <div class="branche-enfants">${(enfants.get(b.id) || []).map((e) => brancheHtml(e, enfants, kind, editable, ctx)).join('')}</div>
   </div>`;
 }
 
@@ -614,18 +677,31 @@ async function pageArbre(kind, id) {
   const editable = arbre.proprietaire;
 
   const enfants = new Map();
+  const parId = new Map();
   for (const b of arbre.branches) {
+    parId.set(b.id, b);
     const cle = b.parent_id || 0;
     if (!enfants.has(cle)) enfants.set(cle, []);
     enfants.get(cle).push(b);
   }
+  // chaque présent est le futur de plusieurs passés : les nourritures
+  const sourcesDe = new Map();
+  for (const l of arbre.liens || []) {
+    if (!sourcesDe.has(l.branch_id)) sourcesDe.set(l.branch_id, []);
+    sourcesDe.get(l.branch_id).push(l.source_id);
+  }
+  const ctx = { parId, sourcesDe };
 
   app.innerHTML = `
     <p class="fil-retour"><a href="${def.chemin}" data-link>← ${esc(def.titre)}</a></p>
     <h1>${esc(arbre.title)}</h1>
     ${arbre.trunk ? `<p class="tronc">${esc(arbre.trunk)}</p>` : ''}
+    <p class="liaison-bandeau" id="liaison-bandeau" hidden>
+      Touche la branche <strong>qui nourrit</strong> celle-ci.
+      <button type="button" class="link-btn" id="liaison-annule">Annuler</button>
+    </p>
     <div class="arbre" id="arbre">
-      ${(enfants.get(0) || []).map((b) => brancheHtml(b, enfants, kind, editable)).join('')
+      ${(enfants.get(0) || []).map((b) => brancheHtml(b, enfants, kind, editable, ctx)).join('')
         || '<p class="empty-note">Le tronc attend ses premières branches.</p>'}
     </div>
     ${editable ? `
@@ -644,15 +720,58 @@ async function pageArbre(kind, id) {
     <p class="arbre-suppr"><button type="button" class="link-btn danger" id="arbre-suppr">Abattre cet arbre</button></p>
     ` : `<p class="empty-note">L’arbre d’un As de ton carré — en lecture.</p>`}`;
 
+  // le saut vers une source : pour tout le monde, lecteur compris
+  const vaVers = (cible) => {
+    const el = document.querySelector(`[data-branche="${cible}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.add('branche--visee');
+    setTimeout(() => el.classList.remove('branche--visee'), 1600);
+  };
+  document.getElementById('arbre').addEventListener('click', (e) => {
+    const va = e.target.closest('[data-va]');
+    // en mode liaison le toucher désigne une source, il ne navigue pas
+    if (va && document.getElementById('liaison-bandeau').hidden) vaVers(+va.dataset.va);
+  });
+
   if (!editable) return;
 
   const parentField = document.getElementById('branche-parent');
   const ou = document.getElementById('branche-ou');
   const annule = document.getElementById('branche-annule');
+  // la liaison : « nourrie par… » puis un toucher sur la branche source
+  let liaisonDepuis = null;
+  const bandeau = document.getElementById('liaison-bandeau');
+  document.getElementById('liaison-annule').onclick = () => { liaisonDepuis = null; bandeau.hidden = true; };
+
   document.getElementById('arbre').addEventListener('click', async (e) => {
     const pousse = e.target.closest('[data-pousse]');
     const coupe = e.target.closest('[data-coupe]');
-    if (pousse) {
+    const nourrit = e.target.closest('[data-nourrit]');
+    const oublie = e.target.closest('[data-oublie]');
+    if (liaisonDepuis != null) {
+      // en mode liaison, tout toucher de branche désigne la source
+      const cible = e.target.closest('[data-branche]');
+      if (!cible) return;
+      const sourceId = +cible.dataset.branche;
+      const depuis = liaisonDepuis;
+      liaisonDepuis = null; bandeau.hidden = true;
+      if (sourceId === depuis) return;
+      try {
+        await api(`/api/branches/${depuis}/liens`, { method: 'POST', body: { source_id: sourceId } });
+        pageArbre(kind, id);
+      } catch (err) { alert(err.message); }
+      return;
+    }
+    if (nourrit) {
+      liaisonDepuis = +nourrit.dataset.nourrit;
+      bandeau.hidden = false;
+      bandeau.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else if (oublie) {
+      const [bId, sId] = oublie.dataset.oublie.split(':');
+      await api(`/api/branches/${bId}/liens/${sId}`, { method: 'DELETE' });
+      pageArbre(kind, id);
+    } else if (pousse) {
       parentField.value = pousse.dataset.pousse;
       ou.textContent = 'Nouvelle branche sur la branche choisie';
       annule.hidden = false;
@@ -747,6 +866,30 @@ async function pageCarre() {
           <button type="button" class="link-btn danger" id="carre-quitter">Quitter le carré</button>
         </form>
         <div id="video-carre"></div>
+      </section>
+      <section class="carre-conv">
+        <h2>La conversation du carré</h2>
+        <div class="conv-list conv-list--carre" id="carre-conv-list"><p class="empty-note">…</p></div>
+        <form id="carre-conv-form" class="conv-form">
+          <textarea id="carre-conv-body" maxlength="2000" rows="2"
+            placeholder="Entre As — personne d’autre ne lit ici…"></textarea>
+          <div class="conv-form-foot">
+            <button type="submit" class="primary">Envoyer</button>
+          </div>
+          <p class="form-error" id="carre-conv-err"></p>
+        </form>
+      </section>
+      <section class="carre-vie">
+        <h2>La vie du carré</h2>
+        <ul class="vie-liste">
+          ${(c.brainstorms || []).map((b) => `
+            <li><a href="/brainstorm/${b.id}" data-link>${esc(b.sujet)}</a>
+              <span class="vie-meta">${b.statut === 'live' ? 'en direct' : b.statut === 'annonce' ? 'annoncé' : 'terminé'}
+                ${b.retenues ? ` · ${b.retenues} retenue${b.retenues > 1 ? 's' : ''}` : ''}</span></li>`).join('')}
+          ${c.membres.map((m) => `
+            <li><span class="vie-arrivee">${esc(m.username)} est là</span>
+              <span class="vie-meta">${esc(formatDate(m.joined_at))}</span></li>`).join('')}
+        </ul>
       </section>`;
   } else if (state.user) {
     outil = `
@@ -768,7 +911,73 @@ async function pageCarre() {
     outil = '<p class="empty-note">Connecte-toi pour fonder ou rejoindre un carré.</p>';
   }
 
-  app.innerHTML = `<h1>Carré d’As</h1>${outil}${missions}`;
+  // l'annuaire : tous les As arrivés à cet échelon, en carré ou libres —
+  // c'est ici qu'on se trouve pour se composer
+  const annuaire = `
+    <section class="annuaire">
+      <h2>L’annuaire des As</h2>
+      <input id="annuaire-filtre" placeholder="Chercher un As…" autocomplete="off">
+      <div id="annuaire-liste"><p class="empty-note">…</p></div>
+    </section>`;
+
+  app.innerHTML = `<h1>Carré d’As</h1>${outil}${annuaire}${missions}`;
+
+  // l'annuaire se remplit sans retenir la page
+  (async () => {
+    let d;
+    try { d = await api('/api/carre/as'); } catch { return; }
+    if (stale(epoch)) return;
+    const zone = document.getElementById('annuaire-liste');
+    const champ = document.getElementById('annuaire-filtre');
+    if (!zone) return;
+    const renduAs = () => {
+      const q = (champ.value || '').trim().toLowerCase();
+      const vus = d.as.filter((a) => !q || a.username.toLowerCase().includes(q)
+        || (a.carre || '').toLowerCase().includes(q));
+      zone.innerHTML = vus.length ? `<ul class="annuaire-as">${vus.map((a) => `
+        <li>${authorLink(a.username)}
+          <span class="as-echelon">échelon ${a.echelon}</span>
+          ${a.role ? `<span class="carre-role">${esc(a.role)}</span>` : ''}
+          ${a.domaine ? `<span class="carre-domaine">${esc(a.domaine)}</span>` : ''}
+          <span class="as-carre">${a.carre ? esc(a.carre) : 'libre'}</span>
+        </li>`).join('')}</ul>` : '<p class="empty-note">Aucun As ne répond à ce nom.</p>';
+    };
+    champ.oninput = renduAs;
+    renduAs();
+  })();
+
+  // la conversation du carré : chargée à part, battement de 20 s
+  if (data.carre) {
+    const listeCarre = document.getElementById('carre-conv-list');
+    let derniereCleCarre = '';
+    const rechargeCarre = async (force = false) => {
+      let d;
+      try { d = await api('/api/carre/conversation'); } catch { return; }
+      if (stale(epoch)) return;
+      const cle = d.messages.map((m) => m.id).join(',');
+      if (!force && cle === derniereCleCarre) return;
+      derniereCleCarre = cle;
+      const enBas = listeCarre.scrollHeight - listeCarre.scrollTop - listeCarre.clientHeight < 60;
+      listeCarre.innerHTML = d.messages.length
+        ? d.messages.map((m) => `<article class="msg">
+            <div class="msg-head">${authorLink(m.username)}<time>${esc(formatDate(m.created_at))}</time></div>
+            <p class="msg-body">${esc(m.body)}</p></article>`).join('')
+        : '<p class="empty-note">Le carré n’a encore rien dit.</p>';
+      if (enBas || force) listeCarre.scrollTop = listeCarre.scrollHeight;
+    };
+    rechargeCarre(true);
+    pageTimer = setInterval(() => { if (!document.hidden) rechargeCarre(); }, 20000);
+    document.getElementById('carre-conv-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const champ = document.getElementById('carre-conv-body');
+      if (!champ.value.trim()) return;
+      try {
+        await api('/api/carre/conversation', { method: 'POST', body: { body: champ.value } });
+        champ.value = '';
+        rechargeCarre(true);
+      } catch (err) { document.getElementById('carre-conv-err').textContent = err.message; }
+    };
+  }
 
   const moi = document.getElementById('carre-moi');
   if (moi) {
@@ -881,13 +1090,18 @@ async function pageBrainstorms() {
   };
 }
 
-function ideeHtml(i) {
-  return `<article class="idee">
+// duCarre : le carré qui porte le live peut retenir une réflexion — c'est la
+// récolte du brainstorming, elle reste après le direct.
+function ideeHtml(i, duCarre) {
+  return `<article class="idee${i.retenue ? ' idee--retenue' : ''}">
     <button type="button" class="idee-vote${i.mon_vote ? ' votee' : ''}" data-vote="${i.id}"
       aria-label="Soutenir">▲ ${i.votes}</button>
     <div class="idee-corps">
       <p>${esc(i.body)}</p>
-      <div class="idee-meta">${authorLink(i.username)} · ${esc(formatDate(i.created_at))}</div>
+      <div class="idee-meta">${authorLink(i.username)} · ${esc(formatDate(i.created_at))}
+        ${i.retenue ? '<span class="idee-badge">★ retenue</span>' : ''}
+        ${duCarre ? `<button type="button" class="link-btn" data-retient="${i.id}">${i.retenue ? 'relâcher' : '★ retenir'}</button>` : ''}
+      </div>
     </div>
   </article>`;
 }
@@ -925,13 +1139,19 @@ async function pageBrainstorm(id) {
         <button type="submit" class="primary">Proposer</button>
         <p class="form-error" id="idee-err"></p>
       </form>` : ''}
-      <div class="bs-colonnes">
-        <section><h2>En avant</h2><div id="bs-avant">
-          ${d.enAvant.length ? d.enAvant.map(ideeHtml).join('') : '<p class="empty-note">Les premières réflexions montent ici.</p>'}
-        </div></section>
-        <section><h2>Récentes</h2><div id="bs-recentes">
-          ${d.recentes.length ? d.recentes.map(ideeHtml).join('') : '<p class="empty-note">Rien encore.</p>'}
-        </div></section>
+      <div id="bs-salle">
+        <section class="bs-retenues" id="bs-retenues" ${d.retenues.length ? '' : 'hidden'}>
+          <h2>La récolte — retenues par le carré</h2>
+          <div id="bs-retenues-liste">${d.retenues.map((i) => ideeHtml(i, d.duCarre)).join('')}</div>
+        </section>
+        <div class="bs-colonnes">
+          <section><h2>En avant</h2><div id="bs-avant">
+            ${d.enAvant.length ? d.enAvant.map((i) => ideeHtml(i, d.duCarre)).join('') : '<p class="empty-note">Les premières réflexions montent ici.</p>'}
+          </div></section>
+          <section><h2>Récentes</h2><div id="bs-recentes">
+            ${d.recentes.length ? d.recentes.map((i) => ideeHtml(i, d.duCarre)).join('') : '<p class="empty-note">Rien encore.</p>'}
+          </div></section>
+        </div>
       </div>`;
   };
 
@@ -960,15 +1180,17 @@ async function pageBrainstorm(id) {
         rebranche();
       };
     });
-    // voter sans redessiner la page : le compte se met à jour sur place.
-    // L'écouteur vit sur les colonnes — le rafraîchissement ne remplace que
-    // leur intérieur, et un nouveau rendu le remplace avec elles.
-    const colonnes = document.querySelector('.bs-colonnes');
-    if (colonnes) colonnes.addEventListener('click', async (e) => {
+    // voter ou retenir sans redessiner la page. L'écouteur vit sur la salle —
+    // le rafraîchissement ne remplace que l'intérieur des listes, et un
+    // nouveau rendu le remplace avec elle.
+    const salle = document.getElementById('bs-salle');
+    if (salle) salle.addEventListener('click', async (e) => {
       const vote = e.target.closest('[data-vote]');
-      if (!vote || !state.user) return;
+      const retient = e.target.closest('[data-retient]');
+      if (!state.user || (!vote && !retient)) return;
       try {
-        await api(`/api/brainstorms/${id}/votes`, { method: 'POST', body: { idee_id: +vote.dataset.vote } });
+        if (vote) await api(`/api/brainstorms/${id}/votes`, { method: 'POST', body: { idee_id: +vote.dataset.vote } });
+        else await api(`/api/brainstorms/${id}/retenues`, { method: 'POST', body: { idee_id: +retient.dataset.retient } });
         await rafraichit();
       } catch { /* le battement suivant remettra tout d'aplomb */ }
     });
@@ -983,8 +1205,13 @@ async function pageBrainstorm(id) {
     data = d;
     const avant = document.getElementById('bs-avant');
     const recentes = document.getElementById('bs-recentes');
-    if (avant) avant.innerHTML = d.enAvant.length ? d.enAvant.map(ideeHtml).join('') : '<p class="empty-note">Les premières réflexions montent ici.</p>';
-    if (recentes) recentes.innerHTML = d.recentes.length ? d.recentes.map(ideeHtml).join('') : '<p class="empty-note">Rien encore.</p>';
+    const retenues = document.getElementById('bs-retenues');
+    if (avant) avant.innerHTML = d.enAvant.length ? d.enAvant.map((i) => ideeHtml(i, d.duCarre)).join('') : '<p class="empty-note">Les premières réflexions montent ici.</p>';
+    if (recentes) recentes.innerHTML = d.recentes.length ? d.recentes.map((i) => ideeHtml(i, d.duCarre)).join('') : '<p class="empty-note">Rien encore.</p>';
+    if (retenues) {
+      retenues.hidden = !d.retenues.length;
+      document.getElementById('bs-retenues-liste').innerHTML = d.retenues.map((i) => ideeHtml(i, d.duCarre)).join('');
+    }
   }
   pageTimer = setInterval(() => {
     if (document.hidden) return;
@@ -3563,8 +3790,13 @@ function enigmesProgressHtml() {
 
 let attenteTimer = null;
 
+// Jusqu'à l'heure on lit des minutes:secondes ; au-delà, « 720:00 » ne dit
+// plus rien à personne — on écrit les heures en toutes lettres de chiffres.
 function attenteLabel(ms) {
   const s = Math.ceil(ms / 1000);
+  if (s >= 3600) {
+    return `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
+  }
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 

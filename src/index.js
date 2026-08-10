@@ -129,10 +129,15 @@ async function handleApi(request, env, url) {
   if ((p = route('POST', '/api/arbres/:id/branches'))) return branchesCreate(request, env, +p[0]);
   if ((p = route('PUT', '/api/branches/:id'))) return branchesUpdate(request, env, +p[0]);
   if ((p = route('DELETE', '/api/branches/:id'))) return branchesDelete(request, env, +p[0]);
+  if ((p = route('POST', '/api/branches/:id/liens'))) return lienCreate(request, env, +p[0]);
+  if ((p = route('DELETE', '/api/branches/:id/liens/:source'))) return lienDelete(request, env, +p[0], +p[1]);
   if ((p = route('GET', '/api/videographie/membre/:id'))) return videographieDuMembre(request, env, +p[0]);
 
   if (route('GET', '/api/carre')) return carreGet(request, env);
   if (route('POST', '/api/carre')) return carreCreate(request, env);
+  if (route('GET', '/api/carre/as')) return carreAnnuaire(request, env);
+  if (route('GET', '/api/carre/conversation')) return carreChatList(request, env);
+  if (route('POST', '/api/carre/conversation')) return carreChatPost(request, env);
   if ((p = route('POST', '/api/carre/:id/rejoindre'))) return carreJoin(request, env, +p[0]);
   if (route('PUT', '/api/carre/moi')) return carreUpdateMoi(request, env);
   if (route('POST', '/api/carre/quitter')) return carreLeave(request, env);
@@ -143,6 +148,7 @@ async function handleApi(request, env, url) {
   if ((p = route('PUT', '/api/brainstorms/:id'))) return brainstormUpdate(request, env, +p[0]);
   if ((p = route('POST', '/api/brainstorms/:id/idees'))) return brainstormIdee(request, env, +p[0]);
   if ((p = route('POST', '/api/brainstorms/:id/votes'))) return brainstormVote(request, env, +p[0]);
+  if ((p = route('POST', '/api/brainstorms/:id/retenues'))) return brainstormRetenue(request, env, +p[0]);
 
   if (route('GET', '/api/gmo')) return gmoGet(request, env);
 
@@ -2035,6 +2041,7 @@ async function ensureHautesTables(env) {
          brainstorm_id INTEGER NOT NULL REFERENCES brainstorms(id) ON DELETE CASCADE,
          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
          body TEXT NOT NULL,
+         retenue INTEGER NOT NULL DEFAULT 0,
          created_at TEXT NOT NULL DEFAULT (datetime('now'))
        )`
     ),
@@ -2048,7 +2055,32 @@ async function ensureHautesTables(env) {
        )`
     ),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_votes_idee ON brainstorm_votes(idee_id, created_at)'),
+    // une branche peut naître de plusieurs passés : ses liens de nourriture
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS reflection_branch_links (
+         branch_id INTEGER NOT NULL REFERENCES reflection_branches(id) ON DELETE CASCADE,
+         source_id INTEGER NOT NULL REFERENCES reflection_branches(id) ON DELETE CASCADE,
+         PRIMARY KEY (branch_id, source_id)
+       )`
+    ),
+    // la conversation privée d'un carré : son histoire, tout ce qui s'y dit
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS carre_messages (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         carre_id INTEGER NOT NULL REFERENCES carres(id) ON DELETE CASCADE,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         body TEXT NOT NULL,
+         created_at TEXT NOT NULL DEFAULT (datetime('now'))
+       )`
+    ),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_carre_messages ON carre_messages(carre_id, id)'),
   ]);
+  // `retenue` est arrivée après la création de la table sur les bases déjà
+  // en service : on regarde avant d'ajouter, ALTER n'est pas idempotent.
+  const { results: cols } = await env.DB.prepare('PRAGMA table_info(brainstorm_idees)').all();
+  if (!(cols || []).some((c) => c.name === 'retenue')) {
+    await env.DB.prepare('ALTER TABLE brainstorm_idees ADD COLUMN retenue INTEGER NOT NULL DEFAULT 0').run();
+  }
   hautesTablesReady = true;
 }
 
@@ -2161,8 +2193,8 @@ async function arbresCreate(request, env) {
   return json({ ok: true, id: r.meta.last_row_id }, 201);
 }
 
-// L'arbre entier, branches comprises. `proprietaire` distingue le sien
-// (modifiable) de celui d'un membre de son carré (lecture seule).
+// L'arbre entier, branches et liens compris. `proprietaire` distingue le
+// sien (modifiable) de celui d'un membre de son carré (lecture seule).
 async function chargeArbre(env, id) {
   const tree = await env.DB.prepare(
     'SELECT id, user_id, kind, title, trunk, created_at, updated_at FROM reflection_trees WHERE id = ?1'
@@ -2171,7 +2203,12 @@ async function chargeArbre(env, id) {
   const { results } = await env.DB.prepare(
     'SELECT id, parent_id, body, url, created_at FROM reflection_branches WHERE tree_id = ?1 ORDER BY id'
   ).bind(id).all();
-  return { ...tree, branches: results || [] };
+  // les nourritures : une branche peut naître de plusieurs passés
+  const { results: liens } = await env.DB.prepare(
+    `SELECT l.branch_id, l.source_id FROM reflection_branch_links l
+       JOIN reflection_branches b ON b.id = l.branch_id WHERE b.tree_id = ?1`
+  ).bind(id).all();
+  return { ...tree, branches: results || [], liens: liens || [] };
 }
 
 async function arbresGet(request, env, id) {
@@ -2295,6 +2332,46 @@ async function branchesDelete(request, env, id) {
   return json({ ok: true });
 }
 
+/* Chaque présent est le futur de plusieurs passés : au-delà de sa branche
+   mère (sa place dans l'arbre), une branche peut être nourrie par d'autres.
+   Ces liens traversent l'arbre sans le déformer — l'arbre reste lisible,
+   les nourritures s'y ajoutent en chips. */
+
+async function lienCreate(request, env, brancheId) {
+  await ensureHautesTables(env);
+  const row = await brancheEtArbre(env, brancheId);
+  if (!row) return json({ error: 'Branche introuvable.' }, 404);
+  const { vu, refus } = await gateArbre(request, env, row.kind);
+  if (refus) return refus;
+  if (row.user_id !== vu.user.id) return json({ error: 'Cette branche n’est pas la vôtre.' }, 403);
+
+  const body = await readJson(request);
+  const sourceId = Number(body?.source_id);
+  if (!sourceId || sourceId === brancheId) return json({ error: 'Une branche ne se nourrit pas d’elle-même.' }, 400);
+  const source = await env.DB.prepare(
+    'SELECT id FROM reflection_branches WHERE id = ?1 AND tree_id = ?2'
+  ).bind(sourceId, row.tree_id).first();
+  if (!source) return json({ error: 'La branche source doit vivre dans le même arbre.' }, 404);
+
+  await env.DB.prepare(
+    'INSERT OR IGNORE INTO reflection_branch_links (branch_id, source_id) VALUES (?1, ?2)'
+  ).bind(brancheId, sourceId).run();
+  return json({ ok: true }, 201);
+}
+
+async function lienDelete(request, env, brancheId, sourceId) {
+  await ensureHautesTables(env);
+  const row = await brancheEtArbre(env, brancheId);
+  if (!row) return json({ error: 'Branche introuvable.' }, 404);
+  const { vu, refus } = await gateArbre(request, env, row.kind);
+  if (refus) return refus;
+  if (row.user_id !== vu.user.id) return json({ error: 'Cette branche n’est pas la vôtre.' }, 403);
+  await env.DB.prepare(
+    'DELETE FROM reflection_branch_links WHERE branch_id = ?1 AND source_id = ?2'
+  ).bind(brancheId, sourceId).run();
+  return json({ ok: true });
+}
+
 // La forêt vidéo d'un membre de son propre carré, en lecture : c'est la
 // matière du travail mutuel des As.
 async function videographieDuMembre(request, env, membreId) {
@@ -2351,7 +2428,17 @@ async function carreGet(request, env) {
   const reponse = { missions: MISSIONS_CARRE, roles: ROLES_CARRE, domaines: DOMAINES_CARRE, carre: null, ouverts: [] };
   if (vu.user) {
     const carre = await monCarre(env, vu.user.id);
-    if (carre) reponse.carre = { ...carre, membres: await membresDe(env, carre.id) };
+    if (carre) {
+      reponse.carre = { ...carre, membres: await membresDe(env, carre.id) };
+      // la vie du carré : les brainstorms qu'il a portés, du plus récent au
+      // plus ancien — son histoire publique, à côté de sa conversation privée
+      const { results: bs } = await env.DB.prepare(
+        `SELECT id, sujet, statut, plateforme, created_at,
+                (SELECT COUNT(*) FROM brainstorm_idees i WHERE i.brainstorm_id = brainstorms.id AND i.retenue = 1) AS retenues
+           FROM brainstorms WHERE carre_id = ?1 ORDER BY id DESC LIMIT 20`
+      ).bind(carre.id).all();
+      reponse.carre.brainstorms = bs || [];
+    }
   }
   if (!reponse.carre) {
     // les carrés où il reste une place, pour rejoindre plutôt que fonder
@@ -2416,6 +2503,86 @@ async function carreUpdateMoi(request, env) {
   await env.DB.prepare('UPDATE carre_membres SET role = ?1, domaine = ?2 WHERE user_id = ?3')
     .bind(role, domaine, vu.user.id).run();
   return json({ ok: true });
+}
+
+/* L'annuaire des As : tous ceux qui ont atteint l'échelon du carré, avec
+   leur carré s'ils en ont un — pour que les libres se trouvent et que les
+   carrés incomplets se voient. L'échelon d'un membre est déjà public sur son
+   profil : l'annuaire ne montre rien de plus, il rassemble.               */
+async function carreAnnuaire(request, env) {
+  const { refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
+  if (refus) return refus;
+  await ensureHautesTables(env);
+
+  // l'échelon se recalcule des signes trouvés — seule vérité, jamais figée
+  const { results } = await env.DB.prepare(
+    'SELECT user_id, riddle_id FROM riddle_progress WHERE solved_at IS NOT NULL'
+  ).all();
+  const parUser = new Map();
+  for (const r of results || []) {
+    if (!parUser.has(r.user_id)) parUser.set(r.user_id, new Set());
+    parUser.get(r.user_id).add(currentAnswerId(r.riddle_id));
+  }
+  const hauts = [...parUser.entries()]
+    .map(([id, solved]) => ({ id, echelon: echelonOf(solved) }))
+    .filter((u) => u.echelon >= ECHELON_CARRE);
+  if (!hauts.length) return json({ as: [] });
+
+  const marks = hauts.map((_, i) => `?${i + 1}`).join(',');
+  const users = (await env.DB.prepare(
+    `SELECT u.id, u.username, m.role, m.domaine, c.nom AS carre_nom
+       FROM users u
+       LEFT JOIN carre_membres m ON m.user_id = u.id
+       LEFT JOIN carres c ON c.id = m.carre_id
+      WHERE u.id IN (${marks})`
+  ).bind(...hauts.map((u) => u.id)).all()).results || [];
+
+  const echelonDe = new Map(hauts.map((u) => [u.id, u.echelon]));
+  const as = users
+    .map((u) => ({
+      username: u.username,
+      echelon: echelonDe.get(u.id),
+      carre: u.carre_nom || null,
+      role: u.role || null,
+      domaine: u.domaine || null,
+    }))
+    .sort((a, b) => b.echelon - a.echelon || a.username.localeCompare(b.username));
+  return json({ as });
+}
+
+/* La conversation du carré : privée, réservée à ses quatre As. C'est aussi
+   son histoire — tout ce qui s'y est dit reste, tant que le carré vit.    */
+async function carreChatList(request, env) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
+  if (refus) return refus;
+  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
+  await ensureHautesTables(env);
+  const carre = await monCarre(env, vu.user.id);
+  if (!carre) return json({ error: 'Vous n’avez pas encore de carré.' }, 404);
+  const { results } = await env.DB.prepare(
+    `SELECT m.id, m.body, m.created_at, u.username
+       FROM carre_messages m JOIN users u ON u.id = m.user_id
+      WHERE m.carre_id = ?1 ORDER BY m.id DESC LIMIT 100`
+  ).bind(carre.id).all();
+  return json({ messages: (results || []).reverse() });
+}
+
+async function carreChatPost(request, env) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
+  if (refus) return refus;
+  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
+  await ensureHautesTables(env);
+  const carre = await monCarre(env, vu.user.id);
+  if (!carre) return json({ error: 'Vous n’avez pas encore de carré.' }, 404);
+
+  const body = await readJson(request);
+  const texte = String(body?.body || '').trim();
+  if (!texte) return json({ error: 'Message vide.' }, 400);
+  if (texte.length > 2000) return json({ error: 'Message trop long (2000 caractères).' }, 400);
+  const r = await env.DB.prepare(
+    'INSERT INTO carre_messages (carre_id, user_id, body) VALUES (?1, ?2, ?3)'
+  ).bind(carre.id, vu.user.id, texte).run();
+  return json({ ok: true, id: r.meta.last_row_id }, 201);
 }
 
 async function carreLeave(request, env) {
@@ -2511,7 +2678,7 @@ async function brainstormGet(request, env, id) {
 
   const viewerId = vu.user ? vu.user.id : 0;
   const enAvant = (await env.DB.prepare(
-    `SELECT i.id, i.body, i.created_at, u.username,
+    `SELECT i.id, i.body, i.created_at, i.retenue, u.username,
             COUNT(v.user_id) AS votes,
             COALESCE(SUM(CASE
               WHEN (julianday('now') - julianday(v.created_at)) * 1440 <= 1 THEN 8
@@ -2529,18 +2696,54 @@ async function brainstormGet(request, env, id) {
   ).bind(id, viewerId).all()).results || [];
 
   const recentes = (await env.DB.prepare(
-    `SELECT i.id, i.body, i.created_at, u.username,
+    `SELECT i.id, i.body, i.created_at, i.retenue, u.username,
             (SELECT COUNT(*) FROM brainstorm_votes v WHERE v.idee_id = i.id) AS votes,
             EXISTS(SELECT 1 FROM brainstorm_votes v WHERE v.idee_id = i.id AND v.user_id = ?2) AS mon_vote
        FROM brainstorm_idees i JOIN users u ON u.id = i.user_id
       WHERE i.brainstorm_id = ?1 ORDER BY i.id DESC LIMIT 20`
   ).bind(id, viewerId).all()).results || [];
 
+  // la récolte : ce que le carré a retenu du live
+  const retenues = (await env.DB.prepare(
+    `SELECT i.id, i.body, i.created_at, i.retenue, u.username,
+            (SELECT COUNT(*) FROM brainstorm_votes v WHERE v.idee_id = i.id) AS votes,
+            EXISTS(SELECT 1 FROM brainstorm_votes v WHERE v.idee_id = i.id AND v.user_id = ?2) AS mon_vote
+       FROM brainstorm_idees i JOIN users u ON u.id = i.user_id
+      WHERE i.brainstorm_id = ?1 AND i.retenue = 1 ORDER BY votes DESC, i.id LIMIT 40`
+  ).bind(id, viewerId).all()).results || [];
+
   const duCarre = vu.user ? !!(await env.DB.prepare(
     'SELECT 1 AS oui FROM carre_membres WHERE user_id = ?1 AND carre_id = ?2'
   ).bind(vu.user.id, b.carre_id).first()) : false;
 
-  return json({ brainstorm: b, enAvant, recentes, duCarre });
+  return json({ brainstorm: b, enAvant, recentes, retenues, duCarre });
+}
+
+// Retenir une réflexion, ou la relâcher : la récolte du brainstorming,
+// choisie par le carré qui le porte pendant que la salle vote.
+async function brainstormRetenue(request, env, id) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_BRAINSTORM, 'brainstorm');
+  if (refus) return refus;
+  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
+  await ensureHautesTables(env);
+
+  const b = await env.DB.prepare('SELECT id, carre_id FROM brainstorms WHERE id = ?1').bind(id).first();
+  if (!b) return json({ error: 'Brainstorm introuvable.' }, 404);
+  const membre = await env.DB.prepare(
+    'SELECT 1 AS oui FROM carre_membres WHERE user_id = ?1 AND carre_id = ?2'
+  ).bind(vu.user.id, b.carre_id).first();
+  if (!membre && !vu.user.is_admin) return json({ error: 'Seul le carré qui le porte retient.' }, 403);
+
+  const body = await readJson(request);
+  const ideeId = Number(body?.idee_id);
+  const idee = await env.DB.prepare(
+    'SELECT id, retenue FROM brainstorm_idees WHERE id = ?1 AND brainstorm_id = ?2'
+  ).bind(ideeId, id).first();
+  if (!idee) return json({ error: 'Réflexion introuvable.' }, 404);
+
+  await env.DB.prepare('UPDATE brainstorm_idees SET retenue = ?1 WHERE id = ?2')
+    .bind(idee.retenue ? 0 : 1, ideeId).run();
+  return json({ ok: true, retenue: !idee.retenue });
 }
 
 async function brainstormUpdate(request, env, id) {

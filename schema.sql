@@ -333,6 +333,7 @@ CREATE TABLE IF NOT EXISTS brainstorm_idees (
   brainstorm_id INTEGER NOT NULL REFERENCES brainstorms(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   body TEXT NOT NULL,
+  retenue INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_idees_brainstorm ON brainstorm_idees(brainstorm_id, created_at);
@@ -344,3 +345,19 @@ CREATE TABLE IF NOT EXISTS brainstorm_votes (
   PRIMARY KEY (idee_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_votes_idee ON brainstorm_votes(idee_id, created_at);
+
+-- Les réseaux des pièces hautes (voir migrations/0014)
+CREATE TABLE IF NOT EXISTS reflection_branch_links (
+  branch_id INTEGER NOT NULL REFERENCES reflection_branches(id) ON DELETE CASCADE,
+  source_id INTEGER NOT NULL REFERENCES reflection_branches(id) ON DELETE CASCADE,
+  PRIMARY KEY (branch_id, source_id)
+);
+
+CREATE TABLE IF NOT EXISTS carre_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  carre_id INTEGER NOT NULL REFERENCES carres(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_carre_messages ON carre_messages(carre_id, id);

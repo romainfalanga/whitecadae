@@ -155,32 +155,48 @@ bloc titré.
 
 La **Conversation** (échelon 2) est unique et commune, mais chaque message
 porte l'**échelon minimal pour le lire**, choisi par son auteur entre 2 et son
-propre échelon : plus on monte, plus on entend de ce qui se dit. La page se
-relit toutes les 20 secondes quand l'onglet est visible.
+propre échelon : plus on monte, plus on entend de ce qui se dit. Un **filtre**
+permet de regarder la conversation autrement : tout ce qui m'est ouvert,
+seulement l'échelon N, à partir de N, ou **jusqu'à N — c'est voir la
+conversation exactement comme la voit un membre de l'échelon N**. Le filtre est
+client : le serveur a déjà envoyé tout ce qui est lisible, filtrer ne coûte
+aucune requête. La page se relit toutes les 20 secondes quand l'onglet est
+visible, et ne se redessine que si quelque chose a changé.
 
 **Pense Mieux** (échelon 3) est l'outil de réflexion : un sujet devient un
 **arbre** — un tronc, des branches emboîtées qui se font grandir — et
-l'ensemble de ses arbres, une forêt. La **Vidéographie** (échelon 4) est le
-même moteur, mais chaque branche est une **vidéo YouTube** (publique ou
-privée) : on y organise ce qu'on a extériorisé en vidéo. Les arbres de pensée
-restent à leur auteur ; les vidéographies se partagent **en lecture au sein de
-son carré**, puisque les As doivent les analyser mutuellement.
+l'ensemble de ses arbres, une forêt. Et parce que **chaque présent est le
+futur de plusieurs passés**, une branche peut être **nourrie** par d'autres
+branches du même arbre : des liens qui traversent l'arborescence sans la
+déformer, affichés en chips « ⇠ » qui mènent à leur source
+(`reflection_branch_links`). La **Vidéographie** (échelon 4) est le même
+moteur, liens compris, mais chaque branche est une **vidéo YouTube** (publique
+ou privée) : on y organise ce qu'on a extériorisé en vidéo. Les arbres de
+pensée restent à leur auteur ; les vidéographies se partagent **en lecture au
+sein de son carré**, puisque les As doivent les analyser mutuellement.
 
 Le **Carré d'As** (échelon 5) porte les missions des carrés et les outils pour
 les accomplir : fonder un carré ou rejoindre un carré incomplet, choisir sa
 nature (**infinisseur** ou **harmonisateur**) et sa connaissance fondamentale
 (**Psychologie, Univers, IA, Religions**), et voir d'un regard l'équilibre du
-carré — natures comptées, connaissances couvertes ou manquantes.
+carré — natures comptées, connaissances couvertes ou manquantes. S'y ajoutent
+**l'annuaire des As** (tous ceux qui ont atteint l'échelon, leur carré ou
+« libre », cherchables — c'est là qu'on se trouve pour se composer), la
+**conversation privée du carré** (réservée à ses As, c'est son histoire :
+tout ce qui s'y est dit reste) et la **vie du carré** (les arrivées, les
+brainstorms portés et leur récolte).
 
 Le **Brainstorm** (échelon 6) est la place des lives : un **carré complet**
 (quatre As) annonce un brainstorming sur YouTube, Twitch ou TikTok ; la salle
 propose des **réflexions** et **vote** ; le carré voit monter les plus
 soutenues du moment. Le classement pondère chaque vote par son âge (dernière
 minute ×8, cinq dernières ×4, dix dernières ×2, sinon ×1) et se recalcule à
-la lecture — une seule requête SQL, rien qui tourne en fond. Le direct
-fonctionne par **relecture périodique** (12 s, onglet visible) : pas de
-serveur temps réel, pas de connexion tenue ouverte, un brainstorm à mille
-personnes coûte des requêtes ordinaires.
+la lecture — une seule requête SQL, rien qui tourne en fond. Pendant le live,
+le carré peut **retenir** des réflexions : c'est la **récolte** du
+brainstorming, affichée en tête, conservée après le direct, et comptée dans la
+vie du carré. Le direct fonctionne par **relecture périodique** (12 s, onglet
+visible) : pas de serveur temps réel, pas de connexion tenue ouverte, un
+brainstorm à mille personnes coûte des requêtes ordinaires.
 
 **Game Master Orange** (échelon 7) expose les **7 mécanismes orange** — ce
 qu'on attend d'un joueur arrivé au sommet — avec, quand un mécanisme a son
