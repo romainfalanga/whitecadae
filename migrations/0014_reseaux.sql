@@ -19,5 +19,5 @@ CREATE TABLE IF NOT EXISTS carre_messages (
 CREATE INDEX IF NOT EXISTS idx_carre_messages ON carre_messages(carre_id, id);
 
 -- `retenue` sur brainstorm_idees : le Worker l'ajoute de lui-même si la
--- colonne manque (ALTER guidé par PRAGMA) — ne pas la doubler ici, un ALTER
+-- colonne manque (ALTER guidé par PRAGMA) : ne pas la doubler ici, un ALTER
 -- échouerait sur une base où il est déjà passé.

@@ -1,4 +1,4 @@
--- Migration 0004 — interprétations d'ensemble avec connexions entre blocs
+-- Migration 0004 : interprétations d'ensemble avec connexions entre blocs
 -- (appliquée le 2026-08-05 ; le schéma complet à jour reste schema.sql)
 
 CREATE TABLE IF NOT EXISTS essays (

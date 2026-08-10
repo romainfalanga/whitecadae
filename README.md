@@ -95,6 +95,19 @@ champ, et les réponses s'y ajoutent une à une, dans n'importe quel ordre
 même leur libellé quand celui-ci est la réponse du précédent. Un refus ne
 dit rien : la carte tressaille, rougit et vibre.
 
+**Un signe peut se tenir partiellement.** Chaque réponse est découpée en
+**parties** ordonnées (`33 ans` : « 33 » puis « ans » ; `12 arc-anges` :
+« 12 », « arc », « anges »). Proposer une partie seule la fait apparaître
+**en vert, à sa place**, avec un « ? » pour chaque trou : `33 ?`, `? ans`,
+`12 ? anges`. Le serveur n'envoie jamais le texte d'une partie manquante, ni
+leur nombre : un trou contigu ne vaut qu'un seul « ? ». Les écritures
+admises sont strictes : la bonne façon d'écrire le signe, ses chiffres en
+lettres, son singulier ou son pluriel quand les deux se disent, et rien
+d'autre : ni article, ni mot en trop. Une partie déjà verte re-proposée
+compte comme un essai faux. Chaque partie vit sur sa propre ligne de
+`riddle_progress` (`n-e-2.p0`) ; la réponse entière garde la sienne, et
+l'échelon ne compte que les réponses entières.
+
 Le tout premier bloc est **muet** (`silent`) : pas de libellé, et le serveur
 ne dit pas non plus combien de signes il cache : il envoie seulement
 `open`, qui suffit à savoir s'il faut encore afficher le champ. Le nombre
@@ -203,19 +216,47 @@ ou privée) : on y organise ce qu'on a extériorisé en vidéo. Les arbres de
 pensée restent à leur auteur ; les vidéographies se partagent **en lecture au
 sein de son carré**, puisque les As doivent les analyser mutuellement.
 
-Le **Carré d'As** (échelon 5) porte les missions des carrés et les outils pour
-les accomplir : fonder un carré ou rejoindre un carré incomplet, choisir sa
-nature (**infinisseur** ou **harmonisateur**) et sa connaissance fondamentale
-(**Psychologie, Univers, IA, Religions**), et voir d'un regard l'équilibre du
-carré : natures comptées, connaissances couvertes ou manquantes. S'y ajoutent
-**l'annuaire des As** (tous ceux qui ont atteint l'échelon, leur carré ou
-« libre », cherchables : c'est là qu'on se trouve pour se composer), la
-**conversation privée du carré** (réservée à ses As, c'est son histoire :
-tout ce qui s'y est dit reste) et la **vie du carré** (les arrivées, les
-brainstorms portés et leur récolte).
+Le **Carré d'As** (échelon 5) est un réseau social des réflexions. Un As peut
+vivre dans **plusieurs carrés** (sept au plus) : des groupes de réflexion qui
+se complètent. Chaque carré de quatre équilibre deux natures
+(**infinisseur**, **harmonisateur**) et quatre connaissances fondamentales
+(**Philosophie, IA, Religions, Univers**), choisies par carré. Sa page a
+quatre onglets :
+
+- **Le carré** : les As et l'équilibre, le **cap** (ce que le carré vise :
+  sa meilleure version, sa société harmonieuse, ses modèles d'univers), le
+  **salon Discord** où il s'organise, et **le live du carré** : l'As au
+  meilleur matériel tient l'antenne, les quatre se retrouvent au salon, et
+  l'hôte retransmet leurs quatre voix en direct.
+- **Notes** : l'évaluation mutuelle, domaine par domaine, de 1 à 10. Le
+  **meilleur du domaine vaut 10** et toutes les autres notes se lisent par
+  rapport à lui ; tout le carré voit toutes les notes (la transparence est
+  la discussion) et rien n'est figé : on affine (`carre_notes`).
+- **Conversation** : privée, réservée à ses As, par carré.
+- **Relatif** : l'IA du carré, bâtie sur Pense Mieux (voir plus bas).
+
+S'y ajoutent le **salon de recrutement** (les As s'annoncent, même déjà en
+carré ; les carrés où il reste une place invitent ; on n'entre que voulu des
+deux côtés, et l'annonce reste au salon pour d'autres carrés encore) et les
+**missions**. Un carré qui n'est pas le sien ne montre que sa façade : le
+nom, les As, les places ; jamais son cap, son salon, ses notes ni sa
+conversation.
+
+**Le relatif** parle d'une voix : celle d'un As, ou celle du carré entier.
+La voix d'un As est bâtie sur ses **arbres de pensée offerts** à ce carré
+(consentement explicite, arbre par arbre : rien de privé ne nourrit le
+relatif sans ce geste) et ses vidéographies, déjà partagées au carré. La
+voix du carré ajoute le cap et la récolte de ses brainstorms. Le **portrait**
+de chaque voix se copie d'un bouton, pour la porter à n'importe quelle IA ;
+sur place, le relatif répond par **Workers AI** (binding `AI` dans
+`wrangler.jsonc`) et garde ses échanges (`carre_relatif_messages`). Sans le
+binding, l'API répond 503 et le portrait reste : rien ne casse.
 
 Le **Brainstorm** (échelon 6) est la place des lives : un **carré complet**
-(quatre As) annonce un brainstorming sur YouTube, Twitch ou TikTok ; la salle
+(quatre As) annonce un brainstorming sur YouTube, Twitch ou TikTok, en
+choisissant lequel de ses carrés le porte et lequel de ses As est **l'hôte**
+(celui qui tient l'antenne). Les As du carré voient sur la page du live le
+lien de leur **salon Discord** ; les autres ne le voient pas. La salle
 propose des **réflexions** et **vote** ; le carré voit monter les plus
 soutenues du moment. Le classement pondère chaque vote par son âge (dernière
 minute ×8, cinq dernières ×4, dix dernières ×2, sinon ×1) et se recalcule à

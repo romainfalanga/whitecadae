@@ -1,4 +1,4 @@
--- Migration 0011 — les références deviennent des contributions à part entière
+-- Migration 0011 : les références deviennent des contributions à part entière
 --
 -- Jusqu'ici une référence était accrochée à une interprétation
 -- (annotation_references.annotation_id NOT NULL) : impossible d'en poser une

@@ -1172,6 +1172,17 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 }
 .enigme-answer { color: var(--accent); font-size: 1.2rem; }
 
+/* Un signe tenu partiellement : le trouvé en vert, le reste en « ? ». La
+   ligne garde la police des réponses : c'est la même chose, en devenir. */
+/* pas le flex de .enigme-line : les séparateurs sont dans le texte même */
+.enigme-partiel { display: block; white-space: pre-wrap; }
+.enigme-partiel .seg-ok { color: #79c98d; font-size: 1.2rem; }
+.enigme-partiel .seg-q {
+  color: var(--text-dim);
+  font-size: 1.2rem;
+  opacity: 0.75;
+}
+
 .enigme-form { display: flex; align-items: center; gap: 0.5rem; }
 .enigme-input {
   flex: 1;
@@ -1513,6 +1524,113 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .carres-ouverts li:last-child { border-bottom: none; }
 .carres-ouverts li span { color: var(--text-dim); font-size: 0.85rem; }
 .carres-ouverts li button { margin-left: auto; }
+/* le réseau des carrés : cartes, onglets, cap, notes, relatif */
+.carres-liste {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  margin: 1rem 0 1.6rem;
+}
+.carre-carte {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: var(--bg-card);
+  border: 1px solid rgba(216, 192, 122, 0.3);
+  border-radius: 14px;
+  padding: 1rem 1.2rem;
+  color: inherit;
+  text-decoration: none;
+}
+.carre-carte:hover { border-color: var(--accent); }
+.carre-carte h2 { margin: 0; font-size: 1.15rem; }
+.carre-carte-membres { color: var(--text-dim); font-size: 0.88rem; }
+.carre-carte-places { color: var(--accent); }
+
+.carre-onglets {
+  display: flex;
+  gap: 0.2rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  margin: 0.4rem 0 1.2rem;
+}
+.co-tab {
+  padding: 0.5rem 0.9rem;
+  color: var(--text-dim);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+.co-tab.actif { color: var(--accent); border-bottom-color: var(--accent); }
+.co-tab:hover { color: var(--text); }
+
+.carre-cap, .carre-live { margin: 1.6rem 0; max-width: 46rem; }
+.carre-cap h2, .carre-live h2 { font-size: 1.1rem; }
+.carre-cap textarea { width: 100%; }
+.cap-ligne { display: flex; gap: 0.6rem; margin-top: 0.5rem; flex-wrap: wrap; }
+.cap-ligne input { flex: 1; min-width: 220px; }
+.carre-salon { margin-top: 0.5rem; }
+.carre-live-note { color: var(--text-dim); font-size: 0.9rem; }
+
+.notes-regle { color: var(--text-dim); max-width: 42rem; }
+.notes-grille {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  margin: 1rem 0;
+}
+.note-domaine {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.8rem 1rem;
+}
+.note-domaine h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: var(--accent);
+  font-family: var(--serif);
+  font-weight: normal;
+}
+.note-ligne {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.note-ligne:last-child { border-bottom: none; }
+.note-nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.note-moy { font-variant-numeric: tabular-nums; color: var(--text-dim); min-width: 2rem; text-align: right; }
+.note-meilleur .note-moy { color: var(--accent); }
+select.note-saisie { width: auto; padding: 0.3rem 0.4rem; }
+
+.relatif-voix { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.8rem 0; }
+.voix-chip {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-dim);
+  border-radius: 99px;
+  padding: 0.35rem 0.9rem;
+  cursor: pointer;
+}
+.voix-chip.actif { border-color: var(--accent); color: var(--accent); }
+.relatif-dort { color: var(--text-dim); font-size: 0.9rem; }
+.relatif-fil { display: flex; flex-direction: column; gap: 0.8rem; margin: 1rem 0; max-width: 46rem; }
+.relatif-echange { border-left: 2px solid var(--border); padding-left: 0.9rem; }
+.relatif-question { color: var(--text-dim); font-size: 0.92rem; }
+.relatif-qui { color: var(--accent); margin-right: 0.4rem; font-size: 0.85rem; }
+.relatif-reponse { font-family: var(--serif); white-space: pre-wrap; }
+.relatif-form { max-width: 46rem; }
+.relatif-form textarea { width: 100%; }
+.relatif-actions { display: flex; gap: 0.8rem; align-items: center; margin-top: 0.5rem; }
+.relatif-nourrir { margin: 1.6rem 0; max-width: 46rem; }
+.relatif-nourrir summary { cursor: pointer; color: var(--accent); }
+.relatif-note { color: var(--text-dim); font-size: 0.88rem; }
+.source-ligne { display: flex; gap: 0.5rem; align-items: center; padding: 0.25rem 0; }
+.relatif-nourrir button { margin-top: 0.6rem; }
+.recrut-depuis { margin: 0.8rem 0; }
+.recrut-depuis select { width: auto; }
+
 .missions { max-width: 46rem; }
 .mission-bloc { margin-bottom: 1.4rem; }
 .mission-bloc h3 { color: var(--accent); font-family: var(--serif); font-size: 1.1rem; font-weight: normal; }

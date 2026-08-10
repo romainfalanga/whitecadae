@@ -1,4 +1,4 @@
--- Migration 0003 — références jointes aux interprétations
+-- Migration 0003 : références jointes aux interprétations
 -- (appliquée le 2026-08-05 ; le schéma complet à jour reste schema.sql)
 
 CREATE TABLE IF NOT EXISTS annotation_references (

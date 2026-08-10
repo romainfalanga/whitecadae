@@ -1,4 +1,4 @@
--- Migration 0005 — passages multi-phrases et références internes
+-- Migration 0005 : passages multi-phrases et références internes
 -- (appliquée le 2026-08-05 ; le schéma complet à jour reste schema.sql)
 
 -- Une interprétation 'passage' va de (line_id, word_start) à (end_line_id, word_end).

@@ -2,7 +2,7 @@
 
 import {
   getNode, isLocked, matchAnswer, buildState, currentAnswerId, echelonOf, accessOf,
-  delaiEssaiMs, enigmesTrouvees,
+  delaiEssaiMs, enigmesTrouvees, progresOf,
   ECHELON_CONVERSATION, ECHELON_PENSE_MIEUX, ECHELON_VIDEOGRAPHIE,
   ECHELON_CARRE, ECHELON_BRAINSTORM, ECHELON_GMO,
 } from './enigmas57.js';
@@ -137,20 +137,27 @@ async function handleApi(request, env, url) {
   if ((p = route('DELETE', '/api/branches/:id/liens/:source'))) return lienDelete(request, env, +p[0], +p[1]);
   if ((p = route('GET', '/api/videographie/membre/:id'))) return videographieDuMembre(request, env, +p[0]);
 
+  // les littéraux d'abord, la page d'un carré (:id) ensuite
   if (route('GET', '/api/carre')) return carreGet(request, env);
   if (route('POST', '/api/carre')) return carreCreate(request, env);
   if (route('GET', '/api/carre/as')) return carreAnnuaire(request, env);
-  if (route('GET', '/api/carre/conversation')) return carreChatList(request, env);
-  if (route('POST', '/api/carre/conversation')) return carreChatPost(request, env);
   if (route('GET', '/api/carre/recrutement')) return carreRecrutement(request, env);
   if (route('PUT', '/api/carre/annonce')) return carreAnnoncePut(request, env);
   if (route('DELETE', '/api/carre/annonce')) return carreAnnonceDelete(request, env);
   if (route('POST', '/api/carre/invitations')) return carreInvite(request, env);
   if ((p = route('POST', '/api/carre/invitations/:id/accepte'))) return carreInviteAccepte(request, env, +p[0]);
   if ((p = route('POST', '/api/carre/invitations/:id/refuse'))) return carreInviteRefuse(request, env, +p[0]);
+  if ((p = route('GET', '/api/carre/:id'))) return carreDetail(request, env, +p[0]);
+  if ((p = route('PUT', '/api/carre/:id'))) return carreUpdate(request, env, +p[0]);
+  if ((p = route('PUT', '/api/carre/:id/moi'))) return carreUpdateMoi(request, env, +p[0]);
   if ((p = route('POST', '/api/carre/:id/rejoindre'))) return carreJoin(request, env, +p[0]);
-  if (route('PUT', '/api/carre/moi')) return carreUpdateMoi(request, env);
-  if (route('POST', '/api/carre/quitter')) return carreLeave(request, env);
+  if ((p = route('POST', '/api/carre/:id/quitter'))) return carreLeave(request, env, +p[0]);
+  if ((p = route('GET', '/api/carre/:id/conversation'))) return carreChatList(request, env, +p[0]);
+  if ((p = route('POST', '/api/carre/:id/conversation'))) return carreChatPost(request, env, +p[0]);
+  if ((p = route('PUT', '/api/carre/:id/notes'))) return carreNotes(request, env, +p[0]);
+  if ((p = route('GET', '/api/carre/:id/relatif'))) return relatifGet(request, env, +p[0]);
+  if ((p = route('POST', '/api/carre/:id/relatif'))) return relatifPost(request, env, +p[0]);
+  if ((p = route('PUT', '/api/carre/:id/relatif/sources'))) return relatifSources(request, env, +p[0]);
 
   if (route('GET', '/api/brainstorms')) return brainstormsList(request, env);
   if (route('POST', '/api/brainstorms')) return brainstormsCreate(request, env);
@@ -341,7 +348,7 @@ async function viewerAccess(request, env) {
     return { user, echelon: Infinity, solved: new Set(), access: accessOf(Infinity) };
   }
   const rows = await riddleRows(env, user.id);
-  const solved = new Set(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
+  const { solved } = progresOf(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
   const echelon = echelonOf(solved);
   return { user, echelon, solved, access: accessOf(echelon) };
 }
@@ -1015,7 +1022,7 @@ async function getProfile(env, request, username) {
 
   // La part publique : l'échelon, et les énigmes trouvées telles que celui
   // qui regarde a le droit de les nommer.
-  const solvedCible = new Set(
+  const { solved: solvedCible } = progresOf(
     (await riddleRows(env, user.id)).filter((r) => r.solved_at).map((r) => r.riddle_id)
   );
   const vu = await viewerAccess(request, env);
@@ -1793,7 +1800,7 @@ async function signsGuess(request, env) {
 
   // Un essai à la fois, juste ou faux : proposer, c'est déjà jouer.
   const rows = await riddleRows(env, user.id);
-  const solved = new Set(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
+  const { solved, parties } = progresOf(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
   const echelon = echelonOf(solved);
 
   // On ne fait pas payer un essai sur un élément encore verrouillé : il ne
@@ -1809,17 +1816,29 @@ async function signsGuess(request, env) {
     return json({ error: 'Trop tôt.', attenteMs: await attenteRestante(env, user.id, echelon) }, 429);
   }
 
-  const hit = matchAnswer(node, answer, solved);
+  const hit = matchAnswer(node, answer, solved, parties);
   if (!hit) return json({ ok: false, id: node.id, attenteMs: delaiEssaiMs(echelon) });
 
-  await env.DB.prepare(
+  // La prise s'écrit partie par partie (lignes `id.pN`) ; la réponse entière
+  // s'écrit aussi sous son propre identifiant dès qu'elle est complète.
+  const lignes = [];
+  const reponse = node.answers.find((a) => a.id === hit.id);
+  for (let i = 0; i < reponse.parties.length; i++) {
+    if (hit.masque & (1 << i)) lignes.push(`${hit.id}.p${i}`);
+  }
+  if (hit.complet) lignes.push(hit.id);
+  const upsert = env.DB.prepare(
     `INSERT INTO riddle_progress (user_id, riddle_id, solved_at)
      VALUES (?1, ?2, datetime('now'))
      ON CONFLICT(user_id, riddle_id) DO UPDATE
        SET solved_at = COALESCE(solved_at, datetime('now')), updated_at = datetime('now')`
-  ).bind(user.id, hit).run();
+  );
+  await env.DB.batch(lignes.map((id) => upsert.bind(user.id, id)));
 
-  return json({ ok: true, id: node.id, state: await riddleState(env, user.id) });
+  return json({
+    ok: true, id: node.id, partiel: !hit.complet,
+    state: await riddleState(env, user.id),
+  });
 }
 
 // Plus proposé dans l'interface, mais conservé : c'est le seul moyen de
@@ -2051,13 +2070,15 @@ async function ensureHautesTables(env) {
          created_at TEXT NOT NULL DEFAULT (datetime('now'))
        )`
     ),
+    // un As peut appartenir à plusieurs carrés : la clé porte le couple
     env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS carre_membres (
-         user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
          carre_id INTEGER NOT NULL REFERENCES carres(id) ON DELETE CASCADE,
          role TEXT,
          domaine TEXT,
-         joined_at TEXT NOT NULL DEFAULT (datetime('now'))
+         joined_at TEXT NOT NULL DEFAULT (datetime('now')),
+         PRIMARY KEY (carre_id, user_id)
        )`
     ),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_carre_membres ON carre_membres(carre_id)'),
@@ -2136,6 +2157,41 @@ async function ensureHautesTables(env) {
          UNIQUE (carre_id, user_id)
        )`
     ),
+    // l'évaluation mutuelle : dans chaque domaine, le meilleur du carré vaut
+    // 10 et les autres notes se lisent par rapport à lui ; jamais figées
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS carre_notes (
+         carre_id INTEGER NOT NULL REFERENCES carres(id) ON DELETE CASCADE,
+         rateur_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         cible_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         domaine TEXT NOT NULL,
+         note INTEGER NOT NULL CHECK (note BETWEEN 1 AND 10),
+         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+         PRIMARY KEY (carre_id, rateur_id, cible_id, domaine)
+       )`
+    ),
+    // le relatif du carré : ses échanges, et les arbres de pensée que chaque
+    // As a choisi de lui offrir (consentement explicite, arbre par arbre)
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS carre_relatif_messages (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         carre_id INTEGER NOT NULL REFERENCES carres(id) ON DELETE CASCADE,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         voix TEXT NOT NULL,
+         question TEXT NOT NULL,
+         reponse TEXT NOT NULL,
+         created_at TEXT NOT NULL DEFAULT (datetime('now'))
+       )`
+    ),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_relatif_carre ON carre_relatif_messages(carre_id, id)'),
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS carre_relatif_sources (
+         carre_id INTEGER NOT NULL REFERENCES carres(id) ON DELETE CASCADE,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         tree_id INTEGER NOT NULL REFERENCES reflection_trees(id) ON DELETE CASCADE,
+         PRIMARY KEY (carre_id, user_id, tree_id)
+       )`
+    ),
   ]);
   // `retenue` est arrivée après la création de la table sur les bases déjà
   // en service : on regarde avant d'ajouter, ALTER n'est pas idempotent.
@@ -2143,6 +2199,54 @@ async function ensureHautesTables(env) {
   if (!(cols || []).some((c) => c.name === 'retenue')) {
     await env.DB.prepare('ALTER TABLE brainstorm_idees ADD COLUMN retenue INTEGER NOT NULL DEFAULT 0').run();
   }
+
+  // Le carré est devenu pluriel : sur une base d'avant, carre_membres a sa
+  // clé primaire sur user_id seul (un carré par As). On reconstruit la table
+  // avec la clé (carre_id, user_id) en gardant les rangs existants.
+  const { results: mcols } = await env.DB.prepare('PRAGMA table_info(carre_membres)').all();
+  const pk = (mcols || []).filter((c) => c.pk > 0).map((c) => c.name);
+  if (pk.length && !pk.includes('carre_id')) {
+    await env.DB.batch([
+      env.DB.prepare(
+        `CREATE TABLE carre_membres_v2 (
+           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+           carre_id INTEGER NOT NULL REFERENCES carres(id) ON DELETE CASCADE,
+           role TEXT,
+           domaine TEXT,
+           joined_at TEXT NOT NULL DEFAULT (datetime('now')),
+           PRIMARY KEY (carre_id, user_id)
+         )`
+      ),
+      env.DB.prepare(
+        'INSERT INTO carre_membres_v2 (user_id, carre_id, role, domaine, joined_at) SELECT user_id, carre_id, role, domaine, joined_at FROM carre_membres'
+      ),
+      env.DB.prepare('DROP TABLE carre_membres'),
+      env.DB.prepare('ALTER TABLE carre_membres_v2 RENAME TO carre_membres'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_carre_membres ON carre_membres(carre_id)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_carre_membres_user ON carre_membres(user_id)'),
+    ]);
+  }
+
+  // colonnes arrivées avec le carré pluriel : le cap et le salon du carré,
+  // l'hôte d'un brainstorm (l'As qui tient l'antenne)
+  const { results: ccols } = await env.DB.prepare('PRAGMA table_info(carres)').all();
+  if (!(ccols || []).some((c) => c.name === 'cap')) {
+    await env.DB.prepare("ALTER TABLE carres ADD COLUMN cap TEXT NOT NULL DEFAULT ''").run();
+  }
+  if (!(ccols || []).some((c) => c.name === 'discord_url')) {
+    await env.DB.prepare("ALTER TABLE carres ADD COLUMN discord_url TEXT NOT NULL DEFAULT ''").run();
+  }
+  const { results: bcols } = await env.DB.prepare('PRAGMA table_info(brainstorms)').all();
+  if (!(bcols || []).some((c) => c.name === 'hote_user_id')) {
+    await env.DB.prepare('ALTER TABLE brainstorms ADD COLUMN hote_user_id INTEGER').run();
+  }
+
+  // la Psychologie est devenue la Philosophie parmi les quatre connaissances
+  await env.DB.batch([
+    env.DB.prepare("UPDATE carre_membres SET domaine = 'Philosophie' WHERE domaine = 'Psychologie'"),
+    env.DB.prepare("UPDATE carre_annonces SET domaine = 'Philosophie' WHERE domaine = 'Psychologie'"),
+  ]);
+
   hautesTablesReady = true;
 }
 
@@ -2490,16 +2594,29 @@ async function videographieDuMembre(request, env, membreId) {
 }
 
 /* --------------------------------------------- le carré d'as (échelon 5)
-   Quatre As, un équilibre : infinisseurs et harmonisateurs d'un côté, les
-   quatre connaissances fondamentales de l'autre. On crée un carré ou on en
-   rejoint un qui a encore une place ; chacun règle son rôle et sa
-   connaissance, et la page montre ce qui manque à l'équilibre.            */
+   Un réseau de carrés. Quatre As par carré, et un As dans plusieurs carrés
+   s'il le veut : des groupes de réflexion qui se complètent. Chaque carré
+   équilibre deux natures (infinisseur, harmonisateur) et quatre
+   connaissances (Philosophie, IA, Religions, Univers), s'évalue domaine par
+   domaine, tient un cap, un salon, sa conversation, ses brainstorms et son
+   relatif.                                                               */
 
-async function monCarre(env, userId) {
+const MAX_CARRES_PAR_AS = 7;
+
+async function mesCarres(env, userId) {
+  const { results } = await env.DB.prepare(
+    `SELECT c.id, c.nom, c.cap, c.discord_url, c.created_at FROM carres c
+       JOIN carre_membres m ON m.carre_id = c.id
+      WHERE m.user_id = ?1 ORDER BY m.joined_at`
+  ).bind(userId).all();
+  return results || [];
+}
+
+async function monAppartenance(env, carreId, userId) {
+  if (!Number.isFinite(carreId)) return null;
   return env.DB.prepare(
-    `SELECT c.id, c.nom, c.created_at FROM carres c
-       JOIN carre_membres m ON m.carre_id = c.id WHERE m.user_id = ?1`
-  ).bind(userId).first();
+    'SELECT user_id, carre_id, role, domaine FROM carre_membres WHERE carre_id = ?1 AND user_id = ?2'
+  ).bind(carreId, userId).first();
 }
 
 async function membresDe(env, carreId) {
@@ -2521,44 +2638,53 @@ async function memeCarre(env, a, b) {
   return !!row;
 }
 
+// la garde commune des gestes de carré : l'échelon, un compte, les tables
+async function gateCarreUser(request, env) {
+  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
+  if (refus) return { refus };
+  if (!vu.user) return { refus: json({ error: 'Connexion requise.' }, 401) };
+  await ensureHautesTables(env);
+  return { vu };
+}
+
+/* Le hub : mes carrés, ceux où il reste une place, l'appel du salon. */
 async function carreGet(request, env) {
   const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
   if (refus) return refus;
   await ensureHautesTables(env);
 
-  const reponse = { missions: MISSIONS_CARRE, roles: ROLES_CARRE, domaines: DOMAINES_CARRE, carre: null, ouverts: [] };
+  const reponse = {
+    missions: MISSIONS_CARRE, roles: ROLES_CARRE, domaines: DOMAINES_CARRE,
+    carres: [], ouverts: [], invitations: 0,
+  };
   if (vu.user) {
-    const carre = await monCarre(env, vu.user.id);
-    if (carre) {
-      reponse.carre = { ...carre, membres: await membresDe(env, carre.id) };
-      // la vie du carré : les brainstorms qu'il a portés, du plus récent au
-      // plus ancien : son histoire publique, à côté de sa conversation privée
-      const { results: bs } = await env.DB.prepare(
-        `SELECT id, sujet, statut, plateforme, created_at,
-                (SELECT COUNT(*) FROM brainstorm_idees i WHERE i.brainstorm_id = brainstorms.id AND i.retenue = 1) AS retenues
-           FROM brainstorms WHERE carre_id = ?1 ORDER BY id DESC LIMIT 20`
-      ).bind(carre.id).all();
-      reponse.carre.brainstorms = bs || [];
-    }
+    const carres = await mesCarres(env, vu.user.id);
+    for (const c of carres) c.membres = await membresDe(env, c.id);
+    reponse.carres = carres;
+    const inv = await env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM carre_invitations WHERE user_id = ?1'
+    ).bind(vu.user.id).first();
+    reponse.invitations = inv?.n || 0;
   }
-  if (!reponse.carre) {
-    // les carrés où il reste une place, pour rejoindre plutôt que fonder
-    const { results } = await env.DB.prepare(
-      `SELECT c.id, c.nom, COUNT(m.user_id) AS membres FROM carres c
-         LEFT JOIN carre_membres m ON m.carre_id = c.id
-        GROUP BY c.id HAVING membres < 4 ORDER BY c.created_at DESC LIMIT 25`
-    ).all();
-    reponse.ouverts = results || [];
-  }
+  // les carrés où il reste une place, hors les miens : pour en rejoindre un
+  const moi = vu.user ? vu.user.id : 0;
+  const { results } = await env.DB.prepare(
+    `SELECT c.id, c.nom, COUNT(m.user_id) AS membres FROM carres c
+       LEFT JOIN carre_membres m ON m.carre_id = c.id
+      WHERE c.id NOT IN (SELECT carre_id FROM carre_membres WHERE user_id = ?1)
+      GROUP BY c.id HAVING membres < 4 ORDER BY c.created_at DESC LIMIT 25`
+  ).bind(moi).all();
+  reponse.ouverts = results || [];
   return json(reponse);
 }
 
 async function carreCreate(request, env) {
-  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
+  const { vu, refus } = await gateCarreUser(request, env);
   if (refus) return refus;
-  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
-  await ensureHautesTables(env);
-  if (await monCarre(env, vu.user.id)) return json({ error: 'Vous avez déjà un carré.' }, 409);
+  const dejas = await mesCarres(env, vu.user.id);
+  if (dejas.length >= MAX_CARRES_PAR_AS) {
+    return json({ error: `${MAX_CARRES_PAR_AS} carrés au plus par As.` }, 409);
+  }
 
   const body = await readJson(request);
   const nom = String(body?.nom || '').trim();
@@ -2571,14 +2697,14 @@ async function carreCreate(request, env) {
 }
 
 async function carreJoin(request, env, carreId) {
-  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
+  const { vu, refus } = await gateCarreUser(request, env);
   if (refus) return refus;
-  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
-  await ensureHautesTables(env);
-  if (await monCarre(env, vu.user.id)) return json({ error: 'Vous avez déjà un carré.' }, 409);
-
+  if ((await mesCarres(env, vu.user.id)).length >= MAX_CARRES_PAR_AS) {
+    return json({ error: `${MAX_CARRES_PAR_AS} carrés au plus par As.` }, 409);
+  }
   const carre = await env.DB.prepare('SELECT id FROM carres WHERE id = ?1').bind(carreId).first();
   if (!carre) return json({ error: 'Carré introuvable.' }, 404);
+  if (await monAppartenance(env, carreId, vu.user.id)) return json({ error: 'Vous y êtes déjà.' }, 409);
   const membres = await membresDe(env, carreId);
   if (membres.length >= 4) return json({ error: 'Ce carré est complet.' }, 409);
 
@@ -2587,13 +2713,88 @@ async function carreJoin(request, env, carreId) {
   return json({ ok: true });
 }
 
-async function carreUpdateMoi(request, env) {
+/* La page d'un carré. Membre : tout. Un autre As de l'échelon 5 : la façade
+   seulement : le nom, les As, les places : rien que l'annuaire ne montrait
+   déjà. */
+async function carreDetail(request, env, carreId) {
   const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
   if (refus) return refus;
-  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
   await ensureHautesTables(env);
-  const carre = await monCarre(env, vu.user.id);
-  if (!carre) return json({ error: 'Vous n’avez pas encore de carré.' }, 404);
+  if (!Number.isFinite(carreId)) return json({ error: 'Carré introuvable.' }, 404);
+  const carre = await env.DB.prepare(
+    'SELECT id, nom, cap, discord_url, created_at FROM carres WHERE id = ?1'
+  ).bind(carreId).first();
+  if (!carre) return json({ error: 'Carré introuvable.' }, 404);
+  const membres = await membresDe(env, carreId);
+  const moi = vu.user ? await monAppartenance(env, carreId, vu.user.id) : null;
+
+  if (!moi) {
+    return json({
+      publique: true,
+      roles: ROLES_CARRE,
+      domaines: DOMAINES_CARRE,
+      carre: { id: carre.id, nom: carre.nom },
+      membres: membres.map((m) => ({ user_id: m.user_id, username: m.username, role: m.role, domaine: m.domaine })),
+      places: 4 - membres.length,
+    });
+  }
+
+  const { results: notes } = await env.DB.prepare(
+    'SELECT rateur_id, cible_id, domaine, note FROM carre_notes WHERE carre_id = ?1'
+  ).bind(carreId).all();
+  const { results: bs } = await env.DB.prepare(
+    `SELECT b.id, b.sujet, b.statut, b.plateforme, b.created_at, u.username AS hote_username,
+            (SELECT COUNT(*) FROM brainstorm_idees i WHERE i.brainstorm_id = b.id AND i.retenue = 1) AS retenues
+       FROM brainstorms b LEFT JOIN users u ON u.id = b.hote_user_id
+      WHERE b.carre_id = ?1 ORDER BY b.id DESC LIMIT 20`
+  ).bind(carreId).all();
+
+  return json({
+    publique: false,
+    roles: ROLES_CARRE,
+    domaines: DOMAINES_CARRE,
+    carre,
+    membres,
+    moi: { role: moi.role, domaine: moi.domaine },
+    notes: notes || [],
+    brainstorms: bs || [],
+    places: 4 - membres.length,
+  });
+}
+
+// le salon d'organisation d'un carré vit sur Discord : on ne pointe que vers lui
+function lienDiscordValide(url) {
+  if (!url) return true;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && /(^|\.)discord\.(gg|com)$/.test(u.hostname.replace(/^www\./, ''));
+  } catch { return false; }
+}
+
+/* Le cap et le salon du carré : ce que le carré vise, où il s'organise. */
+async function carreUpdate(request, env, carreId) {
+  const { vu, refus } = await gateCarreUser(request, env);
+  if (refus) return refus;
+  if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
+  const carre = await env.DB.prepare('SELECT nom, cap, discord_url FROM carres WHERE id = ?1').bind(carreId).first();
+
+  const body = await readJson(request);
+  const nom = body?.nom === undefined ? carre.nom : String(body.nom).trim();
+  const cap = body?.cap === undefined ? carre.cap : String(body.cap).trim();
+  const discord = body?.discord_url === undefined ? carre.discord_url : String(body.discord_url).trim();
+  if (!nom || nom.length > 60) return json({ error: 'Nom invalide (60 caractères au plus).' }, 400);
+  if (cap.length > 1000) return json({ error: 'Le cap tient en 1000 caractères.' }, 400);
+  if (!lienDiscordValide(discord)) return json({ error: 'Le salon doit être un lien Discord (https).' }, 400);
+
+  await env.DB.prepare('UPDATE carres SET nom = ?1, cap = ?2, discord_url = ?3 WHERE id = ?4')
+    .bind(nom, cap, discord, carreId).run();
+  return json({ ok: true });
+}
+
+async function carreUpdateMoi(request, env, carreId) {
+  const { vu, refus } = await gateCarreUser(request, env);
+  if (refus) return refus;
+  if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
 
   const body = await readJson(request);
   const role = body?.role == null || body.role === '' ? null : String(body.role);
@@ -2601,15 +2802,110 @@ async function carreUpdateMoi(request, env) {
   if (role && !ROLES_CARRE.includes(role)) return json({ error: 'Rôle inconnu.' }, 400);
   if (domaine && !DOMAINES_CARRE.includes(domaine)) return json({ error: 'Connaissance inconnue.' }, 400);
 
-  await env.DB.prepare('UPDATE carre_membres SET role = ?1, domaine = ?2 WHERE user_id = ?3')
-    .bind(role, domaine, vu.user.id).run();
+  await env.DB.prepare('UPDATE carre_membres SET role = ?1, domaine = ?2 WHERE carre_id = ?3 AND user_id = ?4')
+    .bind(role, domaine, carreId, vu.user.id).run();
+  return json({ ok: true });
+}
+
+/* L'évaluation mutuelle. Chacun note les trois autres, domaine par domaine,
+   de 1 à 10 : le meilleur du domaine vaut 10 et les autres notes se lisent
+   par rapport à lui. Tout le carré voit toutes les notes : la transparence
+   est la discussion. Rien n'est figé : on affine.                        */
+async function carreNotes(request, env, carreId) {
+  const { vu, refus } = await gateCarreUser(request, env);
+  if (refus) return refus;
+  if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
+  const membres = await membresDe(env, carreId);
+  const ids = new Set(membres.map((m) => m.user_id));
+
+  const body = await readJson(request);
+  const notes = Array.isArray(body?.notes) ? body.notes.slice(0, 48) : [];
+  const upsert = env.DB.prepare(
+    `INSERT INTO carre_notes (carre_id, rateur_id, cible_id, domaine, note, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))
+     ON CONFLICT(carre_id, rateur_id, cible_id, domaine) DO UPDATE
+       SET note = ?5, updated_at = datetime('now')`
+  );
+  const lot = [];
+  for (const n of notes) {
+    const cible = Number(n?.cible_id);
+    const domaine = String(n?.domaine || '');
+    const note = Number(n?.note);
+    if (!ids.has(cible) || cible === vu.user.id) return json({ error: 'On note les autres As du carré.' }, 400);
+    if (!DOMAINES_CARRE.includes(domaine)) return json({ error: 'Connaissance inconnue.' }, 400);
+    if (!Number.isInteger(note) || note < 1 || note > 10) return json({ error: 'Une note va de 1 à 10.' }, 400);
+    lot.push(upsert.bind(carreId, vu.user.id, cible, domaine, note));
+  }
+  if (lot.length) await env.DB.batch(lot);
+  return json({ ok: true });
+}
+
+/* La conversation du carré : privée, réservée à ses As. C'est aussi son
+   histoire : tout ce qui s'y est dit reste, tant que le carré vit.        */
+async function carreChatList(request, env, carreId) {
+  const { vu, refus } = await gateCarreUser(request, env);
+  if (refus) return refus;
+  if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
+  const { results } = await env.DB.prepare(
+    `SELECT m.id, m.body, m.created_at, u.username
+       FROM carre_messages m JOIN users u ON u.id = m.user_id
+      WHERE m.carre_id = ?1 ORDER BY m.id DESC LIMIT 100`
+  ).bind(carreId).all();
+  return json({ messages: (results || []).reverse() });
+}
+
+async function carreChatPost(request, env, carreId) {
+  const { vu, refus } = await gateCarreUser(request, env);
+  if (refus) return refus;
+  if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
+
+  const body = await readJson(request);
+  const texte = String(body?.body || '').trim();
+  if (!texte) return json({ error: 'Message vide.' }, 400);
+  if (texte.length > 2000) return json({ error: 'Message trop long (2000 caractères).' }, 400);
+  const r = await env.DB.prepare(
+    'INSERT INTO carre_messages (carre_id, user_id, body) VALUES (?1, ?2, ?3)'
+  ).bind(carreId, vu.user.id, texte).run();
+  return json({ ok: true, id: r.meta.last_row_id }, 201);
+}
+
+async function carreLeave(request, env, carreId) {
+  const { vu, refus } = await gateCarreUser(request, env);
+  if (refus) return refus;
+  if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
+
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM carre_membres WHERE carre_id = ?1 AND user_id = ?2').bind(carreId, vu.user.id),
+    env.DB.prepare('DELETE FROM carre_notes WHERE carre_id = ?1 AND (rateur_id = ?2 OR cible_id = ?2)').bind(carreId, vu.user.id),
+    env.DB.prepare('DELETE FROM carre_relatif_sources WHERE carre_id = ?1 AND user_id = ?2').bind(carreId, vu.user.id),
+  ]);
+  // un carré vide ne garde pas de coquille : tout ce qui était à lui s'en va
+  const restants = await membresDe(env, carreId);
+  if (!restants.length) {
+    await env.DB.batch([
+      env.DB.prepare(
+        `DELETE FROM brainstorm_votes WHERE idee_id IN (
+           SELECT i.id FROM brainstorm_idees i
+           JOIN brainstorms b ON b.id = i.brainstorm_id WHERE b.carre_id = ?1)`
+      ).bind(carreId),
+      env.DB.prepare(
+        'DELETE FROM brainstorm_idees WHERE brainstorm_id IN (SELECT id FROM brainstorms WHERE carre_id = ?1)'
+      ).bind(carreId),
+      env.DB.prepare('DELETE FROM brainstorms WHERE carre_id = ?1').bind(carreId),
+      env.DB.prepare('DELETE FROM carre_messages WHERE carre_id = ?1').bind(carreId),
+      env.DB.prepare('DELETE FROM carre_invitations WHERE carre_id = ?1').bind(carreId),
+      env.DB.prepare('DELETE FROM carre_notes WHERE carre_id = ?1').bind(carreId),
+      env.DB.prepare('DELETE FROM carre_relatif_messages WHERE carre_id = ?1').bind(carreId),
+      env.DB.prepare('DELETE FROM carre_relatif_sources WHERE carre_id = ?1').bind(carreId),
+      env.DB.prepare('DELETE FROM carres WHERE id = ?1').bind(carreId),
+    ]);
+  }
   return json({ ok: true });
 }
 
 /* L'annuaire des As : tous ceux qui ont atteint l'échelon du carré, avec
-   leur carré s'ils en ont un : pour que les libres se trouvent et que les
-   carrés incomplets se voient. L'échelon d'un membre est déjà public sur son
-   profil : l'annuaire ne montre rien de plus, il rassemble.               */
+   leurs carrés. L'échelon d'un membre est déjà public sur son profil :
+   l'annuaire ne montre rien de plus, il rassemble.                        */
 async function carreAnnuaire(request, env) {
   const { refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
   if (refus) return refus;
@@ -2625,126 +2921,78 @@ async function carreAnnuaire(request, env) {
     parUser.get(r.user_id).add(currentAnswerId(r.riddle_id));
   }
   const hauts = [...parUser.entries()]
-    .map(([id, solved]) => ({ id, echelon: echelonOf(solved) }))
+    .map(([id, ids]) => ({ id, echelon: echelonOf(progresOf(ids).solved) }))
     .filter((u) => u.echelon >= ECHELON_CARRE);
   if (!hauts.length) return json({ as: [] });
 
   const marks = hauts.map((_, i) => `?${i + 1}`).join(',');
   const users = (await env.DB.prepare(
-    `SELECT u.id, u.username, m.role, m.domaine, c.nom AS carre_nom
-       FROM users u
-       LEFT JOIN carre_membres m ON m.user_id = u.id
-       LEFT JOIN carres c ON c.id = m.carre_id
-      WHERE u.id IN (${marks})`
+    `SELECT u.id, u.username,
+            (SELECT GROUP_CONCAT(c.nom, ' · ') FROM carre_membres m
+              JOIN carres c ON c.id = m.carre_id WHERE m.user_id = u.id) AS carres
+       FROM users u WHERE u.id IN (${marks})`
   ).bind(...hauts.map((u) => u.id)).all()).results || [];
 
   const echelonDe = new Map(hauts.map((u) => [u.id, u.echelon]));
   const as = users
-    .map((u) => ({
-      username: u.username,
-      echelon: echelonDe.get(u.id),
-      carre: u.carre_nom || null,
-      role: u.role || null,
-      domaine: u.domaine || null,
-    }))
+    .map((u) => ({ username: u.username, echelon: echelonDe.get(u.id), carres: u.carres || null }))
     .sort((a, b) => b.echelon - a.echelon || a.username.localeCompare(b.username));
   return json({ as });
 }
 
-/* La conversation du carré : privée, réservée à ses quatre As. C'est aussi
-   son histoire : tout ce qui s'y est dit reste, tant que le carré vit.    */
-async function carreChatList(request, env) {
-  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
-  if (refus) return refus;
-  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
-  await ensureHautesTables(env);
-  const carre = await monCarre(env, vu.user.id);
-  if (!carre) return json({ error: 'Vous n’avez pas encore de carré.' }, 404);
-  const { results } = await env.DB.prepare(
-    `SELECT m.id, m.body, m.created_at, u.username
-       FROM carre_messages m JOIN users u ON u.id = m.user_id
-      WHERE m.carre_id = ?1 ORDER BY m.id DESC LIMIT 100`
-  ).bind(carre.id).all();
-  return json({ messages: (results || []).reverse() });
-}
-
-async function carreChatPost(request, env) {
-  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
-  if (refus) return refus;
-  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
-  await ensureHautesTables(env);
-  const carre = await monCarre(env, vu.user.id);
-  if (!carre) return json({ error: 'Vous n’avez pas encore de carré.' }, 404);
-
-  const body = await readJson(request);
-  const texte = String(body?.body || '').trim();
-  if (!texte) return json({ error: 'Message vide.' }, 400);
-  if (texte.length > 2000) return json({ error: 'Message trop long (2000 caractères).' }, 400);
-  const r = await env.DB.prepare(
-    'INSERT INTO carre_messages (carre_id, user_id, body) VALUES (?1, ?2, ?3)'
-  ).bind(carre.id, vu.user.id, texte).run();
-  return json({ ok: true, id: r.meta.last_row_id }, 201);
-}
-
-/* Le salon de recrutement. Les As libres s'y annoncent : quelques mots sur ce
-   qu'ils apporteraient, leur nature, leur connaissance : et les carrés
-   incomplets les invitent. L'invité accepte ou décline : personne n'entre
-   dans un carré sans l'avoir voulu des deux côtés.                        */
-
-async function gateCarreUser(request, env) {
-  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
-  if (refus) return { refus };
-  if (!vu.user) return { refus: json({ error: 'Connexion requise.' }, 401) };
-  await ensureHautesTables(env);
-  return { vu };
-}
+/* Le salon de recrutement. Les As s'y annoncent : quelques mots sur ce
+   qu'ils apporteraient, leur nature, leur connaissance : et les carrés où il
+   reste une place les invitent. L'invité accepte ou décline : personne
+   n'entre dans un carré sans l'avoir voulu des deux côtés.                */
 
 async function carreRecrutement(request, env) {
   const { vu, refus } = await gateCarreUser(request, env);
   if (refus) return refus;
 
-  // les As encore libres, seuls à paraître au salon
   const annonces = (await env.DB.prepare(
-    `SELECT a.user_id, a.note, a.role, a.domaine, a.created_at, u.username
+    `SELECT a.user_id, a.note, a.role, a.domaine, a.created_at, u.username,
+            (SELECT COUNT(*) FROM carre_membres m WHERE m.user_id = a.user_id) AS carres
        FROM carre_annonces a
        JOIN users u ON u.id = a.user_id
-       LEFT JOIN carre_membres m ON m.user_id = a.user_id
-      WHERE m.user_id IS NULL
       ORDER BY a.created_at DESC LIMIT 50`
   ).all()).results || [];
 
-  const carre = await monCarre(env, vu.user.id);
+  const carres = await mesCarres(env, vu.user.id);
+  const mesCarresAvecPlaces = [];
+  for (const c of carres) {
+    const membres = await membresDe(env, c.id);
+    mesCarresAvecPlaces.push({ id: c.id, nom: c.nom, places: 4 - membres.length });
+  }
+
   const reponse = {
     // la charte du bon carré, en une phrase : celle des missions
     charte: MISSIONS_CARRE.blocs[0].texte,
     roles: ROLES_CARRE,
     domaines: DOMAINES_CARRE,
     annonces: annonces.map((a) => ({ ...a, moi: a.user_id === vu.user.id })),
-    monAnnonce: null,
-    invitations: [],
-    envoyees: [],
-    monCarre: null,
-  };
-
-  if (carre) {
-    const membres = await membresDe(env, carre.id);
-    reponse.monCarre = { id: carre.id, nom: carre.nom, places: 4 - membres.length };
-    reponse.envoyees = (await env.DB.prepare(
-      `SELECT i.id, i.note, i.created_at, u.username
-         FROM carre_invitations i JOIN users u ON u.id = i.user_id
-        WHERE i.carre_id = ?1 ORDER BY i.id DESC`
-    ).bind(carre.id).all()).results || [];
-  } else {
-    reponse.monAnnonce = await env.DB.prepare(
+    monAnnonce: await env.DB.prepare(
       'SELECT note, role, domaine FROM carre_annonces WHERE user_id = ?1'
-    ).bind(vu.user.id).first();
-    reponse.invitations = (await env.DB.prepare(
-      `SELECT i.id, i.note, i.created_at, c.nom AS carre_nom, u.username AS de_username
+    ).bind(vu.user.id).first(),
+    invitations: (await env.DB.prepare(
+      `SELECT i.id, i.note, i.created_at, i.carre_id, c.nom AS carre_nom, u.username AS de_username
          FROM carre_invitations i
          JOIN carres c ON c.id = i.carre_id
          JOIN users u ON u.id = i.de_user_id
         WHERE i.user_id = ?1 ORDER BY i.id DESC`
-    ).bind(vu.user.id).all()).results || [];
+    ).bind(vu.user.id).all()).results || [],
+    mesCarres: mesCarresAvecPlaces,
+    envoyees: [],
+  };
+
+  if (carres.length) {
+    const marks = carres.map((_, i) => `?${i + 1}`).join(',');
+    reponse.envoyees = (await env.DB.prepare(
+      `SELECT i.id, i.note, i.created_at, i.carre_id, c.nom AS carre_nom, u.username
+         FROM carre_invitations i
+         JOIN carres c ON c.id = i.carre_id
+         JOIN users u ON u.id = i.user_id
+        WHERE i.carre_id IN (${marks}) ORDER BY i.id DESC`
+    ).bind(...carres.map((c) => c.id)).all()).results || [];
   }
   return json(reponse);
 }
@@ -2752,7 +3000,6 @@ async function carreRecrutement(request, env) {
 async function carreAnnoncePut(request, env) {
   const { vu, refus } = await gateCarreUser(request, env);
   if (refus) return refus;
-  if (await monCarre(env, vu.user.id)) return json({ error: 'Vous avez déjà un carré.' }, 409);
 
   const body = await readJson(request);
   const note = String(body?.note || '').trim();
@@ -2779,29 +3026,30 @@ async function carreAnnonceDelete(request, env) {
 async function carreInvite(request, env) {
   const { vu, refus } = await gateCarreUser(request, env);
   if (refus) return refus;
-  const carre = await monCarre(env, vu.user.id);
-  if (!carre) return json({ error: 'Il faut un carré pour inviter.' }, 403);
-  const membres = await membresDe(env, carre.id);
-  if (membres.length >= 4) return json({ error: 'Votre carré est complet.' }, 409);
 
   const body = await readJson(request);
+  const carreId = Number(body?.carre_id);
   const username = String(body?.username || '').trim();
   const note = String(body?.note || '').trim();
   if (note.length > 300) return json({ error: 'Le mot d’invitation tient en 300 caractères.' }, 400);
+  if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
+  const membres = await membresDe(env, carreId);
+  if (membres.length >= 4) return json({ error: 'Ce carré est complet.' }, 409);
 
+  // on n'invite que ceux qui se sont annoncés au salon, et pas dans ce carré
   const cible = await env.DB.prepare(
     `SELECT u.id FROM users u
        JOIN carre_annonces a ON a.user_id = u.id
-       LEFT JOIN carre_membres m ON m.user_id = u.id
-      WHERE u.username = ?1 COLLATE NOCASE AND m.user_id IS NULL`
+      WHERE u.username = ?1 COLLATE NOCASE`
   ).bind(username).first();
   if (!cible) return json({ error: 'Cet As n’est pas au salon.' }, 404);
   if (cible.id === vu.user.id) return json({ error: 'On ne s’invite pas soi-même.' }, 400);
+  if (membres.some((m) => m.user_id === cible.id)) return json({ error: 'Cet As est déjà dans ce carré.' }, 409);
 
   await env.DB.prepare(
     `INSERT INTO carre_invitations (carre_id, user_id, de_user_id, note) VALUES (?1, ?2, ?3, ?4)
      ON CONFLICT(carre_id, user_id) DO UPDATE SET note = ?4, de_user_id = ?3`
-  ).bind(carre.id, cible.id, vu.user.id, note).run();
+  ).bind(carreId, cible.id, vu.user.id, note).run();
   return json({ ok: true }, 201);
 }
 
@@ -2812,21 +3060,27 @@ async function carreInviteAccepte(request, env, id) {
     'SELECT id, carre_id FROM carre_invitations WHERE id = ?1 AND user_id = ?2'
   ).bind(id, vu.user.id).first();
   if (!invitation) return json({ error: 'Invitation introuvable.' }, 404);
-  if (await monCarre(env, vu.user.id)) return json({ error: 'Vous avez déjà un carré.' }, 409);
+  if ((await mesCarres(env, vu.user.id)).length >= MAX_CARRES_PAR_AS) {
+    return json({ error: `${MAX_CARRES_PAR_AS} carrés au plus par As.` }, 409);
+  }
+  if (await monAppartenance(env, invitation.carre_id, vu.user.id)) {
+    await env.DB.prepare('DELETE FROM carre_invitations WHERE id = ?1').bind(id).run();
+    return json({ error: 'Vous êtes déjà dans ce carré.' }, 409);
+  }
   const membres = await membresDe(env, invitation.carre_id);
   if (membres.length >= 4) return json({ error: 'Ce carré s’est rempli entre-temps.' }, 409);
 
-  // l'annonce portait déjà la nature et la connaissance : elles suivent
+  // l'annonce portait déjà la nature et la connaissance : elles suivent.
+  // Elle reste au salon : un As peut vouloir d'autres carrés encore.
   const annonce = await env.DB.prepare(
     'SELECT role, domaine FROM carre_annonces WHERE user_id = ?1'
   ).bind(vu.user.id).first();
   await env.DB.batch([
     env.DB.prepare('INSERT INTO carre_membres (user_id, carre_id, role, domaine) VALUES (?1, ?2, ?3, ?4)')
       .bind(vu.user.id, invitation.carre_id, annonce?.role || null, annonce?.domaine || null),
-    env.DB.prepare('DELETE FROM carre_annonces WHERE user_id = ?1').bind(vu.user.id),
-    env.DB.prepare('DELETE FROM carre_invitations WHERE user_id = ?1').bind(vu.user.id),
+    env.DB.prepare('DELETE FROM carre_invitations WHERE id = ?1').bind(id),
   ]);
-  return json({ ok: true });
+  return json({ ok: true, carre_id: invitation.carre_id });
 }
 
 async function carreInviteRefuse(request, env, id) {
@@ -2843,18 +3097,184 @@ async function carreInviteRefuse(request, env, id) {
   return json({ ok: true });
 }
 
-async function carreLeave(request, env) {
-  const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
+/* ------------------------------------------------- le relatif du carré ---
+   L'IA du carré, bâtie sur Pense Mieux. Chaque As choisit, arbre par arbre,
+   les pensées qu'il offre au relatif : rien de privé ne le nourrit sans ce
+   geste. Les vidéographies, déjà partagées au carré, le nourrissent aussi,
+   comme le cap et la récolte des brainstorms. Le relatif parle d'une voix :
+   celle d'un As, ou celle du carré entier.                               */
+
+const RELATIF_MODELES = ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/llama-3.1-8b-instruct'];
+
+// Le portrait d'un As : ses arbres offerts et ses vidéographies, compilés en
+// texte borné. C'est la matière du relatif, et c'est aussi ce qu'on copie
+// pour porter la voix ailleurs.
+async function portraitDe(env, carreId, userId, plafond = 6000) {
+  const { results: arbres } = await env.DB.prepare(
+    `SELECT t.id, t.title, t.trunk FROM reflection_trees t
+      WHERE t.user_id = ?1 AND (t.kind = 'video' OR t.id IN (
+        SELECT tree_id FROM carre_relatif_sources WHERE carre_id = ?2 AND user_id = ?1))
+      ORDER BY t.updated_at DESC LIMIT 12`
+  ).bind(userId, carreId).all();
+  const morceaux = [];
+  for (const t of arbres || []) {
+    morceaux.push(`Arbre « ${t.title} »${t.trunk ? ` : ${t.trunk}` : ''}`);
+    const { results: branches } = await env.DB.prepare(
+      "SELECT body FROM reflection_branches WHERE tree_id = ?1 AND body <> '' ORDER BY id LIMIT 40"
+    ).bind(t.id).all();
+    for (const b of branches || []) morceaux.push(`- ${b.body}`);
+  }
+  const texte = morceaux.join('\n');
+  return texte.length > plafond ? texte.slice(0, plafond) : texte;
+}
+
+async function portraitCarre(env, carre, membres) {
+  const morceaux = [];
+  if (carre.cap) morceaux.push(`Le cap du carré : ${carre.cap}`);
+  const { results: retenues } = await env.DB.prepare(
+    `SELECT i.body FROM brainstorm_idees i
+       JOIN brainstorms b ON b.id = i.brainstorm_id
+      WHERE b.carre_id = ?1 AND i.retenue = 1 ORDER BY i.id DESC LIMIT 30`
+  ).bind(carre.id).all();
+  if ((retenues || []).length) {
+    morceaux.push('La récolte des brainstorms :');
+    for (const r of retenues) morceaux.push(`- ${r.body}`);
+  }
+  for (const m of membres) {
+    const p = await portraitDe(env, carre.id, m.user_id, 1500);
+    if (p) morceaux.push(`\n${m.username}${m.domaine ? ` (${m.domaine})` : ''} :\n${p}`);
+  }
+  const texte = morceaux.join('\n');
+  return texte.length > 6500 ? texte.slice(0, 6500) : texte;
+}
+
+async function relatifGet(request, env, carreId) {
+  const { vu, refus } = await gateCarreUser(request, env);
   if (refus) return refus;
-  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
-  await ensureHautesTables(env);
-  const carre = await monCarre(env, vu.user.id);
-  if (!carre) return json({ error: 'Vous n’avez pas de carré.' }, 404);
-  await env.DB.prepare('DELETE FROM carre_membres WHERE user_id = ?1').bind(vu.user.id).run();
-  // un carré vide ne garde pas de coquille
-  const restants = await membresDe(env, carre.id);
-  if (!restants.length) await env.DB.prepare('DELETE FROM carres WHERE id = ?1').bind(carre.id).run();
-  return json({ ok: true });
+  if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
+  const carre = await env.DB.prepare('SELECT id, nom, cap FROM carres WHERE id = ?1').bind(carreId).first();
+  const membres = await membresDe(env, carreId);
+
+  const echanges = ((await env.DB.prepare(
+    `SELECT r.id, r.voix, r.question, r.reponse, r.created_at, u.username
+       FROM carre_relatif_messages r JOIN users u ON u.id = r.user_id
+      WHERE r.carre_id = ?1 ORDER BY r.id DESC LIMIT 30`
+  ).bind(carreId).all()).results || []).reverse();
+
+  // mes arbres de pensée, et ceux que j'ai déjà offerts à ce carré
+  const { results: miens } = await env.DB.prepare(
+    `SELECT id, title FROM reflection_trees WHERE user_id = ?1 AND kind = 'pensee'
+      ORDER BY updated_at DESC LIMIT 50`
+  ).bind(vu.user.id).all();
+  const { results: offerts } = await env.DB.prepare(
+    'SELECT tree_id FROM carre_relatif_sources WHERE carre_id = ?1 AND user_id = ?2'
+  ).bind(carreId, vu.user.id).all();
+
+  // le portrait de la voix demandée, prêt à copier
+  const voix = new URL(request.url).searchParams.get('voix') || '';
+  let portrait = '';
+  if (voix === 'carre') portrait = await portraitCarre(env, carre, membres);
+  else if (voix && membres.some((m) => String(m.user_id) === voix)) {
+    portrait = await portraitDe(env, carreId, Number(voix));
+  }
+
+  return json({
+    eveille: !!env.AI,
+    carre: { id: carre.id, nom: carre.nom },
+    membres: membres.map((m) => ({ user_id: m.user_id, username: m.username, domaine: m.domaine })),
+    echanges,
+    mesArbres: miens || [],
+    offerts: (offerts || []).map((o) => o.tree_id),
+    portrait,
+  });
+}
+
+// Offrir (ou reprendre) ses arbres de pensée au relatif de CE carré. On ne
+// peut offrir que ses propres arbres de pensée : le serveur revérifie tout.
+async function relatifSources(request, env, carreId) {
+  const { vu, refus } = await gateCarreUser(request, env);
+  if (refus) return refus;
+  if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
+
+  const body = await readJson(request);
+  const demandes = Array.isArray(body?.tree_ids) ? body.tree_ids.slice(0, 50).map(Number) : [];
+  const valides = [];
+  for (const treeId of demandes) {
+    if (!Number.isFinite(treeId)) continue;
+    const t = await env.DB.prepare(
+      "SELECT id FROM reflection_trees WHERE id = ?1 AND user_id = ?2 AND kind = 'pensee'"
+    ).bind(treeId, vu.user.id).first();
+    if (t) valides.push(treeId);
+  }
+  const lot = [
+    env.DB.prepare('DELETE FROM carre_relatif_sources WHERE carre_id = ?1 AND user_id = ?2')
+      .bind(carreId, vu.user.id),
+    ...valides.map((treeId) => env.DB.prepare(
+      'INSERT INTO carre_relatif_sources (carre_id, user_id, tree_id) VALUES (?1, ?2, ?3)'
+    ).bind(carreId, vu.user.id, treeId)),
+  ];
+  await env.DB.batch(lot);
+  return json({ ok: true, offerts: valides });
+}
+
+async function relatifPost(request, env, carreId) {
+  const { vu, refus } = await gateCarreUser(request, env);
+  if (refus) return refus;
+  if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
+  const carre = await env.DB.prepare('SELECT id, nom, cap FROM carres WHERE id = ?1').bind(carreId).first();
+  const membres = await membresDe(env, carreId);
+
+  const body = await readJson(request);
+  const voix = String(body?.voix || '');
+  const question = String(body?.question || '').trim();
+  if (!question) return json({ error: 'Question vide.' }, 400);
+  if (question.length > 500) return json({ error: 'Une question tient en 500 caractères.' }, 400);
+
+  let systeme;
+  let portrait;
+  if (voix === 'carre') {
+    portrait = await portraitCarre(env, carre, membres);
+    systeme = `Tu es le relatif du carré « ${carre.nom } » : la voix commune de ses As. `
+      + 'Tu parles à partir du cap du carré, de la récolte de ses brainstorms et des pensées de ses As, données ci-dessous. '
+      + 'Reste fidèle à ce qu\'elles disent ; si elles ne disent rien sur la question, dis-le simplement. '
+      + 'Réponds en français, en quelques phrases.';
+  } else {
+    const m = membres.find((x) => String(x.user_id) === voix);
+    if (!m) return json({ error: 'Voix inconnue.' }, 400);
+    portrait = await portraitDe(env, carreId, m.user_id);
+    systeme = `Tu es le relatif de ${m.username}, un As du carré « ${carre.nom} ». `
+      + 'Tu parles en son nom, à la première personne, à partir de ses pensées données ci-dessous. '
+      + 'Reste fidèle à ce qu\'elles disent ; si elles ne disent rien sur la question, dis-le simplement. '
+      + 'Réponds en français, en quelques phrases.';
+  }
+  if (!portrait) {
+    return json({ error: 'Cette voix n’a encore rien offert au relatif : des arbres de pensée d’abord.' }, 409);
+  }
+
+  if (!env.AI) {
+    return json({ error: 'Le relatif dort ici : copie le portrait de la voix et porte-le à ton IA.' }, 503);
+  }
+
+  const messages = [
+    { role: 'system', content: `${systeme}\n\n${portrait}` },
+    { role: 'user', content: question },
+  ];
+  let reponse = '';
+  for (const modele of RELATIF_MODELES) {
+    try {
+      const r = await env.AI.run(modele, { messages, max_tokens: 600 });
+      reponse = String(r?.response || '').trim();
+      if (reponse) break;
+    } catch { /* on essaie le modèle suivant */ }
+  }
+  if (!reponse) {
+    return json({ error: 'Le relatif n’a pas répondu : réessaie, ou copie le portrait.' }, 502);
+  }
+
+  await env.DB.prepare(
+    'INSERT INTO carre_relatif_messages (carre_id, user_id, voix, question, reponse) VALUES (?1, ?2, ?3, ?4, ?5)'
+  ).bind(carreId, vu.user.id, voix, question, reponse).run();
+  return json({ ok: true, reponse });
 }
 
 /* ---------------------------------------------- le brainstorm (échelon 6)
@@ -2876,10 +3296,11 @@ async function brainstormsList(request, env) {
   await ensureHautesTables(env);
   const { results } = await env.DB.prepare(
     `SELECT b.id, b.sujet, b.plateforme, b.url, b.statut, b.created_at, b.live_depuis,
-            c.nom AS carre_nom,
+            c.nom AS carre_nom, h.username AS hote_username,
             (SELECT COUNT(*) FROM brainstorm_idees i WHERE i.brainstorm_id = b.id) AS idees,
             (SELECT COUNT(*) FROM brainstorm_idees i WHERE i.brainstorm_id = b.id AND i.retenue = 1) AS retenues
        FROM brainstorms b JOIN carres c ON c.id = b.carre_id
+       LEFT JOIN users h ON h.id = b.hote_user_id
       ORDER BY CASE b.statut WHEN 'live' THEN 0 WHEN 'annonce' THEN 1 ELSE 2 END,
                COALESCE(b.live_depuis, b.created_at) DESC
       LIMIT 50`
@@ -2893,13 +3314,24 @@ async function brainstormsCreate(request, env) {
   if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
   await ensureHautesTables(env);
 
-  // un brainstorm est porté par un carré d'as complet : quatre As
-  const carre = await monCarre(env, vu.user.id);
-  if (!carre) return json({ error: 'Un brainstorm est porté par un carré d’as.' }, 403);
-  const membres = await membresDe(env, carre.id);
-  if (membres.length < 4) return json({ error: 'Votre carré doit être complet : quatre As.' }, 403);
-
   const body = await readJson(request);
+
+  // un brainstorm est porté par UN de mes carrés, complet : quatre As
+  const carreId = Number(body?.carre_id);
+  if (!(await monAppartenance(env, carreId, vu.user.id))) {
+    return json({ error: 'Un brainstorm est porté par un de vos carrés d’as.' }, 403);
+  }
+  const carre = await env.DB.prepare('SELECT id, nom FROM carres WHERE id = ?1').bind(carreId).first();
+  const membres = await membresDe(env, carreId);
+  if (membres.length < 4) return json({ error: 'Le carré doit être complet : quatre As.' }, 403);
+
+  // l'hôte : l'As du carré qui tient l'antenne, celui du meilleur matériel
+  const hote = body?.hote_user_id == null || body.hote_user_id === ''
+    ? vu.user.id : Number(body.hote_user_id);
+  if (!membres.some((m) => m.user_id === hote)) {
+    return json({ error: 'L’hôte doit être un As du carré.' }, 400);
+  }
+
   const sujet = String(body?.sujet || '').trim();
   const plateforme = String(body?.plateforme || '');
   const url = String(body?.url || '').trim();
@@ -2913,8 +3345,8 @@ async function brainstormsCreate(request, env) {
   } catch { return json({ error: 'Lien invalide.' }, 400); }
 
   const r = await env.DB.prepare(
-    'INSERT INTO brainstorms (carre_id, user_id, sujet, plateforme, url) VALUES (?1, ?2, ?3, ?4, ?5)'
-  ).bind(carre.id, vu.user.id, sujet, plateforme, url).run();
+    'INSERT INTO brainstorms (carre_id, user_id, sujet, plateforme, url, hote_user_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)'
+  ).bind(carre.id, vu.user.id, sujet, plateforme, url, hote).run();
   return json({ ok: true, id: r.meta.last_row_id }, 201);
 }
 
@@ -2930,8 +3362,10 @@ async function brainstormGet(request, env, id) {
 
   const b = await env.DB.prepare(
     `SELECT b.id, b.sujet, b.plateforme, b.url, b.statut, b.created_at, b.live_depuis,
-            b.carre_id, c.nom AS carre_nom
-       FROM brainstorms b JOIN carres c ON c.id = b.carre_id WHERE b.id = ?1`
+            b.carre_id, c.nom AS carre_nom, c.discord_url, h.username AS hote_username
+       FROM brainstorms b JOIN carres c ON c.id = b.carre_id
+       LEFT JOIN users h ON h.id = b.hote_user_id
+      WHERE b.id = ?1`
   ).bind(id).first();
   if (!b) return json({ error: 'Brainstorm introuvable.' }, 404);
 
@@ -2974,6 +3408,9 @@ async function brainstormGet(request, env, id) {
   const duCarre = vu.user ? !!(await env.DB.prepare(
     'SELECT 1 AS oui FROM carre_membres WHERE user_id = ?1 AND carre_id = ?2'
   ).bind(vu.user.id, b.carre_id).first()) : false;
+
+  // le salon Discord du carré n'appartient qu'à ses As
+  if (!duCarre) delete b.discord_url;
 
   return json({ brainstorm: b, enAvant, recentes, retenues, duCarre });
 }

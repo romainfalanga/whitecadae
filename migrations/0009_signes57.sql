@@ -1,4 +1,4 @@
--- Migration 0009 — les signes de l'EP 57 (page /57)
+-- Migration 0009 : les signes de l'EP 57 (page /57)
 --
 -- Progression d'un membre sur la chasse aux signes. Une ligne par signe
 -- rencontré : elle existe dès le premier indice demandé, et solved_at se

@@ -15,7 +15,15 @@ export const MISSIONS_CARRE = {
         'Pour créer votre carré d’as, vous devez trouver le meilleur équilibre '
         + 'possible entre infinisseurs et harmonisateurs. Vous devez également '
         + 'trouver un équilibre dans les connaissances fondamentales d’un carré '
-        + 'd’as : Psychologie, Univers, IA et Religions.',
+        + 'd’as : Philosophie, Intelligence artificielle, Religions et Univers.',
+    },
+    {
+      titre: 'S’évaluer mutuellement',
+      texte:
+        'Dans chaque domaine, discutez pour trouver qui est le meilleur du '
+        + 'carré : il vaut 10. Toutes les autres notes, de 1 à 10, se lisent '
+        + 'par rapport à lui. Quand le carré affine son regard, affinez les '
+        + 'notes : elles ne sont jamais figées.',
     },
     {
       titre: 'S’élever ensemble',
@@ -52,7 +60,7 @@ export const MISSIONS_CARRE = {
 // Les deux natures d'un As, et les quatre connaissances fondamentales. Le
 // client les reçoit d'ici : une seule source de vérité pour les libellés.
 export const ROLES_CARRE = ['infinisseur', 'harmonisateur'];
-export const DOMAINES_CARRE = ['Psychologie', 'Univers', 'IA', 'Religions'];
+export const DOMAINES_CARRE = ['Philosophie', 'IA', 'Religions', 'Univers'];
 
 /* --------------------------------- Game Master Orange (échelon 7) ------- */
 

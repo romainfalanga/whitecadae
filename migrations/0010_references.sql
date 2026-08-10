@@ -1,4 +1,4 @@
--- Migration 0010 — références enrichies
+-- Migration 0010 : références enrichies
 --
 -- Une référence libre ne se résume plus à un libellé et un lien : elle nomme
 -- l'œuvre, son artiste, et explique en quoi c'en est une. Une référence

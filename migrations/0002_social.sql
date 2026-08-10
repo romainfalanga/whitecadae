@@ -1,4 +1,4 @@
--- Migration 0002 — fonctionnalités sociales
+-- Migration 0002 : fonctionnalités sociales
 -- (appliquée le 2026-08-05 ; le schéma complet à jour reste schema.sql)
 
 ALTER TABLE songs ADD COLUMN duration_seconds INTEGER;

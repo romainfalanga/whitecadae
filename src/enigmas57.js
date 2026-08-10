@@ -1,4 +1,4 @@
-// WhiteCadae : les mots de passe de l'EP 57 (page /57)
+// WhiteCadae : les signes de l'EP 57 (page /57)
 //
 // ATTENTION : ce fichier est du code Worker. Il n'est JAMAIS servi au
 // navigateur : c'est toute la raison de son existence. Les réponses ne
@@ -9,10 +9,6 @@
 // indice. Un élément, un « = », un champ. Les champs `note` et `quotes`
 // ci-dessous ne sont PAS envoyés au client ni affichés : ils ne servent
 // qu'à documenter, ici, pourquoi telle réponse est la bonne.
-//
-// Pour ajouter un mot de passe : ajoutez une entrée dans `answers` du nœud
-// concerné, ou un nœud entier dans NODES. Rien d'autre à toucher, ni côté
-// API ni côté interface.
 
 /* ------------------------------------------------------- normalisation */
 
@@ -31,29 +27,6 @@ export function normalize(value) {
     .replace(/\s+/g, ' ');
 }
 
-// Les nombres écrits en toutes lettres que le jeu peut rencontrer.
-const WORD_NUMBERS = {
-  deux: 2, cinq: 5, huit: 8, dix: 10, treize: 13, vingt: 20,
-  'vingt cinq': 25, trente: 30, 'trente trois': 33,
-  'six cent soixante six': 666,
-};
-
-// Tous les nombres d'une réponse, chiffres et lettres confondus.
-function numbersIn(n) {
-  const found = (n.match(/\d+/g) || []).map(Number);
-  for (const [word, value] of Object.entries(WORD_NUMBERS)) {
-    if (n.includes(word)) found.push(value);
-  }
-  return found;
-}
-
-// « 25 décembre », « 25 dec », « 25/12 », « 25 12 » : même chose.
-function isDecemberDay(n, day) {
-  const nums = numbersIn(n);
-  if (!nums.includes(day)) return false;
-  return /\bdec/.test(n) || nums.includes(12);
-}
-
 /* ----------------------------------------------------------------- nœuds */
 
 // Un nœud = un élément de l'arborescence, avec un seul champ de saisie même
@@ -62,19 +35,24 @@ function isDecemberDay(n, day) {
 //
 // source      : ce qui est écrit à gauche du « = ». Vide : le bloc n'a pas
 //               de libellé du tout : on ne dit même pas de quoi il parle
-// silent      : le nombre de mots de passe à trouver n'est pas annoncé (le
-//               client ne reçoit alors aucun total pour ce bloc)
-// lockedLabel : libellé de remplacement tant que le nœud est verrouillé,
-//               quand la source est elle-même la réponse d'un autre nœud
+// silent      : le nombre de signes à trouver n'est pas annoncé (le client
+//               ne reçoit alors aucun total pour ce bloc)
 // requires    : identifiants de réponses à trouver avant d'ouvrir ce nœud
-// answers[]   : { id, label, match }  : plus note/quotes, non affichés
+// answers[]   : { id, label, parties, seps?, extra? } : plus note/quotes,
+//               non affichés
+//
+// Un signe s'écrit d'UNE manière : celle de `label`. Chaque réponse est
+// découpée en parties ordonnées ; `formes` liste les seules écritures
+// admises d'une partie (chiffres ou lettres, singulier ou pluriel quand les
+// deux se disent). Proposer une partie seule la fait apparaître en vert à sa
+// place, le reste en « ? » : on peut tenir un signe partiellement.
+//
+// seps  : séparateurs affichés entre les parties (espace par défaut)
+// extra : écritures qui couvrent plusieurs parties d'un coup (idx), comme
+//         « archanges » qui vaut arc + anges
 //
 // Aucun identifiant ne doit contenir sa propre réponse : ils voyagent
 // jusque dans le DOM.
-
-// Les mots de passe écrits d'un seul tenant : on tolère les espaces, pas
-// autre chose.
-const oneWord = (...formes) => (n) => formes.includes(n.replace(/ /g, ''));
 
 export const NODES = [
   {
@@ -91,14 +69,14 @@ export const NODES = [
       {
         id: 'n-0-1',
         label: 'Devincix',
-        match: oneWord('devincix'),
+        parties: [{ t: 'Devincix', formes: ['devincix'] }],
         note: '',
         quotes: [],
       },
       {
         id: 'n-0-3',
         label: 'Katikas',
-        match: oneWord('katikas', 'katikias'),
+        parties: [{ t: 'Katikas', formes: ['katikas', 'katikias'] }],
         note: 'Les deux orthographes valent.',
         quotes: [],
       },
@@ -115,8 +93,10 @@ export const NODES = [
       {
         id: 'n-w-1',
         label: 'Infini blanc',
-        // les deux mots, dans l'ordre qu'on veut
-        match: (n) => /infini/.test(n) && /blanc/.test(n),
+        parties: [
+          { t: 'Infini', formes: ['infini'] },
+          { t: 'blanc', formes: ['blanc'] },
+        ],
         note: 'White : blanc. Cadae : C=3, A=1, D=4, A=1, E=5 : les décimales de pi, qui ne s’arrêtent jamais.',
         quotes: ['J’harmonise l’infini, l’infini devient fini. (Multivers)',
                  'Je ne suis qu’un fil qui relie deux infinis. (Un fil entre deux infinis)'],
@@ -127,32 +107,55 @@ export const NODES = [
     id: 'n-a',
     source: '57',
     requires: [],
-    // Trois mots de passe, dans cet ordre. Les identifiants ne suivent pas
-    // l'ordre d'affichage : ils restent collés à leur sens pour ne pas
-    // effacer les parties déjà en cours.
+    // Deux signes : les signes eux-mêmes, et les 12 arc-anges. « Anges » et
+    // « 12 », trouvés séparément du temps où ils étaient deux réponses,
+    // restent acquis en tant que parties (RENAMED).
     answers: [
       {
         id: 'n-a-2',
         label: 'Signes',
-        match: (n) => /^(les |des |le |la |l |un |une )?signes?$/.test(n),
+        parties: [{ t: 'Signes', formes: ['signes', 'signe'] }],
         note: '« Tu verras les 57 » : ce que l’on voit apparaître partout, ce sont les signes laissés là exprès.',
         quotes: ['Je vois des signes partout sur le chantier du paradis. (Orange)',
                  'Sans indices dans les dés, je laisse des signes cachés. (Sans indices dans les dés)'],
       },
       {
-        id: 'n-a-1',
-        label: 'Anges',
-        // « anges » et « archanges » ouvrent le même mot de passe.
-        match: (n) => /^(les |des |le |la |l |un |une )?(arch)?anges?$/.test(n),
-        note: 'Les 57 sont les anges : ils font grandir la matrix, ils s’actualisent, ils forment le carré qui protège. Archanges vaut anges.',
+        id: 'n-a-4',
+        label: '12 arc-anges',
+        parties: [
+          { t: '12', formes: ['12', 'douze'] },
+          { t: 'arc', formes: ['arc'] },
+          { t: 'anges', formes: ['anges', 'ange'] },
+        ],
+        seps: [' ', '-'],
+        extra: [
+          { idx: [1, 2], formes: ['archanges', 'archange', 'arcanges', 'arcange'] },
+          { idx: [0, 1, 2], formes: ['12 archanges', '12 archange', '12 arcanges', 'douze archanges', 'douze arcanges'] },
+        ],
+        note: '5 + 7 = 12. Les 57 sont les anges : ils font grandir la matrix, ils forment le carré qui protège. L’arc relie l’ange à l’arc-ange.',
         quotes: ['La matrix est vivante, elle grandit grâce aux anges. (13h20)',
                  'Mon carré d’anges est là pour me protéger. (Orange)'],
       },
+    ],
+  },
+  {
+    // Le chiffre 7, repris de musique en musique.
+    id: 'n-k',
+    source: '7',
+    requires: [],
+    answers: [
       {
-        id: 'n-a-3',
-        label: '12',
-        match: (n) => numbersIn(n).includes(12) || /\bdouze\b/.test(n),
-        note: '5 + 7 = 12. Relié aux anges, cela donne les 12 archanges : 7 ou 12 selon les prismes.',
+        id: 'n-k-1',
+        label: 'Galaxie',
+        parties: [{ t: 'Galaxie', formes: ['galaxie'] }],
+        note: 'Le premier signe du 7.',
+        quotes: [],
+      },
+      {
+        id: 'n-k-2',
+        label: 'Signe',
+        parties: [{ t: 'Signe', formes: ['signe', 'signes'] }],
+        note: 'Le second signe du 7 : le 7 est lui-même un signe.',
         quotes: [],
       },
     ],
@@ -165,7 +168,7 @@ export const NODES = [
       {
         id: 'n-b-1',
         label: 'Signes',
-        match: (n) => /^(les |des |le |la |l |un |une )?signes?$/.test(n),
+        parties: [{ t: 'Signes', formes: ['signes', 'signe'] }],
         note: 'Même vers, deux versions : « tu verras les 57 » (30 vins divins) et « t’entendras les trompettes » (Sans indices dans les dés). Les trompettes sont les 57, donc les signes.',
         quotes: ['30 vins divins, tu verras les 57. (30 vins divins)',
                  '30 vins divins, t’entendras les trompettes. (Sans indices dans les dés)'],
@@ -183,7 +186,11 @@ export const NODES = [
       {
         id: 'n-c-1',
         label: '25 décembre',
-        match: (n) => isDecemberDay(n, 25) && !numbersIn(n).includes(2031),
+        parties: [
+          { t: '25', formes: ['25', 'vingt cinq'] },
+          { t: 'décembre', formes: ['decembre', 'dec'] },
+        ],
+        extra: [{ idx: [0, 1], formes: ['25 12', '25 douze'] }],
         note: '5 vins = 5 + vingt = 25 ; 30 vins = (30 + 20) / 2 = 25. « Divins » donne le mois de la naissance du divin.',
         quotes: ['5 vins divins, t’entendras les 57. (Sans indices dans les dés)',
                  '30 vins divins, tu verras les 57. (30 vins divins)'],
@@ -199,14 +206,18 @@ export const NODES = [
       {
         id: 'n-e-1',
         label: '2031',
-        match: (n) => numbersIn(n).includes(2031),
+        parties: [{ t: '2031', formes: ['2031'] }],
+        extra: [{ idx: [0], formes: ['20 31'] }],
         note: '13 retourné donne 31, posé derrière le 20 : 2031.',
         quotes: ['Jusqu’à la fin, et même si ça fait mal à 13h20. (13h20)'],
       },
       {
         id: 'n-e-2',
         label: '33 ans',
-        match: (n) => numbersIn(n).includes(33),
+        parties: [
+          { t: '33', formes: ['33', 'trente trois'] },
+          { t: 'ans', formes: ['ans', 'an'] },
+        ],
         note: '13 + 20 = 33, l’âge du Christ.',
         quotes: ['À 13 heures 20, j’ai plus peur d’être. (30 vins divins)'],
       },
@@ -221,10 +232,12 @@ export const NODES = [
       {
         id: 'n-f-1',
         label: '25 décembre 2031',
-        match: (n) => {
-          const nums = numbersIn(n);
-          return nums.includes(2031) && nums.includes(25) && (/\bdec/.test(n) || nums.includes(12));
-        },
+        parties: [
+          { t: '25', formes: ['25', 'vingt cinq'] },
+          { t: 'décembre', formes: ['decembre', 'dec'] },
+          { t: '2031', formes: ['2031'] },
+        ],
+        extra: [{ idx: [0, 1, 2], formes: ['25 12 2031'] }],
         note: 'Les vins divins donnent le jour, l’heure donne l’année.',
         quotes: [],
       },
@@ -239,41 +252,29 @@ export const NODES = [
       {
         id: 'n-g-1',
         label: '666',
-        match: (n) => numbersIn(n).includes(666) || /^six six six$/.test(n),
+        parties: [{ t: '666', formes: ['666', 'six six six', 'six cent soixante six'] }],
         note: 'Le titre s’entend aussi « cent indices ». Un dé a six faces ; ce qui s’y cache est le nombre de la bête.',
         quotes: ['Sans indices dans les dés, je laisse des signes cachés. (Sans indices dans les dés)'],
       },
     ],
   },
   {
+    // Un seul signe désormais : plus d'étape « 10 mains » entre la bête et
+    // ses cornes. Qui avait trouvé les mains garde le 10 (RENAMED).
     id: 'n-h',
     source: 'Prends la bête à …',
     requires: [],
     answers: [
       {
-        id: 'n-h-1',
-        label: '10 mains',
-        match: (n) => numbersIn(n).includes(10) && !/corne/.test(n),
-        note: '« Prends la bête à 8 mains » (Sans indices dans les dés) + « Prends la bête à 2 mains » (30 vins divins).',
+        id: 'n-h-2',
+        label: '10 cornes',
+        parties: [
+          { t: '10', formes: ['10', 'dix'] },
+          { t: 'cornes', formes: ['cornes', 'corne'] },
+        ],
+        note: '« Prends la bête à 8 mains » + « à 2 mains » : dix. La bête de l’Apocalypse a dix cornes : les mains du refrain les comptent.',
         quotes: ['Prends la bête à 8 mains, dans l’aiguille j’ai vu un aigle. (Sans indices dans les dés)',
                  'Prends la bête à 2 mains, dans les chiffres j’ai vu un aigle. (30 vins divins)'],
-      },
-    ],
-  },
-  {
-    id: 'n-i',
-    source: '10 mains',
-    // Sa source EST la réponse du nœud précédent : masquée tant qu'il est
-    // verrouillé.
-    lockedLabel: 'Le signe précédent',
-    requires: ['n-h-1'],
-    answers: [
-      {
-        id: 'n-i-1',
-        label: '10 cornes',
-        match: (n) => /cornes?/.test(n),
-        note: 'La bête de l’Apocalypse a dix cornes : les mains du refrain les comptent.',
-        quotes: [],
       },
     ],
   },
@@ -286,7 +287,16 @@ export const NODES = [
       {
         id: 'n-j-1',
         label: 'Mécanisme = Matière',
-        match: (n) => /mecanism/.test(n) && /matiere/.test(n),
+        parties: [
+          { t: 'Mécanisme', formes: ['mecanisme'] },
+          { t: 'Matière', formes: ['matiere'] },
+        ],
+        seps: [' = '],
+        extra: [{
+          idx: [0, 1],
+          formes: ['mecanisme egale matiere', 'mecanisme egal matiere',
+                   'matiere mecanisme', 'matiere egale mecanisme'],
+        }],
         note: 'Les deux mots reviennent toujours ensemble, toujours équivalents.',
         quotes: ['Je sais que le QI change, M égale M à jamais. (30 vins divins)',
                  'Tout a une logique, matière et mécanisme. (Multivers)'],
@@ -296,25 +306,104 @@ export const NODES = [
 
 ];
 
+/* --------------------------------------------------- moteur des parties ---
+   Chaque réponse est compilée une fois au chargement : toutes les écritures
+   admises de chaque sous-ensemble ordonné de parties, jointes par espace,
+   plus les écritures `extra`. La proposition d'un joueur se compare à ces
+   tables (avec puis sans espaces) : le masque obtenu dit quelles parties
+   viennent d'être trouvées.                                              */
+
+const bits = (m) => { let n = 0; while (m) { n += m & 1; m >>= 1; } return n; };
+
+function compileAnswer(a) {
+  const k = a.parties.length;
+  const garde = (map, s, masque) => {
+    const cle = s.trim().replace(/\s+/g, ' ');
+    if (!cle) return;
+    const avant = map.get(cle) || 0;
+    if (bits(masque) > bits(avant)) map.set(cle, masque);
+  };
+  const exactes = new Map();
+  for (let masque = 1; masque < (1 << k); masque++) {
+    let combos = [''];
+    for (let i = 0; i < k; i++) {
+      if (!(masque & (1 << i))) continue;
+      const suite = [];
+      for (const c of combos) for (const f of a.parties[i].formes) suite.push(c ? `${c} ${f}` : f);
+      combos = suite;
+    }
+    for (const c of combos) garde(exactes, c, masque);
+  }
+  for (const e of a.extra || []) {
+    const masque = e.idx.reduce((acc, i) => acc | (1 << i), 0);
+    for (const f of e.formes) garde(exactes, f, masque);
+  }
+  const collees = new Map();
+  for (const [s, m] of exactes) garde(collees, s.replace(/ /g, ''), m);
+  return { exactes, collees, plein: (1 << k) - 1 };
+}
+
+for (const node of NODES) for (const a of node.answers) a.moteur = compileAnswer(a);
+
 /* ----------------------------------------------------------------- API */
 
-// « 30 vins divins » a eu son propre nœud avant d'être réuni à « 5 vins
-// divins », et « White Cadae » a gardé la page Interprétations avant de
-// rejoindre le 57 : ce qui avait été trouvé vaut toujours, on ne
-// réinitialise personne. Les réponses supprimées, elles, sont ignorées.
-const RENAMED = { 'n-d-2': 'n-c-1', 'porte-interp-1': 'n-w-1' };
+// Des nœuds ont été réunis ou refondus depuis les premières trouvailles : ce
+// qui avait été trouvé vaut toujours, on ne réinitialise personne. Un ancien
+// identifiant peut valoir une réponse entière, ou seulement une partie de la
+// réponse qui l'a absorbée (suffixe .pN). Les réponses supprimées sont
+// ignorées.
+const RENAMED = {
+  'n-d-2': 'n-c-1',
+  'porte-interp-1': 'n-w-1',
+  // « Anges » et « 12 » vivent désormais dans « 12 arc-anges »
+  'n-a-1': 'n-a-4.p2',
+  'n-a-3': 'n-a-4.p0',
+  // la bête n'a plus qu'un signe ; « 10 mains » laisse son 10
+  'n-i-1': 'n-h-2',
+  'n-h-1': 'n-h-2.p0',
+};
 export function currentAnswerId(id) {
   return RENAMED[id] || id;
 }
 
 const NODE_BY_ID = new Map(NODES.map((n) => [n.id, n]));
 const NODE_OF_ANSWER = new Map();
-for (const node of NODES) for (const a of node.answers) NODE_OF_ANSWER.set(a.id, node);
+const ANSWER_BY_ID = new Map();
+for (const node of NODES) {
+  for (const a of node.answers) {
+    NODE_OF_ANSWER.set(a.id, node);
+    ANSWER_BY_ID.set(a.id, a);
+  }
+}
 
 export const TOTAL_ANSWERS = NODES.reduce((sum, n) => sum + n.answers.length, 0);
 
 export function getNode(id) {
   return NODE_BY_ID.get(id) || null;
+}
+
+// Sépare des identifiants (déjà passés par currentAnswerId) les réponses
+// entières et les parties. Une réponse dont toutes les parties sont là est
+// entière. Tout le monde lit la progression par cette porte : le jeu, le
+// profil, l'annuaire.
+export function progresOf(ids) {
+  const solved = new Set();
+  const parties = new Map();
+  for (const id of ids) {
+    const m = /^(.+)\.p(\d+)$/.exec(id);
+    if (m && ANSWER_BY_ID.has(m[1])) {
+      const idx = Number(m[2]);
+      if (idx >= ANSWER_BY_ID.get(m[1]).parties.length) continue;
+      if (!parties.has(m[1])) parties.set(m[1], new Set());
+      parties.get(m[1]).add(idx);
+    } else if (ANSWER_BY_ID.has(id)) {
+      solved.add(id);
+    }
+  }
+  for (const [id, set] of parties) {
+    if (set.size >= ANSWER_BY_ID.get(id).parties.length) solved.add(id);
+  }
+  return { solved, parties };
 }
 
 // Un nœud n'est jouable que si toutes les réponses dont il dépend sont
@@ -323,18 +412,48 @@ export function isLocked(node, solved) {
   return node.requires.some((id) => !solved.has(id));
 }
 
-// Cherche, parmi les réponses encore à trouver de ce nœud, celle qui
-// correspond. Retourne son identifiant, ou null.
-export function matchAnswer(node, answer, solved) {
+// Confronte une proposition aux réponses restantes du nœud. Renvoie la
+// meilleure prise : { id, masque (les parties qui viennent d'être gagnées),
+// complet }, ou null. Une réponse entière l'emporte sur une partie ;
+// re-proposer une partie déjà verte ne vaut rien.
+export function matchAnswer(node, answer, solved, parties = new Map()) {
   const n = normalize(answer);
   if (!n) return null;
-  const hit = node.answers.find((a) => !solved.has(a.id) && a.match(n));
-  return hit ? hit.id : null;
+  const collee = n.replace(/ /g, '');
+  let meilleur = null;
+  for (const a of node.answers) {
+    if (solved.has(a.id)) continue;
+    const brut = a.moteur.exactes.get(n) ?? a.moteur.collees.get(collee) ?? 0;
+    const deja = [...(parties.get(a.id) || [])].reduce((acc, i) => acc | (1 << i), 0);
+    const neuf = brut & ~deja;
+    if (!neuf) continue;
+    const complet = (brut | deja) === a.moteur.plein;
+    const score = (complet ? 100 : 0) + bits(neuf);
+    if (!meilleur || score > meilleur.score) meilleur = { id: a.id, masque: neuf, complet, score };
+  }
+  return meilleur;
 }
 
 // Le libellé d'un nœud tel qu'on a le droit de l'afficher.
 function sourceOf(node, locked) {
   return locked && node.lockedLabel ? node.lockedLabel : node.source;
+}
+
+/* Ce qu'une réponse tenue partiellement a le droit de montrer : les parties
+   trouvées, à leur place, et un seul « ? » par trou : jamais le texte d'une
+   partie manquante, jamais leur nombre, jamais le séparateur d'un trou.   */
+function jetonsPartiels(a, trouvees) {
+  const jetons = [];
+  for (let i = 0; i < a.parties.length; i++) {
+    if (trouvees.has(i)) {
+      const sep = jetons.length === 0 ? ''
+        : (trouvees.has(i - 1) ? (a.seps?.[i - 1] ?? ' ') : ' ');
+      jetons.push({ t: a.parties[i].t, sep });
+    } else if (!jetons.length || !jetons[jetons.length - 1].q) {
+      jetons.push({ q: true, sep: jetons.length ? ' ' : '' });
+    }
+  }
+  return jetons;
 }
 
 /* ------------------------------------------------------------- échelons */
@@ -349,12 +468,12 @@ for (const node of NODES) {
   for (const a of node.answers) (node.bonus ? BONUS_ANSWERS : ORDINARY_ANSWERS).add(a.id);
 }
 
-// On est à l'échelon 1 dès l'arrivée : c'est le point de départ que l'on gravit ensuite. Ce
-// qu'on gravit ensuite, ce sont les crans : trois signes titrés chacun. Un
-// signe du bloc muet apporte l'équivalent de trois signes d'un coup : il fait
-// donc gagner un échelon entier, quel que soit le moment où on le trouve.
-// Avec treize signes titrés (quatre crans pleins) et deux signes muets, le
-// sommet est l'échelon 7.
+// On est à l'échelon 1 dès l'arrivée : c'est le point de départ que l'on
+// gravit ensuite. Ce qu'on gravit ensuite, ce sont les crans : trois signes
+// titrés chacun. Un signe du bloc muet apporte l'équivalent de trois signes
+// d'un coup : il fait donc gagner un échelon entier, quel que soit le moment
+// où on le trouve. Avec treize signes titrés et deux signes muets, le sommet
+// est l'échelon 7. Une réponse tenue partiellement ne compte pas encore.
 export function echelonOf(solved) {
   let signes = 0;
   for (const id of solved) {
@@ -365,8 +484,8 @@ export function echelonOf(solved) {
 }
 
 // Ce que chaque échelon ouvre. La page 57 est toujours là : c'est par elle
-// qu'on entre. Les interprétations et les reprises sont ouvertes dès le sol :
-// même sans compte : et chaque cran suivant découvre une pièce de plus.
+// qu'on entre. Les interprétations et les reprises sont ouvertes dès le sol,
+// même sans compte, et chaque cran suivant découvre une pièce de plus.
 export const ECHELON_INTERPRETATIONS = 1;
 export const ECHELON_REPRISES = 1;
 export const ECHELON_CONVERSATION = 2;
@@ -427,27 +546,31 @@ export function accessOf(echelon) {
 }
 
 // L'état complet du jeu pour un membre. `rows` vient de riddle_progress ;
-// les identifiants inconnus (anciennes parties) sont simplement ignorés.
+// les identifiants inconnus (anciennes parties du jeu) sont ignorés.
 //
 // Ce qui part au client est volontairement pauvre : jamais le nombre total de
-// mots de passe du jeu, et pas même celui d'un bloc silencieux. Un bloc
-// encore ouvert se signale par `open`, ce qui suffit à afficher le champ sans
-// dire combien il reste à trouver.
+// signes du jeu, pas même celui d'un bloc silencieux, jamais une partie non
+// trouvée. Un bloc encore ouvert se signale par `open`, ce qui suffit à
+// afficher le champ sans dire combien il reste à trouver.
 export function buildState(rows) {
-  const solved = new Set(
-    rows.filter((r) => r.solved_at && NODE_OF_ANSWER.has(r.riddle_id)).map((r) => r.riddle_id)
+  const { solved, parties } = progresOf(
+    rows.filter((r) => r.solved_at).map((r) => r.riddle_id)
   );
 
   const nodes = NODES.map((node) => {
     const locked = isLocked(node, solved);
     const found = node.answers.filter((a) => solved.has(a.id)).map((a) => ({ id: a.id, label: a.label }));
+    const partiels = node.answers
+      .filter((a) => !solved.has(a.id) && parties.get(a.id)?.size)
+      .map((a) => ({ id: a.id, jetons: jetonsPartiels(a, parties.get(a.id)) }));
     return {
       id: node.id,
       source: sourceOf(node, locked),
-      locked: locked && found.length === 0,
+      locked: locked && found.length === 0 && partiels.length === 0,
       total: node.silent ? null : node.answers.length,
       open: found.length < node.answers.length,
       found,
+      partiels,
       // de quoi afficher un cadenas cliquable, sans rien révéler d'autre
       requires: node.requires.map((answerId) => {
         const dep = NODE_OF_ANSWER.get(answerId);

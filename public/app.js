@@ -190,12 +190,16 @@ async function route() {
   if (path === '/videographie/nouveau') return vueNouvelArbre('video');
   if (path === '/videographie/carre') return vueVideoCarre();
   if ((m = path.match(/^\/videographie\/(\d+)$/))) return pageArbre('video', +m[1]);
-  if (path === '/carre-d-as') return vueMonCarre();
-  if (path === '/carre-d-as/conversation') return vueCarreConv();
+  if (path === '/carre-d-as') return vueMesCarres();
   if (path === '/carre-d-as/recrutement') return vueRecrutement();
-  // l'ancien annuaire vit désormais dans le salon de recrutement
+  // l'ancien annuaire vit au salon de recrutement ; l'ancienne conversation
+  // unique vit dans chaque carré
   if (path === '/carre-d-as/annuaire') return navigate('/carre-d-as/recrutement', true);
+  if (path === '/carre-d-as/conversation') return navigate('/carre-d-as', true);
   if (path === '/carre-d-as/missions') return vueMissions();
+  if ((m = path.match(/^\/carre-d-as\/(\d+)(?:\/(notes|conversation|relatif))?$/))) {
+    return pageCarre(+m[1], m[2] || 'carre');
+  }
   if (path === '/brainstorm') return vueScene();
   if (path === '/brainstorm/archives') return vueArchives();
   if (path === '/brainstorm/annoncer') return vueAnnoncer();
@@ -622,8 +626,7 @@ const SOUS_APPS = {
     { cle: 'carre', chemin: '/videographie/carre', label: 'Carré' },
   ],
   ca: [
-    { cle: 'carre', chemin: '/carre-d-as', label: 'Mon carré' },
-    { cle: 'conv', chemin: '/carre-d-as/conversation', label: 'Conversation' },
+    { cle: 'carre', chemin: '/carre-d-as', label: 'Mes carrés' },
     { cle: 'recrutement', chemin: '/carre-d-as/recrutement', label: 'Recrutement' },
     { cle: 'missions', chemin: '/carre-d-as/missions', label: 'Missions' },
   ],
@@ -781,21 +784,31 @@ async function vueVideoCarre() {
   }
   if (stale(epoch)) return;
 
-  if (!d.carre) {
+  if (!(d.carres || []).length) {
     docke('vg', 'carre', `
       <h1>Le carré</h1>
       <p class="empty-note">Pas encore de carré : il se fonde au <a href="/carre-d-as" data-link>Carré d’As</a>.</p>`);
     return;
   }
 
-  const autres = d.carre.membres.filter((m) => !state.user || m.user_id !== state.user.id);
+  // tous les As de tous mes carrés, chacun une fois, moi excepté
+  const vus = new Set();
+  const autres = [];
+  for (const c of d.carres) {
+    for (const m of c.membres) {
+      if (state.user && m.user_id === state.user.id) continue;
+      if (vus.has(m.user_id)) continue;
+      vus.add(m.user_id);
+      autres.push(m);
+    }
+  }
   docke('vg', 'carre', `
     <h1>Le carré</h1>
     ${autres.length ? autres.map((m) => `
       <section class="video-as" data-as="${m.user_id}">
         <h2>${esc(m.username)}</h2>
         <div class="video-as-arbres"><p class="empty-note">…</p></div>
-      </section>`).join('') : '<p class="empty-note">Ton carré n’a pas encore d’autre As.</p>'}`);
+      </section>`).join('') : '<p class="empty-note">Tes carrés n’ont pas encore d’autre As.</p>'}`);
 
   for (const m of autres) {
     try {
@@ -1058,144 +1071,330 @@ async function chargeCarre() {
   return api('/api/carre');
 }
 
-async function vueMonCarre() {
+/* ----------------------- mes carrés : le réseau des groupes de réflexion ---
+   Un As peut vivre dans plusieurs carrés. Cette vue les liste, en fonde un,
+   en rejoint un ; chaque carré a ensuite sa page, avec ses onglets.       */
+
+async function vueMesCarres() {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
-  let data;
-  try { data = await chargeCarre(); }
+  let d;
+  try { d = await chargeCarre(); }
   catch { return navigate('/57', true); }
   if (stale(epoch)) return;
 
-  let outil;
-  if (data.carre) {
-    const c = data.carre;
-    const parRole = data.roles.map((r) => {
-      const total = c.membres.filter((m) => m.role === r).length;
-      return `${total} ${r}${total > 1 ? 's' : ''}`;
-    });
-    const pris = new Set(c.membres.map((m) => m.domaine).filter(Boolean));
-    const moi = c.membres.find((m) => state.user && m.user_id === state.user.id);
-    outil = `
-      <section class="mon-carre">
-        <h2>${esc(c.nom)}</h2>
-        <div class="carre-membres">
-          ${c.membres.map((m) => `
-            <div class="carre-membre${state.user && m.user_id === state.user.id ? ' moi' : ''}">
-              ${authorLink(m.username)}
-              <span class="carre-role">${esc(m.role || 'rôle à choisir')}</span>
-              <span class="carre-domaine">${esc(m.domaine || 'connaissance à choisir')}</span>
-              ${m.user_id !== (state.user && state.user.id) && state.access.videographie
-                ? `<a class="link-btn" href="/videographie/carre" data-link>sa vidéographie</a>` : ''}
-            </div>`).join('')}
-          ${Array.from({ length: 4 - c.membres.length }, () => '<div class="carre-membre carre-vide">place libre</div>').join('')}
-        </div>
-        <div class="carre-equilibre">
-          <span>${parRole.map(esc).join(' · ')}</span>
-          <span class="carre-domaines">${data.domaines.map((d) => `<span class="dom${pris.has(d) ? ' couvert' : ''}">${esc(d)}</span>`).join('')}</span>
-        </div>
-        <form id="carre-moi" class="carre-moi">
-          <label>Ma nature
-            <select id="carre-role"><option value="">Choisir…</option>
-              ${data.roles.map((r) => `<option value="${esc(r)}"${moi?.role === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}
-            </select></label>
-          <label>Ma connaissance
-            <select id="carre-domaine"><option value="">Choisir…</option>
-              ${data.domaines.map((d) => `<option value="${esc(d)}"${moi?.domaine === d ? ' selected' : ''}>${esc(d)}</option>`).join('')}
-            </select></label>
-          <button type="submit">Enregistrer</button>
-          <button type="button" class="link-btn danger" id="carre-quitter">Quitter le carré</button>
-        </form>
-      </section>
-      <section class="carre-vie">
-        <h2>La vie du carré</h2>
-        <ul class="vie-liste">
-          ${(c.brainstorms || []).map((b) => `
-            <li><a href="/brainstorm/${b.id}" data-link>${esc(b.sujet)}</a>
-              <span class="vie-meta">${b.statut === 'live' ? 'en direct' : b.statut === 'annonce' ? 'annoncé' : 'terminé'}
-                ${b.retenues ? ` · ${b.retenues} retenue${b.retenues > 1 ? 's' : ''}` : ''}</span></li>`).join('')}
-          ${c.membres.map((m) => `
-            <li><span class="vie-arrivee">${esc(m.username)} est là</span>
-              <span class="vie-meta">${esc(formatDate(m.joined_at))}</span></li>`).join('')}
-        </ul>
-      </section>`;
-  } else if (state.user) {
-    outil = `
-      <section class="mon-carre">
-        <h2>Ton carré</h2>
-        <p class="empty-note">Fonde le tien, ou passe par le <a href="/carre-d-as/recrutement" data-link>recrutement</a>.</p>
-        <form id="carre-cree" class="carre-cree">
-          <input id="carre-nom" maxlength="60" placeholder="Le nom de ton carré" required>
-          <button type="submit" class="primary">Fonder un carré</button>
-          <p class="form-error" id="carre-err"></p>
-        </form>
-        ${data.ouverts.length ? `
-        <h3>Carrés où il reste une place</h3>
-        <ul class="carres-ouverts">
-          ${data.ouverts.map((o) => `<li>${esc(o.nom)} <span>(${o.membres}/4)</span>
-            <button type="button" data-rejoint="${o.id}">Rejoindre</button></li>`).join('')}
-        </ul>` : '<p class="empty-note">Aucun carré n’attend de quatrième As : fonde le tien.</p>'}
-      </section>`;
+  let contenu;
+  if (!state.user) {
+    contenu = '<p class="empty-note">Connecte-toi pour fonder ou rejoindre un carré.</p>';
   } else {
-    outil = '<p class="empty-note">Connecte-toi pour fonder ou rejoindre un carré.</p>';
+    const cartes = d.carres.map((c) => {
+      const pris = new Set(c.membres.map((m) => m.domaine).filter(Boolean));
+      const places = 4 - c.membres.length;
+      return `
+        <a class="carre-carte" href="/carre-d-as/${c.id}" data-link>
+          <h2>${esc(c.nom)}</h2>
+          <p class="carre-carte-membres">${c.membres.map((m) => esc(m.username)).join(' · ')}
+            ${places ? `<span class="carre-carte-places">${places} place${places > 1 ? 's' : ''}</span>` : ''}</p>
+          <p class="carre-domaines">${d.domaines.map((x) => `<span class="dom${pris.has(x) ? ' couvert' : ''}">${esc(x)}</span>`).join('')}</p>
+        </a>`;
+    }).join('');
+    contenu = `
+      ${d.invitations ? `<p class="recrut-place"><a href="/carre-d-as/recrutement" data-link>
+        ${d.invitations} invitation${d.invitations > 1 ? 's' : ''} au recrutement</a></p>` : ''}
+      ${d.carres.length ? `<div class="carres-liste">${cartes}</div>`
+        : '<p class="empty-note">Aucun carré encore : fonde le tien, ou passe par le <a href="/carre-d-as/recrutement" data-link>recrutement</a>.</p>'}
+      <form id="carre-cree" class="carre-cree">
+        <input id="carre-nom" maxlength="60" placeholder="Le nom d’un nouveau carré" required>
+        <button type="submit" class="primary">Fonder</button>
+        <p class="form-error" id="carre-err"></p>
+      </form>
+      ${d.ouverts.length ? `
+      <h2>Carrés où il reste une place</h2>
+      <ul class="carres-ouverts">
+        ${d.ouverts.map((o) => `<li><a href="/carre-d-as/${o.id}" data-link>${esc(o.nom)}</a> <span>(${o.membres}/4)</span>
+          <button type="button" data-rejoint="${o.id}">Rejoindre</button></li>`).join('')}
+      </ul>` : ''}`;
   }
 
-  docke('ca', 'carre', `<h1>Carré d’As</h1>${outil}`);
+  docke('ca', 'carre', `<h1>Carré d’As</h1>${contenu}`);
 
-  const moi = document.getElementById('carre-moi');
-  if (moi) {
-    moi.onsubmit = async (e) => {
-      e.preventDefault();
-      await api('/api/carre/moi', {
-        method: 'PUT',
-        body: { role: document.getElementById('carre-role').value, domaine: document.getElementById('carre-domaine').value },
-      });
-      vueMonCarre();
-    };
-    document.getElementById('carre-quitter').onclick = async () => {
-      if (!confirm('Quitter ton carré ?')) return;
-      await api('/api/carre/quitter', { method: 'POST' });
-      vueMonCarre();
-    };
-  }
   const cree = document.getElementById('carre-cree');
   if (cree) {
     cree.onsubmit = async (e) => {
       e.preventDefault();
       try {
-        await api('/api/carre', { method: 'POST', body: { nom: document.getElementById('carre-nom').value } });
-        vueMonCarre();
+        const r = await api('/api/carre', { method: 'POST', body: { nom: document.getElementById('carre-nom').value } });
+        navigate(`/carre-d-as/${r.id}`);
       } catch (err) { document.getElementById('carre-err').textContent = err.message; }
     };
     app.querySelectorAll('[data-rejoint]').forEach((b) => {
       b.onclick = async () => {
         try {
           await api(`/api/carre/${b.dataset.rejoint}/rejoindre`, { method: 'POST', body: {} });
-          vueMonCarre();
+          navigate(`/carre-d-as/${b.dataset.rejoint}`);
         } catch (err) { document.getElementById('carre-err').textContent = err.message; }
       };
     });
   }
 }
 
-/* -------------------- la conversation du carré : plein écran, entre As --- */
+/* --------------------------------- la page d'un carré, et ses onglets ---
+   Le carré (les As, le cap, le salon, le live), les notes (l'évaluation
+   mutuelle), la conversation, le relatif (l'IA du carré).                */
 
-async function vueCarreConv() {
+function carreTete(d, id, onglet) {
+  const onglets = d.publique ? '' : `
+    <nav class="carre-onglets">
+      ${[['carre', 'Le carré'], ['notes', 'Notes'], ['conversation', 'Conversation'], ['relatif', 'Relatif']]
+        .map(([cle, label]) => `<a href="/carre-d-as/${id}${cle === 'carre' ? '' : `/${cle}`}" data-link
+          class="co-tab${onglet === cle ? ' actif' : ''}">${label}</a>`).join('')}
+    </nav>`;
+  return `
+    <p class="fil-retour"><a href="/carre-d-as" data-link>← Mes carrés</a></p>
+    <h1>${esc(d.carre.nom)}</h1>
+    ${onglets}`;
+}
+
+async function pageCarre(id, onglet) {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
-  let premier;
-  try { premier = await api('/api/carre/conversation'); }
-  catch (err) {
-    if (err.status === 404) {
-      docke('ca', 'conv', `<h1>La conversation du carré</h1>
-        <p class="empty-note">Elle s’ouvrira avec ton <a href="/carre-d-as" data-link>carré</a>.</p>`);
-      return;
-    }
-    return navigate('/57', true);
-  }
+  let d;
+  try { d = await api(`/api/carre/${id}`); }
+  catch { return navigate('/carre-d-as', true); }
   if (stale(epoch)) return;
 
-  docke('ca', 'conv', `
-    <h1>La conversation du carré</h1>
+  if (d.publique) return carreFacade(id, d);
+  if (onglet === 'notes') return carreOngletNotes(id, d, epoch);
+  if (onglet === 'conversation') return carreOngletConversation(id, d, epoch);
+  if (onglet === 'relatif') return carreOngletRelatif(id, d, epoch);
+  return carreOngletCarre(id, d, epoch);
+}
+
+// La façade d'un carré qui n'est pas le mien : les As, les places. Rien que
+// l'annuaire ne montrait déjà.
+function carreFacade(id, d) {
+  docke('ca', 'carre', `
+    ${carreTete(d, id, 'carre')}
+    <div class="carre-membres">
+      ${d.membres.map((m) => `
+        <div class="carre-membre">
+          ${authorLink(m.username)}
+          <span class="carre-role">${esc(m.role || '')}</span>
+          <span class="carre-domaine">${esc(m.domaine || '')}</span>
+        </div>`).join('')}
+      ${Array.from({ length: d.places }, () => '<div class="carre-membre carre-vide">place libre</div>').join('')}
+    </div>
+    ${d.places > 0 && state.user ? `
+      <button type="button" class="primary" id="carre-rejoint">Rejoindre ce carré</button>
+      <p class="form-error" id="carre-err"></p>` : ''}`);
+
+  const b = document.getElementById('carre-rejoint');
+  if (b) b.onclick = async () => {
+    try {
+      await api(`/api/carre/${id}/rejoindre`, { method: 'POST', body: {} });
+      pageCarre(id, 'carre');
+    } catch (err) { document.getElementById('carre-err').textContent = err.message; }
+  };
+}
+
+function carreOngletCarre(id, d, epoch) {
+  const c = d.carre;
+  const pris = new Set(d.membres.map((m) => m.domaine).filter(Boolean));
+  const parRole = d.roles.map((r) => {
+    const total = d.membres.filter((m) => m.role === r).length;
+    return `${total} ${r}${total > 1 ? 's' : ''}`;
+  });
+  const complet = d.membres.length === 4;
+
+  docke('ca', 'carre', `
+    ${carreTete(d, id, 'carre')}
+    <section class="mon-carre">
+      <div class="carre-membres">
+        ${d.membres.map((m) => `
+          <div class="carre-membre${state.user && m.user_id === state.user.id ? ' moi' : ''}">
+            ${authorLink(m.username)}
+            <span class="carre-role">${esc(m.role || 'rôle à choisir')}</span>
+            <span class="carre-domaine">${esc(m.domaine || 'connaissance à choisir')}</span>
+            ${m.user_id !== (state.user && state.user.id) && state.access.videographie
+              ? '<a class="link-btn" href="/videographie/carre" data-link>sa vidéographie</a>' : ''}
+          </div>`).join('')}
+        ${Array.from({ length: d.places }, () => '<div class="carre-membre carre-vide">place libre</div>').join('')}
+      </div>
+      <div class="carre-equilibre">
+        <span>${parRole.map(esc).join(' · ')}</span>
+        <span class="carre-domaines">${d.domaines.map((x) => `<span class="dom${pris.has(x) ? ' couvert' : ''}">${esc(x)}</span>`).join('')}</span>
+      </div>
+      <form id="carre-moi" class="carre-moi">
+        <label>Ma nature
+          <select id="carre-role"><option value="">Choisir…</option>
+            ${d.roles.map((r) => `<option value="${esc(r)}"${d.moi.role === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}
+          </select></label>
+        <label>Ma connaissance
+          <select id="carre-domaine"><option value="">Choisir…</option>
+            ${d.domaines.map((x) => `<option value="${esc(x)}"${d.moi.domaine === x ? ' selected' : ''}>${esc(x)}</option>`).join('')}
+          </select></label>
+        <button type="submit">Enregistrer</button>
+        <button type="button" class="link-btn danger" id="carre-quitter">Quitter le carré</button>
+      </form>
+    </section>
+
+    <section class="carre-cap">
+      <h2>Le cap</h2>
+      <form id="cap-form">
+        <textarea id="cap-texte" maxlength="1000" rows="3"
+          placeholder="Ta meilleure version, votre société harmonieuse, vos modèles d’univers : le cap de ce carré.">${esc(c.cap || '')}</textarea>
+        <div class="cap-ligne">
+          <input id="cap-discord" type="url" maxlength="200"
+            placeholder="Le salon Discord du carré (facultatif)" value="${esc(c.discord_url || '')}">
+          <button type="submit">Enregistrer</button>
+        </div>
+        <p class="form-error" id="cap-err"></p>
+      </form>
+      ${c.discord_url ? `<p class="carre-salon"><a href="${esc(safeUrl(c.discord_url))}" target="_blank" rel="noopener">Ouvrir le salon du carré ↗</a></p>` : ''}
+    </section>
+
+    <section class="carre-live">
+      <h2>Le live du carré</h2>
+      ${complet ? `
+      <p class="carre-live-note">L’As au meilleur matériel tient l’antenne ; les quatre se retrouvent
+        au salon, et l’hôte retransmet leurs quatre voix en direct.</p>
+      <form id="live-form" class="bs-form">
+        <input id="live-sujet" maxlength="200" placeholder="Le sujet du brainstorming" required>
+        <div class="bs-form-ligne">
+          <select id="live-hote">
+            ${d.membres.map((m) => `<option value="${m.user_id}"${state.user && m.user_id === state.user.id ? ' selected' : ''}>Hôte : ${esc(m.username)}</option>`).join('')}
+          </select>
+          <select id="live-plateforme">
+            <option value="youtube">YouTube</option><option value="twitch">Twitch</option><option value="tiktok">TikTok</option>
+          </select>
+          <input id="live-url" type="url" placeholder="Le lien du live" required>
+        </div>
+        <button type="submit" class="primary">Annoncer</button>
+        <p class="form-error" id="live-err"></p>
+      </form>` : '<p class="empty-note">Le live s’annonce à quatre : complète le carré.</p>'}
+      ${(d.brainstorms || []).length ? `
+      <ul class="vie-liste">
+        ${d.brainstorms.map((b) => `
+          <li><a href="/brainstorm/${b.id}" data-link>${esc(b.sujet)}</a>
+            <span class="vie-meta">${b.statut === 'live' ? 'en direct' : b.statut === 'annonce' ? 'annoncé' : 'terminé'}
+              ${b.hote_username ? ` · ${esc(b.hote_username)} à l’antenne` : ''}
+              ${b.retenues ? ` · ${b.retenues} retenue${b.retenues > 1 ? 's' : ''}` : ''}</span></li>`).join('')}
+      </ul>` : ''}
+    </section>`);
+
+  document.getElementById('carre-moi').onsubmit = async (e) => {
+    e.preventDefault();
+    await api(`/api/carre/${id}/moi`, {
+      method: 'PUT',
+      body: { role: document.getElementById('carre-role').value, domaine: document.getElementById('carre-domaine').value },
+    });
+    pageCarre(id, 'carre');
+  };
+  document.getElementById('carre-quitter').onclick = async () => {
+    if (!confirm('Quitter ce carré ?')) return;
+    await api(`/api/carre/${id}/quitter`, { method: 'POST', body: {} });
+    navigate('/carre-d-as');
+  };
+  document.getElementById('cap-form').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api(`/api/carre/${id}`, {
+        method: 'PUT',
+        body: { cap: document.getElementById('cap-texte').value, discord_url: document.getElementById('cap-discord').value },
+      });
+      pageCarre(id, 'carre');
+    } catch (err) { document.getElementById('cap-err').textContent = err.message; }
+  };
+  const live = document.getElementById('live-form');
+  if (live) live.onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api('/api/brainstorms', {
+        method: 'POST',
+        body: {
+          carre_id: id,
+          sujet: document.getElementById('live-sujet').value,
+          plateforme: document.getElementById('live-plateforme').value,
+          url: document.getElementById('live-url').value,
+          hote_user_id: +document.getElementById('live-hote').value,
+        },
+      });
+      navigate(`/brainstorm/${r.id}`);
+    } catch (err) { document.getElementById('live-err').textContent = err.message; }
+  };
+}
+
+/* Les notes : chacun note les trois autres, domaine par domaine. Le meilleur
+   du domaine vaut 10, le reste se lit par rapport à lui. Tout le carré voit
+   tout : la transparence est la discussion.                               */
+function carreOngletNotes(id, d, epoch) {
+  const autres = d.membres.filter((m) => !state.user || m.user_id !== state.user.id);
+  const maNote = (cible, domaine) => {
+    const n = d.notes.find((x) => state.user && x.rateur_id === state.user.id
+      && x.cible_id === cible && x.domaine === domaine);
+    return n ? n.note : '';
+  };
+  const moyennes = new Map();
+  for (const m of d.membres) {
+    for (const dom of d.domaines) {
+      const recues = d.notes.filter((x) => x.cible_id === m.user_id && x.domaine === dom);
+      if (recues.length) {
+        moyennes.set(`${m.user_id}:${dom}`, recues.reduce((s, x) => s + x.note, 0) / recues.length);
+      }
+    }
+  }
+
+  const sections = d.domaines.map((dom) => {
+    let meilleure = 0;
+    for (const m of d.membres) meilleure = Math.max(meilleure, moyennes.get(`${m.user_id}:${dom}`) || 0);
+    const lignes = d.membres.map((m) => {
+      const moy = moyennes.get(`${m.user_id}:${dom}`);
+      const estMoi = state.user && m.user_id === state.user.id;
+      return `
+        <div class="note-ligne${moy && moy === meilleure ? ' note-meilleur' : ''}">
+          <span class="note-nom">${esc(m.username)}</span>
+          <span class="note-moy">${moy ? moy.toFixed(1).replace('.0', '') : '·'}</span>
+          ${estMoi ? '<span class="note-saisie"></span>' : `
+          <select class="note-saisie" data-cible="${m.user_id}" data-domaine="${esc(dom)}">
+            <option value="">Noter…</option>
+            ${Array.from({ length: 10 }, (_, i) => 10 - i).map((n) =>
+              `<option value="${n}"${String(maNote(m.user_id, dom)) === String(n) ? ' selected' : ''}>${n}</option>`).join('')}
+          </select>`}
+        </div>`;
+    }).join('');
+    return `<section class="note-domaine"><h2>${esc(dom)}</h2>${lignes}</section>`;
+  }).join('');
+
+  docke('ca', 'carre', `
+    ${carreTete(d, id, 'notes')}
+    <p class="notes-regle">Le meilleur du domaine vaut 10 ; les autres notes se lisent par
+      rapport à lui. Discutez d’abord, notez ensuite, affinez toujours.</p>
+    ${d.membres.length > 1 ? `
+    <div class="notes-grille">${sections}</div>
+    <button type="button" class="primary" id="notes-envoi">Enregistrer mes notes</button>
+    <p class="form-error" id="notes-err"></p>` : '<p class="empty-note">Les notes commencent à deux.</p>'}`);
+
+  const envoi = document.getElementById('notes-envoi');
+  if (envoi) envoi.onclick = async () => {
+    const notes = [...document.querySelectorAll('.note-saisie[data-cible]')]
+      .filter((s) => s.value)
+      .map((s) => ({ cible_id: +s.dataset.cible, domaine: s.dataset.domaine, note: +s.value }));
+    try {
+      await api(`/api/carre/${id}/notes`, { method: 'PUT', body: { notes } });
+      pageCarre(id, 'notes');
+    } catch (err) { document.getElementById('notes-err').textContent = err.message; }
+  };
+}
+
+/* La conversation du carré : privée, entre ses As. */
+async function carreOngletConversation(id, d, epoch) {
+  let premier;
+  try { premier = await api(`/api/carre/${id}/conversation`); }
+  catch { return navigate('/carre-d-as', true); }
+  if (stale(epoch)) return;
+
+  docke('ca', 'carre', `
+    ${carreTete(d, id, 'conversation')}
     <div class="conv-list conv-list--pleine" id="carre-conv-list"></div>
     <form id="carre-conv-form" class="conv-form">
       <textarea id="carre-conv-body" maxlength="2000" rows="2" placeholder="Dis-le à ton carré…"></textarea>
@@ -1217,14 +1416,14 @@ async function vueCarreConv() {
   liste.scrollTop = liste.scrollHeight;
 
   const recharge = async (force = false) => {
-    let d;
-    try { d = await api('/api/carre/conversation'); } catch { return; }
+    let x;
+    try { x = await api(`/api/carre/${id}/conversation`); } catch { return; }
     if (stale(epoch)) return;
-    const cle = d.messages.map((m) => m.id).join(',');
+    const cle = x.messages.map((m) => m.id).join(',');
     if (!force && cle === derniereCle) return;
     derniereCle = cle;
     const enBas = liste.scrollHeight - liste.scrollTop - liste.clientHeight < 60;
-    peint(d.messages);
+    peint(x.messages);
     if (enBas || force) liste.scrollTop = liste.scrollHeight;
   };
   pageTimer = setInterval(() => { if (!document.hidden) recharge(); }, 20000);
@@ -1234,10 +1433,99 @@ async function vueCarreConv() {
     const champ = document.getElementById('carre-conv-body');
     if (!champ.value.trim()) return;
     try {
-      await api('/api/carre/conversation', { method: 'POST', body: { body: champ.value } });
+      await api(`/api/carre/${id}/conversation`, { method: 'POST', body: { body: champ.value } });
       champ.value = '';
       recharge(true);
     } catch (err) { document.getElementById('carre-conv-err').textContent = err.message; }
+  };
+}
+
+/* Le relatif : l'IA du carré, bâtie sur Pense Mieux. Il parle d'une voix :
+   celle d'un As (ses arbres offerts et ses vidéographies), ou celle du carré
+   entier (le cap, la récolte des brainstorms, les quatre voix). Chaque As
+   choisit ce qu'il offre, arbre par arbre.                                */
+async function carreOngletRelatif(id, d, epoch) {
+  const voix = state.relatifVoix && state.relatifVoix.carre === id ? state.relatifVoix.voix : 'carre';
+  let r;
+  try { r = await api(`/api/carre/${id}/relatif?voix=${encodeURIComponent(voix)}`); }
+  catch { return navigate('/carre-d-as', true); }
+  if (stale(epoch)) return;
+
+  const nomVoix = (v) => v === 'carre' ? `le carré`
+    : esc((r.membres.find((m) => String(m.user_id) === String(v)) || {}).username || '');
+  const aQui = (v) => v === 'carre' ? 'au carré' : `à ${nomVoix(v)}`;
+
+  docke('ca', 'carre', `
+    ${carreTete(d, id, 'relatif')}
+    <div class="relatif-voix">
+      ${[['carre', `Le carré`], ...r.membres.map((m) => [String(m.user_id), m.username])]
+        .map(([v, label]) => `<button type="button" class="voix-chip${String(voix) === v ? ' actif' : ''}"
+          data-voix="${esc(v)}">${esc(label)}</button>`).join('')}
+    </div>
+    ${r.eveille ? '' : `<p class="relatif-dort">Le relatif dort ici : copie le portrait de la voix
+      et porte-le à ton IA.</p>`}
+    <div class="relatif-fil" id="relatif-fil">
+      ${r.echanges.length ? r.echanges.map((e) => `
+        <article class="relatif-echange">
+          <p class="relatif-question"><span class="relatif-qui">${esc(e.username)} ${aQui(e.voix)}</span> ${esc(e.question)}</p>
+          <p class="relatif-reponse">${esc(e.reponse)}</p>
+        </article>`).join('') : '<p class="empty-note">Le relatif attend sa première question.</p>'}
+    </div>
+    <form id="relatif-form" class="relatif-form">
+      <textarea id="relatif-question" maxlength="500" rows="2"
+        placeholder="Demande ${aQui(voix)}…"></textarea>
+      <div class="relatif-actions">
+        <button type="submit" class="primary">Demander</button>
+        <button type="button" class="link-btn" id="relatif-copie">Copier le portrait</button>
+      </div>
+      <p class="form-error" id="relatif-err"></p>
+    </form>
+    <details class="relatif-nourrir">
+      <summary>Nourrir le relatif</summary>
+      <p class="relatif-note">Tes arbres de pensée offerts à ce carré. Rien d’autre de privé ne nourrit sa voix.</p>
+      ${r.mesArbres.length ? `
+      <form id="sources-form">
+        ${r.mesArbres.map((a) => `
+          <label class="source-ligne"><input type="checkbox" value="${a.id}"
+            ${r.offerts.includes(a.id) ? 'checked' : ''}> ${esc(a.title)}</label>`).join('')}
+        <button type="submit">Enregistrer</button>
+      </form>` : '<p class="empty-note">Aucun arbre de pensée encore : plante-en dans <a href="/pense-mieux" data-link>Pense Mieux</a>.</p>'}
+    </details>`);
+
+  app.querySelectorAll('[data-voix]').forEach((b) => {
+    b.onclick = () => {
+      state.relatifVoix = { carre: id, voix: b.dataset.voix };
+      pageCarre(id, 'relatif');
+    };
+  });
+  document.getElementById('relatif-copie').onclick = async () => {
+    const bouton = document.getElementById('relatif-copie');
+    try {
+      await navigator.clipboard.writeText(r.portrait || '');
+      bouton.textContent = r.portrait ? 'Portrait copié' : 'Portrait vide';
+    } catch { bouton.textContent = 'Copie impossible'; }
+    setTimeout(() => { bouton.textContent = 'Copier le portrait'; }, 1800);
+  };
+  document.getElementById('relatif-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const champ = document.getElementById('relatif-question');
+    if (!champ.value.trim()) return;
+    const bouton = e.target.querySelector('button[type="submit"]');
+    bouton.disabled = true;
+    try {
+      await api(`/api/carre/${id}/relatif`, { method: 'POST', body: { voix: String(voix), question: champ.value } });
+      pageCarre(id, 'relatif');
+    } catch (err) {
+      bouton.disabled = false;
+      document.getElementById('relatif-err').textContent = err.message;
+    }
+  };
+  const sources = document.getElementById('sources-form');
+  if (sources) sources.onsubmit = async (e) => {
+    e.preventDefault();
+    const ids = [...sources.querySelectorAll('input:checked')].map((i) => +i.value);
+    await api(`/api/carre/${id}/relatif/sources`, { method: 'PUT', body: { tree_ids: ids } });
+    pageCarre(id, 'relatif');
   };
 }
 
@@ -1257,61 +1545,65 @@ async function vueRecrutement() {
   }
   if (stale(epoch)) return;
 
-  // ma situation : libre (je m'annonce, je reçois) ou en carré (j'invite)
-  let maZone = '';
-  if (d.monCarre) {
-    maZone = `
-      ${d.monCarre.places > 0 ? `<p class="recrut-place">${esc(d.monCarre.nom)} : ${d.monCarre.places} place${d.monCarre.places > 1 ? 's' : ''} à prendre.</p>`
-        : `<p class="recrut-place">${esc(d.monCarre.nom)} est complet.</p>`}
-      ${d.envoyees.length ? `
-      <div class="recrut-envoyees">
-        ${d.envoyees.map((i) => `<span class="recrut-attente">${esc(i.username)} (invité)
-          <button type="button" class="link-btn" data-retire="${i.id}">retirer</button></span>`).join('')}
-      </div>` : ''}`;
-  } else {
-    const a = d.monAnnonce;
-    maZone = `
-      ${d.invitations.length ? `
-      <div class="recrut-invitations">
-        ${d.invitations.map((i) => `
-          <div class="recrut-invitation">
-            <div><strong>${esc(i.carre_nom)}</strong> t’invite${i.note ? ` : « ${esc(i.note)} »` : ''}
-              <span class="vie-meta">par ${esc(i.de_username)}</span></div>
-            <div class="recrut-choix">
-              <button type="button" class="primary" data-accepte="${i.id}">Rejoindre</button>
-              <button type="button" class="link-btn" data-refuse="${i.id}">Décliner</button>
-            </div>
-          </div>`).join('')}
-      </div>` : ''}
-      <form id="annonce-form" class="annonce-form">
-        <textarea id="annonce-note" maxlength="500" rows="2"
-          placeholder="Ce que tu apporterais à un carré…">${esc(a?.note || '')}</textarea>
-        <div class="annonce-ligne">
-          <select id="annonce-role"><option value="">nature</option>
-            ${d.roles.map((r) => `<option value="${esc(r)}"${a?.role === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}
-          </select>
-          <select id="annonce-domaine"><option value="">connaissance</option>
-            ${d.domaines.map((x) => `<option value="${esc(x)}"${a?.domaine === x ? ' selected' : ''}>${esc(x)}</option>`).join('')}
-          </select>
-          <button type="submit" class="primary">${a ? 'Mettre à jour' : 'Me rendre disponible'}</button>
-          ${a ? '<button type="button" class="link-btn danger" id="annonce-retire">Me retirer</button>' : ''}
-        </div>
-        <p class="form-error" id="annonce-err"></p>
-      </form>`;
-  }
+  // les invitations que je reçois, et mon annonce au salon
+  const a = d.monAnnonce;
+  const maZone = `
+    ${d.invitations.length ? `
+    <div class="recrut-invitations">
+      ${d.invitations.map((i) => `
+        <div class="recrut-invitation">
+          <div><strong>${esc(i.carre_nom)}</strong> t’invite${i.note ? ` : « ${esc(i.note)} »` : ''}
+            <span class="vie-meta">par ${esc(i.de_username)}</span></div>
+          <div class="recrut-choix">
+            <button type="button" class="primary" data-accepte="${i.id}">Rejoindre</button>
+            <button type="button" class="link-btn" data-refuse="${i.id}">Décliner</button>
+          </div>
+        </div>`).join('')}
+    </div>` : ''}
+    <form id="annonce-form" class="annonce-form">
+      <textarea id="annonce-note" maxlength="500" rows="2"
+        placeholder="Ce que tu apporterais à un carré…">${esc(a?.note || '')}</textarea>
+      <div class="annonce-ligne">
+        <select id="annonce-role"><option value="">nature</option>
+          ${d.roles.map((r) => `<option value="${esc(r)}"${a?.role === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}
+        </select>
+        <select id="annonce-domaine"><option value="">connaissance</option>
+          ${d.domaines.map((x) => `<option value="${esc(x)}"${a?.domaine === x ? ' selected' : ''}>${esc(x)}</option>`).join('')}
+        </select>
+        <button type="submit" class="primary">${a ? 'Mettre à jour' : 'Me rendre disponible'}</button>
+        ${a ? '<button type="button" class="link-btn danger" id="annonce-retire">Me retirer</button>' : ''}
+      </div>
+      <p class="form-error" id="annonce-err"></p>
+    </form>`;
 
-  const peutInviter = d.monCarre && d.monCarre.places > 0;
+  // inviter : depuis lequel de mes carrés où il reste une place
+  const avecPlaces = d.mesCarres.filter((c) => c.places > 0);
+  const choixCarre = avecPlaces.length ? `
+    <div class="recrut-depuis">
+      <label>Inviter dans
+        <select id="invite-carre">
+          ${avecPlaces.map((c) => `<option value="${c.id}">${esc(c.nom)} (${c.places} place${c.places > 1 ? 's' : ''})</option>`).join('')}
+        </select></label>
+    </div>` : '';
+
+  const envoyees = d.envoyees.length ? `
+    <div class="recrut-envoyees">
+      ${d.envoyees.map((i) => `<span class="recrut-attente">${esc(i.carre_nom)} : ${esc(i.username)} (invité)
+        <button type="button" class="link-btn" data-retire="${i.id}">retirer</button></span>`).join('')}
+    </div>` : '';
+
   const salon = d.annonces.length ? `
     <div class="recrut-salon">
-      ${d.annonces.map((a) => `
-        <div class="recrut-annonce${a.moi ? ' moi' : ''}">
+      ${d.annonces.map((x) => `
+        <div class="recrut-annonce${x.moi ? ' moi' : ''}">
           <div class="recrut-tete">
-            ${authorLink(a.username)}
-            ${a.role ? `<span class="carre-role">${esc(a.role)}</span>` : ''}
-            ${a.domaine ? `<span class="carre-domaine">${esc(a.domaine)}</span>` : ''}
+            ${authorLink(x.username)}
+            ${x.role ? `<span class="carre-role">${esc(x.role)}</span>` : ''}
+            ${x.domaine ? `<span class="carre-domaine">${esc(x.domaine)}</span>` : ''}
+            ${x.carres ? `<span class="vie-meta">${x.carres} carré${x.carres > 1 ? 's' : ''}</span>` : ''}
           </div>
-          ${a.note ? `<p class="recrut-note">${esc(a.note)}</p>` : ''}
-          ${peutInviter && !a.moi ? `<button type="button" data-invite="${esc(a.username)}">Inviter</button>` : ''}
+          ${x.note ? `<p class="recrut-note">${esc(x.note)}</p>` : ''}
+          ${avecPlaces.length && !x.moi ? `<button type="button" data-invite="${esc(x.username)}">Inviter</button>` : ''}
         </div>`).join('')}
     </div>` : '<p class="empty-note">Personne au salon.</p>';
 
@@ -1319,13 +1611,17 @@ async function vueRecrutement() {
     <h1>Recrutement</h1>
     <p class="recrut-charte">${esc(d.charte)}</p>
     ${maZone}
+    ${envoyees}
+    ${choixCarre}
     ${salon}`);
 
   const zone = app;
   zone.querySelectorAll('[data-accepte]').forEach((b) => {
     b.onclick = async () => {
-      try { await api(`/api/carre/invitations/${b.dataset.accepte}/accepte`, { method: 'POST', body: {} }); navigate('/carre-d-as'); }
-      catch (err) { alert(err.message); }
+      try {
+        const r = await api(`/api/carre/invitations/${b.dataset.accepte}/accepte`, { method: 'POST', body: {} });
+        navigate(`/carre-d-as/${r.carre_id}`);
+      } catch (err) { alert(err.message); }
     };
   });
   zone.querySelectorAll('[data-refuse],[data-retire]').forEach((b) => {
@@ -1336,9 +1632,13 @@ async function vueRecrutement() {
   });
   zone.querySelectorAll('[data-invite]').forEach((b) => {
     b.onclick = async () => {
+      const carreId = +document.getElementById('invite-carre').value;
       const note = prompt(`Un mot pour ${b.dataset.invite} ? (facultatif)`) ?? '';
       try {
-        await api('/api/carre/invitations', { method: 'POST', body: { username: b.dataset.invite, note } });
+        await api('/api/carre/invitations', {
+          method: 'POST',
+          body: { carre_id: carreId, username: b.dataset.invite, note },
+        });
         vueRecrutement();
       } catch (err) { alert(err.message); }
     };
@@ -1442,12 +1742,37 @@ async function vueArchives() {
       : '<p class="empty-note">Aucune archive pour l’instant : le premier brainstorm terminé viendra ici.</p>'}</div>`);
 }
 
-// Annoncer : la parole d'un carré complet.
+// Annoncer : la parole d'un carré complet. On choisit lequel de ses carrés
+// porte le live, et lequel de ses As tient l'antenne.
 async function vueAnnoncer() {
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  let d;
+  try { d = await chargeCarre(); }
+  catch { return navigate('/57', true); }
+  if (stale(epoch)) return;
+
+  const complets = (d.carres || []).filter((c) => c.membres.length === 4);
+  if (!complets.length) {
+    docke('bs', 'annoncer', `
+      <h1>Annoncer un brainstorm</h1>
+      <p class="empty-note">Un brainstorm est porté par un carré complet : quatre As.
+        Tout se joue au <a href="/carre-d-as" data-link>Carré d’As</a>.</p>`);
+    return;
+  }
+
+  const hotesDe = (carreId) => complets.find((c) => c.id === carreId).membres;
   docke('bs', 'annoncer', `
     <h1>Annoncer un brainstorm</h1>
     <form id="bs-form" class="bs-form">
       <input id="bs-sujet" maxlength="200" placeholder="Le sujet du brainstorming" required>
+      <div class="bs-form-ligne">
+        ${complets.length > 1 ? `
+        <select id="bs-carre">
+          ${complets.map((c) => `<option value="${c.id}">${esc(c.nom)}</option>`).join('')}
+        </select>` : `<input type="hidden" id="bs-carre" value="${complets[0].id}">`}
+        <select id="bs-hote"></select>
+      </div>
       <div class="bs-form-ligne">
         <select id="bs-plateforme">
           <option value="youtube">YouTube</option><option value="twitch">Twitch</option><option value="tiktok">TikTok</option>
@@ -1458,12 +1783,24 @@ async function vueAnnoncer() {
       <p class="form-error" id="bs-err"></p>
     </form>`);
 
+  const carreChamp = document.getElementById('bs-carre');
+  const hoteChamp = document.getElementById('bs-hote');
+  const peintHotes = () => {
+    hoteChamp.innerHTML = hotesDe(+carreChamp.value)
+      .map((m) => `<option value="${m.user_id}"${state.user && m.user_id === state.user.id ? ' selected' : ''}>Hôte : ${esc(m.username)}</option>`)
+      .join('');
+  };
+  peintHotes();
+  if (carreChamp.tagName === 'SELECT') carreChamp.onchange = peintHotes;
+
   document.getElementById('bs-form').onsubmit = async (e) => {
     e.preventDefault();
     try {
       const r = await api('/api/brainstorms', {
         method: 'POST',
         body: {
+          carre_id: +carreChamp.value,
+          hote_user_id: +hoteChamp.value,
           sujet: document.getElementById('bs-sujet').value,
           plateforme: document.getElementById('bs-plateforme').value,
           url: document.getElementById('bs-url').value,
@@ -1511,8 +1848,9 @@ async function pageBrainstorm(id) {
       <div class="bs-tete bs-${esc(b.statut)}">
         <div class="bs-statut">${b.statut === 'live' ? '● EN DIRECT' : b.statut === 'annonce' ? 'Annoncé' : 'Terminé'}</div>
         <h1>${esc(b.sujet)}</h1>
-        <div class="bs-meta">${esc(b.carre_nom)} ·
-          <a href="${esc(safeUrl(b.url))}" target="_blank" rel="noopener">rejoindre le live sur ${esc(PLATEFORME_LABELS[b.plateforme] || b.plateforme)} ↗</a></div>
+        <div class="bs-meta">${esc(b.carre_nom)}${b.hote_username ? ` · ${esc(b.hote_username)} à l’antenne` : ''} ·
+          <a href="${esc(safeUrl(b.url))}" target="_blank" rel="noopener">rejoindre le live sur ${esc(PLATEFORME_LABELS[b.plateforme] || b.plateforme)} ↗</a>
+          ${d.duCarre && b.discord_url ? ` · <a href="${esc(safeUrl(b.discord_url))}" target="_blank" rel="noopener">salon du carré ↗</a>` : ''}</div>
         ${pilote}
       </div>
       ${b.statut !== 'termine' && state.user ? `
@@ -4110,7 +4448,7 @@ function nodeClass(n) {
   const rang = n.total === null ? 'enigme enigme--graal' : 'enigme';
   if (n.locked) return `${rang} enigme--locked`;
   if (!n.open) return `${rang} enigme--solved`;
-  if (n.found.length) return `${rang} enigme--partial`;
+  if (n.found.length || (n.partiels && n.partiels.length)) return `${rang} enigme--partial`;
   return rang;
 }
 
@@ -4141,6 +4479,14 @@ function nodeCardHtml(n) {
     .map((a) => `<p class="enigme-line"><strong class="enigme-answer">${esc(a.label)}</strong></p>`)
     .join('');
 
+  // Un signe tenu partiellement : ses parties trouvées en vert, à leur place,
+  // un « ? » pour chaque trou. Le serveur n'envoie jamais le texte manquant.
+  const partiels = (n.partiels || [])
+    .map((p) => `<p class="enigme-line enigme-partiel">${p.jetons
+      .map((j) => esc(j.sep) + (j.q ? '<span class="seg-q">?</span>' : `<strong class="seg-ok">${esc(j.t)}</strong>`))
+      .join('')}</p>`)
+    .join('');
+
   const form = !n.open ? '' : `
     <form class="enigme-form">
       <input class="enigme-input" type="text" placeholder="signe"
@@ -4153,7 +4499,7 @@ function nodeCardHtml(n) {
     </form>
     <p class="enigme-msg" role="status" aria-live="polite"></p>`;
 
-  return `${head}<div class="enigme-body">${found}${form}</div>`;
+  return `${head}<div class="enigme-body">${found}${partiels}${form}</div>`;
 }
 
 // On ne dit jamais combien il y a de mots de passe en tout : la barre montre
