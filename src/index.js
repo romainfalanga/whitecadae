@@ -1723,12 +1723,26 @@ async function attenteRestante(env, userId, echelon) {
   return Math.max(0, Math.round(delaiEssaiMs(echelon) - row.ecoule));
 }
 
-async function marquerEssai(env, userId) {
-  await env.DB.prepare(
+// Réclame le créneau du minuteur, de façon ATOMIQUE. Renvoie true si le
+// créneau était libre (l'essai est autorisé), false s'il court encore.
+//
+// C'est un unique UPSERT conditionnel : le WHERE du DO UPDATE ne laisse
+// réécrire l'horodatage que si le délai est écoulé. D1 sérialise ses écritures,
+// donc parmi N requêtes concurrentes du même joueur, une seule modifie la ligne
+// (changes = 1) et toutes les autres échouent le WHERE (changes = 0). Au tout
+// premier essai, la clé primaire (user_id, '@essai') ne laisse réussir qu'un
+// seul INSERT. Un joueur ne peut donc PAS forcer les signes en rafale en
+// envoyant dix tentatives à la fois — le vieux schéma « lire l'attente, tester,
+// puis marquer » laissait cette course ouverte.
+async function marquerEssai(env, userId, delaiMs) {
+  await ensureRiddleTable(env);
+  const r = await env.DB.prepare(
     `INSERT INTO riddle_progress (user_id, riddle_id, updated_at)
      VALUES (?1, ?2, datetime('now'))
-     ON CONFLICT(user_id, riddle_id) DO UPDATE SET updated_at = datetime('now')`
-  ).bind(userId, ESSAI_ROW).run();
+     ON CONFLICT(user_id, riddle_id) DO UPDATE SET updated_at = datetime('now')
+       WHERE (julianday('now') - julianday(updated_at)) * 86400000 >= ?3`
+  ).bind(userId, ESSAI_ROW, delaiMs).run();
+  return r.meta.changes === 1;
 }
 
 // Une ligne par réponse trouvée.
@@ -1769,17 +1783,23 @@ async function signsGuess(request, env) {
   if (answer.length > 200) return json({ error: 'Réponse trop longue.' }, 400);
   if (!answer.trim()) return json({ error: 'Réponse vide.' }, 400);
 
-  // Un essai par heure, juste ou faux. On vérifie avant de regarder la
-  // réponse, et on décompte avant de la juger : proposer, c'est déjà jouer.
+  // Un essai à la fois, juste ou faux : proposer, c'est déjà jouer.
   const rows = await riddleRows(env, user.id);
   const solved = new Set(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
   const echelon = echelonOf(solved);
 
-  const attente = await attenteRestante(env, user.id, echelon);
-  if (attente > 0) return json({ error: 'Trop tôt.', attenteMs: attente }, 429);
+  // On ne fait pas payer un essai sur un élément encore verrouillé : il ne
+  // peut de toute façon rien valider.
   if (isLocked(node, solved)) return json({ error: 'Cet élément est encore verrouillé.' }, 403);
 
-  await marquerEssai(env, user.id);
+  // Le vrai verrou anti-rafale : la réservation atomique du créneau. Une
+  // lecture préalable donnerait un 429 plus lisible dans le cas courant, mais
+  // ne sérialise rien — c'est ce claim, et lui seul, qui empêche dix essais
+  // simultanés de passer ensemble.
+  const libre = await marquerEssai(env, user.id, delaiEssaiMs(echelon));
+  if (!libre) {
+    return json({ error: 'Trop tôt.', attenteMs: await attenteRestante(env, user.id, echelon) }, 429);
+  }
 
   const hit = matchAnswer(node, answer, solved);
   if (!hit) return json({ ok: false, id: node.id, attenteMs: delaiEssaiMs(echelon) });
@@ -1795,12 +1815,17 @@ async function signsGuess(request, env) {
 }
 
 // Plus proposé dans l'interface, mais conservé : c'est le seul moyen de
-// repartir de zéro.
+// repartir de zéro. On EXCLUT la ligne du minuteur ('@essai') : sans quoi
+// remettre sa progression à zéro effacerait aussi le cooldown, et l'on pourrait
+// boucler « essai raté → reset → essai » pour forcer les premiers signes sans
+// jamais attendre. Le minuteur survit donc au reset.
 async function signsReset(request, env) {
   let user;
   try { user = await requireUser(request, env); } catch (resp) { return resp; }
   await ensureRiddleTable(env);
-  await env.DB.prepare('DELETE FROM riddle_progress WHERE user_id = ?1').bind(user.id).run();
+  await env.DB.prepare(
+    'DELETE FROM riddle_progress WHERE user_id = ?1 AND riddle_id <> ?2'
+  ).bind(user.id, ESSAI_ROW).run();
   return json({ ok: true, state: await riddleState(env, user.id) });
 }
 
@@ -2250,8 +2275,12 @@ async function arbresGet(request, env, id) {
   await ensureHautesTables(env);
   const arbre = await chargeArbre(env, id);
   if (!arbre) return json({ error: 'Arbre introuvable.' }, 404);
+  // Sous l'échelon requis, on répond « introuvable » plutôt que « pas encore
+  // ouvert » : sans quoi le couple 403/404 dirait à un joueur trop bas qu'un
+  // arbre existe à cet identifiant. Un arbre qu'on n'a pas le droit de voir se
+  // comporte exactement comme un arbre qui n'existe pas.
   const { vu, refus } = await gateArbre(request, env, arbre.kind);
-  if (refus) return refus;
+  if (refus) return json({ error: 'Arbre introuvable.' }, 404);
 
   if (arbre.user_id === vu.user.id) {
     return json({ arbre: { ...arbre, proprietaire: true } });
