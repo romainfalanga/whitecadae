@@ -3,7 +3,7 @@
 # Ce fichier n'est pas servi : Cloudflare le lit et applique ces en-têtes.
 # Il est nécessaire parce qu'un fichier qui existe vraiment dans public/
 # (/, /index.html, /styles.css, /app.js…) est servi par le réseau SANS passer
-# par le Worker — src/index.js ne peut donc pas les poser lui-même. Le Worker
+# par le Worker, src/index.js ne peut donc pas les poser lui-même. Le Worker
 # garde les siens pour l'API et pour les routes de l'application (/57,
 # /chanson/…), qui n'existent pas en tant que fichiers.
 #
@@ -17,3 +17,4 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload

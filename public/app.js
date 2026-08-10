@@ -1,4 +1,4 @@
-// WhiteCadae — application frontend (SPA vanilla)
+// WhiteCadae : application frontend (SPA vanilla)
 
 const app = document.getElementById('app');
 const nav = document.getElementById('nav');
@@ -27,6 +27,14 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
+}
+
+// Un href de lien externe : on ne laisse passer que http(s). La politique de
+// sécurité bloque déjà un javascript: sur un clic, mais on ferme la porte plus
+// tôt. À passer par esc() pour l'attribut.
+function safeUrl(url) {
+  const u = String(url ?? '').trim();
+  return /^https?:\/\//i.test(u) ? u : '#';
 }
 
 function tokens(text) {
@@ -74,7 +82,7 @@ let renderEpoch = 0;
 function newEpoch() { return ++renderEpoch; }
 function stale(epoch) { return epoch !== renderEpoch; }
 
-// `remplace` : on ne laisse pas de trace dans l'historique — utile quand on
+// `remplace` : pas de trace dans l'historique. Utile quand on
 // renvoie quelqu'un d'une page qui ne lui est pas encore ouverte, pour que le
 // bouton « retour » ne l'y ramène pas en boucle.
 function navigate(path, remplace) {
@@ -154,7 +162,7 @@ async function route() {
 
   // Le profil est public : on y lit l'échelon d'un membre et les énigmes
   // qu'il a percées sans rien avoir trouvé soi-même. Ce qu'il a écrit reste
-  // soumis à l'accès de celui qui regarde — le serveur s'en charge.
+  // soumis à l'accès de celui qui regarde : le serveur s'en charge.
   if ((m = path.match(/^\/membre\/([^/]+)$/))) return pageProfile(decodeURIComponent(m[1]));
 
   // Une page qu'on n'a pas encore atteinte ne se discute pas : on revient au
@@ -229,7 +237,7 @@ function avatarImg(username, className) {
 // Le repli quand un membre n'a pas de photo. Il était écrit dans un attribut
 // `onerror`, ce que la politique de sécurité du site interdit désormais : on
 // écoute donc à la capture, puisque `error` ne remonte pas depuis une image.
-// L'attribut est retiré au passage — si le repli lui-même échouait, on
+// L'attribut est retiré au passage : si le repli lui-même échouait, on
 // tournerait en boucle.
 document.addEventListener('error', (e) => {
   const img = e.target;
@@ -584,22 +592,22 @@ const ARBRES_PAGES = {
     titre: 'Pense Mieux',
     chemin: '/pense-mieux',
     app: 'pm',
-    invite: 'Un sujet de réflexion devient un arbre : un tronc, des branches qui se font grandir. Et comme chaque présent est le futur de plusieurs passés, une branche peut être nourrie par d’autres qu’elle relie.',
+    invite: 'Un sujet de réflexion devient un arbre : un tronc, des branches qui se font grandir. Une branche peut aussi être nourrie par d’autres branches qu’elle relie.',
     vide: 'Ta forêt est vide. Plante ton premier arbre.',
   },
   video: {
     titre: 'Vidéographie',
     chemin: '/videographie',
     app: 'vg',
-    invite: 'Extériorise tes réflexions en vidéo, puis relie-les : chaque branche est une vidéo YouTube, publique ou privée — et chacune peut être nourrie par plusieurs autres.',
+    invite: 'Extériorise tes réflexions en vidéo, puis relie-les : chaque branche est une vidéo YouTube, publique ou privée. Chacune peut être nourrie par plusieurs autres.',
     vide: 'Aucune vidéo pour l’instant. Plante ton premier arbre.',
   },
 };
 
 /* ------------------------------------------------ le dock des applications
    Les quatre pièces hautes ne sont pas des pages mais des applications :
-   chacune a son propre menu, fixé en bas de l'écran — au pouce sur mobile,
-   sous les yeux sur ordinateur — qui suit l'utilisateur dans toutes ses
+   chacune a son menu, fixé en bas de l'écran (au pouce sur mobile,
+   sous les yeux sur ordinateur), qui suit l'utilisateur dans toutes ses
    vues.                                                                   */
 
 const SOUS_APPS = {
@@ -627,8 +635,7 @@ const SOUS_APPS = {
 };
 
 // Habille une vue : le contenu, puis le dock de son application. Pas
-// d'icônes — la typographie suffit, on est dans un escape game, pas dans un
-// magasin d'applications.
+// d'icônes : la typographie suffit.
 function docke(appCle, actif, contenu) {
   document.body.classList.add('avec-dock');
   app.innerHTML = contenu + `
@@ -704,7 +711,7 @@ function vueNouvelArbre(kind) {
     <h1>Nouvel arbre</h1>
     <form id="arbre-form" class="arbre-form">
       <input id="arbre-titre" maxlength="120" placeholder="Le sujet" required autofocus>
-      <textarea id="arbre-tronc" maxlength="4000" rows="3" placeholder="Le tronc — d’où tout part"></textarea>
+      <textarea id="arbre-tronc" maxlength="4000" rows="3" placeholder="Le tronc : d’où tout part"></textarea>
       <button type="submit" class="primary">Planter</button>
       <p class="form-error" id="arbre-err"></p>
     </form>`);
@@ -777,7 +784,7 @@ async function vueVideoCarre() {
   if (!d.carre) {
     docke('vg', 'carre', `
       <h1>Le carré</h1>
-      <p class="empty-note">Pas encore de carré — il se fonde au <a href="/carre-d-as" data-link>Carré d’As</a>.</p>`);
+      <p class="empty-note">Pas encore de carré : il se fonde au <a href="/carre-d-as" data-link>Carré d’As</a>.</p>`);
     return;
   }
 
@@ -814,7 +821,7 @@ function brancheEtiquette(b) {
 
 // Les branches s'emboîtent : on dessine l'arbre en profondeur. Les
 // nourritures (les autres passés d'une branche) s'affichent en chips qui
-// mènent à leur source — dans cet arbre, ou dans un autre arbre de la même
+// mènent à leur source : dans cet arbre, ou dans un autre arbre de la même
 // forêt : la chip porte alors le nom de l'arbre et y navigue.
 function brancheHtml(b, enfants, kind, editable, ctx) {
   const contenu = kind === 'video'
@@ -845,7 +852,7 @@ function brancheHtml(b, enfants, kind, editable, ctx) {
 
 function videoEmbed(url) {
   const id = youtubeEmbedId(url || '');
-  if (!id) return `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`;
+  if (!id) return `<a href="${esc(safeUrl(url))}" target="_blank" rel="noopener">${esc(url)}</a>`;
   return `<div class="cover-embed"><iframe src="https://www.youtube.com/embed/${esc(id)}"
     title="Vidéo" loading="lazy" allowfullscreen
     allow="accelerometer; encrypted-media; picture-in-picture"></iframe></div>`;
@@ -884,7 +891,7 @@ async function pageArbre(kind, id) {
     ${arbre.trunk ? `<p class="tronc">${esc(arbre.trunk)}</p>` : ''}
     <div class="liaison-bandeau" id="liaison-bandeau" hidden>
       <span>Touche la branche <strong>qui nourrit</strong> celle-ci</span>
-      <select id="liaison-arbre"><option value="">— ou depuis un autre arbre…</option></select>
+      <select id="liaison-arbre"><option value="">ou depuis un autre arbre…</option></select>
       <button type="button" class="link-btn" id="liaison-annule">Annuler</button>
       <div id="liaison-sources" hidden></div>
     </div>
@@ -906,7 +913,7 @@ async function pageArbre(kind, id) {
       <p class="form-error" id="branche-err"></p>
     </form>
     <p class="arbre-suppr"><button type="button" class="link-btn danger" id="arbre-suppr">Abattre cet arbre</button></p>
-    ` : `<p class="empty-note">L’arbre d’un As de ton carré — en lecture.</p>`}`);
+    ` : `<p class="empty-note">L’arbre d’un As de ton carré (lecture seule).</p>`}`);
 
   // le saut vers une source : pour tout le monde, lecteur compris
   const vaVers = (cible) => {
@@ -929,7 +936,7 @@ async function pageArbre(kind, id) {
   const parentField = document.getElementById('branche-parent');
   const ou = document.getElementById('branche-ou');
   const annule = document.getElementById('branche-annule');
-  // la liaison : « nourrie par… » puis un toucher sur la branche source —
+  // la liaison : « nourrie par… » puis un toucher sur la branche source :
   // dans cet arbre, ou dans un autre choisi au sélecteur
   let liaisonDepuis = null;
   const bandeau = document.getElementById('liaison-bandeau');
@@ -948,7 +955,7 @@ async function pageArbre(kind, id) {
     try {
       const d = await api(`/api/arbres?kind=${kind}`);
       autresArbres = d.arbres.filter((a) => a.id !== id);
-      selArbre.innerHTML = '<option value="">— ou depuis un autre arbre…</option>'
+      selArbre.innerHTML = '<option value="">ou depuis un autre arbre…</option>'
         + autresArbres.map((a) => `<option value="${a.id}">${esc(a.title)}</option>`).join('');
       selArbre.hidden = autresArbres.length === 0;
     } catch { selArbre.hidden = true; }
@@ -1088,11 +1095,11 @@ async function vueMonCarre() {
         </div>
         <form id="carre-moi" class="carre-moi">
           <label>Ma nature
-            <select id="carre-role"><option value="">—</option>
+            <select id="carre-role"><option value="">Choisir…</option>
               ${data.roles.map((r) => `<option value="${esc(r)}"${moi?.role === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}
             </select></label>
           <label>Ma connaissance
-            <select id="carre-domaine"><option value="">—</option>
+            <select id="carre-domaine"><option value="">Choisir…</option>
               ${data.domaines.map((d) => `<option value="${esc(d)}"${moi?.domaine === d ? ' selected' : ''}>${esc(d)}</option>`).join('')}
             </select></label>
           <button type="submit">Enregistrer</button>
@@ -1235,7 +1242,7 @@ async function vueCarreConv() {
 }
 
 /* ------------------ le recrutement : le salon où les carrés se composent ---
-   Les As libres s'annoncent — ce qu'ils apporteraient, leur nature, leur
+   Les As libres s'annoncent : ce qu'ils apporteraient, leur nature, leur
    connaissance. Les carrés incomplets les invitent. L'invité accepte ou
    décline : on n'entre dans un carré que voulu des deux côtés.            */
 
@@ -1254,11 +1261,11 @@ async function vueRecrutement() {
   let maZone = '';
   if (d.monCarre) {
     maZone = `
-      ${d.monCarre.places > 0 ? `<p class="recrut-place">${esc(d.monCarre.nom)} — ${d.monCarre.places} place${d.monCarre.places > 1 ? 's' : ''} à prendre.</p>`
+      ${d.monCarre.places > 0 ? `<p class="recrut-place">${esc(d.monCarre.nom)} : ${d.monCarre.places} place${d.monCarre.places > 1 ? 's' : ''} à prendre.</p>`
         : `<p class="recrut-place">${esc(d.monCarre.nom)} est complet.</p>`}
       ${d.envoyees.length ? `
       <div class="recrut-envoyees">
-        ${d.envoyees.map((i) => `<span class="recrut-attente">${esc(i.username)} — invité
+        ${d.envoyees.map((i) => `<span class="recrut-attente">${esc(i.username)} (invité)
           <button type="button" class="link-btn" data-retire="${i.id}">retirer</button></span>`).join('')}
       </div>` : ''}`;
   } else {
@@ -1268,7 +1275,7 @@ async function vueRecrutement() {
       <div class="recrut-invitations">
         ${d.invitations.map((i) => `
           <div class="recrut-invitation">
-            <div><strong>${esc(i.carre_nom)}</strong> t’invite${i.note ? ` — « ${esc(i.note)} »` : ''}
+            <div><strong>${esc(i.carre_nom)}</strong> t’invite${i.note ? ` : « ${esc(i.note)} »` : ''}
               <span class="vie-meta">par ${esc(i.de_username)}</span></div>
             <div class="recrut-choix">
               <button type="button" class="primary" data-accepte="${i.id}">Rejoindre</button>
@@ -1383,7 +1390,7 @@ async function vueMissions() {
 /* ---------------------------------------------- le brainstorm (échelon 6)
    Les lives des carrés, et la salle qui réfléchit avec eux. Tout marche par
    relecture périodique : douze secondes quand un live est ouvert et que
-   l'onglet est visible — pas de connexion tenue, pas de serveur en plus.  */
+   l'onglet est visible : pas de connexion tenue, pas de serveur en plus.  */
 
 const PLATEFORME_LABELS = { youtube: 'YouTube', twitch: 'Twitch', tiktok: 'TikTok' };
 
@@ -1416,7 +1423,7 @@ async function vueScene() {
       : '<p class="empty-note">Personne n’est en direct. Les brainstorms passés vivent dans les <a href="/brainstorm/archives" data-link>archives</a>.</p>'}</div>
     <h2>Annoncés</h2>
     <div class="bs-liste">${annonces.length ? annonces.map(bsCarte).join('')
-      : '<p class="empty-note">Rien d’annoncé — un carré complet peut <a href="/brainstorm/annoncer" data-link>annoncer le sien</a>.</p>'}</div>`);
+      : '<p class="empty-note">Rien d’annoncé : un carré complet peut <a href="/brainstorm/annoncer" data-link>annoncer le sien</a>.</p>'}</div>`);
 }
 
 // Les archives : les brainstorms passés et leur récolte.
@@ -1505,7 +1512,7 @@ async function pageBrainstorm(id) {
         <div class="bs-statut">${b.statut === 'live' ? '● EN DIRECT' : b.statut === 'annonce' ? 'Annoncé' : 'Terminé'}</div>
         <h1>${esc(b.sujet)}</h1>
         <div class="bs-meta">${esc(b.carre_nom)} ·
-          <a href="${esc(b.url)}" target="_blank" rel="noopener">rejoindre le live sur ${esc(PLATEFORME_LABELS[b.plateforme] || b.plateforme)} ↗</a></div>
+          <a href="${esc(safeUrl(b.url))}" target="_blank" rel="noopener">rejoindre le live sur ${esc(PLATEFORME_LABELS[b.plateforme] || b.plateforme)} ↗</a></div>
         ${pilote}
       </div>
       ${b.statut !== 'termine' && state.user ? `
@@ -1517,7 +1524,7 @@ async function pageBrainstorm(id) {
       </form>` : ''}
       <div id="bs-salle">
         <section class="bs-retenues" id="bs-retenues" ${d.retenues.length ? '' : 'hidden'}>
-          <h2>La récolte — retenues par le carré</h2>
+          <h2>La récolte du carré</h2>
           <div id="bs-retenues-liste">${d.retenues.map((i) => ideeHtml(i, d.duCarre)).join('')}</div>
         </section>
         <div class="bs-colonnes">
@@ -1556,7 +1563,7 @@ async function pageBrainstorm(id) {
         rebranche();
       };
     });
-    // voter ou retenir sans redessiner la page. L'écouteur vit sur la salle —
+    // voter ou retenir sans redessiner la page. L'écouteur vit sur la salle :
     // le rafraîchissement ne remplace que l'intérieur des listes, et un
     // nouveau rendu le remplace avec elle.
     const salle = document.getElementById('bs-salle');
@@ -1627,7 +1634,7 @@ async function pageGmo() {
 // L'API sert les albums du plus ancien au plus récent (colonne `position`).
 // L'accueil et les reprises les présentent dans l'autre sens : la dernière
 // sortie en premier. L'ordre des morceaux à l'intérieur d'un album ne change
-// pas — il suit toujours le numéro de piste.
+// pas : il suit toujours le numéro de piste.
 function newestFirst(albums) {
   return [...albums].reverse();
 }
@@ -1954,7 +1961,7 @@ function wordOf(el) {
   return SEL.words.find((o) => o.el === el) || null;
 }
 
-// Mot sous le pointeur ; à défaut, le mot le plus proche — glisser dans une
+// Mot sous le pointeur ; à défaut, le mot le plus proche : glisser dans une
 // marge ou un interligne continue d'étendre la sélection.
 function wordAtPoint(x, y) {
   const el = document.elementFromPoint(x, y);
@@ -2045,7 +2052,7 @@ function commitSelection() {
     ? [SEL.anchor, SEL.focus]
     : [SEL.focus, SEL.anchor];
   // Un mot, des mots, une phrase ou plusieurs : c'est toujours un passage.
-  // Un seul bloc, toujours le même — il englobe tous les cas.
+  // Un seul bloc, toujours le même : il englobe tous les cas.
   state.sel = { type: 'passage', startLine: a.lineId, startIdx: a.idx, endLine: b.lineId, endIdx: b.idx };
   renderSongPage();
   // sur grand écran, on amène le panneau sous les yeux s'il est hors de vue
@@ -2322,7 +2329,7 @@ function renderSongPage() {
       <button class="target-chip target-chip-write ${sel && sel.type === 'title' ? 'active' : ''}" id="target-title">
         Interpréter le titre${countFor('title') ? ` · ${countFor('title')}` : ''}
       </button>
-      ${song.youtube_url ? `<a class="target-chip" href="${esc(song.youtube_url)}" target="_blank" rel="noopener">▶ Écouter</a>` : ''}
+      ${song.youtube_url ? `<a class="target-chip" href="${esc(safeUrl(song.youtube_url))}" target="_blank" rel="noopener">▶ Écouter</a>` : ''}
       ${state.access.reprises ? `<a class="target-chip" href="/chanson/${encodeURIComponent(song.slug)}/reprises" data-link>
         Reprises${state.song.coverCount ? ` · ${state.song.coverCount}` : ''}
       </a>` : ''}
@@ -2459,8 +2466,8 @@ function renderInbound() {
     ${refs.map((r) => `
       <div class="inbound">
         <div class="inbound-from">
-          ↩ depuis <a href="/chanson/${encodeURIComponent(r.source_slug)}" data-link>${esc(r.source_title)}</a>
-          — à propos de ${esc(inboundSourceLabel(r))}
+          ↩ depuis <a href="/chanson/${encodeURIComponent(r.source_slug)}" data-link>${esc(r.source_title)}</a>,
+          à propos de ${esc(inboundSourceLabel(r))}
         </div>
         <div class="inbound-anchor">« ${esc(inboundAnchorText(r))} »</div>
         ${r.note ? `<p class="ref-item-note">${esc(r.note)}</p>` : ''}
@@ -2475,8 +2482,8 @@ function renderInbound() {
     ${inbound.map((r) => `
       <div class="inbound" data-ann="${r.id}">
         <div class="inbound-from">
-          ↩ depuis <a href="/chanson/${encodeURIComponent(r.source_slug)}" data-link>${esc(r.source_title)}</a>
-          — à propos de ${esc(inboundSourceLabel(r))}
+          ↩ depuis <a href="/chanson/${encodeURIComponent(r.source_slug)}" data-link>${esc(r.source_title)}</a>,
+          à propos de ${esc(inboundSourceLabel(r))}
         </div>
         <div class="inbound-anchor">« ${esc(inboundAnchorText(r))} »</div>
         ${r.ref_note ? `<p class="ref-item-note">${esc(r.ref_note)}</p>` : ''}
@@ -2594,17 +2601,17 @@ function blockPickerHtml(side) {
       return `<span class="w ${selected ? 'selected-word' : ''}" data-eb-word="${side}:${i}">${esc(tok)}</span>`;
     }).join(' ')}</div>
     <div class="hint">${b.ws == null
-      ? 'Toute la phrase est sélectionnée — cliquez sur un mot pour restreindre (Maj+clic pour étendre).'
-      : `Mots ${b.ws + 1} à ${b.we + 1} — <button class="link-btn" data-eb-whole="${side}">reprendre toute la phrase</button>`}</div>`;
+      ? 'Toute la phrase est sélectionnée. Cliquez sur un mot pour restreindre (Maj+clic pour étendre).'
+      : `Mots ${b.ws + 1} à ${b.we + 1}. <button class="link-btn" data-eb-whole="${side}">Reprendre toute la phrase</button>`}</div>`;
   }
   return `<div class="eb-block">
     <h4>Bloc ${side}</h4>
     <select data-eb-song="${side}">
-      <option value="">— Choisir un morceau —</option>
+      <option value="">Choisir un morceau…</option>
       ${songs.map((s) => `<option value="${s.id}" ${s.id === b.song_id ? 'selected' : ''}>${esc(s.title)}</option>`).join('')}
     </select>
     <select data-eb-line="${side}" ${b.song_id ? '' : 'disabled'}>
-      <option value="">— Choisir une phrase —</option>
+      <option value="">Choisir une phrase…</option>
       ${lines.map((l) => `<option value="${l.id}" ${l.id === b.line_id ? 'selected' : ''}>${esc(l.text.length > 60 ? l.text.slice(0, 57) + '…' : l.text)}</option>`).join('')}
     </select>
     ${wordsHtml}
@@ -2643,7 +2650,7 @@ function renderEssayBuilderHtml() {
     const sugg = echoSuggestions(excerptOf(lineA.text, A.ws, A.we), A.line_id);
     if (sugg.length) {
       suggestions = `<div class="eb-suggestions">
-        <div class="essay-links-title">Échos trouvés dans l’œuvre — cliquez pour remplir le bloc B :</div>
+        <div class="essay-links-title">Échos trouvés dans l’œuvre. Cliquez pour remplir le bloc B :</div>
         ${sugg.map((l) => {
           const s = corpusSong(l.song_id);
           return `<button type="button" class="eb-suggestion" data-eb-suggest="${l.id}">
@@ -2939,7 +2946,7 @@ function bindSocial(container, opts = {}) {
 /* ------------------------------------------------------------ références ---
    Une référence dit trois choses : quelle œuvre, de quel artiste, et en quoi
    c'en est une. Elle se compose dans son propre éditeur et se publie avec son
-   propre bouton — greffée à l'interprétation, mais écrite à part.
+   propre bouton : greffée à l'interprétation, mais écrite à part.
    En interne, la cible n'est pas une œuvre mais un passage d'un morceau : la
    référence apparaît alors des deux côtés, ici et sur la chanson visée.    */
 
@@ -2947,7 +2954,7 @@ function refTitle(r) {
   if (r.ref_song_slug) {
     return `<a href="/chanson/${encodeURIComponent(r.ref_song_slug)}" data-link>♪ ${esc(r.label)}</a>`;
   }
-  return `<span class="ref-work">${esc(r.label)}</span>${r.artist ? ` <span class="ref-artist-name">— ${esc(r.artist)}</span>` : ''}`;
+  return `<span class="ref-work">${esc(r.label)}</span>${r.artist ? ` <span class="ref-artist-name">· ${esc(r.artist)}</span>` : ''}`;
 }
 
 function referencesList(a) {
@@ -2993,7 +3000,7 @@ function refEditorInternal() {
   const songs = state.corpus.songs.filter((s) => state.corpus.lines.some((l) => l.song_id === s.id));
   return `<div class="ref-editor ref-editor-internal" data-kind="internal">
     <label>Le morceau</label>
-    <select class="ref-song"><option value="">— Choisir un morceau —</option>
+    <select class="ref-song"><option value="">Choisir un morceau…</option>
       ${songs.map((s) => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}
     </select>
     <div class="ref-lines" hidden></div>
@@ -3086,7 +3093,7 @@ function bindRefSongPicker(editor) {
     const last = lines.find((l) => l.line_number === hi);
     const song = songSel.options[songSel.selectedIndex].textContent;
     const quote = lo === hi ? first.text : `${first.text} […] ${last.text}`;
-    editor.dataset.label = `${song} — « ${quote} »`;
+    editor.dataset.label = `${song} : « ${quote} »`;
     picked.hidden = false;
     picked.innerHTML = `<span class="ref-picked-quote">« ${esc(quote)} »</span>
       <button type="button" class="link-btn ref-picked-clear">changer</button>`;
@@ -3142,7 +3149,7 @@ function bindRefSongPicker(editor) {
 function refStagedHtml(ref) {
   const title = ref.ref_line_id
     ? `♪ ${esc(ref._label || 'Passage d’un morceau')}`
-    : `${esc(ref.label)}${ref.artist ? ` — ${esc(ref.artist)}` : ''}`;
+    : `${esc(ref.label)}${ref.artist ? ` : ${esc(ref.artist)}` : ''}`;
   return `<div class="ref-staged" data-ref="${esc(JSON.stringify(ref))}">
     <div class="ref-item-head">
       <span class="ref-work">${title}</span>
@@ -3297,7 +3304,7 @@ function annotationCard(a, targetQuote) {
 }
 
 // Le numéro de la prochaine grille de lecture que cet auteur écrirait sur
-// cette cible — 1 pour une première lecture, sinon la suite de ses lectures
+// cette cible : 1 pour une première lecture, sinon la suite de ses lectures
 // déjà écrites ici (superposition simultanée : chacune s'ajoute, sans
 // remplacer les précédentes).
 function nextGridFor(anns) {
@@ -3311,7 +3318,7 @@ function nextGridFor(anns) {
    Sur une même cible, trois choses indépendantes peuvent être dites, de la
    plus fréquente à la plus rare : une interprétation, une référence à un
    passage d'un autre morceau, une référence à une œuvre. On choisit d'abord
-   laquelle — ce ne sont pas des annexes l'une de l'autre.               */
+   laquelle : ce ne sont pas des annexes l'une de l'autre.               */
 
 function passageRefsFor(pred) {
   return (state.song.passageRefs || []).filter(pred);
@@ -3323,7 +3330,7 @@ function refCard(r) {
   const own = u && (u.id === r.user_id || u.is_admin);
   const title = r.kind === 'internal'
     ? `<a href="/chanson/${encodeURIComponent(r.ref_song_slug || '')}" data-link>♪ ${esc(r.label)}</a>`
-    : `<span class="ref-work">${esc(r.label)}</span>${r.artist ? ` <span class="ref-artist-name">— ${esc(r.artist)}</span>` : ''}`;
+    : `<span class="ref-work">${esc(r.label)}</span>${r.artist ? ` <span class="ref-artist-name">· ${esc(r.artist)}</span>` : ''}`;
   return `<div class="ref-block" data-pref="${r.id}">
     <div class="ref-item-head">
       ${title}
@@ -3347,7 +3354,7 @@ let composerSeq = 0;
 function resetComposers() { composerSeq = 0; }
 
 // `seulInterp` : sur le morceau pris en entier, on n'écrit qu'une
-// interprétation — pas de référence. Le choix n'a alors plus lieu d'être, et
+// interprétation : pas de référence. Le choix n'a alors plus lieu d'être, et
 // le formulaire s'ouvre directement.
 function composerHtml(seulInterp) {
   if (!state.user) {
@@ -3432,7 +3439,7 @@ function annotationForm(id, placeholder, buttonLabel, nextGrid = 1) {
     return `<p class="empty-note"><a href="/connexion" data-link>Connectez-vous</a> pour proposer une interprétation.</p>`;
   }
   return `<form class="annotation-form" id="${id}">
-    ${nextGrid > 1 ? `<div class="grid-label grid-label-next">Nouvelle grille de lecture — n°${nextGrid}</div>` : ''}
+    ${nextGrid > 1 ? `<div class="grid-label grid-label-next">Nouvelle grille de lecture n°${nextGrid}</div>` : ''}
     <textarea placeholder="${esc(placeholder)}" required maxlength="5000"></textarea>
     <div class="error-msg"></div>
     <div class="composer-actions">
@@ -3515,7 +3522,7 @@ function renderPanel() {
   if (sel && sel.type === 'passage') {
     const quote = passageText(sel.startLine, sel.startIdx, sel.endLine, sel.endIdx);
     const [s0, s1] = selPassageRange(sel);
-    // Un seul bloc, qui ramasse tout ce qui touche au passage choisi — y
+    // Un seul bloc, qui ramasse tout ce qui touche au passage choisi : y
     // compris ce qui fut écrit du temps où un mot et une phrase avaient
     // chacun le leur.
     const touche = (x) => {
@@ -3638,7 +3645,7 @@ function renderConnections() {
     ? `<form class="panel-card" id="conn-form">
         <h3>Relier « ${esc(song.title)} » à une autre chanson</h3>
         <select id="conn-target" required>
-          <option value="">— Choisir une chanson —</option>
+          <option value="">Choisir une chanson…</option>
           ${others.map((s) => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}
         </select>
         <textarea id="conn-text" placeholder="En quoi ces deux chansons sont-elles reliées ?" required maxlength="5000"></textarea>
@@ -3683,7 +3690,7 @@ function renderConnections() {
 /* ------------------------------------------------------------------ reprises */
 
 // Identifiant YouTube d'une URL (watch, youtu.be, shorts, déjà en embed…),
-// ou null si le lien ne pointe pas vers YouTube — dans ce cas la reprise
+// ou null si le lien ne pointe pas vers YouTube : dans ce cas la reprise
 // s'affiche comme une simple carte-lien plutôt qu'un lecteur intégré.
 function youtubeEmbedId(url) {
   try {
@@ -3700,7 +3707,7 @@ function youtubeEmbedId(url) {
 }
 
 // `opts.solo` : la reprise est déjà présentée par ce qui l'entoure (le fil
-// d'un profil, par exemple), qui porte l'auteur et la date — on ne les répète
+// d'un profil, par exemple), qui porte l'auteur et la date : on ne les répète
 // pas ici, mais le bouton de suppression reste à sa place.
 function coverCard(c, opts = {}) {
   const u = state.user;
@@ -3710,7 +3717,7 @@ function coverCard(c, opts = {}) {
     ${ytId
       ? `<div class="cover-embed"><iframe src="https://www.youtube.com/embed/${esc(ytId)}"
           title="${esc(c.title)}" loading="lazy" allowfullscreen></iframe></div>`
-      : `<a class="cover-link" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">▶ Voir la reprise</a>`}
+      : `<a class="cover-link" href="${esc(safeUrl(c.url))}" target="_blank" rel="noopener noreferrer">▶ Voir la reprise</a>`}
     <div class="cover-head">
       <h4>${esc(c.title)}</h4>
       ${c.song_slug && !opts.solo ? `<a class="cover-song-tag" href="/chanson/${encodeURIComponent(c.song_slug)}/reprises" data-link>${esc(c.song_title)}</a>` : ''}
@@ -3736,7 +3743,7 @@ function bindCoverDeletes(container, reload) {
   });
 }
 
-// Page dédiée aux reprises d'un morceau — distincte de la page
+// Page dédiée aux reprises d'un morceau : distincte de la page
 // d'interprétation (paroles, annotations, essais, connexions) : ici il n'y a
 // que les réalisations de la communauté pour ce morceau, et rien d'autre.
 async function pageSongCovers(slug) {
@@ -3811,7 +3818,7 @@ function renderSongCoversPage() {
    La page de profil EST le fil de ce qu'un membre a fait ici, du plus récent
    au plus ancien : interprétations, interprétations d'ensemble, références,
    connexions, reprises, et les publications qui ont rendu tout cela visible.
-   Un seul fil, daté de bout en bout — ni sections, ni compteurs, ni
+   Un seul fil, daté de bout en bout : ni sections, ni compteurs, ni
    présentation.                                                          */
 
 const TIMELINE_KIND = {
@@ -3863,19 +3870,19 @@ function essayLinksHtml(e) {
 function refTargetHtml(r) {
   const cible = r.kind === 'internal'
     ? `♪ ${r.ref_song_slug ? songLink(r.ref_song_slug, r.label) : esc(r.label)}`
-    : `${esc(r.label)}${r.artist ? ` <span class="ref-artist-name">— ${esc(r.artist)}</span>` : ''}`;
+    : `${esc(r.label)}${r.artist ? ` <span class="ref-artist-name">· ${esc(r.artist)}</span>` : ''}`;
   return `<div class="tl-ref-target">${cible}</div>`;
 }
 
 // L'échelon d'un membre et les énigmes qu'il a percées : publics, et lisibles
-// par n'importe qui. Jamais les réponses — seulement le nom de ce qui a été
+// par n'importe qui. Jamais les réponses : seulement le nom de ce qui a été
 // trouvé, tel que le serveur autorise celui qui regarde à le nommer.
 function jeuHtml(jeu) {
   if (!jeu) return '';
   const liste = jeu.enigmes.length
     ? `<ul class="jeu-liste">${jeu.enigmes.map((e) => `
         <li>
-          <span class="jeu-source">${e.source ? esc(e.source) : '<em>—</em>'}</span>
+          <span class="jeu-source">${e.source ? esc(e.source) : '<em>·</em>'}</span>
           <span class="jeu-compte">${e.found}${e.total ? `<span>/${e.total}</span>` : ''}</span>
         </li>`).join('')}</ul>`
     : '<p class="empty-note">Aucune énigme percée pour l’instant.</p>';
@@ -3962,7 +3969,7 @@ async function pageProfile(username) {
   app.innerHTML = `
     <div class="profile-head">
       ${avatarImg(user.username, 'profile-avatar')}
-      <h1>${esc(user.username)}${user.is_admin ? ' <span class="album-date">— artiste</span>' : ''}</h1>
+      <h1>${esc(user.username)}${user.is_admin ? ' <span class="album-date">artiste</span>' : ''}</h1>
       ${isMe ? `<button type="button" class="icon-btn" id="settings-btn"
         title="Paramètres du compte" aria-label="Paramètres du compte">⚙</button>` : ''}
     </div>
@@ -4076,7 +4083,7 @@ async function pageCovers() {
 
 /* --------------------------------------------------- les énigmes (/57) */
 
-/* Page 57 : un escape game. Aucun texte, aucune explication, aucun indice —
+/* Page 57 : un escape game. Aucun texte, aucune explication, aucun indice :
    un élément, un « = », un champ. Rien de ce qui est à trouver n'apparaît
    ici : ni réponse, ni nom de classe, ni identifiant. Le Worker ne renvoie
    une réponse qu'une fois trouvée. */
@@ -4167,7 +4174,7 @@ function enigmesProgressHtml() {
 let attenteTimer = null;
 
 // Jusqu'à l'heure on lit des minutes:secondes ; au-delà, « 720:00 » ne dit
-// plus rien à personne — on écrit les heures en toutes lettres de chiffres.
+// plus rien à personne : on écrit les heures en toutes lettres de chiffres.
 function attenteLabel(ms) {
   const s = Math.ceil(ms / 1000);
   if (s >= 3600) {
@@ -4249,8 +4256,8 @@ function renderEnigmesPage() {
   else armeAttente(d.attenteMs || 0);
 }
 
-// Aucun compte : on ferme le geste, pas la lecture. Le champ garde son encre
-// et son « mot de passe » — seul le bouton s'éteint. La touche Entrée ne doit
+// Sans compte, le bouton d'envoi est coupé mais la lecture reste ouverte. Le champ garde son encre
+// et son « mot de passe » : seul le bouton s'éteint. La touche Entrée ne doit
 // pas non plus emporter la page : sans compte, aucune carte n'est branchée,
 // donc rien n'arrêterait l'envoi natif du formulaire.
 function figeChamps() {
@@ -4412,7 +4419,7 @@ async function pageAdmin() {
           <label>Titre</label><input id="sf-title" required>
           <label>Album</label>
           <select id="sf-album">
-            <option value="">— Sans album —</option>
+            <option value="">Sans album</option>
             ${albums.map((al) => `<option value="${al.id}">${esc(al.title)}</option>`).join('')}
           </select>
           <label>Numéro de piste</label><input id="sf-track" type="number" min="1">
@@ -4429,7 +4436,7 @@ async function pageAdmin() {
         <h2>Paroles &amp; durée</h2>
         <label>Chanson</label>
         <select id="lyrics-song">
-          <option value="">— Choisir une chanson —</option>
+          <option value="">Choisir une chanson…</option>
           ${allSongs.map((s) => `<option value="${s.id}" data-slug="${esc(s.slug)}">${esc(s.title)}</option>`).join('')}
         </select>
         <form id="duration-form" hidden>

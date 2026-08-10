@@ -1,7 +1,7 @@
-// WhiteCadae — les mots de passe de l'EP 57 (page /57)
+// WhiteCadae : les mots de passe de l'EP 57 (page /57)
 //
 // ATTENTION : ce fichier est du code Worker. Il n'est JAMAIS servi au
-// navigateur — c'est toute la raison de son existence. Les réponses ne
+// navigateur : c'est toute la raison de son existence. Les réponses ne
 // partent au client qu'une fois trouvées. Ne recopiez rien de tout ceci
 // dans public/, sinon le jeu se résout avec la console du navigateur.
 //
@@ -61,13 +61,13 @@ function isDecemberDay(n, day) {
 // dans n'importe quel ordre.
 //
 // source      : ce qui est écrit à gauche du « = ». Vide : le bloc n'a pas
-//               de libellé du tout — on ne dit même pas de quoi il parle
+//               de libellé du tout : on ne dit même pas de quoi il parle
 // silent      : le nombre de mots de passe à trouver n'est pas annoncé (le
 //               client ne reçoit alors aucun total pour ce bloc)
 // lockedLabel : libellé de remplacement tant que le nœud est verrouillé,
 //               quand la source est elle-même la réponse d'un autre nœud
 // requires    : identifiants de réponses à trouver avant d'ouvrir ce nœud
-// answers[]   : { id, label, match }  — plus note/quotes, non affichés
+// answers[]   : { id, label, match }  : plus note/quotes, non affichés
 //
 // Aucun identifiant ne doit contenir sa propre réponse : ils voyagent
 // jusque dans le DOM.
@@ -80,7 +80,7 @@ export const NODES = [
   {
     // Le bloc d'entrée : ni titre, ni compte. On ne sait pas ce qu'on
     // cherche, ni combien il y en a. Ses signes ne comptent pas comme les
-    // autres : chacun vaut un cran entier — trois signes d'un coup, donc un
+    // autres : chacun vaut un cran entier : trois signes d'un coup, donc un
     // échelon gagné mécaniquement.
     id: 'n-0',
     source: '',
@@ -117,7 +117,7 @@ export const NODES = [
         label: 'Infini blanc',
         // les deux mots, dans l'ordre qu'on veut
         match: (n) => /infini/.test(n) && /blanc/.test(n),
-        note: 'White : blanc. Cadae : C=3, A=1, D=4, A=1, E=5 — les décimales de pi, qui ne s’arrêtent jamais.',
+        note: 'White : blanc. Cadae : C=3, A=1, D=4, A=1, E=5 : les décimales de pi, qui ne s’arrêtent jamais.',
         quotes: ['J’harmonise l’infini, l’infini devient fini. (Multivers)',
                  'Je ne suis qu’un fil qui relie deux infinis. (Un fil entre deux infinis)'],
       },
@@ -152,7 +152,7 @@ export const NODES = [
         id: 'n-a-3',
         label: '12',
         match: (n) => numbersIn(n).includes(12) || /\bdouze\b/.test(n),
-        note: '5 + 7 = 12. Relié aux anges, cela donne les 12 archanges — 7 ou 12 selon les prismes.',
+        note: '5 + 7 = 12. Relié aux anges, cela donne les 12 archanges : 7 ou 12 selon les prismes.',
         quotes: [],
       },
     ],
@@ -349,8 +349,8 @@ for (const node of NODES) {
   for (const a of node.answers) (node.bonus ? BONUS_ANSWERS : ORDINARY_ANSWERS).add(a.id);
 }
 
-// On est à l'échelon 1 dès l'arrivée : c'est le sol, pas une récompense. Ce
-// qu'on gravit ensuite, ce sont les crans — trois signes titrés chacun. Un
+// On est à l'échelon 1 dès l'arrivée : c'est le point de départ que l'on gravit ensuite. Ce
+// qu'on gravit ensuite, ce sont les crans : trois signes titrés chacun. Un
 // signe du bloc muet apporte l'équivalent de trois signes d'un coup : il fait
 // donc gagner un échelon entier, quel que soit le moment où on le trouve.
 // Avec treize signes titrés (quatre crans pleins) et deux signes muets, le
@@ -365,8 +365,8 @@ export function echelonOf(solved) {
 }
 
 // Ce que chaque échelon ouvre. La page 57 est toujours là : c'est par elle
-// qu'on entre. Les interprétations et les reprises sont ouvertes dès le sol —
-// même sans compte — et chaque cran suivant découvre une pièce de plus.
+// qu'on entre. Les interprétations et les reprises sont ouvertes dès le sol :
+// même sans compte : et chaque cran suivant découvre une pièce de plus.
 export const ECHELON_INTERPRETATIONS = 1;
 export const ECHELON_REPRISES = 1;
 export const ECHELON_CONVERSATION = 2;
@@ -379,7 +379,7 @@ export const ECHELON_GMO = 7;
 /* Ce qu'un membre a trouvé, tel qu'un autre a le droit de le voir : le nom de
    l'élément, jamais la réponse. Un nœud dont le libellé est lui-même la
    réponse d'un autre reste masqué tant que CELUI QUI REGARDE ne l'a pas
-   ouvert de son côté — sans quoi un profil deviendrait une antisèche.     */
+   ouvert de son côté : sans quoi un profil deviendrait une antisèche.     */
 export function enigmesTrouvees(solvedCible, solvedVisiteur = new Set()) {
   return NODES.map((node) => {
     const trouves = node.answers.filter((a) => solvedCible.has(a.id)).length;
@@ -397,7 +397,7 @@ export function enigmesTrouvees(solvedCible, solvedVisiteur = new Set()) {
    Plus on est haut, plus un essai coûte cher. En bas de l'échelle on peut
    tâtonner ; en haut, chaque proposition engage la journée.              */
 
-// 12, 33, 57 — les trois nombres du disque, repris d'une unité à l'autre :
+// 12, 33, 57 : les trois nombres du disque, repris d'une unité à l'autre :
 // secondes, puis minutes, puis heures. L'échelon 1 démarre au deuxième cran
 // de la suite (33 s), l'échelon 2 au troisième (57 s), et ainsi de suite.
 const SUITE = [12, 33, 57];

@@ -1,4 +1,4 @@
-// WhiteCadae — Cloudflare Worker : API + service du site statique
+// WhiteCadae : Cloudflare Worker (API + service du site statique)
 
 import {
   getNode, isLocked, matchAnswer, buildState, currentAnswerId, echelonOf, accessOf,
@@ -33,7 +33,7 @@ export default {
    Le vrai verrou est `script-src 'self'` : le site n'exécute que ses propres
    fichiers. Si une chaîne écrite par un membre parvenait un jour à s'échapper
    de l'échappement du client, le navigateur refuserait quand même de la
-   lancer. Il n'y a aucun script en ligne dans le site — c'est pourquoi le
+   lancer. Il n'y a aucun script en ligne dans le site : c'est pourquoi le
    repli d'avatar, qui vivait dans un attribut `onerror`, a été déplacé dans
    app.js.
 
@@ -66,6 +66,8 @@ const SECURITE = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'Permissions-Policy': 'geolocation=(), microphone=(), camera=(), payment=(), usb=()',
+  // le navigateur garde le site en HTTPS pendant deux ans, sous-domaines compris
+  'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
 };
 
 function avecSecurite(reponse) {
@@ -161,7 +163,7 @@ async function handleApi(request, env, url) {
   if (route('GET', '/api/gmo')) return gmoGet(request, env);
 
   // --- le tronc commun : interprétations et reprises. Ouvert dès l'échelon 1,
-  //     donc à tout le monde, visiteur compris — le barrage ne ferme plus que
+  //     donc à tout le monde, visiteur compris : le barrage ne ferme plus que
   //     ce qui est au-dessus. On le garde en place : si un jour un échelon
   //     doit se refermer, il suffit de relever la constante.
   const coversRoute = route('GET', '/api/covers/feed') || route('GET', '/api/covers')
@@ -219,7 +221,7 @@ async function handleApi(request, env, url) {
 
 /* ---------------------------------------------------------------- helpers */
 
-// `no-store` : toutes ces réponses dépendent de qui les demande — la session,
+// `no-store` : toutes ces réponses dépendent de qui les demande, la session,
 // l'échelon atteint, les brouillons qu'on est seul à voir. Aucune ne doit
 // dormir dans un cache intermédiaire, encore moins être resservie à
 // quelqu'un d'autre. (L'avatar, lui, forge sa propre réponse et reste
@@ -325,10 +327,9 @@ async function requireAdmin(request, env) {
 
    Le 57 commande le reste du site : sans mot de passe trouvé, il n'y a que
    lui. Les pages s'ouvrent ensuite une à une (voir accessOf). Le barrage vit
-   ici, pas seulement dans l'interface : masquer un lien n'a jamais fermé une
-   porte.
+   dans le code : masquer un lien dans l'interface ne ferme aucune porte.
 
-   L'artiste en est exempté — il ne peut pas se retrouver enfermé dehors de
+   L'artiste en est exempté : il ne peut pas se retrouver enfermé dehors de
    son propre site par un jeu dont il connaît déjà les réponses.            */
 
 async function viewerAccess(request, env) {
@@ -426,7 +427,7 @@ async function parseReferences(env, raw) {
       if (start.song_id !== end.song_id) return json({ error: 'Le passage référencé doit rester dans un même morceau.' }, 400);
       if (end.line_number < start.line_number) return json({ error: 'Passage référencé invalide (fin avant le début).' }, 400);
       const excerpt = start.text.length > 60 ? start.text.slice(0, 57) + '…' : start.text;
-      const label = `${start.title} — « ${excerpt}${endId !== startId ? ' […]' : ''} »`;
+      const label = `${start.title} : « ${excerpt}${endId !== startId ? ' […]' : ''} »`;
       const note = String((r && r.note) || '').trim();
       if (note.length > 2000) return json({ error: 'Explication de référence trop longue (2000 caractères max).' }, 400);
       refs.push({
@@ -509,7 +510,7 @@ async function deleteReference(request, env, id) {
 /* ------------------------------------------------- le barrage des essais ---
 
    Deux portes s'ouvrent sans rien prouver : la connexion et l'inscription. Sans
-   compteur, on peut y taper indéfiniment — essayer des mots de passe de
+   compteur, on peut y taper indéfiniment : essayer des mots de passe de
    membres d'un côté, fabriquer des comptes jetables de l'autre. Or un compte
    jetable, c'est un essai de plus sur les signes du 57 : le minuteur du jeu ne
    tient que par compte, il ne coûte donc rien à qui sait en créer mille.
@@ -661,7 +662,7 @@ async function logout(request, env) {
   return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
 }
 
-// La session porte aussi ce que l'échelon ouvre et le minuteur d'essai —
+// La session porte aussi ce que l'échelon ouvre et le minuteur d'essai :
 // commun à tous les signes du site. L'interface s'y règle dès le chargement,
 // sans attendre l'état du jeu.
 async function me(request, env) {
@@ -689,7 +690,7 @@ async function getCorpus(env) {
   ).all()).results;
 
   // Nombre d'interprétations couvrant chaque phrase : une référence interne
-  // ne peut viser qu'un passage déjà interprété — et publié, puisqu'une
+  // ne peut viser qu'un passage déjà interprété : et publié, puisqu'une
   // référence relie une lecture publique à une autre lecture publique.
   const spans = (await env.DB.prepare(
     `SELECT a.song_id, ls.line_number AS from_no,
@@ -803,7 +804,7 @@ async function getSong(env, request, slug) {
   ).bind(song.id).all()).results;
 
   // Grilles de lecture : le numéro de chaque lecture (n°1, n°2, …) est fixé
-  // une fois pour toutes à sa création — il n'est jamais recalculé, y compris
+  // une fois pour toutes à sa création : il n'est jamais recalculé, y compris
   // si une lecture plus ancienne du même auteur sur la même cible est supprimée.
   const annotations = (await env.DB.prepare(
     `SELECT a.id, a.user_id, a.target_type, a.line_id, a.word_start, a.word_end, a.end_line_id,
@@ -1001,7 +1002,7 @@ async function attachSocial(env, viewer, kind, idSubquery, items) {
 // membre lui-même voit aussi ses brouillons en attente de publication.
 // Le profil se lit sans rien avoir trouvé : l'échelon d'un membre et les
 // énigmes qu'il a percées sont publics. Ce qu'il a ÉCRIT, en revanche, suit
-// l'accès de celui qui regarde — on ne contourne pas les portes par ici.
+// l'accès de celui qui regarde : on ne contourne pas les portes par ici.
 async function getProfile(env, request, username) {
   await ensureReferenceColumns(env);
   const user = await env.DB.prepare(
@@ -1243,7 +1244,7 @@ async function createAnnotation(request, env) {
 }
 
 // Rang (à partir de 1) de la prochaine lecture de cet auteur sur cette cible
-// exacte, parmi celles qu'il a déjà écrites — jamais recalculé après coup.
+// exacte, parmi celles qu'il a déjà écrites : jamais recalculé après coup.
 async function nextGridNumber(env, userId, songId, targetType, lineId, wordStart, wordEnd, endLineId) {
   const row = await env.DB.prepare(
     `SELECT COALESCE(MAX(grid_number), 0) AS n FROM annotations
@@ -1463,7 +1464,7 @@ async function deleteEssay(request, env, id) {
 // Arborescence complète des reprises : albums (ordre de sortie) → morceaux
 // (ordre de piste) → reprises (de la plus récente à la plus ancienne).
 // Le fil des reprises : les plus récentes d'abord, à plat, avec le morceau
-// repris. Même forme que /api/feed — un élément de plus pour savoir s'il en
+// repris. Même forme que /api/feed : un élément de plus pour savoir s'il en
 // reste.
 async function getCoverFeed(env, request, url) {
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 5, 1), 30);
@@ -1635,6 +1636,13 @@ async function updatePassword(request, env) {
 
   const hash = await hashPassword(next);
   await env.DB.prepare('UPDATE users SET password_hash = ?1 WHERE id = ?2').bind(hash, user.id).run();
+
+  // Changer de mot de passe coupe toutes les autres sessions : si un cookie a
+  // fuité, il ne vaut plus rien après ce geste. On garde seulement la session
+  // en cours, pour ne pas se déconnecter soi-même.
+  const token = getCookie(request, SESSION_COOKIE);
+  await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?1 AND token <> ?2')
+    .bind(user.id, token || '').run();
   return json({ ok: true });
 }
 
@@ -1700,7 +1708,7 @@ async function ensureRiddleTable(env) {
 
 /* Un essai par heure. Le délai court dès qu'un mot de passe est proposé,
    juste ou faux : c'est ce qui oblige à réfléchir avant de taper. Il est
-   gardé côté serveur — un rechargement de page ne le fait pas sauter.
+   gardé côté serveur : un rechargement de page ne le fait pas sauter.
 
    La date du dernier essai vit sur une ligne réservée de riddle_progress,
    dont le riddle_id ne correspond à aucune réponse : buildState l'ignore
@@ -1711,8 +1719,8 @@ async function ensureRiddleTable(env) {
 const ESSAI_ROW = '@essai';
 
 // Le délai dépend de l'échelon atteint, et il est relu à chaque fois : monter
-// d'un cran allonge donc l'attente en cours. C'est voulu — l'attente est une
-// propriété de là où l'on est, pas du moment où l'on a tenté.
+// d'un cran allonge donc l'attente en cours. C'est voulu : l'attente est une
+// propriété de l'échelon où l'on se trouve. Le moment de la tentative n'y change rien.
 async function attenteRestante(env, userId, echelon) {
   await ensureRiddleTable(env);
   const row = await env.DB.prepare(
@@ -1732,7 +1740,7 @@ async function attenteRestante(env, userId, echelon) {
 // (changes = 1) et toutes les autres échouent le WHERE (changes = 0). Au tout
 // premier essai, la clé primaire (user_id, '@essai') ne laisse réussir qu'un
 // seul INSERT. Un joueur ne peut donc PAS forcer les signes en rafale en
-// envoyant dix tentatives à la fois — le vieux schéma « lire l'attente, tester,
+// envoyant dix tentatives à la fois : le vieux schéma « lire l'attente, tester,
 // puis marquer » laissait cette course ouverte.
 async function marquerEssai(env, userId, delaiMs) {
   await ensureRiddleTable(env);
@@ -1794,7 +1802,7 @@ async function signsGuess(request, env) {
 
   // Le vrai verrou anti-rafale : la réservation atomique du créneau. Une
   // lecture préalable donnerait un 429 plus lisible dans le cas courant, mais
-  // ne sérialise rien — c'est ce claim, et lui seul, qui empêche dix essais
+  // ne sérialise rien : c'est ce claim, et lui seul, qui empêche dix essais
   // simultanés de passer ensemble.
   const libre = await marquerEssai(env, user.id, delaiEssaiMs(echelon));
   if (!libre) {
@@ -2257,7 +2265,7 @@ async function chargeArbre(env, id) {
   const { results } = await env.DB.prepare(
     'SELECT id, parent_id, body, url, created_at FROM reflection_branches WHERE tree_id = ?1 ORDER BY id'
   ).bind(id).all();
-  // les nourritures : une branche peut naître de plusieurs passés — y compris
+  // les nourritures : une branche peut naître de plusieurs passés, y compris
   // d'un autre arbre. La chip a donc besoin de connaître sa source.
   const { results: liens } = await env.DB.prepare(
     `SELECT l.branch_id, l.source_id, sb.body AS source_body, sb.url AS source_url,
@@ -2398,7 +2406,7 @@ async function branchesDelete(request, env, id) {
 
 /* Chaque présent est le futur de plusieurs passés : au-delà de sa branche
    mère (sa place dans l'arbre), une branche peut être nourrie par d'autres.
-   Ces liens traversent l'arbre sans le déformer — l'arbre reste lisible,
+   Ces liens traversent l'arbre sans le déformer : l'arbre reste lisible,
    les nourritures s'y ajoutent en chips. */
 
 async function lienCreate(request, env, brancheId) {
@@ -2524,7 +2532,7 @@ async function carreGet(request, env) {
     if (carre) {
       reponse.carre = { ...carre, membres: await membresDe(env, carre.id) };
       // la vie du carré : les brainstorms qu'il a portés, du plus récent au
-      // plus ancien — son histoire publique, à côté de sa conversation privée
+      // plus ancien : son histoire publique, à côté de sa conversation privée
       const { results: bs } = await env.DB.prepare(
         `SELECT id, sujet, statut, plateforme, created_at,
                 (SELECT COUNT(*) FROM brainstorm_idees i WHERE i.brainstorm_id = brainstorms.id AND i.retenue = 1) AS retenues
@@ -2599,7 +2607,7 @@ async function carreUpdateMoi(request, env) {
 }
 
 /* L'annuaire des As : tous ceux qui ont atteint l'échelon du carré, avec
-   leur carré s'ils en ont un — pour que les libres se trouvent et que les
+   leur carré s'ils en ont un : pour que les libres se trouvent et que les
    carrés incomplets se voient. L'échelon d'un membre est déjà public sur son
    profil : l'annuaire ne montre rien de plus, il rassemble.               */
 async function carreAnnuaire(request, env) {
@@ -2607,7 +2615,7 @@ async function carreAnnuaire(request, env) {
   if (refus) return refus;
   await ensureHautesTables(env);
 
-  // l'échelon se recalcule des signes trouvés — seule vérité, jamais figée
+  // l'échelon se recalcule des signes trouvés : seule vérité, jamais figée
   const { results } = await env.DB.prepare(
     'SELECT user_id, riddle_id FROM riddle_progress WHERE solved_at IS NOT NULL'
   ).all();
@@ -2644,7 +2652,7 @@ async function carreAnnuaire(request, env) {
 }
 
 /* La conversation du carré : privée, réservée à ses quatre As. C'est aussi
-   son histoire — tout ce qui s'y est dit reste, tant que le carré vit.    */
+   son histoire : tout ce qui s'y est dit reste, tant que le carré vit.    */
 async function carreChatList(request, env) {
   const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
   if (refus) return refus;
@@ -2678,8 +2686,8 @@ async function carreChatPost(request, env) {
   return json({ ok: true, id: r.meta.last_row_id }, 201);
 }
 
-/* Le salon de recrutement. Les As libres s'y annoncent — quelques mots sur ce
-   qu'ils apporteraient, leur nature, leur connaissance — et les carrés
+/* Le salon de recrutement. Les As libres s'y annoncent : quelques mots sur ce
+   qu'ils apporteraient, leur nature, leur connaissance : et les carrés
    incomplets les invitent. L'invité accepte ou décline : personne n'entre
    dans un carré sans l'avoir voulu des deux côtés.                        */
 
@@ -2853,7 +2861,7 @@ async function carreLeave(request, env) {
    Un carré complet annonce un live (TikTok, YouTube ou Twitch). Pendant le
    live, la salle propose des réflexions et vote ; le carré voit monter les
    plus soutenues du moment. Tout marche par relecture périodique côté
-   client — aucun serveur temps réel, aucune connexion tenue ouverte : le
+   client, sans serveur temps réel ni connexion tenue ouverte. Le
    coût d'un brainstorm à mille personnes est celui de requêtes ordinaires. */
 
 const PLATEFORMES_LIVE = {
@@ -2885,7 +2893,7 @@ async function brainstormsCreate(request, env) {
   if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
   await ensureHautesTables(env);
 
-  // un brainstorm est porté par un carré d'as — complet : quatre As
+  // un brainstorm est porté par un carré d'as complet : quatre As
   const carre = await monCarre(env, vu.user.id);
   if (!carre) return json({ error: 'Un brainstorm est porté par un carré d’as.' }, 403);
   const membres = await membresDe(env, carre.id);
@@ -2911,7 +2919,7 @@ async function brainstormsCreate(request, env) {
 }
 
 /* Le classement du direct. Une réflexion monte parce qu'on vient de la
-   soutenir : chaque vote pèse selon son âge — la dernière minute pèse 8, les
+   soutenir : chaque vote pèse selon son âge : la dernière minute pèse 8, les
    cinq dernières 4, les dix dernières 2, le reste 1. C'est tout l'algorithme,
    et il tient dans une requête : rien à maintenir, rien qui tourne en fond,
    le classement se recalcule à la lecture.                                 */

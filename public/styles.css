@@ -1,4 +1,4 @@
-/* WhiteCadae — feuille de style */
+/* WhiteCadae : feuille de style */
 
 :root {
   --bg: #0d0d10;
@@ -114,8 +114,8 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-7px) rotate
 }
 .site-nav a { color: var(--text-dim); }
 .site-nav a:hover { color: var(--text); text-decoration: none; }
-/* « Mon compte » quand le profil n'est pas encore ouvert : un lien du menu,
-   pas un bouton — il ne doit pas se distinguer des autres. */
+/* « Mon compte » quand le profil n'est pas encore ouvert : un lien du menu
+   ordinaire, sans le relief d'un bouton, pour ne pas se distinguer des autres. */
 .site-nav .nav-account {
   background: none;
   border: none;
@@ -333,7 +333,7 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 
 /* ------------------------------------------------------------- références */
 
-/* Lecture : une référence est un petit bloc à part entière — l'œuvre et son
+/* Lecture : une référence est un petit bloc à part entière : l'œuvre et son
    artiste en tête, l'explication en dessous. */
 .ref-list { list-style: none; margin-top: 0.7rem; display: flex; flex-direction: column; gap: 0.5rem; }
 .ref-item {
@@ -390,7 +390,7 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .ref-lines { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 
 /* La poignée : on tire pour donner de la place au texte, ou pour la rendre
-   au champ d'écriture juste en dessous — que le navigateur laisse déjà
+   au champ d'écriture juste en dessous : que le navigateur laisse déjà
    étirer par son coin. */
 .ref-grip {
   display: flex;
@@ -1039,10 +1039,8 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 
 /* ------------------------------------------------------ les énigmes (/57) */
 
-/* Sans compte : la page se lit entièrement, sans voile. Rien n'y est grisé —
-   ni les éléments, ni le champ, ni son « mot de passe ». Le seul signe est le
-   bouton Valider, éteint : c'est le geste qui est fermé, pas la lecture. Les
-   deux boutons disent quoi faire, et la page 57 n'explique jamais rien. */
+/* Sans compte, la page se lit en entier, sans rien de grisé. Seul le bouton
+   Valider est éteint : c'est le geste qui est bloqué, la lecture reste ouverte. */
 .enigmes-gate-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
 
 
@@ -1079,7 +1077,7 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .progress-text strong { color: var(--accent); font-size: 1.15rem; }
 
 /* Une carte par élément : la racine est dedans, pas à côté. Une colonne au
-   doigt, deux dès qu'il y a la place — l'ensemble tient alors d'un regard. */
+   doigt, deux dès qu'il y a la place. */
 .enigmes-grid { display: grid; gap: 0.85rem; align-items: start; }
 @media (min-width: 820px) { .enigmes-grid { grid-template-columns: 1fr 1fr; } }
 
@@ -1195,7 +1193,7 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .enigme-msg:empty { display: none; }
 
 /* L'attente : proposer un mot de passe ferme les champs pour une heure. Le
-   décompte prend la place du bouton — rien n'est écrit, rien n'est expliqué.
+   décompte prend la place du bouton : rien n'est écrit, rien n'est expliqué.
    La largeur est figée pour que la carte ne tressaille pas à chaque seconde. */
 .enigme-form button { min-width: 6.2rem; text-align: center; }
 .enigme-form button:disabled {
@@ -1345,7 +1343,7 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 
 /* Ouverte par la pastille du titre : le titre, le sens général, les lectures
    d'ensemble et les connexions. Centrée sur ordinateur, feuille montante sur
-   téléphone — la page ne défile jamais derrière. */
+   téléphone : la page ne défile jamais derrière. */
 .modal-song { width: min(760px, calc(100vw - 2rem)); max-height: calc(100vh - 3rem); }
 .modal-song .settings-section h3 { font-family: var(--serif); font-size: 1.15rem; }
 
@@ -1689,8 +1687,8 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 
 /* ------------------------------------------- le dock des applications ---
    Les quatre pièces hautes sont des applications : chacune a son menu à
-   elle, fixé en bas de l'écran — au pouce sur mobile, sous les yeux sur
-   ordinateur — qui suit l'utilisateur dans toutes ses vues. */
+   elle, fixé en bas de l'écran : au pouce sur mobile, sous les yeux sur
+   ordinateur : qui suit l'utilisateur dans toutes ses vues. */
 
 .sous-menu {
   position: fixed;

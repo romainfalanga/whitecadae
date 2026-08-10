@@ -1,4 +1,4 @@
-// WhiteCadae — les contenus des hautes pages (échelons 5 et 7)
+// WhiteCadae : les contenus des hautes pages (échelons 5 et 7)
 //
 // Comme les réponses du jeu, ces textes ne vivent que côté Worker : ils ne
 // sont servis qu'à ceux dont l'échelon y donne droit. Les mettre dans
@@ -57,8 +57,8 @@ export const DOMAINES_CARRE = ['Psychologie', 'Univers', 'IA', 'Religions'];
 /* --------------------------------- Game Master Orange (échelon 7) ------- */
 
 // Le mécanisme 6 est adapté à la plateforme : le carré d'as se forme
-// désormais à l'échelon 5, sur sa propre page — arrivé ici, le joueur a déjà
-// le sien. Le mécanisme parle donc de ce qu'on en fait, pas de le trouver.
+// désormais à l'échelon 5, sur sa propre page : arrivé ici, le joueur a déjà
+// le sien. Le mécanisme parle donc de ce qu'on en fait, une fois qu'on l'a.
 
 export const MECANISMES_GMO = {
   titre: 'Les 7 mécanismes orange',
