@@ -4,6 +4,21 @@
 // sont servis qu'à ceux dont l'échelon y donne droit. Les mettre dans
 // public/ reviendrait à les offrir à quiconque lit le JavaScript.
 
+/* ------------------------------------------------------- les deux axes ---
+   Deux troncs existent d'avance pour chacun, dans Pense Mieux, dans la
+   Vidéographie et dans chaque carré : devenir sa version la plus harmonieuse,
+   et imaginer sa société la plus harmonieuse. Ce sont les mécanismes 2 et 3
+   de l'orange, devenus des arbres qu'on nourrit. Dans un carré, le moi porte
+   le nom de son As et la société est commune aux quatre : c'est là que le
+   champ des possibles s'ouvre, un carré de plus étant une version de plus. */
+
+export const AXES = {
+  moi: { titre: 'Le moi harmonieux', titreCarre: (nom) => `Le moi harmonieux de ${nom}` },
+  societe: { titre: 'Ma société harmonieuse', titreCarre: () => 'Notre société harmonieuse' },
+};
+
+export const AXES_ORDRE = ['moi', 'societe'];
+
 /* --------------------------------------------- Carré d'As (échelon 5) --- */
 
 export const MISSIONS_CARRE = {
@@ -91,6 +106,9 @@ export const MECANISMES_GMO = {
         'Trouve les expansions harmonieuses qui permettront d’y arriver.',
         'Montre-leur le chemin du réel.',
       ],
+      // le tronc qui porte ce mécanisme, dans les trois outils
+      page: '/pense-mieux',
+      pageLabel: 'Ma société harmonieuse',
     },
     {
       numero: 3,
@@ -100,6 +118,8 @@ export const MECANISMES_GMO = {
         'Trouve les expansions harmonieuses qui te permettront d’y arriver.',
         'Montre-leur le chemin du réel.',
       ],
+      page: '/pense-mieux',
+      pageLabel: 'Le moi harmonieux',
     },
     {
       numero: 4,

@@ -229,18 +229,64 @@ ou privée) : on y organise ce qu'on a extériorisé en vidéo. Les arbres de
 pensée restent à leur auteur ; les vidéographies se partagent **en lecture au
 sein de son carré**, puisque les As doivent les analyser mutuellement.
 
+## Les deux troncs
+
+Chacun poursuit deux choses : devenir **sa version la plus harmonieuse**, et
+imaginer **sa société la plus harmonieuse**. Ce sont les mécanismes 2 et 3 de
+l'orange ; ce sont aussi, désormais, deux arbres qui existent d'avance.
+
+En tête de la forêt de **Pense Mieux** et de celle de la **Vidéographie**,
+deux troncs épinglés : **« Le moi harmonieux »** et **« Ma société
+harmonieuse »**. Ils se créent au premier regard, ne se plantent pas, ne
+s'abattent pas et ne se renomment pas : on ne fait que les nourrir, branche
+après branche, avec le même éditeur que tout le reste. En Pense Mieux ils sont
+à leur seul porteur ; en Vidéographie ils suivent la règle de l'outil et se
+lisent au sein du carré.
+
+Dans un **carré**, l'onglet **Harmonie** porte les deux mêmes axes, devenus
+collectifs : **« Notre société harmonieuse »**, commune aux quatre, où chacun
+écrit et où chacun greffe sur la branche des autres sans jamais pouvoir la
+retoucher ni la couper (chaque branche porte son auteur) ; et **« Le moi
+harmonieux de … »**, un par As, écrit par lui seul et lu par les trois autres.
+C'est la matière du travail mutuel : sa version la plus harmonieuse telle que
+ce carré-là la révèle.
+
+**Le champ des possibles.** Un As vit dans plusieurs carrés, donc il a
+plusieurs versions de lui-même, et plusieurs sociétés imaginées. Sur la page
+d'un tronc, une ligne, « Le même ailleurs », mène à toutes les autres :
+depuis son moi personnel vers son moi de chaque carré, et de l'un à l'autre.
+Un carré de plus est une version de plus, et le champ s'ouvre d'autant.
+
+Techniquement, un tronc **est un arbre** : `reflection_trees` porte `axe`
+(`moi` | `societe`) et `carre_id` (nul pour un arbre personnel). Les troncs
+héritent donc, sans une ligne de moteur nouveau, des branches emboîtées, des
+liens de nourriture, du rendu et de la recherche. Un arbre se lit par un
+chemin unique, `/arbre/<id>`, quel que soit l'endroit où il vit : c'est le
+serveur qui dit sa nature, son axe et son carré, jamais l'URL.
+
+La **nourriture est directionnelle**, et c'est le verrou de la page : une
+branche personnelle peut se nourrir d'un arbre de carré (c'est ainsi que ce
+qu'un carré produit entre dans le tronc de chacun de ses As, avec sa chip de
+provenance), mais une branche d'un arbre de carré ne peut se nourrir que du
+**même** carré. Sans cette règle, l'extrait affiché par une chip livrerait une
+pensée privée, ou celle d'un autre carré, aux trois autres As. En quittant un
+carré, son moi redescend dans sa forêt sous le nom du carré quitté, et les
+nourritures qui traversaient la frontière sont coupées **dans les deux sens**.
+
 Le **Carré d'As** (échelon 5) est un réseau social des réflexions. Un As peut
 vivre dans **plusieurs carrés** (sept au plus) : des groupes de réflexion qui
 se complètent. Chaque carré de quatre équilibre deux natures
 (**infinisseur**, **harmonisateur**) et quatre connaissances fondamentales
 (**Philosophie, IA, Religions, Univers**), choisies par carré. Sa page a
-quatre onglets :
+cinq onglets :
 
 - **Le carré** : les As et l'équilibre, le **cap** (ce que le carré vise :
   sa meilleure version, sa société harmonieuse, ses modèles d'univers), le
   **salon Discord** où il s'organise, et **le live du carré** : l'As au
   meilleur matériel tient l'antenne, les quatre se retrouvent au salon, et
   l'hôte retransmet leurs quatre voix en direct.
+- **Harmonie** : les deux troncs du carré, décrits plus haut : la société
+  commune aux quatre, et le moi harmonieux de chacun.
 - **Notes** : l'évaluation mutuelle, domaine par domaine, de 1 à 10. Le
   **meilleur du domaine vaut 10** et toutes les autres notes se lisent par
   rapport à lui ; tout le carré voit toutes les notes (la transparence est
@@ -259,7 +305,10 @@ conversation.
 La voix d'un As est bâtie sur ses **arbres de pensée offerts** à ce carré
 (consentement explicite, arbre par arbre : rien de privé ne nourrit le
 relatif sans ce geste) et ses vidéographies, déjà partagées au carré. La
-voix du carré ajoute le cap et la récolte de ses brainstorms. Le **portrait**
+voix du carré ajoute le cap, la société harmonieuse que les quatre imaginent
+ensemble, et la récolte de ses brainstorms ; la voix d'un As ajoute son moi
+harmonieux dans ce carré. Ces deux troncs y entrent d'office, ils sont déjà
+écrits pour les quatre. Le **portrait**
 de chaque voix se copie d'un bouton, pour la porter à n'importe quelle IA ;
 sur place, le relatif répond par **Workers AI** (binding `AI` dans
 `wrangler.jsonc`) et garde ses échanges (`carre_relatif_messages`). Sans le

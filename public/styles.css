@@ -1529,6 +1529,24 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .carres-ouverts li:last-child { border-bottom: none; }
 .carres-ouverts li span { color: var(--text-dim); font-size: 0.85rem; }
 .carres-ouverts li button { margin-left: auto; }
+/* les deux troncs : ils ne se plantent pas, ils se distinguent */
+.foret-troncs { margin-bottom: 1.4rem; }
+.arbre-card--tronc {
+  border-left: 2px solid var(--accent);
+  background: linear-gradient(90deg, rgba(216, 192, 122, 0.06), transparent 40%);
+}
+.branche-auteur { color: var(--text-dim); font-size: 0.8rem; margin-top: 0.2rem; }
+.arbre-ailleurs { color: var(--text-dim); font-size: 0.88rem; margin: 0.3rem 0 1rem; }
+.arbre-ailleurs a { color: var(--accent); }
+
+.harmonie { margin: 1.2rem 0 2rem; max-width: 46rem; }
+.harmonie h2 { font-size: 1.1rem; }
+.harmonie-note { color: var(--text-dim); font-size: 0.88rem; margin-top: 0.5rem; }
+.harmonie-mois { display: grid; gap: 0.7rem; }
+.harmonie-as { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
+.harmonie-as .arbre-card { flex: 1; min-width: 180px; padding: 0.6rem 0.9rem; }
+.harmonie .arbre-card { text-decoration: none; }
+
 /* le réseau des carrés : cartes, onglets, cap, notes, relatif */
 .carres-liste {
   display: grid;

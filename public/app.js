@@ -171,6 +171,9 @@ async function route() {
   const cle =
     (path === '/reprises' || path === '/reprises/fil' || /^\/chanson\/[^/]+\/reprises$/.test(path)) ? 'reprises'
     : path === '/conversation' ? 'conversation'
+    // un arbre se lit par son chemin canonique : sa nature vient du serveur,
+    // qui refuse en 404 celui qu'on n'a pas le droit de voir
+    : path.startsWith('/arbre/') ? 'penseMieux'
     : path.startsWith('/pense-mieux') ? 'penseMieux'
     : path.startsWith('/videographie') ? 'videographie'
     : path.startsWith('/carre-d-as') ? 'carre'
@@ -185,11 +188,11 @@ async function route() {
   if (path === '/pense-mieux') return vueForet('pensee');
   if (path === '/pense-mieux/nouveau') return vueNouvelArbre('pensee');
   if (path === '/pense-mieux/recherche') return vueRecherche('pensee');
-  if ((m = path.match(/^\/pense-mieux\/(\d+)$/))) return pageArbre('pensee', +m[1]);
+  if ((m = path.match(/^\/pense-mieux\/(\d+)$/))) return pageArbre(+m[1]);
   if (path === '/videographie') return vueForet('video');
   if (path === '/videographie/nouveau') return vueNouvelArbre('video');
   if (path === '/videographie/carre') return vueVideoCarre();
-  if ((m = path.match(/^\/videographie\/(\d+)$/))) return pageArbre('video', +m[1]);
+  if ((m = path.match(/^\/videographie\/(\d+)$/))) return pageArbre(+m[1]);
   if (path === '/carre-d-as') return vueMesCarres();
   if (path === '/carre-d-as/recrutement') return vueRecrutement();
   // l'ancien annuaire vit au salon de recrutement ; l'ancienne conversation
@@ -197,9 +200,10 @@ async function route() {
   if (path === '/carre-d-as/annuaire') return navigate('/carre-d-as/recrutement', true);
   if (path === '/carre-d-as/conversation') return navigate('/carre-d-as', true);
   if (path === '/carre-d-as/missions') return vueMissions();
-  if ((m = path.match(/^\/carre-d-as\/(\d+)(?:\/(notes|conversation|relatif))?$/))) {
+  if ((m = path.match(/^\/carre-d-as\/(\d+)(?:\/(harmonie|notes|conversation|relatif))?$/))) {
     return pageCarre(+m[1], m[2] || 'carre');
   }
+  if ((m = path.match(/^\/arbre\/(\d+)$/))) return pageArbre(+m[1]);
   if (path === '/brainstorm') return vueScene();
   if (path === '/brainstorm/archives') return vueArchives();
   if (path === '/brainstorm/annoncer') return vueAnnoncer();
@@ -677,15 +681,24 @@ async function vueForet(kind) {
     }
     if (tri === 'branches') arbres.sort((a, b) => b.branches - a.branches);
     return arbres.length ? arbres.map((a) => `
-      <a class="arbre-card" href="${def.chemin}/${a.id}" data-link>
+      <a class="arbre-card" href="/arbre/${a.id}" data-link>
         <h2>${esc(a.title)}</h2>
         ${a.trunk ? `<p class="arbre-tronc-apercu">${esc(a.trunk)}</p>` : ''}
         <span class="arbre-meta">${a.branches} branche${a.branches > 1 ? 's' : ''}</span>
       </a>`).join('') : `<p class="empty-note">${esc(data.arbres.length ? 'Rien ne porte ce nom.' : def.vide)}</p>`;
   };
 
+  // Les deux troncs sont là d'avance et ne descendent jamais dans la forêt :
+  // on ne les plante pas, on les nourrit.
+  const troncs = (data.troncs || []).map((t) => `
+    <a class="arbre-card arbre-card--tronc" href="/arbre/${t.id}" data-link>
+      <h2>${esc(t.title)}</h2>
+      <span class="arbre-meta">${t.branches} branche${t.branches > 1 ? 's' : ''}</span>
+    </a>`).join('');
+
   docke(def.app, 'foret', `
     <h1>${esc(def.titre)}</h1>
+    ${troncs ? `<div class="foret foret-troncs">${troncs}</div>` : ''}
     <div class="foret-outils">
       <span class="foret-stats">${data.arbres.length} arbre${data.arbres.length > 1 ? 's' : ''} · ${totalBranches} branche${totalBranches > 1 ? 's' : ''}</span>
       <input id="foret-filtre" placeholder="Filtrer…" autocomplete="off">
@@ -726,7 +739,7 @@ function vueNouvelArbre(kind) {
         method: 'POST',
         body: { kind, title: document.getElementById('arbre-titre').value, trunk: document.getElementById('arbre-tronc').value },
       });
-      navigate(`${def.chemin}/${r.id}`);
+      navigate(`/arbre/${r.id}`);
     } catch (err) { document.getElementById('arbre-err').textContent = err.message; }
   };
 }
@@ -753,12 +766,12 @@ async function vueRecherche(kind) {
       catch { return; }
       if (champ.value.trim() !== q) return; // une frappe plus récente a gagné
       const arbres = d.arbres.map((a) => `
-        <a class="arbre-card" href="${def.chemin}/${a.id}" data-link>
+        <a class="arbre-card" href="/arbre/${a.id}" data-link>
           <h2>${esc(a.title)}</h2>
           ${a.trunk ? `<p class="arbre-tronc-apercu">${esc(a.trunk)}</p>` : ''}
         </a>`).join('');
       const branches = d.branches.map((b) => `
-        <a class="journal-entree" href="${def.chemin}/${b.tree_id}" data-link>
+        <a class="journal-entree" href="/arbre/${b.tree_id}#b${b.id}" data-link>
           <div class="journal-corps"><p>${esc(b.body || b.url || '')}</p></div>
           <div class="journal-meta"><span class="journal-arbre">${esc(b.tree_title)}</span></div>
         </a>`).join('');
@@ -817,7 +830,7 @@ async function vueVideoCarre() {
       const zone = document.querySelector(`[data-as="${m.user_id}"] .video-as-arbres`);
       if (!zone) continue;
       zone.innerHTML = v.arbres.length ? `<div class="foret">${v.arbres.map((a) => `
-        <a class="arbre-card" href="/videographie/${a.id}" data-link>
+        <a class="arbre-card${a.axe ? ' arbre-card--tronc' : ''}" href="/arbre/${a.id}" data-link>
           <h2>${esc(a.title)}</h2>
           ${a.trunk ? `<p class="arbre-tronc-apercu">${esc(a.trunk)}</p>` : ''}
           <span class="arbre-meta">${a.branches} vidéo${a.branches > 1 ? 's' : ''}</span>
@@ -834,29 +847,35 @@ function brancheEtiquette(b) {
 
 // Les branches s'emboîtent : on dessine l'arbre en profondeur. Les
 // nourritures (les autres passés d'une branche) s'affichent en chips qui
-// mènent à leur source : dans cet arbre, ou dans un autre arbre de la même
-// forêt : la chip porte alors le nom de l'arbre et y navigue.
+// mènent à leur source : dans cet arbre, ou ailleurs : la chip porte alors le
+// nom de l'arbre, celui de son carré s'il y en a un, et y navigue.
+//
+// Dans l'arbre commun d'un carré, chaque branche dit qui l'a écrite : chacun
+// greffe sur la branche de n'importe qui, personne ne touche celle d'un autre.
 function brancheHtml(b, enfants, kind, editable, ctx) {
   const contenu = kind === 'video'
     ? `<div class="branche-video">${videoEmbed(b.url)}${b.body ? `<p>${esc(b.body)}</p>` : ''}</div>`
     : `<p class="branche-texte">${esc(b.body)}</p>`;
+  const mienne = !ctx.collectif || (b.auteur_id == null ? ctx.porteur : b.auteur_id) === ctx.moi;
   const sources = (ctx.sourcesDe.get(b.id) || []).map((l) => {
     const ici = l.source_tree_id === ctx.arbreId;
     const etiquette = brancheEtiquette({ body: l.source_body, url: l.source_url });
+    const ou = l.source_carre_nom ? `${l.source_carre_nom} · ${l.source_tree_title}` : l.source_tree_title;
     const saut = ici
       ? `<button type="button" class="nourrie-va" data-va="${l.source_id}">⇠ ${esc(etiquette)}</button>`
-      : `<a class="nourrie-va" href="${ctx.chemin}/${l.source_tree_id}#b${l.source_id}" data-link>⇠ ${esc(l.source_tree_title)} · ${esc(etiquette)}</a>`;
-    return `<span class="nourrie-chip${ici ? '' : ' nourrie-ailleurs'}">${saut}${editable
+      : `<a class="nourrie-va" href="/arbre/${l.source_tree_id}#b${l.source_id}" data-link>⇠ ${esc(ou)} · ${esc(etiquette)}</a>`;
+    return `<span class="nourrie-chip${ici ? '' : ' nourrie-ailleurs'}">${saut}${editable && mienne
       ? `<button type="button" class="nourrie-oublie" data-oublie="${b.id}:${l.source_id}" aria-label="Détacher">✕</button>` : ''}</span>`;
   }).join('');
   const boutons = editable ? `
     <div class="branche-actions">
       <button type="button" class="link-btn" data-pousse="${b.id}">+ branche</button>
-      <button type="button" class="link-btn" data-nourrit="${b.id}">⇠ nourrie par…</button>
-      <button type="button" class="link-btn danger" data-coupe="${b.id}">couper</button>
+      ${mienne ? `<button type="button" class="link-btn" data-nourrit="${b.id}">⇠ nourrie par…</button>
+      <button type="button" class="link-btn danger" data-coupe="${b.id}">couper</button>` : ''}
     </div>` : '';
   return `<div class="branche" data-branche="${b.id}">
     ${contenu}
+    ${ctx.collectif && b.auteur ? `<p class="branche-auteur">${esc(b.auteur)}</p>` : ''}
     ${sources ? `<div class="branche-nourritures">${sources}</div>` : ''}
     ${boutons}
     <div class="branche-enfants">${(enfants.get(b.id) || []).map((e) => brancheHtml(e, enfants, kind, editable, ctx)).join('')}</div>
@@ -871,16 +890,20 @@ function videoEmbed(url) {
     allow="accelerometer; encrypted-media; picture-in-picture"></iframe></div>`;
 }
 
-async function pageArbre(kind, id) {
-  const def = ARBRES_PAGES[kind];
+// Un arbre se lit par le même chemin où qu'il vive : /arbre/:id. Son
+// contexte lui vient du serveur, pas de l'URL : sa nature, son axe, son carré.
+async function pageArbre(id) {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
   let data;
   try { data = await api(`/api/arbres/${id}`); }
-  catch { return navigate(def.chemin, true); }
+  catch { return navigate('/pense-mieux', true); }
   if (stale(epoch)) return;
   const arbre = data.arbre;
-  const editable = arbre.proprietaire;
+  const kind = arbre.kind;
+  const def = ARBRES_PAGES[kind];
+  const editable = arbre.editable;
+  const collectif = arbre.carre_id != null;
 
   const enfants = new Map();
   const parId = new Map();
@@ -896,12 +919,28 @@ async function pageArbre(kind, id) {
     if (!sourcesDe.has(l.branch_id)) sourcesDe.set(l.branch_id, []);
     sourcesDe.get(l.branch_id).push(l);
   }
-  const ctx = { parId, sourcesDe, arbreId: arbre.id, chemin: def.chemin };
+  const ctx = {
+    parId, sourcesDe, arbreId: arbre.id,
+    collectif, moi: arbre.moi, porteur: arbre.user_id,
+  };
 
-  docke(def.app, 'foret', `
-    <p class="fil-retour"><a href="${def.chemin}" data-link>← ${esc(def.titre)}</a></p>
+  // le retour et le dock suivent l'arbre : celui d'un carré ne s'affiche pas
+  // sous le dock de Pense Mieux
+  const retour = collectif
+    ? { app: 'ca', onglet: 'carre', chemin: `/carre-d-as/${arbre.carre_id}/harmonie`, titre: arbre.carre_nom || 'Le carré' }
+    : { app: def.app, onglet: 'foret', chemin: def.chemin, titre: def.titre };
+
+  // le champ des possibles : le même axe, ailleurs. Une ligne, pas une page.
+  const ailleurs = (arbre.ailleurs || []).map((a) => {
+    const nom = a.carre_nom || (a.kind === 'video' ? 'Vidéographie' : 'Pense Mieux');
+    return `<a href="/arbre/${a.id}" data-link>${esc(nom)}</a>`;
+  }).join(' · ');
+
+  docke(retour.app, retour.onglet, `
+    <p class="fil-retour"><a href="${retour.chemin}" data-link>← ${esc(retour.titre)}</a></p>
     <h1>${esc(arbre.title)}</h1>
     ${arbre.trunk ? `<p class="tronc">${esc(arbre.trunk)}</p>` : ''}
+    ${ailleurs ? `<p class="arbre-ailleurs">Le même ailleurs : ${ailleurs}</p>` : ''}
     <div class="liaison-bandeau" id="liaison-bandeau" hidden>
       <span>Touche la branche <strong>qui nourrit</strong> celle-ci</span>
       <select id="liaison-arbre"><option value="">ou depuis un autre arbre…</option></select>
@@ -925,7 +964,7 @@ async function pageArbre(kind, id) {
       </div>
       <p class="form-error" id="branche-err"></p>
     </form>
-    <p class="arbre-suppr"><button type="button" class="link-btn danger" id="arbre-suppr">Abattre cet arbre</button></p>
+    ${arbre.axe ? '' : '<p class="arbre-suppr"><button type="button" class="link-btn danger" id="arbre-suppr">Abattre cet arbre</button></p>'}
     ` : `<p class="empty-note">L’arbre d’un As de ton carré (lecture seule).</p>`}`);
 
   // le saut vers une source : pour tout le monde, lecteur compris
@@ -961,16 +1000,37 @@ async function pageArbre(kind, id) {
   };
   document.getElementById('liaison-annule').onclick = fermeLiaison;
 
-  // les autres arbres de la forêt, chargés à la première liaison
+  // Les autres arbres où puiser, chargés à la première liaison. Dans un
+  // arbre de carré on ne propose que ce carré : c'est la règle du serveur, et
+  // la proposer autrement mènerait à un refus.
   let autresArbres = null;
   const chargeAutres = async () => {
     if (autresArbres) return;
     try {
       const d = await api(`/api/arbres?kind=${kind}`);
-      autresArbres = d.arbres.filter((a) => a.id !== id);
-      selArbre.innerHTML = '<option value="">ou depuis un autre arbre…</option>'
-        + autresArbres.map((a) => `<option value="${a.id}">${esc(a.title)}</option>`).join('');
-      selArbre.hidden = autresArbres.length === 0;
+      const groupe = (label, arbres) => arbres.length
+        ? `<optgroup label="${esc(label)}">${arbres.map((a) => `<option value="${a.id}">${esc(a.title)}</option>`).join('')}</optgroup>`
+        : '';
+      let options = '';
+      let total = 0;
+      if (collectif) {
+        const c = (d.carres || []).find((x) => x.carre_id === arbre.carre_id);
+        const arbres = (c ? c.arbres : []).filter((a) => a.id !== id);
+        total = arbres.length;
+        options = groupe(c ? c.carre_nom : 'Le carré', arbres);
+      } else {
+        const mienne = [...(d.troncs || []), ...(d.arbres || [])].filter((a) => a.id !== id);
+        total = mienne.length;
+        options = groupe('Ma forêt', mienne);
+        for (const c of d.carres || []) {
+          const arbres = c.arbres.filter((a) => a.id !== id);
+          total += arbres.length;
+          options += groupe(c.carre_nom, arbres);
+        }
+      }
+      autresArbres = total;
+      selArbre.innerHTML = '<option value="">ou depuis un autre arbre…</option>' + options;
+      selArbre.hidden = total === 0;
     } catch { selArbre.hidden = true; }
   };
 
@@ -994,7 +1054,7 @@ async function pageArbre(kind, id) {
     fermeLiaison();
     try {
       await api(`/api/branches/${depuis}/liens`, { method: 'POST', body: { source_id: +source.dataset.source } });
-      pageArbre(kind, id);
+      pageArbre(id);
     } catch (err) { alert(err.message); }
   });
 
@@ -1013,7 +1073,7 @@ async function pageArbre(kind, id) {
       if (sourceId === depuis) return;
       try {
         await api(`/api/branches/${depuis}/liens`, { method: 'POST', body: { source_id: sourceId } });
-        pageArbre(kind, id);
+        pageArbre(id);
       } catch (err) { alert(err.message); }
       return;
     }
@@ -1025,7 +1085,7 @@ async function pageArbre(kind, id) {
     } else if (oublie) {
       const [bId, sId] = oublie.dataset.oublie.split(':');
       await api(`/api/branches/${bId}/liens/${sId}`, { method: 'DELETE' });
-      pageArbre(kind, id);
+      pageArbre(id);
     } else if (pousse) {
       parentField.value = pousse.dataset.pousse;
       ou.textContent = 'Nouvelle branche sur la branche choisie';
@@ -1033,7 +1093,7 @@ async function pageArbre(kind, id) {
       document.getElementById(kind === 'video' ? 'branche-url' : 'branche-body').focus();
     } else if (coupe && confirm('Couper cette branche et tout ce qui pousse dessus ?')) {
       await api(`/api/branches/${coupe.dataset.coupe}`, { method: 'DELETE' });
-      pageArbre(kind, id);
+      pageArbre(id);
     }
   });
   annule.onclick = () => { parentField.value = ''; ou.textContent = 'Nouvelle branche sur le tronc'; annule.hidden = true; };
@@ -1049,22 +1109,22 @@ async function pageArbre(kind, id) {
           url: kind === 'video' ? document.getElementById('branche-url').value : '',
         },
       });
-      pageArbre(kind, id);
+      pageArbre(id);
     } catch (err) { document.getElementById('branche-err').textContent = err.message; }
   };
 
-  document.getElementById('arbre-suppr').onclick = async () => {
+  // un tronc n'a pas ce bouton : il ne s'abat pas
+  const suppr = document.getElementById('arbre-suppr');
+  if (suppr) suppr.onclick = async () => {
     if (!confirm('Abattre cet arbre, tronc et branches ?')) return;
     await api(`/api/arbres/${id}`, { method: 'DELETE' });
-    navigate(def.chemin);
+    navigate(retour.chemin);
   };
 }
 
-/* --------------------------------------------- le carré d'as (échelon 5) */
-
 /* --------------------------------------------- le carré d'as (échelon 5)
-   Quatre vues : le carré lui-même, sa conversation privée, l'annuaire des
-   As et les missions. Le dock en bas passe de l'une à l'autre.           */
+   Le réseau des carrés : mes carrés, le salon de recrutement, les missions.
+   La page d'un carré porte ses cinq onglets, dont l'harmonie.            */
 
 // L'état du carré, partagé par les vues qui en ont besoin.
 async function chargeCarre() {
@@ -1145,7 +1205,8 @@ async function vueMesCarres() {
 function carreTete(d, id, onglet) {
   const onglets = d.publique ? '' : `
     <nav class="carre-onglets">
-      ${[['carre', 'Le carré'], ['notes', 'Notes'], ['conversation', 'Conversation'], ['relatif', 'Relatif']]
+      ${[['carre', 'Le carré'], ['harmonie', 'Harmonie'], ['notes', 'Notes'],
+        ['conversation', 'Conversation'], ['relatif', 'Relatif']]
         .map(([cle, label]) => `<a href="/carre-d-as/${id}${cle === 'carre' ? '' : `/${cle}`}" data-link
           class="co-tab${onglet === cle ? ' actif' : ''}">${label}</a>`).join('')}
     </nav>`;
@@ -1164,6 +1225,7 @@ async function pageCarre(id, onglet) {
   if (stale(epoch)) return;
 
   if (d.publique) return carreFacade(id, d);
+  if (onglet === 'harmonie') return carreOngletHarmonie(id, d, epoch);
   if (onglet === 'notes') return carreOngletNotes(id, d, epoch);
   if (onglet === 'conversation') return carreOngletConversation(id, d, epoch);
   if (onglet === 'relatif') return carreOngletRelatif(id, d, epoch);
@@ -1242,7 +1304,7 @@ function carreOngletCarre(id, d, epoch) {
       <h2>Le cap</h2>
       <form id="cap-form">
         <textarea id="cap-texte" maxlength="1000" rows="3"
-          placeholder="Ta meilleure version, votre société harmonieuse, vos modèles d’univers : le cap de ce carré.">${esc(c.cap || '')}</textarea>
+          placeholder="Ce que ce carré vise ensemble.">${esc(c.cap || '')}</textarea>
         <div class="cap-ligne">
           <input id="cap-discord" type="url" maxlength="200"
             placeholder="Le salon Discord du carré (facultatif)" value="${esc(c.discord_url || '')}">
@@ -1327,6 +1389,43 @@ function carreOngletCarre(id, d, epoch) {
 /* Les notes : chacun note les trois autres, domaine par domaine. Le meilleur
    du domaine vaut 10, le reste se lit par rapport à lui. Tout le carré voit
    tout : la transparence est la discussion.                               */
+/* L'harmonie du carré : la société que les quatre imaginent ensemble, et le
+   moi harmonieux de chacun tel que ce carré le révèle. On n'écrit pas ici :
+   on entre dans l'arbre.                                                  */
+async function carreOngletHarmonie(id, d, epoch) {
+  let h;
+  try { h = await api(`/api/carre/${id}/harmonie`); }
+  catch { return navigate('/carre-d-as', true); }
+  if (stale(epoch)) return;
+
+  const compte = (n) => n
+    ? `${n} branche${n > 1 ? 's' : ''}`
+    : 'le tronc attend ses premières branches';
+  docke('ca', 'carre', `
+    ${carreTete(d, id, 'harmonie')}
+    <section class="harmonie">
+      <h2>Notre société harmonieuse</h2>
+      <a class="arbre-card arbre-card--tronc" href="/arbre/${h.societe.id}" data-link>
+        <span class="arbre-meta">${compte(h.societe.branches)}</span>
+      </a>
+      <p class="harmonie-note">Les quatre y écrivent ensemble.</p>
+    </section>
+    <section class="harmonie">
+      <h2>Le moi harmonieux de chacun</h2>
+      <div class="harmonie-mois">
+        ${h.mois.map((m) => `
+          <div class="harmonie-as">
+            ${authorLink(m.username)}
+            ${m.tree_id
+              ? `<a class="arbre-card arbre-card--tronc" href="/arbre/${m.tree_id}" data-link>
+                   <span class="arbre-meta">${compte(m.branches)}</span></a>`
+              : '<span class="empty-note">pas encore ouvert</span>'}
+          </div>`).join('')}
+      </div>
+      <p class="harmonie-note">Chacun le sien, lu par les trois autres.</p>
+    </section>`);
+}
+
 function carreOngletNotes(id, d, epoch) {
   const autres = d.membres.filter((m) => !state.user || m.user_id !== state.user.id);
   const maNote = (cible, domaine) => {
