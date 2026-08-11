@@ -2053,6 +2053,7 @@ body.avec-dock main { padding-bottom: 7rem; }
 .carte-pensees svg { display: block; width: 100%; height: auto; }
 .carte-lien { stroke: rgba(216, 192, 122, 0.35); }
 .carte-lien--miroir { stroke: rgba(140, 150, 170, 0.5); stroke-dasharray: 5 5; }
+.carte-lien--range { stroke: rgba(140, 150, 170, 0.25); }
 .carte-noeud circle {
   fill: rgba(216, 192, 122, 0.16);
   stroke: rgba(216, 192, 122, 0.6);
@@ -2061,7 +2062,7 @@ body.avec-dock main { padding-bottom: 7rem; }
 }
 .carte-noeud--espace circle { fill: rgba(216, 192, 122, 0.28); }
 .carte-noeud--intime circle { stroke: #8a8a94; fill: rgba(138, 138, 148, 0.18); }
-.carte-noeud--publique circle { stroke: #79c98d; }
+.carte-noeud--categorie circle { stroke-dasharray: 4 3; }
 .carte-noeud:hover circle { fill: rgba(216, 192, 122, 0.45); }
 .carte-noeud text {
   fill: var(--text-dim);
@@ -2199,3 +2200,40 @@ body.avec-dock main { padding-bottom: 7rem; }
 .arbre-qui::before { content: '· '; }
 .arbre-card--intime { border-left-color: #6f6f79; }
 .arbre-partage { color: var(--text-dim); font-size: 0.85rem; margin: 0.2rem 0 0.8rem; }
+
+/* -------------------- Pense Mieux : deux blocs, et ce qu'on y range ------ */
+.pm-bloc { margin: 1.6rem 0; }
+.pm-bloc > h2 { font-size: 1.05rem; margin-bottom: 0.15rem; }
+.pm-bloc-sous { color: var(--text-dim); font-size: 0.85rem; margin: 0 0 0.7rem; }
+.pm-bloc--carre .arbre-card--tronc { border-left-color: var(--accent); }
+.fil-sep { color: var(--text-dim); margin: 0 0.35rem; }
+.arbre-card--categorie { border-style: dashed; }
+.dedans { margin: 1rem 0 1.4rem; }
+.dedans-liste { margin-bottom: 0.6rem; }
+.dedans-crees { display: flex; gap: 1rem; flex-wrap: wrap; }
+#cree-form { margin-top: 0.6rem; }
+.pensee-video { display: block; width: min(100%, 480px); border-radius: 10px; margin: 0.4rem 0; }
+.branche-video-zone { display: block; }
+
+/* ---------------------- le Carré d'As : une seule page ------------------- */
+.ca-bloc { margin: 1.8rem 0; }
+.ca-bloc > h2 { font-size: 1.05rem; margin-bottom: 0.6rem; }
+#carre-cherche { max-width: 320px; margin-bottom: 0.6rem; }
+
+/* la page d'un carré : le bloc du carré, puis un bloc par As */
+.carre-blocs {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  align-items: start;
+}
+.carre-bloc {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.8rem 0.9rem;
+}
+.carre-bloc--commun { border-top: 2px solid var(--accent); }
+.carre-bloc--moi { border-color: rgba(216, 192, 122, 0.45); }
+.carre-bloc > h2 { font-size: 1rem; margin: 0 0 0.6rem; }
+.carre-bloc-cartes { display: grid; gap: 0.5rem; }

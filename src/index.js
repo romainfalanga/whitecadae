@@ -7,7 +7,7 @@ import {
   ECHELON_CARRE, ECHELON_BRAINSTORM, ECHELON_GMO,
 } from './enigmas57.js';
 import {
-  MISSIONS_CARRE, MECANISMES_GMO, AXES, AXES_ORDRE,
+  CHARTE_CARRE, MECANISMES_GMO, AXES, AXES_ORDRE,
   CADENCES, CADENCES_ORDRE, REPONSES, REPONSES_CLES,
 } from './contenus.js';
 
@@ -146,9 +146,7 @@ async function handleApi(request, env, url) {
   if (route('GET', '/api/videographie/rythme')) return videographieRythme(request, env);
   if (route('PUT', '/api/videographie/recap')) return videographieRecap(request, env);
   if ((p = route('DELETE', '/api/videographie/recap/:id'))) return videographieRecapDelete(request, env, +p[0]);
-  if ((p = route('GET', '/api/videographie/membre/:id'))) return videographieDuMembre(request, env, +p[0]);
   // la galerie des univers : le seul endroit où les arbres de tous se lisent
-  if (route('GET', '/api/univers')) return universGalerie(request, env, url);
   // le vocal : la pensée dite, transcrite, rejouée
   if (route('POST', '/api/vocal/transcription')) return vocalTranscription(request, env);
   if (route('PUT', '/api/voix')) return voixPut(request, env);
@@ -2416,6 +2414,30 @@ async function ensureHautesTables(env) {
       WHERE kind = 'video' AND axe IS NOT NULL AND carre_id IS NULL`
   ).run();
 
+  /* Pense Mieux se range : une réflexion naît désormais DANS un espace, ou
+     dans une catégorie qu'on y a créée. `parent_id` dit où elle vit, `genre`
+     ce qu'elle est (`categorie` ou `reflexion`). Les cinq espaces gardent
+     leur axe et un parent nul. */
+  await ajouteColonne(env, 'reflection_trees', 'parent_id',
+    'ALTER TABLE reflection_trees ADD COLUMN parent_id INTEGER');
+  await ajouteColonne(env, 'reflection_trees', 'genre',
+    'ALTER TABLE reflection_trees ADD COLUMN genre TEXT');
+  await env.DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_trees_parent ON reflection_trees(parent_id)'
+  ).run();
+
+  /* Le multivers redevient personnel : les modèles d'univers ne se
+     travaillent ni dans un carré ni sous le regard de la plateforme. Les
+     multivers DE carré redescendent chez celui qui les avait ouverts, avec la
+     mémoire du carré dans leur nom — rien n'est perdu. Idempotent. */
+  await env.DB.prepare(
+    `UPDATE reflection_trees
+        SET axe = NULL,
+            title = title || ' · ' || COALESCE((SELECT nom FROM carres WHERE id = carre_id), 'un carré'),
+            carre_id = NULL
+      WHERE carre_id IS NOT NULL AND axe = 'univers'`
+  ).run();
+
   hautesTablesReady = true;
 }
 
@@ -2522,26 +2544,32 @@ function urlYoutubeValide(url) {
    c'est là que le champ des possibles s'ouvre, un carré de plus étant une
    version de plus de soi.                                                  */
 
-// Les axes communs d'un carré, et le seul axe public. Ces listes viennent de
-// nos propres constantes : leur interpolation en SQL est sans danger.
+// Les axes communs d'un carré. Ces listes viennent de nos propres
+// constantes : leur interpolation en SQL est sans danger.
 const AXES_COMMUNS = AXES_ORDRE.filter((a) => AXES[a].commun);
 const AXES_PARTAGES = AXES_ORDRE.filter((a) => AXES[a].partage === 'carre');
-const AXES_PUBLICS = AXES_ORDRE.filter((a) => AXES[a].publique);
 const SQL_COMMUNS = AXES_COMMUNS.map((a) => `'${a}'`).join(',');
 const SQL_PARTAGES = AXES_PARTAGES.map((a) => `'${a}'`).join(',');
-const SQL_PUBLICS = AXES_PUBLICS.map((a) => `'${a}'`).join(',');
 
-// Ce qu'un axe laisse voir. La psychologie et le moi harmonieux ne sortent
-// jamais ; la philosophie, le multivers et la société sont la matière du
-// carré. Un espace sans axe (une réflexion qu'on a ouverte) est privé.
+// Ce qu'un axe laisse voir. La psychologie, le moi harmonieux et le multivers
+// ne sortent jamais ; la philosophie et la société harmonieuse sont la
+// matière du carré.
 function axePartage(axe) {
   return !!(axe && AXES[axe] && AXES[axe].partage === 'carre');
 }
 
-// Un axe public est lu par tous les As de l'échelon de l'outil, où qu'il
-// vive : c'est un choix de l'axe, jamais de celui qui écrit.
-function axePublic(axe) {
-  return !!(axe && AXES[axe] && AXES[axe].publique);
+/* L'axe effectif d'un arbre : le sien, ou celui de l'espace racine dont il
+   descend. Une réflexion rangée dans « Ma philosophie » se lit comme la
+   philosophie ; rangée dans le multivers ou une catégorie du multivers, elle
+   reste à son porteur. C'est l'espace qui décide, jamais la réflexion. */
+async function axeRacine(env, tree) {
+  let t = tree;
+  for (let garde = 0; garde < 12 && t && !t.axe && t.parent_id; garde++) {
+    t = await env.DB.prepare(
+      'SELECT id, axe, parent_id FROM reflection_trees WHERE id = ?1'
+    ).bind(t.parent_id).first();
+  }
+  return t && t.axe ? t.axe : null;
 }
 
 function titreAxe(axe, nomCarre) {
@@ -2611,33 +2639,30 @@ async function troncMiroir(env, arbre) {
    droit de voir se comporte partout comme un arbre qui n'existe pas.     */
 async function droitsArbre(env, vu, tree) {
   const proprietaire = tree.user_id === vu.user.id;
-  // Le multivers est lu par tous les As de l'échelon de l'outil : un modèle
-  // d'univers ne vaut que confronté aux autres. C'est le seul axe ainsi, et
-  // c'est l'axe qui le décide, jamais celui qui écrit.
-  const publique = axePublic(tree.axe);
   if (tree.carre_id != null) {
     // l'appartenance implique l'échelon du carré, mais on le revérifie : les
     // droits ne se déduisent jamais d'un autre droit
     const membre = !!(vu.access.carre && await monAppartenance(env, tree.carre_id, vu.user.id));
-    if (!membre) return { lire: publique, ecrire: false, repondre: false, proprietaire, publique, membre };
-    // les trois arbres d'un carré appartiennent à ses quatre As
-    return { lire: true, ecrire: true, repondre: false, proprietaire, publique, membre };
+    if (!membre) return { lire: false, ecrire: false, repondre: false, proprietaire, membre };
+    // les arbres d'un carré appartiennent à ses quatre As
+    return { lire: true, ecrire: true, repondre: false, proprietaire, membre };
   }
-  if (proprietaire) return { lire: true, ecrire: true, repondre: false, proprietaire, publique };
+  if (proprietaire) return { lire: true, ecrire: true, repondre: false, proprietaire };
 
-  /* Chez une personne, trois espaces seulement sortent : sa philosophie, son
-     multivers et sa société harmonieuse. Ce sont les matières du travail
-     commun, et les As de ses carrés peuvent y RÉPONDRE — approfondir,
-     élargir, opposer en résolvant — sans jamais y écrire à sa place.
+  /* Chez une personne, deux espaces seulement sortent : sa philosophie et sa
+     société harmonieuse — avec tout ce qui y est rangé, catégories et
+     réflexions comprises : c'est l'espace RACINE qui décide. Les As de ses
+     carrés peuvent y RÉPONDRE — approfondir, élargir, opposer en résolvant —
+     sans jamais y écrire à sa place.
 
-     Sa psychologie, son moi harmonieux et tout ce qu'il a ouvert lui-même ne
-     sortent pas. On ne travaille pas son rapport à soi sous le regard des
-     autres. */
-  if (axePartage(tree.axe) && await memeCarre(env, vu.user.id, tree.user_id)) {
-    return { lire: true, ecrire: false, repondre: true, proprietaire, publique };
+     Sa psychologie, son moi harmonieux, son multivers et tout ce qui y est
+     rangé ne sortent pas. On ne travaille ni son rapport à soi ni ses
+     modèles d'univers sous le regard des autres. */
+  const axe = tree.axe || await axeRacine(env, tree);
+  if (axePartage(axe) && await memeCarre(env, vu.user.id, tree.user_id)) {
+    return { lire: true, ecrire: false, repondre: true, proprietaire };
   }
-  if (publique) return { lire: true, ecrire: false, repondre: false, proprietaire, publique };
-  return { lire: false, ecrire: false, repondre: false, proprietaire, publique };
+  return { lire: false, ecrire: false, repondre: false, proprietaire };
 }
 
 // L'auteur d'une branche : celui qui l'a écrite, ou le porteur de l'arbre
@@ -2669,10 +2694,10 @@ async function arbresList(request, env, url) {
 
   const compte = async (t) => ({
     ...t,
-    // ce que porte l'axe : sa phrase, et qui le lit
+    // ce que porte l'axe : sa phrase, qui le lit, et dans quel bloc il vit
     sous: AXES[t.axe] ? AXES[t.axe].sous : null,
     partage: AXES[t.axe] ? AXES[t.axe].partage : 'moi',
-    publique: axePublic(t.axe),
+    bloc: AXES[t.axe] ? AXES[t.axe].bloc : 'perso',
     branches: (await env.DB.prepare(
       'SELECT COUNT(*) AS n FROM reflection_branches WHERE tree_id = ?1'
     ).bind(t.id).first())?.n || 0,
@@ -2680,9 +2705,11 @@ async function arbresList(request, env, url) {
   const troncs = [];
   for (const t of await troncsDe(env, vu.user.id, kind)) troncs.push(await compte(t));
 
-  // les réflexions que j'ai ouvertes : elles ne sortent jamais
+  // mes catégories et réflexions : chacune vit dans un espace (parent_id) et
+  // se lit comme lui. Les plus anciennes, d'avant le rangement, n'ont pas de
+  // parent : elles restent visibles, à part.
   const { results } = await env.DB.prepare(
-    `SELECT t.id, t.title, t.trunk, t.created_at, t.updated_at,
+    `SELECT t.id, t.title, t.trunk, t.parent_id, t.genre, t.created_at, t.updated_at,
             (SELECT COUNT(*) FROM reflection_branches b WHERE b.tree_id = t.id) AS branches
        FROM reflection_trees t
       WHERE t.user_id = ?1 AND t.kind = ?2 AND t.axe IS NULL AND t.carre_id IS NULL
@@ -2744,19 +2771,33 @@ async function arbresCreate(request, env) {
   if (title.length > 120) return json({ error: 'Sujet trop long (120 caractères).' }, 400);
   if (trunk.length > 4000) return json({ error: 'Point de départ trop long (4000 caractères).' }, 400);
 
-  // On ne lit ici NI axe NI carre_id : un tronc ne se plante pas à la main et
-  // aucun arbre de carré ne naît par cette porte. Il n'existe donc aucun
-  // chemin par lequel un client fabriquerait un axe ou s'inviterait ailleurs.
+  /* Une réflexion naît DANS un de ses espaces, ou dans une catégorie qu'on y
+     a créée : Pense Mieux n'a plus de réflexions hors-sol. Le parent doit
+     être à soi, personnel, et être un espace ou une catégorie — jamais une
+     réflexion, et jamais un arbre de carré. On ne lit toujours NI axe NI
+     carre_id : aucun chemin ne fabrique un espace ni ne s'invite ailleurs. */
+  const genre = body?.genre === 'categorie' ? 'categorie' : 'reflexion';
+  const parentId = Number(body?.parent_id);
+  if (!Number.isFinite(parentId)) return json({ error: 'Une réflexion naît dans un de tes espaces.' }, 400);
+  const parent = await env.DB.prepare(
+    'SELECT id, user_id, kind, axe, genre, carre_id FROM reflection_trees WHERE id = ?1'
+  ).bind(parentId).first();
+  if (!parent || parent.user_id !== vu.user.id || parent.carre_id != null
+      || parent.kind !== kind || !(parent.axe || parent.genre === 'categorie')) {
+    return json({ error: 'Espace introuvable.' }, 404);
+  }
+
   const r = await env.DB.prepare(
-    'INSERT INTO reflection_trees (user_id, kind, title, trunk) VALUES (?1, ?2, ?3, ?4)'
-  ).bind(vu.user.id, kind, title, trunk).run();
-  return json({ ok: true, id: r.meta.last_row_id }, 201);
+    'INSERT INTO reflection_trees (user_id, kind, title, trunk, parent_id, genre) VALUES (?1, ?2, ?3, ?4, ?5, ?6)'
+  ).bind(vu.user.id, kind, title, trunk, parentId, genre).run();
+  return json({ ok: true, id: r.meta.last_row_id, genre }, 201);
 }
 
 // L'arbre entier, branches et liens compris.
 async function chargeArbre(env, id) {
   const tree = await env.DB.prepare(
     `SELECT t.id, t.user_id, t.kind, t.title, t.trunk, t.axe, t.carre_id, t.prive,
+            t.parent_id, t.genre,
             t.created_at, t.updated_at, c.nom AS carre_nom, u.username AS porteur
        FROM reflection_trees t
        LEFT JOIN carres c ON c.id = t.carre_id
@@ -2854,6 +2895,33 @@ async function arbresGet(request, env, id) {
     await assureTronc(env, { userId: vu.user.id, kind: arbre.kind, axe: AXES[arbre.axe].miroir });
   }
 
+  /* Ce que l'arbre contient : les catégories qu'on y a créées, et les
+     réflexions qu'on y a rangées. Visible à quiconque a le droit de lire
+     l'arbre — un As du carré qui lit ma philosophie lit aussi ce qu'elle
+     range, puisque tout hérite de l'espace racine. */
+  let dedans = [];
+  if (arbre.carre_id == null && (arbre.axe || arbre.genre === 'categorie')) {
+    const { results } = await env.DB.prepare(
+      `SELECT t.id, t.title, t.trunk, t.genre, t.updated_at,
+              (SELECT COUNT(*) FROM reflection_branches b WHERE b.tree_id = t.id) AS branches,
+              (SELECT COUNT(*) FROM reflection_trees e WHERE e.parent_id = t.id) AS contenus
+         FROM reflection_trees t WHERE t.parent_id = ?1
+        ORDER BY (t.genre = 'categorie') DESC, t.updated_at DESC`
+    ).bind(arbre.id).all();
+    dedans = results || [];
+  }
+
+  // le fil d'ariane : de l'espace racine jusqu'ici
+  const chemin = [];
+  let cran = arbre;
+  for (let garde = 0; garde < 12 && cran && cran.parent_id; garde++) {
+    cran = await env.DB.prepare(
+      'SELECT id, title, axe, parent_id FROM reflection_trees WHERE id = ?1'
+    ).bind(cran.parent_id).first();
+    if (cran) chemin.unshift({ id: cran.id, title: cran.title, axe: cran.axe });
+  }
+
+  const axeEffectif = arbre.axe || await axeRacine(env, arbre);
   return json({
     arbre: {
       ...arbre,
@@ -2861,62 +2929,15 @@ async function arbresGet(request, env, id) {
       editable: droits.ecrire,
       repondable: !!droits.repondre,
       reponses: REPONSES,
-      publique: droits.publique,
-      partage: AXES[arbre.axe] ? AXES[arbre.axe].partage : null,
+      partage: AXES[axeEffectif] ? AXES[axeEffectif].partage : null,
       membre: !!droits.membre,
       sous: AXES[arbre.axe] ? AXES[arbre.axe].sous : null,
       miroir: await troncMiroir(env, arbre),
       moi: vu.user.id,
       ailleurs: await memeAxeAilleurs(env, vu, arbre),
+      dedans,
+      chemin,
     },
-  });
-}
-
-/* ------------------------------------------------- la galerie des univers ---
-   Le seul endroit de la plateforme où les arbres de tout le monde se lisent.
-   Un modèle d'univers ne vaut que confronté aux autres : on regarde, et on
-   fabrique le sien en reliant ce qu'on y trouve.
-
-   Les troncs vides n'y paraissent pas : ils existent d'avance pour chacun, et
-   une galerie de troncs vides ne dirait rien. Un univers entre dans la
-   galerie au moment où quelqu'un y écrit.                                  */
-async function universGalerie(request, env, url) {
-  const kind = kindDe(url.searchParams.get('kind'));
-  if (!kind) return json({ error: 'Espace de réflexion inconnu.' }, 400);
-  const { vu, refus } = await gateArbre(request, env, kind);
-  if (refus) return refus;
-
-  const q = String(url.searchParams.get('q') || '').trim();
-  const motif = q.length >= 2 ? '%' + q.replace(/[%_\\]/g, ' ') + '%' : null;
-  const filtre = motif
-    ? 'AND (t.trunk LIKE ?3 OR u.username LIKE ?3 OR c.nom LIKE ?3 OR EXISTS (SELECT 1 FROM reflection_branches b WHERE b.tree_id = t.id AND b.body LIKE ?3))'
-    : 'AND ?3 IS NULL';
-
-  const { results } = await env.DB.prepare(
-    `SELECT t.id, t.title, t.trunk, t.updated_at, t.user_id, t.carre_id,
-            u.username, c.nom AS carre_nom,
-            (SELECT COUNT(*) FROM reflection_branches b WHERE b.tree_id = t.id) AS branches,
-            (SELECT b.body FROM reflection_branches b
-              WHERE b.tree_id = t.id AND b.body <> '' ORDER BY b.id LIMIT 1) AS apercu
-       FROM reflection_trees t
-       LEFT JOIN users u ON u.id = t.user_id
-       LEFT JOIN carres c ON c.id = t.carre_id
-      WHERE t.axe IN (${SQL_PUBLICS}) AND t.kind = ?2 ${filtre}
-        AND (t.trunk <> '' OR EXISTS (SELECT 1 FROM reflection_branches b WHERE b.tree_id = t.id))
-        AND ?1 IS NOT NULL
-      ORDER BY t.updated_at DESC LIMIT 60`
-  ).bind(vu.user.id, kind, motif).all();
-
-  return json({
-    univers: (results || []).map((t) => ({
-      id: t.id, title: t.title, branches: t.branches,
-      // de quoi donner envie d'entrer : le tronc, ou la première branche.
-      // Ces textes sont publics par nature de l'axe : rien ne fuit ici.
-      trunk: t.trunk || (t.apercu ? String(t.apercu).slice(0, 200) : ''),
-      updated_at: t.updated_at, carre_nom: t.carre_nom,
-      username: t.carre_id == null ? t.username : null,
-      mien: t.carre_id == null && t.user_id === vu.user.id,
-    })),
   });
 }
 
@@ -2925,7 +2946,7 @@ async function universGalerie(request, env, url) {
 async function arbresUpdate(request, env, id) {
   await ensureHautesTables(env);
   const tree = await env.DB.prepare(
-    'SELECT id, user_id, kind, axe, carre_id, prive FROM reflection_trees WHERE id = ?1'
+    'SELECT id, user_id, kind, axe, genre, parent_id, carre_id, prive FROM reflection_trees WHERE id = ?1'
   ).bind(id).first();
   if (!tree) return json({ error: 'Réflexion introuvable.' }, 404);
   const { vu, refus } = await gateArbre(request, env, tree.kind);
@@ -2956,16 +2977,21 @@ async function arbresUpdate(request, env, id) {
 async function arbresDelete(request, env, id) {
   await ensureHautesTables(env);
   const tree = await env.DB.prepare(
-    'SELECT id, user_id, kind, axe, carre_id FROM reflection_trees WHERE id = ?1'
+    'SELECT id, user_id, kind, axe, genre, parent_id, carre_id FROM reflection_trees WHERE id = ?1'
   ).bind(id).first();
   if (!tree) return json({ error: 'Réflexion introuvable.' }, 404);
   const { vu, refus } = await gateArbre(request, env, tree.kind);
   if (refus) return json({ error: 'Réflexion introuvable.' }, 404);
   const droits = await droitsArbre(env, vu, tree);
   if (!droits.ecrire || !droits.proprietaire) return json({ error: 'Réflexion introuvable.' }, 404);
-  // un tronc n'est pas un arbre qu'on a planté : ses branches se coupent une
+  // un espace n'est pas un arbre qu'on a planté : ses pensées se coupent une
   // à une, lui reste
   if (tree.axe) return json({ error: 'Cet espace ne se referme pas : il t’attend, toujours.' }, 400);
+  // une catégorie ne s'emporte pas avec ce qu'elle range
+  const plein = await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM reflection_trees WHERE parent_id = ?1'
+  ).bind(id).first();
+  if (plein?.n) return json({ error: 'Cette catégorie range encore des réflexions : vide-la d’abord.' }, 400);
   await env.DB.prepare('DELETE FROM reflection_trees WHERE id = ?1').bind(id).run();
   return json({ ok: true });
 }
@@ -2973,7 +2999,7 @@ async function arbresDelete(request, env, id) {
 async function branchesCreate(request, env, treeId) {
   await ensureHautesTables(env);
   const tree = await env.DB.prepare(
-    'SELECT id, user_id, kind, axe, carre_id, prive FROM reflection_trees WHERE id = ?1'
+    'SELECT id, user_id, kind, axe, genre, parent_id, carre_id, prive FROM reflection_trees WHERE id = ?1'
   ).bind(treeId).first();
   if (!tree) return json({ error: 'Réflexion introuvable.' }, 404);
   const { vu, refus } = await gateArbre(request, env, tree.kind);
@@ -3028,7 +3054,7 @@ async function toucheArbre(env, treeId) {
 async function brancheEtArbre(env, id) {
   return env.DB.prepare(
     `SELECT b.id, b.tree_id, b.user_id AS auteur_id, b.reponse,
-            t.user_id, t.kind, t.axe, t.carre_id, t.prive
+            t.user_id, t.kind, t.axe, t.genre, t.parent_id, t.carre_id, t.prive
        FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
       WHERE b.id = ?1`
   ).bind(id).first();
@@ -3092,44 +3118,32 @@ async function lienCreate(request, env, brancheId) {
      tire vers soi, on l'expose à ceux qui lisent l'arbre d'arrivée.
 
      Vers une branche à moi : la source peut venir d'un de mes arbres ou d'un
-     arbre d'un carré dont je suis membre. C'est ainsi qu'un carré nourrit le
-     tronc personnel de chacun de ses As.
+     arbre d'un carré dont je suis membre. C'est ainsi qu'un carré nourrit
+     les espaces personnels de chacun de ses As.
 
      Vers une branche d'un arbre de carré : la source doit venir du MÊME
-     carré, ou d'un de mes trois espaces que ce carré lit déjà (philosophie,
-     multivers, société). Ce qui reste fermé : ma psychologie, mon moi
-     harmonieux, mes réflexions personnelles, et tout ce qui vient d'un AUTRE
-     carré.
-
-     Vers une branche d'un arbre PUBLIC (les univers) : la source doit être
-     elle-même publique. Un arbre lu par tous ne peut pas porter l'extrait
-     d'une pensée qui ne l'est pas — ni la mienne, ni celle de mon carré.
-
-     Dans l'autre sens, un arbre public nourrit n'importe quoi : c'est là tout
-     l'intérêt de la galerie. On regarde les univers des autres, on relie, et
-     un univers nouveau naît de ce qu'on a relié.                          */
-  const publique = 't.axe IN (' + SQL_PUBLICS + ')';
-  const memeKind = 'b.id = ?1 AND t.kind = ?2';
-  const source = axePublic(row.axe)
-    ? await env.DB.prepare(
-      `SELECT b.id FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
-        WHERE ${memeKind} AND ${publique} AND ?3 IS NOT NULL`
-    ).bind(sourceId, row.kind, vu.user.id).first()
-    : row.carre_id == null
-      ? await env.DB.prepare(
-        `SELECT b.id FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
-          WHERE ${memeKind} AND (
-            ${publique}
-            OR t.user_id = ?3
-            OR (t.carre_id IS NOT NULL AND EXISTS (
-                  SELECT 1 FROM carre_membres m WHERE m.carre_id = t.carre_id AND m.user_id = ?3)))`
-      ).bind(sourceId, row.kind, vu.user.id).first()
-      : await env.DB.prepare(
-        `SELECT b.id FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
-          WHERE ${memeKind} AND (${publique} OR t.carre_id = ?3
-            OR (t.user_id = ?4 AND t.carre_id IS NULL AND t.axe IN (${SQL_PARTAGES})))`
-      ).bind(sourceId, row.kind, row.carre_id, vu.user.id).first();
-  if (!source) return json({ error: 'Pensée source introuvable.' }, 404);
+     carré, ou de chez moi dans un espace que ce carré lit déjà — la
+     philosophie ou la société harmonieuse, catégories et réflexions rangées
+     comprises : c'est l'espace RACINE qui décide. Ce qui reste fermé : ma
+     psychologie, mon moi harmonieux, mon multivers, et tout ce qui vient
+     d'un AUTRE carré. */
+  const src = await env.DB.prepare(
+    `SELECT b.id, t.user_id, t.kind, t.axe, t.parent_id, t.carre_id
+       FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
+      WHERE b.id = ?1`
+  ).bind(sourceId).first();
+  let permis = false;
+  if (src && src.kind === row.kind) {
+    if (row.carre_id == null) {
+      permis = (src.carre_id == null && src.user_id === vu.user.id)
+        || (src.carre_id != null && !!(await monAppartenance(env, src.carre_id, vu.user.id)));
+    } else {
+      permis = src.carre_id === row.carre_id
+        || (src.carre_id == null && src.user_id === vu.user.id
+            && axePartage(src.axe || await axeRacine(env, src)));
+    }
+  }
+  if (!permis) return json({ error: 'Pensée source introuvable.' }, 404);
 
   await env.DB.prepare(
     'INSERT OR IGNORE INTO reflection_branch_links (branch_id, source_id) VALUES (?1, ?2)'
@@ -3173,7 +3187,7 @@ async function voixPut(request, env) {
     corps: nombre(body?.corps, -6, 6, 0),
     presence: nombre(body?.presence, 0, 8, 3),
     presenceHz: nombre(body?.presenceHz, 1500, 6000, 3000),
-    gain: nombre(body?.gain, 0, 12, 4),
+    gain: nombre(body?.gain, 0, 18, 4),
   };
   await env.DB.prepare('UPDATE users SET voix = ?1 WHERE id = ?2')
     .bind(JSON.stringify(reglage), user.id).run();
@@ -3193,7 +3207,7 @@ async function voixPut(request, env) {
    pensée jetée est courte, et une ligne de D1 ne dépasse pas deux mégaoctets.
                                                                           */
 
-const VOCAL_MAX_BASE64 = 1_400_000;   // environ trois minutes d'opus
+const VOCAL_MAX_BASE64 = 2_000_000;   // trois minutes d'opus, avec du champ
 const VOCAL_MODELES = ['@cf/openai/whisper-large-v3-turbo', '@cf/openai/whisper'];
 
 // Le corps d'un vocal : une data-url audio, sa durée. Rien d'autre n'entre.
@@ -3370,22 +3384,6 @@ async function arbresRecherche(request, env, url) {
   ).bind(vu.user.id, kind, motif).all()).results || [];
 
   return json({ arbres, branches });
-}
-
-// La forêt vidéo d'un membre de son propre carré, en lecture : c'est la
-// matière du travail mutuel des As. Ses deux troncs en font partie, et
-// l'axe part avec eux pour que le client les nomme au lieu de les noyer.
-async function videographieDuMembre(request, env, membreId) {
-  const { vu, refus } = await gateArbre(request, env, 'video');
-  if (refus) return refus;
-  if (!(await memeCarre(env, vu.user.id, membreId))) return json({ error: 'Membre introuvable.' }, 404);
-  const membre = await env.DB.prepare('SELECT username FROM users WHERE id = ?1').bind(membreId).first();
-  // son rythme, et rien d'autre : c'est tout ce qu'est la Vidéographie
-  const { results: recaps } = await env.DB.prepare(
-    `SELECT cadence, periode, url, note, updated_at FROM videographie_recaps
-      WHERE user_id = ?1 ORDER BY periode DESC LIMIT 18`
-  ).bind(membreId).all();
-  return json({ membre: membre?.username || '', recaps: recaps || [] });
 }
 
 /* --------------------------------------- la Vidéographie : le rythme ------
@@ -3708,9 +3706,7 @@ async function carreGet(request, env) {
   if (refus) return refus;
   await ensureHautesTables(env);
 
-  const reponse = {
-    missions: MISSIONS_CARRE, carres: [], ouverts: [], invitations: 0,
-  };
+  const reponse = { carres: [], ouverts: [], invitations: 0 };
   if (vu.user) {
     const carres = await mesCarres(env, vu.user.id);
     for (const c of carres) c.membres = await membresDe(env, c.id);
@@ -3886,7 +3882,6 @@ async function carreAxe(request, env, carreId, axe) {
     axe,
     titre: AXES[axe].titreCarre(carre.nom),
     sous: AXES[axe].sousCarre || AXES[axe].sous,
-    publique: !!AXES[axe].publique,
     reponses: REPONSES,
     commun: commun ? { id: commun.id, trunk: commun.trunk, pensees: commun.pensees } : null,
     membres: membres.map((m) => {
@@ -4053,7 +4048,7 @@ async function carreRecrutement(request, env) {
 
   const reponse = {
     // la charte du bon carré, en une phrase : celle des missions
-    charte: MISSIONS_CARRE.blocs[0].texte,
+    charte: CHARTE_CARRE,
     annonces: annonces.map((a) => ({ ...a, moi: a.user_id === vu.user.id })),
     monAnnonce: await env.DB.prepare(
       'SELECT note FROM carre_annonces WHERE user_id = ?1'

@@ -15,20 +15,20 @@
 
    `partage` dit qui les lit, et c'est la règle centrale de la plateforme :
 
-     - `moi` : la psychologie et le moi harmonieux ne sortent jamais. Personne
-       d'autre que soi ne les voit, carré compris. On ne travaille pas son
-       rapport à soi sous le regard des autres.
+     - `moi` : la psychologie, le moi harmonieux ET le multivers ne sortent
+       jamais. Personne d'autre que soi ne les voit, carré compris. On ne
+       travaille ni son rapport à soi ni ses modèles d'univers sous le regard
+       des autres.
 
-     - `carre` : la philosophie, le multivers et la société harmonieuse sont
-       lus par les As de ses carrés, qui peuvent y répondre. Ce sont les trois
-       matières du travail commun — et un carré n'existe que pour elles.
+     - `carre` : la philosophie et la société harmonieuse sont lues par les
+       As de ses carrés, qui peuvent y répondre. Ce sont les deux matières du
+       travail commun — et un carré n'existe que pour elles.
 
-   Tout le reste de Pense Mieux (les réflexions qu'on ouvre soi-même) est
-   privé, sans exception.
+   `bloc` range les espaces sur la page d'accueil : les trois personnels
+   d'abord, puis les deux que l'on porte devant ses carrés.
 
-   `commun` : ces trois mêmes axes existent aussi comme arbre DU carré, écrit
-   par les quatre. `publique` : le multivers seul est lu par toute la
-   plateforme — un modèle d'univers ne vaut que confronté aux autres.       */
+   `commun` : ces deux mêmes axes existent aussi comme arbre DU carré, écrit
+   par les quatre.                                                          */
 
 export const AXES = {
   psy: {
@@ -37,6 +37,7 @@ export const AXES = {
     sous: 'Le présent : comment tu fonctionnes, ce que tu constates de toi.',
     miroir: 'moi',
     partage: 'moi',
+    bloc: 'perso',
     commun: false,
   },
   moi: {
@@ -45,6 +46,15 @@ export const AXES = {
     sous: 'Ce vers quoi tu tends : ta version la plus harmonieuse.',
     miroir: 'psy',
     partage: 'moi',
+    bloc: 'perso',
+    commun: false,
+  },
+  univers: {
+    titre: 'Mon multivers',
+    court: 'Multivers',
+    sous: 'Tes modèles d’univers, et ce qu’ils se répondent.',
+    partage: 'moi',
+    bloc: 'perso',
     commun: false,
   },
   philo: {
@@ -54,17 +64,8 @@ export const AXES = {
     sous: 'Tes questions, tes constats, et ce qu’ils font de ta façon de penser.',
     sousCarre: 'Vos questions, vos constats, et ce qu’ils font de votre façon de penser.',
     partage: 'carre',
+    bloc: 'carre',
     commun: true,
-  },
-  univers: {
-    titre: 'Mon multivers',
-    court: 'Multivers',
-    titreCarre: () => 'Notre multivers',
-    sous: 'Tes modèles d’univers. Ils sont lus par tous les As.',
-    sousCarre: 'Les modèles d’univers que vous imaginez ensemble. Lus par tous les As.',
-    partage: 'carre',
-    commun: true,
-    publique: true,
   },
   societe: {
     titre: 'Ma société harmonieuse',
@@ -73,60 +74,23 @@ export const AXES = {
     sous: 'La société la plus harmonieuse que tu imagines, et son chemin du réel.',
     sousCarre: 'La société la plus harmonieuse que vous imaginez ensemble, et son chemin du réel.',
     partage: 'carre',
+    bloc: 'carre',
     commun: true,
   },
 };
 
-// L'ordre de lecture : le miroir d'abord (le présent, puis ce vers quoi il
-// tend), puis les trois matières que l'on porte devant son carré.
-export const AXES_ORDRE = ['psy', 'moi', 'philo', 'univers', 'societe'];
+// L'ordre de lecture : le bloc personnel d'abord (le miroir, puis le
+// multivers), puis les deux matières que l'on porte devant son carré.
+export const AXES_ORDRE = ['psy', 'moi', 'univers', 'philo', 'societe'];
 
-/* --------------------------------------------- Carré d'As (échelon 5) --- */
+/* --------------------------------------------- Carré d'As (échelon 5) ---
+   Les missions n'ont plus de page : le carré se comprend en le vivant. Ne
+   survit que la charte, en une phrase, au seuil du recrutement.           */
 
-export const MISSIONS_CARRE = {
-  titre: 'Les missions des carrés',
-  blocs: [
-    {
-      titre: 'Composer son carré',
-      texte:
-        'Un carré, c’est quatre personnes qui acceptent de penser sous le '
-        + 'regard des trois autres. Cherchez des esprits qui ne voient pas '
-        + 'comme vous : un carré où tout le monde pense pareil n’apprend rien '
-        + 'à personne.',
-    },
-    {
-      titre: 'Creuser votre philosophie',
-      texte:
-        'Chacun porte la sienne, et vous en écrivez une ensemble. Elle naît de '
-        + 'vos questions et de vos constats, jamais d’une position qu’on '
-        + 'défend. Quand l’un de vous avance, entrez chez lui : approfondissez '
-        + 'ce qu’il dit, élargissez son champ, ou opposez-lui une issue — '
-        + 'jamais une objection seule.',
-    },
-    {
-      titre: 'Imaginer votre multivers',
-      texte:
-        'Chacun tient ses modèles d’univers, et le carré tient les siens. '
-        + 'Confrontez-les : un modèle ne vaut que face aux autres, et c’est en '
-        + 'les reliant qu’on en fabrique de nouveaux.',
-    },
-    {
-      titre: 'Imaginer votre société harmonieuse',
-      texte:
-        'Imaginez ensemble la société la plus harmonieuse que vous puissiez '
-        + 'concevoir, puis montrez-lui le chemin du réel. Trouvez les '
-        + 'expansions harmonieuses qui y mènent, et faites-les exister sous '
-        + 'plusieurs formes.',
-    },
-    {
-      titre: 'S’élever ensemble',
-      texte:
-        'Ce que vous vous apportez n’a qu’un but : que chacun voie plus de '
-        + 'variables qu’il n’en voyait seul. L’expansion harmonieuse d’un '
-        + 'carré engendre celle de ses As, et réciproquement.',
-    },
-  ],
-};
+export const CHARTE_CARRE =
+  'Un carré, c’est quatre personnes qui acceptent de penser sous le regard '
+  + 'des trois autres. Cherchez des esprits qui ne voient pas comme vous : un '
+  + 'carré où tout le monde pense pareil n’apprend rien à personne.';
 
 /* --------------------------------- Game Master Orange (échelon 7) ------- */
 
@@ -210,11 +174,11 @@ export const MECANISMES_GMO = {
       etapes: [
         'Propage les symboles de l’Escape Game Orange de sorte à le faire grandir.',
         'Tu n’es plus un simple joueur : tu es un créateur de nouvelles grilles de lecture.',
-        'Imagine tes modèles d’univers, regarde ceux des autres, et fais-en naître de nouveaux en les reliant.',
+        'Imagine tes modèles d’univers et fais-les se répondre dans ton multivers.',
         'Utilise les IA pour réduire le temps et les ressources nécessaires à la concrétisation de tes idées.',
       ],
-      page: '/pense-mieux/multivers',
-      pageLabel: 'Les multivers',
+      page: '/pense-mieux',
+      pageLabel: 'Ton multivers',
     },
   ],
 };

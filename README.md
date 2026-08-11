@@ -179,19 +179,15 @@ bloc titré.
 
 ### Les pièces hautes
 
-Pense Mieux, la Vidéographie, le Carré d'As et le Brainstorm ne sont pas des
-pages mais des **applications** : chacune a son propre menu : un **dock fixé
-en bas de l'écran**, au pouce sur mobile, sous les yeux sur ordinateur : qui
-suit l'utilisateur dans toutes ses vues. Le dock est purement typographique
-(pas d'icônes) et les vues ne s'expliquent pas : on est dans un escape game,
-l'interface se comprend en la touchant. Pense Mieux : **Mes réflexions** (la
-cartographie, puis la liste), **Ouvrir** (la création est un geste du menu) et
-**Recherche** (plein texte dans ses propres réflexions, rien d'autre).
-Vidéographie : **Mon rythme**, **Le carré** (les récaps de ses As).
-Carré d'As : **Mes carrés**, **Multivers** (la galerie de tous les modèles
-d'univers), **Recrutement**, **Missions**. Brainstorm : **La scène** (le
-direct et l'annoncé), **Archives** (les brainstorms passés et leur récolte :
-rien ne s'évapore), **Annoncer**.
+Pense Mieux, la Vidéographie et le Carré d'As sont chacun **UNE page**, sans
+sous-menu : la cartographie, les cinq espaces et la recherche pour Pense
+Mieux ; le rythme et son historique pour la Vidéographie ; mes carrés, le
+salon de recrutement, les carrés à compléter et la fondation pour le Carré
+d'As. Les vues ne s'expliquent pas : on est dans un escape game, l'interface
+se comprend en la touchant. Seul le **Brainstorm** garde un dock (fixé en
+bas, au pouce sur mobile) : **La scène** (le direct et l'annoncé),
+**Archives** (les brainstorms passés et leur récolte : rien ne s'évapore),
+**Annoncer** — trois moments réellement distincts.
 
 Les nourritures d'une branche peuvent venir d'un **autre arbre de la même
 forêt** : la chip porte alors le nom de l'arbre source et y navigue, branche
@@ -204,8 +200,8 @@ Le **Recrutement** est le salon où les carrés se composent : un As libre
 d'autre : un carré ne classe pas ses As. Un carré incomplet l'**invite** avec
 un mot, et l'invité **accepte ou décline** : on n'entre dans un carré que
 voulu des deux côtés. L'annonce reste au salon, car un As peut vouloir
-d'autres carrés encore. La charte du bon carré ouvre la page : c'est le
-premier bloc des missions.
+d'autres carrés encore. La charte du bon carré ouvre le salon — une phrase,
+et c'est tout ce qui reste des anciennes missions.
 
 La **Conversation** (échelon 2) est unique et commune, mais chaque message
 porte l'**échelon minimal pour le lire**, choisi par son auteur entre 2 et son
@@ -230,29 +226,35 @@ Le vocabulaire de la page est celui de la pensée, pas celui de l'arbre : on
 chemin d'une réflexion est `/reflexion/:id` (l'ancien `/arbre/:id` y mène
 encore : rien de ce qui a été partagé ne casse).
 
-**Le vocal.** Une pensée vient rarement au moment où l'on a un clavier. Sous
-le champ, **Dire ma pensée** enregistre, la transcription revient par
-**Workers AI** (Whisper, en français, silences filtrés), et le texte devient
-la pensée.
+**Le vocal est LE geste de Pense Mieux.** Une pensée s'y dit, elle ne s'y
+tape pas : **Dire ma pensée** enregistre, la transcription revient par
+**Workers AI** (Whisper, en français, silences filtrés), le champ s'ouvre
+alors **pour être corrigé**, et le dépôt n'apparaît qu'à ce moment. Le
+clavier ne revient en premier que si le navigateur ne sait pas enregistrer
+(ou si la transcription manque : le champ s'ouvre vide, la pensée s'écrit).
 
-Le son n'est pas le signal brut du micro : il passe par une **chaîne de voix**
-avant d'être encodé — passe-haut sous la fondamentale, creux dans le
-bas-médium, cloche de présence, compresseur, gain, limiteur. Ce qui est gardé,
-ce qui part à la transcription et ce qui deviendra une vidéo sont donc le même
-son, déjà propre. La chaîne s'**accorde au timbre de chacun, toute seule** :
-chaque enregistrement est mesuré en silence (fondamentale par
-autocorrélation, niveau), coupure, présence et gain s'en déduisent et le
-réglage vit sur le compte (`users.voix`) — le vocal suivant s'y accorde.
-Aucun bouton : rien à savoir, rien à régler.
+Le micro est pris **brut** : la suppression de bruit et le gain automatique
+du navigateur — la voix « sous l'eau » de tous les enregistrements web —
+sont coupés (l'isolation de voix du système, `voiceIsolation`, est demandée
+quand l'appareil la sait faire), et c'est notre **chaîne de voix** qui fait
+le travail avant l'encodage : passe-haut sous la fondamentale, creux dans le
+bas-médium, cloche de présence, souffle d'air, compresseur large, gain,
+limiteur. Ce qui est gardé, ce qui part à la transcription et ce qui devient
+une vidéo sont le même son, déjà propre. La chaîne s'**accorde au timbre de
+chacun, toute seule** : chaque enregistrement est mesuré en silence
+(fondamentale par autocorrélation, niveau), coupure, présence et gain s'en
+déduisent et le réglage vit sur le compte (`users.voix`) — le vocal suivant
+s'y accorde. Aucun bouton : rien à savoir, rien à régler.
 
 L'audio reste attaché à sa pensée avec son **minutage mot à mot**
-(`branch_vocaux`, en base64 dans D1 comme les avatars, borné à trois minutes) :
-on la **réécoute** en voyant le texte apparaître au fur et à mesure. Et la
-**vidéo se fabrique d'elle-même**, sans qu'on la demande : dès qu'une pensée
-dite est déposée, le texte est dessiné sur une toile au rythme de la voix et
-enregistré avec le son par le navigateur, en silence et sans rien bloquer. Le
-fichier est gardé dans le navigateur (IndexedDB) — il ne pèse donc rien sur la
-base — et se télécharge, prêt à être publié en Vidéographie. Les vidéos
+(`branch_vocaux`, en base64 dans D1 comme les avatars, borné à trois
+minutes). Et la **vidéo se fabrique d'elle-même**, sans qu'on la demande :
+dès qu'une pensée dite est déposée, le texte est dessiné sur une toile au
+rythme de la voix et enregistré avec le son par le navigateur, en silence et
+sans rien bloquer. Elle **se regarde en place**, dans la pensée même — un
+lecteur, pas un téléchargement : revenir dans ses pensées, c'est revoir le
+fil conducteur, le texte apparaissant au moment où on le dit. Le fichier vit
+dans le navigateur (IndexedDB) — il ne pèse rien sur la base — et les vidéos
 manquantes (autre navigateur, cache vidé) **se refont d'elles-mêmes** à
 l'ouverture de la page, une à la fois ; si le navigateur exige un geste avant
 de jouer un son, la fabrication repart au premier toucher. Sans le binding
@@ -283,13 +285,13 @@ Chacun porte cinq espaces dans Pense Mieux. Ils existent d'avance, ne
 s'ouvrent pas, ne se referment pas : on les nourrit. Ce qui change de l'un à
 l'autre, c'est **qui les lit** — et c'est la règle centrale de la plateforme :
 
-| axe | espace | qui le lit |
-|---|---|---|
-| `psy` | Ma psychologie | **toi seul** |
-| `moi` | Le moi harmonieux | **toi seul** |
-| `philo` | Ma philosophie | les As de tes carrés |
-| `univers` | Mon multivers | tous les As de la plateforme |
-| `societe` | Ma société harmonieuse | les As de tes carrés |
+| axe | espace | bloc | qui le lit |
+|---|---|---|---|
+| `psy` | Ma psychologie | personnel | **toi seul** |
+| `moi` | Le moi harmonieux | personnel | **toi seul** |
+| `univers` | Mon multivers | personnel | **toi seul** |
+| `philo` | Ma philosophie | avec tes carrés | les As de tes carrés |
+| `societe` | Ma société harmonieuse | avec tes carrés | les As de tes carrés |
 
 Les deux premiers **se répondent en miroir** : la psychologie dit le présent
 (comment on fonctionne, ce qu'on constate de soi), le moi harmonieux dit vers
@@ -297,26 +299,27 @@ quoi l'on tend. Chaque page porte une ligne « En regard » qui mène à l'autre
 Ils ne sortent jamais : on ne travaille pas son rapport à soi sous le regard
 des autres.
 
-Les trois suivants sont les **matières du travail commun** : ce sont les
+Le multivers est **redevenu personnel** : les modèles d'univers ne se
+travaillent ni dans un carré ni sous le regard de la plateforme. La galerie
+publique n'existe plus, et l'axe `univers` n'est plus une matière de carré.
+
+Les deux derniers sont les **matières du travail commun** : ce sont les
 seules choses qu'un As voit chez un autre, et les seules raisons d'être d'un
 carré. Chaque espace le dit sur sa propre page, avant qu'on y écrive.
 
-Tout le reste de Pense Mieux — les réflexions qu'on ouvre soi-même — est
-**privé, sans exception**.
+**Tout se range dans un espace.** Une réflexion ne naît plus hors-sol : elle
+s'ouvre DANS un des cinq espaces, ou dans une **catégorie** qu'on y a créée
+(`reflection_trees.parent_id`, `genre`). Et tout ce qui est rangé **se lit
+comme son espace racine** : une réflexion rangée dans la philosophie est lue
+par les carrés, une réflexion rangée dans le multivers reste à son porteur.
+Chaque espace a en outre **sa propre cartographie** : ses catégories, ses
+réflexions et les nourritures qui les relient, pour voir la trajectoire de
+ses pensées dans cette branche-là.
 
-**Le multivers est public.** C'est le seul espace ainsi, et c'est l'espace qui
-le décide, jamais celui qui écrit : un modèle d'univers ne vaut que confronté
-aux autres. La galerie de tous les multivers vit dans le dock du **Carré
-d'As** — les modèles d'univers sont l'affaire des As entre eux, pas de
-l'espace intime de Pense Mieux — cherchable en plein texte ; les espaces vides
-n'y paraissent pas. On regarde ceux des autres, et on en fabrique de nouveaux
-**en les reliant**.
-
-Pense Mieux, lui, **ne parle que des réflexions de la personne** : pas de
-galerie dans son menu, pas de vitrine du carré sur sa page d'accueil, une
-recherche qui ne fouille que chez soi, et un sélecteur de nourriture qui ne
-propose que ses propres réflexions (plus les multivers, qui sont à tous). Ce
-qui se vit avec un carré se regarde sur la page du carré.
+Pense Mieux **ne parle que des réflexions de la personne** : pas de vitrine
+du carré sur sa page, une recherche qui ne fouille que chez soi, un sélecteur
+de nourriture qui ne propose que ses propres réflexions. Ce qui se vit avec
+un carré se regarde sur la page du carré.
 
 Techniquement, un espace **est une réflexion** : `reflection_trees` porte
 `axe` (`psy` | `moi` | `philo` | `univers` | `societe`) et `carre_id` (nul
@@ -344,28 +347,25 @@ retouche — et le porteur garde le dernier mot chez lui. Ce que le carré
 apporte se lit **dans la réflexion même**, signé et étiqueté : Pense Mieux
 n'en fait pas de vitrine.
 
-La règle de nourriture suit : un de mes trois espaces partagés peut nourrir un
-arbre de son carré (il le lit déjà) ; ma psychologie, mon moi harmonieux et
-mes réflexions personnelles, jamais.
+La règle de nourriture suit la racine : ce qui est rangé dans ma philosophie
+ou ma société peut nourrir un arbre de mon carré (il le lit déjà) ; ma
+psychologie, mon moi harmonieux, mon multivers et ce qu'ils rangent, jamais.
 
-Le **Carré d'As** (échelon 5) n'existe que pour trois matières. Un As peut
-vivre dans **plusieurs carrés** (sept au plus). Un carré de quatre n'a ni
-rôle, ni domaine, ni note : il a des As, et **une seule page, sans
-sous-navigation** — les trois matières côte à côte (**Multivers**,
-**Philosophie**, **Société harmonieuse**), la **Conversation** dessous. Un
-carré se regarde d'un seul regard.
+Le **Carré d'As** (échelon 5) n'existe que pour **deux matières** : la
+philosophie et la société harmonieuse. Un As peut vivre dans **plusieurs
+carrés** (sept au plus). Un carré de quatre n'a ni rôle, ni domaine, ni
+note, et sa page est **cinq blocs** : le bloc du CARRÉ (les deux arbres que
+les quatre écrivent ensemble — chacun greffe sur la pensée des autres, sans
+jamais la retoucher), puis un bloc par As avec sa philosophie et sa société
+harmonieuse — c'est de là qu'on entre chez un autre pour lui répondre. Rien
+d'autre ne s'y voit : ni psychologie, ni moi harmonieux, ni multivers, ni
+réflexions personnelles. En pied de page, le lien du salon Discord (le lieu
+de parole du carré, que le Brainstorm réutilise) et la sortie.
 
-Chaque colonne de matière montre deux choses : ce que les quatre écrivent
-**ensemble** (« À quatre » : un arbre commun, où chacun greffe sur la pensée
-des autres sans jamais pouvoir la retoucher), puis ce que **chacun** porte de
-son côté sur la même matière — c'est de là qu'on entre chez un autre pour lui
-répondre. Rien d'autre ne s'y voit : ni la psychologie ni le moi harmonieux
-d'un As, ni ses réflexions personnelles.
-
-S'y ajoutent le **salon de recrutement** (les As s'annoncent d'un mot, même
-déjà en carré ; les carrés où il reste une place invitent ; on n'entre que
-voulu des deux côtés) et les **missions**. Un carré qui n'est pas le sien ne
-montre que sa façade : son nom et ses As.
+La page principale du Carré d'As centralise **mes carrés**, le **salon de
+recrutement**, les **carrés à compléter** (cherchables au clavier) et la
+**fondation**. Un carré qui n'est pas le sien ne montre que sa façade : son
+nom et ses As. Les missions n'ont plus de page.
 
 Le **Brainstorm** (échelon 6) est la place des lives : un **carré complet**
 (quatre As) annonce un brainstorming sur YouTube, Twitch ou TikTok, en
