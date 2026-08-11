@@ -2146,12 +2146,7 @@ body.avec-dock main { padding-bottom: 7rem; }
 .carre-as { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; margin: -0.4rem 0 0.8rem; }
 .carre-sep { color: var(--text-dim); }
 .carre-places { color: var(--text-dim); font-size: 0.82rem; }
-.carre-matieres {
-  display: grid;
-  gap: 0.9rem;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  align-items: start;
-}
+
 .carre-matiere {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -2205,7 +2200,10 @@ body.avec-dock main { padding-bottom: 7rem; }
 .pm-bloc { margin: 1.6rem 0; }
 .pm-bloc > h2 { font-size: 1.05rem; margin-bottom: 0.15rem; }
 .pm-bloc-sous { color: var(--text-dim); font-size: 0.85rem; margin: 0 0 0.7rem; }
-.pm-bloc--carre .arbre-card--tronc { border-left-color: var(--accent); }
+.carre-porteur { color: var(--text-dim); font-size: 0.9rem; margin: -0.5rem 0 0.4rem; }
+.carre-branches { margin: 1.4rem 0; }
+.carre-branches > h2 { font-size: 1.05rem; margin-bottom: 0.15rem; }
+.carre-carte--mien { border-left: 2px solid var(--accent); }
 .fil-sep { color: var(--text-dim); margin: 0 0.35rem; }
 .arbre-card--categorie { border-style: dashed; }
 .dedans { margin: 1rem 0 1.4rem; }
@@ -2236,4 +2234,9 @@ body.avec-dock main { padding-bottom: 7rem; }
 .carre-bloc--commun { border-top: 2px solid var(--accent); }
 .carre-bloc--moi { border-color: rgba(216, 192, 122, 0.45); }
 .carre-bloc > h2 { font-size: 1rem; margin: 0 0 0.6rem; }
-.carre-bloc-cartes { display: grid; gap: 0.5rem; }
+.carre-bloc-cartes {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  align-items: start;
+}

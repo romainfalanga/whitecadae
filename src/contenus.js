@@ -13,22 +13,12 @@
    quoi l'on tend. L'un décrit, l'autre vise, et la distance entre les deux est
    le travail.
 
-   `partage` dit qui les lit, et c'est la règle centrale de la plateforme :
+   Il n'y a plus de privé ni de public entre une personne et son carré : les
+   CINQ espaces sont lus par les trois As qu'elle a choisis, et ils sont là
+   pour l'aider à les harmoniser. Ce qu'elle range dedans — catégories et
+   réflexions — se lit de la même façon : c'est l'espace racine qui décide.
 
-     - `moi` : la psychologie, le moi harmonieux ET le multivers ne sortent
-       jamais. Personne d'autre que soi ne les voit, carré compris. On ne
-       travaille ni son rapport à soi ni ses modèles d'univers sous le regard
-       des autres.
-
-     - `carre` : la philosophie et la société harmonieuse sont lues par les
-       As de ses carrés, qui peuvent y répondre. Ce sont les deux matières du
-       travail commun — et un carré n'existe que pour elles.
-
-   `bloc` range les espaces sur la page d'accueil : les trois personnels
-   d'abord, puis les deux que l'on porte devant ses carrés.
-
-   `commun` : ces deux mêmes axes existent aussi comme arbre DU carré, écrit
-   par les quatre.                                                          */
+   Hors de son carré, rien ne sort.                                        */
 
 export const AXES = {
   psy: {
@@ -36,67 +26,53 @@ export const AXES = {
     court: 'Psychologie',
     sous: 'Le présent : comment tu fonctionnes, ce que tu constates de toi.',
     miroir: 'moi',
-    partage: 'moi',
-    bloc: 'perso',
-    commun: false,
   },
   moi: {
     titre: 'Le moi harmonieux',
     court: 'Moi harmonieux',
     sous: 'Ce vers quoi tu tends : ta version la plus harmonieuse.',
     miroir: 'psy',
-    partage: 'moi',
-    bloc: 'perso',
-    commun: false,
   },
   univers: {
     titre: 'Mon multivers',
     court: 'Multivers',
     sous: 'Tes modèles d’univers, et ce qu’ils se répondent.',
-    partage: 'moi',
-    bloc: 'perso',
-    commun: false,
   },
   philo: {
     titre: 'Ma philosophie',
     court: 'Philosophie',
-    titreCarre: () => 'Notre philosophie',
     sous: 'Tes questions, tes constats, et ce qu’ils font de ta façon de penser.',
-    sousCarre: 'Vos questions, vos constats, et ce qu’ils font de votre façon de penser.',
-    partage: 'carre',
-    bloc: 'carre',
-    commun: true,
   },
   societe: {
     titre: 'Ma société harmonieuse',
     court: 'Société harmonieuse',
-    titreCarre: () => 'Notre société harmonieuse',
     sous: 'La société la plus harmonieuse que tu imagines, et son chemin du réel.',
-    sousCarre: 'La société la plus harmonieuse que vous imaginez ensemble, et son chemin du réel.',
-    partage: 'carre',
-    bloc: 'carre',
-    commun: true,
   },
 };
 
-// L'ordre de lecture : le bloc personnel d'abord (le miroir, puis le
-// multivers), puis les deux matières que l'on porte devant son carré.
+// L'ordre de lecture : le miroir d'abord (le présent, puis ce vers quoi il
+// tend), puis le multivers, la philosophie et la société harmonieuse.
 export const AXES_ORDRE = ['psy', 'moi', 'univers', 'philo', 'societe'];
 
 /* --------------------------------------------- Carré d'As (échelon 5) ---
-   Les missions n'ont plus de page : le carré se comprend en le vivant. Ne
-   survit que la charte, en une phrase, au seuil du recrutement.           */
+   Un carré est celui d'UNE personne. Elle le fonde, et elle y cherche trois
+   As qui vont l'aider à harmoniser ses cinq branches de réflexion. Le carré
+   n'écrit rien en commun : il entre chez son porteur, et lui donne des
+   variables de plus.
+
+   Chacun a donc son propre carré — et se retrouve dans celui des autres,
+   pour les aider à leur tour.                                             */
 
 export const CHARTE_CARRE =
-  'Un carré, c’est quatre personnes qui acceptent de penser sous le regard '
-  + 'des trois autres. Cherchez des esprits qui ne voient pas comme vous : un '
-  + 'carré où tout le monde pense pareil n’apprend rien à personne.';
+  'Ton carré, c’est trois As qui acceptent de penser avec toi, sur tes cinq '
+  + 'branches. Cherche des esprits qui ne voient pas comme toi : un carré où '
+  + 'tout le monde pense pareil n’apprend rien à personne.';
 
 /* --------------------------------- Game Master Orange (échelon 7) ------- */
 
-// Le mécanisme 6 est adapté à la plateforme : le carré d'as se forme
-// désormais à l'échelon 5, sur sa propre page : arrivé ici, le joueur a déjà
-// le sien. Le mécanisme parle donc de ce qu'on en fait, une fois qu'on l'a.
+// Le mécanisme 6 est adapté à la plateforme : le carré d'as se fonde à
+// l'échelon 5, sur sa propre page : arrivé ici, le joueur a déjà le sien. Le
+// mécanisme parle donc de ce qu'on en fait, une fois qu'on l'a.
 
 export const MECANISMES_GMO = {
   titre: 'Les 7 mécanismes orange',
@@ -161,8 +137,8 @@ export const MECANISMES_GMO = {
       numero: 6,
       titre: 'Ton carré d’as',
       etapes: [
-        'Ton carré d’as est né à l’échelon 5 : quatre esprits qui ne voient pas comme toi.',
-        'Devenez votre centre de gravité en vous faisant grandir mutuellement.',
+        'Ton carré d’as est né à l’échelon 5 : trois As qui pensent avec toi, sur tes cinq branches.',
+        'Entre à ton tour dans les carrés des autres : c’est là que tu leur donnes des variables de plus.',
         'Fais de ton carré la preuve vivante de ce que le jeu promet.',
       ],
       page: '/carre-d-as',
@@ -186,7 +162,7 @@ export const MECANISMES_GMO = {
 /* ------------------------------------- la Vidéographie : le rythme (4) ---
    Pense Mieux et la Vidéographie ne poursuivent plus la même chose. Pense
    Mieux est l'outil de la pensée : on y écrit, on y parle, on y range ses
-   réflexions en arbres, seul ou avec ses carrés. La Vidéographie est le
+   réflexions en branches, aidé par son carré. La Vidéographie est le
    témoignage de ce qu'on a vécu, et elle a un rythme : une vidéo par semaine,
    une par mois, une par an.
 

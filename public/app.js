@@ -213,7 +213,7 @@ async function route() {
   if (path === '/game-master-orange') return pageGmo();
   if (path === '/reprises/fil') return pageCoverFeed();
   if (path === '/reprises') return pageCovers();
-  if (path === '/fil') return pageFeed();
+  if (path === '/fil') return navigate('/interpretations', true);
   if ((m = path.match(/^\/chanson\/([^/]+)\/reprises$/))) return pageSongCovers(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
   app.innerHTML = '<h1>Page introuvable</h1><p><a href="/interpretations" data-link>Retour aux interprétations</a></p>';
@@ -722,7 +722,7 @@ function carteSvg(noeuds, liens) {
 function dessineCarte(data) {
   const noeuds = [
     ...(data.troncs || []).map((t) => ({
-      id: t.id, titre: t.title, n: t.branches, espace: true, intime: t.partage === 'moi',
+      id: t.id, titre: t.title, n: t.branches, espace: true,
     })),
     ...(data.arbres || []).map((a) => ({
       id: a.id, titre: a.title, n: a.branches, categorie: a.genre === 'categorie',
@@ -779,37 +779,27 @@ async function vueForet(kind) {
   const carteEspace = (t) => {
     const n = rangees.get(t.id) || 0;
     return `
-    <a class="arbre-card arbre-card--tronc${t.partage === 'moi' ? ' arbre-card--intime' : ''}"
-       href="/reflexion/${t.id}" data-link>
+    <a class="arbre-card arbre-card--tronc" href="/reflexion/${t.id}" data-link>
       <h2>${esc(t.title)}</h2>
       ${t.sous ? `<p class="arbre-sous">${esc(t.sous)}</p>` : ''}
       <span class="arbre-meta">${t.branches} pensée${t.branches > 1 ? 's' : ''}${
-        n ? ` · ${n} réflexion${n > 1 ? 's' : ''}` : ''}
-        <span class="arbre-qui">${esc(t.partage === 'carre' ? 'lu par mes carrés' : 'à moi seul')}</span></span>
+        n ? ` · ${n} réflexion${n > 1 ? 's' : ''}` : ''}</span>
     </a>`;
   };
-  const bloc = (cle) => (data.troncs || []).filter((t) => t.bloc === cle).map(carteEspace).join('');
 
   // les réflexions d'avant le rangement, sans espace : elles restent lisibles
   const libres = (data.arbres || []).filter((a) => !a.parent_id);
 
   app.innerHTML = `
     <h1>${esc(def.titre)}</h1>
+    <p class="subtitle">Tes cinq branches. Les trois As de ton carré les lisent
+      toutes et t’aident à les harmoniser — personne d’autre.</p>
     ${dessineCarte(data)}
-    <section class="pm-bloc pm-bloc--perso">
-      <h2>À toi seul</h2>
-      <p class="pm-bloc-sous">Personne d’autre ne lit ces trois espaces, carré compris.</p>
-      <div class="foret foret-troncs">${bloc('perso')}</div>
-    </section>
-    <section class="pm-bloc pm-bloc--carre">
-      <h2>Avec tes carrés</h2>
-      <p class="pm-bloc-sous">Les As de tes carrés lisent ces deux espaces et y répondent.</p>
-      <div class="foret foret-troncs">${bloc('carre')}</div>
-    </section>
+    <div class="foret foret-troncs">${(data.troncs || []).map(carteEspace).join('')}</div>
     ${libres.length ? `
     <section class="pm-bloc">
       <h2>Sans attache</h2>
-      <p class="pm-bloc-sous">Des réflexions d’avant le rangement. Elles restent à toi seul.</p>
+      <p class="pm-bloc-sous">Des réflexions d’avant le rangement.</p>
       <div class="foret">${libres.map((a) => `
         <a class="arbre-card" href="/reflexion/${a.id}" data-link>
           <h2>${esc(a.title)}</h2>
@@ -931,7 +921,9 @@ async function vueRythme() {
         <a href="${esc(safeUrl(h.url))}" target="_blank" rel="noopener">${esc(h.periode)}</a>`).join('')}</div>` : ''}
     </section>`;
 
-  app.innerHTML = `<div class="rythme">${data.cadences.map(carte).join('')}</div>`;
+  app.innerHTML = `
+    <h1>Vidéographie</h1>
+    <div class="rythme">${data.cadences.map(carte).join('')}</div>`;
 
   app.querySelectorAll('[data-refaire]').forEach((b) => {
     b.onclick = () => {
@@ -1671,9 +1663,8 @@ async function pageArbre(id) {
     <p class="fil-retour">${ariane}</p>
     <h1>${esc(titre)}</h1>
     ${arbre.sous && !etranger ? `<p class="arbre-sous">${esc(arbre.sous)}</p>` : ''}
-    ${!etranger && arbre.partage ? `<p class="arbre-partage">${esc(arbre.partage === 'carre'
-      ? 'Les As de tes carrés lisent cet espace et peuvent y répondre.'
-      : 'Cet espace est à toi seul. Personne d’autre ne le lit.')}</p>` : ''}
+    ${!etranger && arbre.proprietaire ? `<p class="arbre-partage">Les trois As de
+      ton carré lisent ceci et peuvent y répondre. Personne d’autre.</p>` : ''}
     ${arbre.repondable ? `<p class="arbre-invite-reponse">Tu es ici pour aider ${esc(nomPorteur)} à voir
       plus de variables : approfondis, élargis, ou oppose en proposant une issue.</p>` : ''}
     ${arbre.miroir ? `<p class="arbre-miroir">En regard : <a href="/reflexion/${arbre.miroir.id}" data-link>${esc(arbre.miroir.title)}</a></p>` : ''}
@@ -2028,15 +2019,19 @@ async function vueCarreDAs() {
   try { r = await api('/api/carre/recrutement'); } catch { r = null; }
   if (stale(epoch)) return;
 
-  const cartes = d.carres.map((c) => {
+  // mon carré d'un côté, ceux où j'aide de l'autre : ce ne sont pas la même
+  // chose, et c'est toute la règle de la page
+  const carte = (c) => {
     const places = 4 - c.membres.length;
     return `
-      <a class="carre-carte" href="/carre-d-as/${c.id}" data-link>
+      <a class="carre-carte${c.mien ? ' carre-carte--mien' : ''}" href="/carre-d-as/${c.id}" data-link>
         <h2>${esc(c.nom)}</h2>
         <p class="carre-carte-membres">${c.membres.map((m) => esc(m.username)).join(' · ')}
           ${places ? `<span class="carre-carte-places">${places} place${places > 1 ? 's' : ''}</span>` : ''}</p>
       </a>`;
-  }).join('');
+  };
+  const mien = d.carres.filter((c) => c.mien).map(carte).join('');
+  const ailleurs = d.carres.filter((c) => !c.mien).map(carte).join('');
 
   // les invitations que je reçois, et mon annonce au salon
   const a = r ? r.monAnnonce : null;
@@ -2053,15 +2048,9 @@ async function vueCarreDAs() {
         </div>`).join('')}
     </div>` : '';
 
-  // inviter : depuis lequel de mes carrés où il reste une place
+  // on n'invite que dans SON carré, et seulement s'il y reste une place
   const avecPlaces = r ? r.mesCarres.filter((c) => c.places > 0) : [];
-  const choixCarre = avecPlaces.length ? `
-    <div class="recrut-depuis">
-      <label>Inviter dans
-        <select id="invite-carre">
-          ${avecPlaces.map((c) => `<option value="${c.id}">${esc(c.nom)} (${c.places} place${c.places > 1 ? 's' : ''})</option>`).join('')}
-        </select></label>
-    </div>` : '';
+  const choixCarre = '';
   const envoyees = r && r.envoyees.length ? `
     <div class="recrut-envoyees">
       ${r.envoyees.map((i) => `<span class="recrut-attente">${esc(i.carre_nom)} : ${esc(i.username)} (invité)
@@ -2082,23 +2071,31 @@ async function vueCarreDAs() {
 
   // les carrés où il reste une place, filtrables au clavier
   const peintOuverts = (liste) => liste.length ? liste.map((o) => `
-    <li><a href="/carre-d-as/${o.id}" data-link>${esc(o.nom)}</a> <span>(${o.membres}/4)</span>
-      <button type="button" data-rejoint="${o.id}">Rejoindre</button></li>`).join('')
+    <li><a href="/carre-d-as/${o.id}" data-link>${esc(o.nom)}</a>
+      <span>${o.createur ? `de ${esc(o.createur)} · ` : ''}${o.membres}/4</span>
+      <button type="button" data-rejoint="${o.id}">Aider</button></li>`).join('')
     : '<li class="empty-note">Aucun carré à compléter.</li>';
 
   app.innerHTML = `
     <h1>Carré d’As</h1>
+    <p class="subtitle">Ton carré, c’est trois As qui pensent avec toi sur tes
+      cinq branches. Et tu entres dans le leur, pour les aider à leur tour.</p>
     ${invitations}
     <section class="ca-bloc">
-      <h2>Mes carrés</h2>
-      ${d.carres.length ? `<div class="carres-liste">${cartes}</div>`
-        : '<p class="empty-note">Aucun carré encore : fonde le tien, ou réponds à une annonce du salon.</p>'}
-      <form id="carre-cree" class="carre-cree">
-        <input id="carre-nom" maxlength="60" placeholder="Le nom d’un nouveau carré" required>
-        <button type="submit" class="primary">Fonder</button>
-        <p class="form-error" id="carre-err"></p>
-      </form>
+      <h2>Mon carré</h2>
+      ${mien ? `<div class="carres-liste">${mien}</div>` : `
+        <p class="empty-note">Tu n’as pas encore ton carré : fonde-le, puis trouve trois As au salon.</p>
+        <form id="carre-cree" class="carre-cree">
+          <input id="carre-nom" maxlength="60" placeholder="Le nom de ton carré" required>
+          <button type="submit" class="primary">Fonder mon carré</button>
+          <p class="form-error" id="carre-err"></p>
+        </form>`}
     </section>
+    ${ailleurs ? `
+    <section class="ca-bloc">
+      <h2>Les carrés où j’aide</h2>
+      <div class="carres-liste">${ailleurs}</div>
+    </section>` : ''}
     <section class="ca-bloc">
       <h2>Le salon</h2>
       ${r ? `<p class="recrut-charte">${esc(r.charte)}</p>` : ''}
@@ -2117,38 +2114,35 @@ async function vueCarreDAs() {
     </section>
     <section class="ca-bloc">
       <h2>Carrés à compléter</h2>
+      <p class="pm-bloc-sous">Ceux qui cherchent encore des As pour les aider.</p>
       <input id="carre-cherche" placeholder="Chercher un carré…" autocomplete="off">
       <ul class="carres-ouverts" id="carres-ouverts">${peintOuverts(d.ouverts)}</ul>
     </section>`;
 
-  document.getElementById('carre-cree').onsubmit = async (e) => {
+  const cree = document.getElementById('carre-cree');
+  if (cree) cree.onsubmit = async (e) => {
     e.preventDefault();
     try {
       const x = await api('/api/carre', { method: 'POST', body: { nom: document.getElementById('carre-nom').value } });
       navigate(`/carre-d-as/${x.id}`);
     } catch (err) { document.getElementById('carre-err').textContent = err.message; }
   };
-  app.querySelectorAll('[data-rejoint]').forEach((b) => {
+  const brancheRejoint = () => app.querySelectorAll('[data-rejoint]').forEach((b) => {
     b.onclick = async () => {
       try {
         await api(`/api/carre/${b.dataset.rejoint}/rejoindre`, { method: 'POST', body: {} });
         navigate(`/carre-d-as/${b.dataset.rejoint}`);
-      } catch (err) { document.getElementById('carre-err').textContent = err.message; }
+      } catch (err) { alert(err.message); }
     };
   });
+  brancheRejoint();
   const cherche = document.getElementById('carre-cherche');
   cherche.oninput = () => {
     const q = cherche.value.trim().toLowerCase();
-    document.getElementById('carres-ouverts').innerHTML =
-      peintOuverts(d.ouverts.filter((o) => !q || o.nom.toLowerCase().includes(q)));
-    app.querySelectorAll('[data-rejoint]').forEach((b) => {
-      b.onclick = async () => {
-        try {
-          await api(`/api/carre/${b.dataset.rejoint}/rejoindre`, { method: 'POST', body: {} });
-          navigate(`/carre-d-as/${b.dataset.rejoint}`);
-        } catch (err) { document.getElementById('carre-err').textContent = err.message; }
-      };
-    });
+    document.getElementById('carres-ouverts').innerHTML = peintOuverts(
+      d.ouverts.filter((o) => !q || o.nom.toLowerCase().includes(q)
+        || (o.createur || '').toLowerCase().includes(q)));
+    brancheRejoint();
   };
   app.querySelectorAll('[data-accepte]').forEach((b) => {
     b.onclick = async () => {
@@ -2166,12 +2160,11 @@ async function vueCarreDAs() {
   });
   app.querySelectorAll('[data-invite]').forEach((b) => {
     b.onclick = async () => {
-      const carreId = +document.getElementById('invite-carre').value;
       const note = prompt(`Un mot pour ${b.dataset.invite} ? (facultatif)`) ?? '';
       try {
         await api('/api/carre/invitations', {
           method: 'POST',
-          body: { carre_id: carreId, username: b.dataset.invite, note },
+          body: { username: b.dataset.invite, note },
         });
         vueCarreDAs();
       } catch (err) { alert(err.message); }
@@ -2189,34 +2182,30 @@ async function vueCarreDAs() {
   if (retire) retire.onclick = async () => { await api('/api/carre/annonce', { method: 'DELETE' }); vueCarreDAs(); };
 }
 
-/* ---------------------------- la page d'un carré : cinq blocs -------------
-   Un carré n'existe que pour deux matières : la philosophie et la société
-   harmonieuse. Sa page les montre en cinq blocs : le bloc du CARRÉ (ce que
-   les quatre écrivent ensemble, aux deux matières), puis un bloc par As —
-   sa philosophie et sa société harmonieuse, et rien d'autre : ni sa
-   psychologie, ni son moi harmonieux, ni son multivers, ni ses réflexions.
-   Pas de sous-navigation : on entre dans une matière pour y écrire.       */
-
-const MATIERES = [
-  { cle: 'philosophie', axe: 'philo', label: 'Philosophie' },
-  { cle: 'societe', axe: 'societe', label: 'Société harmonieuse' },
-];
+/* ------------------------- la page d'un carré : celui d'une personne -------
+   Un carré est celui de son porteur. Ses trois As lisent ses cinq branches
+   et y répondent : c'est tout ce que la page montre — lui, ses branches, et
+   ceux qui l'aident. On entre dans une branche pour lui donner des variables
+   de plus.                                                                */
 
 function carreTete(d) {
-  const as = (d.membres || []).map((m) => authorLink(m.username)).join('<span class="carre-sep">·</span>');
+  const as = (d.membres || []).map((m) => (m.createur
+    ? `<strong>${authorLink(m.username)}</strong>`
+    : authorLink(m.username))).join('<span class="carre-sep">·</span>');
   return `
     <p class="fil-retour"><a href="/carre-d-as" data-link>← Mes carrés</a></p>
     <h1>${esc(d.carre.nom)}</h1>
+    <p class="carre-porteur">Le carré de ${esc(d.carre.createur || '?')}</p>
     <p class="carre-as">${as}${d.places > 0
       ? `<span class="carre-places">${d.places} place${d.places > 1 ? 's' : ''} libre${d.places > 1 ? 's' : ''}</span>` : ''}</p>`;
 }
 
-// La façade d'un carré qui n'est pas le mien : son nom, ses As, ses places.
+// La façade d'un carré où je ne suis pas : son porteur, ses As, ses places.
 function carreFacade(id, d) {
   app.innerHTML = `
     ${carreTete(d)}
     ${d.places > 0 && state.user ? `
-      <button type="button" class="primary" id="carre-rejoint">Rejoindre ce carré</button>
+      <button type="button" class="primary" id="carre-rejoint">Aider dans ce carré</button>
       <p class="form-error" id="carre-err"></p>`
       : '<p class="empty-note">Ce carré est complet.</p>'}`;
 
@@ -2238,69 +2227,39 @@ async function pageCarre(id) {
   if (stale(epoch)) return;
   if (d.publique) return carreFacade(id, d);
 
-  let matieres;
-  try { matieres = await Promise.all(MATIERES.map((m) => api(`/api/carre/${id}/axe/${m.axe}`))); }
-  catch { return navigate('/carre-d-as', true); }
-  if (stale(epoch)) return;
-
-  const compte = (t) => `${t.pensees} pensée${t.pensees > 1 ? 's' : ''}${
-    t.reponses ? ` · ${t.reponses} réponse${t.reponses > 1 ? 's' : ''}` : ''}`;
-
-  // le bloc du carré : ce que les quatre écrivent ensemble
-  const communs = matieres.map((m, i) => (m.commun ? `
-    <a class="mat-carte mat-carte--commun" href="/reflexion/${m.commun.id}" data-link>
-      <h3>${esc(MATIERES[i].label)}</h3>
-      ${m.commun.trunk ? `<p class="mat-apercu">${esc(m.commun.trunk)}</p>` : ''}
-      <span class="mat-meta">${m.commun.pensees} pensée${m.commun.pensees > 1 ? 's' : ''} · à quatre</span>
-    </a>` : '')).join('');
-
-  // un bloc par As : sa philosophie et sa société harmonieuse
-  const parAs = new Map();
-  matieres.forEach((m, i) => {
-    for (const x of m.membres) {
-      if (!parAs.has(x.user_id)) parAs.set(x.user_id, { username: x.username, moi: x.moi, matieres: [] });
-      parAs.get(x.user_id).matieres.push({ def: MATIERES[i], x });
-    }
-  });
-  const blocAs = (as) => `
-    <section class="carre-bloc${as.moi ? ' carre-bloc--moi' : ''}">
-      <h2>${as.moi ? 'Moi' : esc(as.username)}</h2>
-      <div class="carre-bloc-cartes">
-        ${as.matieres.map(({ def, x }) => (x.tree_id ? `
-          <a class="mat-carte" href="/reflexion/${x.tree_id}" data-link>
-            <h3>${esc(def.label)}</h3>
-            ${x.trunk ? `<p class="mat-apercu">${esc(x.trunk)}</p>` : ''}
-            <span class="mat-meta">${compte(x)}</span>
-          </a>` : `
-          <span class="mat-carte mat-carte--vide">
-            <h3>${esc(def.label)}</h3>
-            <span class="mat-meta">rien encore</span>
-          </span>`)).join('')}
-      </div>
-    </section>`;
+  const branches = (d.branches || []).map((b) => `
+    <a class="mat-carte" href="/reflexion/${b.id}" data-link>
+      <h3>${esc(d.mien ? b.titre : `${b.court} de ${d.carre.createur}`)}</h3>
+      ${b.trunk ? `<p class="mat-apercu">${esc(b.trunk)}</p>` : `<p class="mat-apercu">${esc(b.sous)}</p>`}
+      <span class="mat-meta">${b.pensees} pensée${b.pensees > 1 ? 's' : ''}${
+        b.dedans ? ` · ${b.dedans} réflexion${b.dedans > 1 ? 's' : ''}` : ''}${
+        b.reponses ? ` · ${b.reponses} réponse${b.reponses > 1 ? 's' : ''}` : ''}</span>
+    </a>`).join('');
 
   app.innerHTML = `
     ${carreTete(d)}
-    <div class="carre-blocs">
-      <section class="carre-bloc carre-bloc--commun">
-        <h2>Le carré</h2>
-        <div class="carre-bloc-cartes">${communs}</div>
-      </section>
-      ${[...parAs.values()].map(blocAs).join('')}
-    </div>
-    <p class="mat-note">Entre chez les autres pour leur donner des variables de plus :
-      approfondis, élargis, ou oppose en proposant une issue.</p>
+    <section class="carre-branches">
+      <h2>${d.mien ? 'Mes cinq branches' : `Les cinq branches de ${esc(d.carre.createur)}`}</h2>
+      <p class="pm-bloc-sous">${d.mien
+        ? 'Tes trois As les lisent toutes et peuvent y répondre.'
+        : 'Entre, et donne-lui des variables de plus : approfondis, élargis, ou oppose en proposant une issue.'}</p>
+      <div class="carre-bloc-cartes">${branches}</div>
+    </section>
+    ${d.places > 0 && d.mien ? `<p class="empty-note">Il te manque ${d.places} As :
+      le salon est sur <a href="/carre-d-as" data-link>la page des carrés</a>.</p>` : ''}
     <p class="carre-sortie">
-      <label class="carre-salon">Salon Discord
+      ${d.mien ? `<label class="carre-salon">Salon Discord
         <input id="carre-discord" type="url" placeholder="https://discord.gg/…" value="${esc(d.carre.discord_url || '')}">
-      </label>
-      <button type="button" class="link-btn danger" id="carre-quitter">Quitter ce carré</button>
+      </label>` : `${d.carre.discord_url ? `<a href="${esc(safeUrl(d.carre.discord_url))}"
+        target="_blank" rel="noopener">Le salon Discord du carré</a>` : ''}
+      <button type="button" class="link-btn danger" id="carre-quitter">Quitter ce carré</button>`}
       <span class="form-error" id="carre-sortie-err"></span>
     </p>`;
 
-  document.getElementById('carre-quitter').onclick = () => quitteCarre(id);
+  const quitter = document.getElementById('carre-quitter');
+  if (quitter) quitter.onclick = () => quitteCarre(id);
   const discord = document.getElementById('carre-discord');
-  discord.onchange = async () => {
+  if (discord) discord.onchange = async () => {
     try { await api(`/api/carre/${id}`, { method: 'PUT', body: { discord_url: discord.value } }); }
     catch (err) { document.getElementById('carre-sortie-err').textContent = err.message; }
   };
@@ -2379,27 +2338,26 @@ async function vueAnnoncer() {
   catch { return navigate('/57', true); }
   if (stale(epoch)) return;
 
-  const complets = (d.carres || []).filter((c) => c.membres.length === 4);
-  if (!complets.length) {
+  /* Un brainstorm, c'est MON carré qui pense avec moi devant du monde : c'est
+     donc le mien qui le porte, et c'est moi qui tiens l'antenne. */
+  const mien = (d.carres || []).find((c) => c.mien);
+  if (!mien || mien.membres.length < 4) {
     docke('bs', 'annoncer', `
       <h1>Annoncer un brainstorm</h1>
-      <p class="empty-note">Un brainstorm est porté par un carré complet : quatre As.
+      <p class="empty-note">${mien
+        ? 'Ton carré n’est pas complet : il te faut trois As pour penser avec toi.'
+        : 'Fonde d’abord ton carré : c’est lui qui porte le live.'}
         Tout se joue au <a href="/carre-d-as" data-link>Carré d’As</a>.</p>`);
     return;
   }
 
-  const hotesDe = (carreId) => complets.find((c) => c.id === carreId).membres;
   docke('bs', 'annoncer', `
     <h1>Annoncer un brainstorm</h1>
+    <p class="subtitle">Le sujet sur lequel ton carré va t’aider à réfléchir,
+      en direct. Tu tiens l’antenne, ${esc(mien.membres.filter((m) => !state.user
+        || m.user_id !== state.user.id).map((m) => m.username).join(', '))} pensent avec toi.</p>
     <form id="bs-form" class="bs-form">
-      <input id="bs-sujet" maxlength="200" placeholder="Le sujet du brainstorming" required>
-      <div class="bs-form-ligne">
-        ${complets.length > 1 ? `
-        <select id="bs-carre">
-          ${complets.map((c) => `<option value="${c.id}">${esc(c.nom)}</option>`).join('')}
-        </select>` : `<input type="hidden" id="bs-carre" value="${complets[0].id}">`}
-        <select id="bs-hote"></select>
-      </div>
+      <input id="bs-sujet" maxlength="200" placeholder="Sur quoi veux-tu qu’on t’aide à réfléchir ?" required>
       <div class="bs-form-ligne">
         <select id="bs-plateforme">
           <option value="youtube">YouTube</option><option value="twitch">Twitch</option><option value="tiktok">TikTok</option>
@@ -2410,24 +2368,12 @@ async function vueAnnoncer() {
       <p class="form-error" id="bs-err"></p>
     </form>`);
 
-  const carreChamp = document.getElementById('bs-carre');
-  const hoteChamp = document.getElementById('bs-hote');
-  const peintHotes = () => {
-    hoteChamp.innerHTML = hotesDe(+carreChamp.value)
-      .map((m) => `<option value="${m.user_id}"${state.user && m.user_id === state.user.id ? ' selected' : ''}>Hôte : ${esc(m.username)}</option>`)
-      .join('');
-  };
-  peintHotes();
-  if (carreChamp.tagName === 'SELECT') carreChamp.onchange = peintHotes;
-
   document.getElementById('bs-form').onsubmit = async (e) => {
     e.preventDefault();
     try {
       const r = await api('/api/brainstorms', {
         method: 'POST',
         body: {
-          carre_id: +carreChamp.value,
-          hote_user_id: +hoteChamp.value,
           sujet: document.getElementById('bs-sujet').value,
           plateforme: document.getElementById('bs-plateforme').value,
           url: document.getElementById('bs-url').value,
@@ -2604,12 +2550,8 @@ function newestFirst(albums) {
   return [...albums].reverse();
 }
 
-/* ------------------------------------------------------------------ fil ---
-   Les interprétations des autres, de la plus récente à la plus ancienne :
-   le passage visé, puis ce qu'on en dit.                                  */
-
-// Le passage sur lequel porte une interprétation, reconstitué sans avoir à
-// charger tout le morceau.
+/* Le passage sur lequel porte une interprétation, reconstitué sans avoir à
+   charger tout le morceau : le fil d'un profil s'en sert. */
 function feedQuote(it) {
   if (it.target_type === 'song') return 'le morceau entier';
   if (it.target_type === 'title') return `le titre « ${it.song_title} »`;
@@ -2624,48 +2566,6 @@ function feedQuote(it) {
     return `« ${from} […] ${to} »`;
   }
   return `« ${it.line_text} »`;
-}
-
-function feedCard(it) {
-  return `<article class="feed-card" data-ann="${it.id}">
-    <div class="feed-head">
-      <a class="feed-song" href="/chanson/${encodeURIComponent(it.song_slug)}" data-link>${esc(it.song_title)}</a>
-      <span class="feed-date">${esc(formatDate(it.created_at))}</span>
-    </div>
-    <div class="feed-quote">${esc(feedQuote(it))}</div>
-    <div class="annotation-body">${esc(it.content)}</div>
-    <div class="feed-foot">par ${authorLink(it.username)}</div>
-    ${socialFooter('annotation', it)}
-  </article>`;
-}
-
-async function pageFeed() {
-  const epoch = newEpoch();
-  app.innerHTML = '<div class="loading">Chargement…</div>';
-  const data = await api('/api/feed?limit=15');
-  if (stale(epoch)) return;
-  state.feed = { items: data.items, more: data.more };
-  renderFeedPage();
-}
-
-function renderFeedPage() {
-  const { items, more } = state.feed;
-  app.innerHTML = `
-    <div class="breadcrumb"><a href="/interpretations" data-link>Interprétations</a></div>
-    <h1>Le fil</h1>
-    <p class="subtitle">Toutes les interprétations publiées, de la plus récente à la plus ancienne.</p>
-    <div class="feed-list" id="feed-list">${items.map(feedCard).join('')
-      || '<p class="empty-note">Aucune interprétation publiée pour l’instant.</p>'}</div>
-    ${more ? '<p class="feed-more"><button type="button" class="btn" id="feed-more">Voir les précédentes</button></p>' : ''}`;
-  bindSocial(document.getElementById('feed-list'));
-  const btn = document.getElementById('feed-more');
-  if (btn) btn.onclick = async () => {
-    btn.disabled = true;
-    const data = await api(`/api/feed?limit=15&offset=${state.feed.items.length}`);
-    state.feed.items = state.feed.items.concat(data.items);
-    state.feed.more = data.more;
-    renderFeedPage();
-  };
 }
 
 async function pageInterpretations() {
@@ -2690,23 +2590,12 @@ async function pageInterpretations() {
       </ol>
     </section>`).join('');
 
-  let recent = { items: [], more: false };
-  try { recent = await api('/api/feed?limit=3'); } catch { /* le fil n'est pas vital */ }
-  if (stale(epoch)) return;
-
-  const feedBlock = `<section class="feed-block">
-    <div class="feed-block-head">
-      <h2>Les dernières interprétations</h2>
-      <a class="btn" href="/fil" data-link>Voir le fil →</a>
-    </div>
-    <div class="feed-list" id="recent-list">${recent.items.map(feedCard).join('')
-      || '<p class="empty-note">Aucune interprétation publiée pour l’instant.</p>'}</div>
-  </section>`;
-
-  app.innerHTML = '<h1>Interprétations</h1>' + feedBlock +
-    '<h2 class="albums-title">Les morceaux</h2>' +
-    (albums || '<p class="empty-note">Aucun album pour le moment.</p>');
-  bindSocial(document.getElementById('recent-list'));
+  app.innerHTML = `
+    <h1>Interprétations</h1>
+    <p class="subtitle">Ta mémoire des morceaux : ce que tu y lis, morceau par
+      morceau. Ce que tu écris ici n’est lu que par toi.</p>
+    <h2 class="albums-title">Les morceaux</h2>
+    ${albums || '<p class="empty-note">Aucun album pour le moment.</p>'}`;
 }
 
 /* ------------------------------------------------------- connexion/compte */
@@ -3457,7 +3346,6 @@ function renderInbound() {
         <div class="annotation-head">
           ${authorLink(r.username)}
           <span>${esc(formatDate(r.created_at))}${r.updated_at ? ' (modifié)' : ''}</span>
-          ${!r.is_published ? '<span class="draft-badge" title="Visible seulement par vous, tant qu’une nouvelle version n’a pas été publiée">Brouillon</span>' : ''}
         </div>
         ${socialFooter('annotation', r)}
       </div>`).join('')}
@@ -3541,7 +3429,6 @@ function essayCard(e) {
     <div class="annotation-head">
       ${authorLink(e.username)}
       <span>${esc(formatDate(e.created_at))}${e.updated_at ? ' (modifié)' : ''}</span>
-      ${!e.is_published ? '<span class="draft-badge" title="Visible seulement par vous, tant qu’une nouvelle version n’a pas été publiée">Brouillon</span>' : ''}
       ${own ? `<button class="link-btn" data-essay-edit="${e.id}">modifier</button>
                <button class="link-btn" data-essay-del="${e.id}">supprimer</button>` : ''}
     </div>
@@ -3647,7 +3534,7 @@ function renderEssayBuilderHtml() {
     <button type="button" id="eb-add-link">+ Ajouter cette connexion</button>
     <div class="error-msg" id="eb-error"></div>
     <div class="eb-actions">
-      <button type="button" class="primary" id="eb-publish">${b.essayId ? 'Enregistrer' : 'Publier l’interprétation'}</button>
+      <button type="button" class="primary" id="eb-publish">Enregistrer</button>
       <button type="button" class="link-btn" id="eb-cancel">Annuler</button>
     </div>
   </div>`;
@@ -3813,6 +3700,10 @@ function bindEssays(container) {
 /* ------------------------------------ favoris & commentaires (partagé) --- */
 
 function socialFooter(kind, item) {
+  /* Une interprétation ne se commente pas et ne se compte pas : c'est la
+     mémoire de son auteur, personne d'autre ne la lit. Seules les reprises,
+     que les membres se montrent, gardent leurs favoris et leurs mots. */
+  if (kind !== 'cover') return '';
   const key = `${kind}:${item.id}`;
   const open = state.openComments.has(key);
   const nComments = item.comments ? item.comments.length : 0;
@@ -4257,7 +4148,6 @@ function annotationCard(a, targetQuote) {
     <div class="annotation-head">
       ${authorLink(a.username)}
       <span>${esc(formatDate(a.created_at))}${a.updated_at ? ' (modifié)' : ''}</span>
-      ${!a.is_published ? '<span class="draft-badge" title="Visible seulement par vous, tant qu’une nouvelle version n’a pas été publiée">Brouillon</span>' : ''}
       ${own ? `<button class="link-btn" data-edit="${a.id}">modifier</button>
                <button class="link-btn" data-del="${a.id}">supprimer</button>` : ''}
     </div>
@@ -4812,7 +4702,7 @@ function timelineEntry(kind, at, { where = '', body = '', badge = '' }) {
 const songLink = (slug, title) =>
   `<a href="/chanson/${encodeURIComponent(slug)}" data-link>${esc(title)}</a>`;
 
-const draftBadge = (it) => (it.is_published ? '' : '<span class="draft-badge">Brouillon</span>');
+const draftBadge = () => '';
 
 // Les connexions qui justifient une interprétation d'ensemble.
 function essayLinksHtml(e) {
@@ -4869,7 +4759,7 @@ async function pageProfile(username) {
   }
   if (stale(epoch)) return;
 
-  const { user, jeu, stats, annotations, essays, passageRefs, connections, versions, covers } = data;
+  const { user, jeu, stats, annotations, essays, passageRefs, connections, covers } = data;
   const isMe = state.user && state.user.username === user.username;
 
   // Tout ce qu'a fait ce membre devient une entrée datée, puis le fil se
@@ -4922,15 +4812,8 @@ async function pageProfile(username) {
       body: coverCard(c, { solo: true }),
     }));
   }
-  for (const v of versions) {
-    add(v.published_at, timelineEntry('publication', v.published_at, {
-      badge: `<span class="tl-version">n°${v.number}</span>`,
-      body: `<div class="tl-count">${v.item_count} bloc${v.item_count > 1 ? 's' : ''}</div>`,
-    }));
-  }
   entries.sort((x, y) => (x.at < y.at ? 1 : x.at > y.at ? -1 : 0));
 
-  const pending = stats.draft_count;
   app.innerHTML = `
     <div class="profile-head">
       ${avatarImg(user.username, 'profile-avatar')}
@@ -4939,28 +4822,11 @@ async function pageProfile(username) {
         title="Paramètres du compte" aria-label="Paramètres du compte">⚙</button>` : ''}
     </div>
     ${jeuHtml(jeu)}
-    ${isMe ? `<div class="profile-publish">
-      <button type="button" class="primary" id="publish-btn" ${pending ? '' : 'disabled'}>
-        Publier la version actuelle${pending ? ` · ${pending}` : ''}
-      </button>
-      <div class="error-msg" id="publish-error"></div>
-    </div>` : ''}
     ${data.restreint ? '' : `<div class="timeline">${entries.map((e) => e.html).join('')
       || '<p class="empty-note">Rien pour l’instant.</p>'}</div>`}`;
 
   if (isMe) {
     document.getElementById('settings-btn').onclick = () => openSettings();
-    const publishBtn = document.getElementById('publish-btn');
-    if (pending) publishBtn.onclick = async () => {
-      publishBtn.disabled = true;
-      try {
-        await api('/api/profile/publish', { method: 'POST' });
-        await pageProfile(username);
-      } catch (err) {
-        document.getElementById('publish-error').textContent = err.message;
-        publishBtn.disabled = false;
-      }
-    };
   }
   if (covers.length && state.access.reprises) {
     bindSocial(app, { reload: () => pageProfile(username), render: () => pageProfile(username) });

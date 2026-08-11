@@ -49,26 +49,32 @@ restent en base et s'affichent dans le fil des profils.
 La pastille **Reprises** n'apparaît sur une page de chanson qu'une fois cette
 page-là ouverte par l'échelon.
 
-La **page de profil est publique** : n'importe qui, même sans compte, y lit
-l'échelon d'un membre et les énigmes qu'il a percées : le nom de l'élément et
+La **page de profil est publique** pour ce qui est du jeu : n'importe qui,
+même sans compte, y lit l'échelon d'un membre et les énigmes qu'il a percées : le nom de l'élément et
 le nombre de signes trouvés, **jamais les réponses**. Un élément dont
 le libellé est lui-même la réponse d'un autre y reste masqué tant que *celui
 qui regarde* ne l'a pas ouvert de son côté, sans quoi un profil deviendrait
 une antisèche.
 
-En dessous, un **fil** : tout ce que ce membre a fait ici, du plus récent au
-plus ancien, daté entrée par entrée :
+En dessous, un **fil** que **seul son propriétaire voit** (les reprises
+exceptées, qui restent publiques) : tout ce qu'il a fait ici, du plus récent
+au plus ancien, daté entrée par entrée :
 interprétations (jusqu'au passage), interprétations d'ensemble, références,
 connexions, reprises, et les publications qui ont rendu tout cela visible.
 Ni compteurs, ni présentation, ni sections. Ce fil-là suit l'accès de celui
 qui regarde : sans les interprétations ouvertes, on ne voit que l'échelon et
-les énigmes. Le membre y trouve le bouton qui publie l'état actuel de ses
-interprétations : tant qu'il ne l'a pas pressé, ce qu'il écrit reste en
-brouillon, visible de lui seul.
+les énigmes. Il n'y a plus rien à publier : ce qu'il écrit est à lui dès la première
+frappe.
 
-Dimension sociale : tout est public en lecture, et chaque interprétation
-ou connexion peut recevoir des **favoris (♥)** et des **commentaires**
-des autres membres.
+**Les interprétations sont la mémoire de leur auteur.** Ce qu'on écrit sur un
+morceau n'est lu que par soi : ni un visiteur, ni un autre membre n'y a
+accès. Il n'y a donc ni fil public, ni favoris, ni commentaires, ni étape de
+publication — ce qu'on écrit est à soi, tout de suite. Les compteurs de la
+page des morceaux disent ce que **j'ai** écrit, et la densité d'un passage
+compte **mes** lectures.
+
+Les **reprises**, elles, restent ce qu'elles ont toujours été : les membres
+se les montrent, avec leurs **favoris (♥)** et leurs **commentaires**.
 
 ## La page « 57 »
 
@@ -279,60 +285,55 @@ janvier** (elle raconte l'année écoulée). Hors fenêtre, pas de formulaire :
 la carte dit la date, et le serveur refuse en 403 ce que l'interface ne
 propose pas. Le reste du temps, on vit ; le jour venu, on raconte.
 
-## Les cinq espaces, et qui les lit
+## Les cinq branches, et qui les lit
 
-Chacun porte cinq espaces dans Pense Mieux. Ils existent d'avance, ne
-s'ouvrent pas, ne se referment pas : on les nourrit. Ce qui change de l'un à
-l'autre, c'est **qui les lit** — et c'est la règle centrale de la plateforme :
+Chacun porte cinq branches de réflexion dans Pense Mieux. Elles existent
+d'avance, ne s'ouvrent pas, ne se referment pas : on les nourrit.
 
-| axe | espace | bloc | qui le lit |
-|---|---|---|---|
-| `psy` | Ma psychologie | personnel | **toi seul** |
-| `moi` | Le moi harmonieux | personnel | **toi seul** |
-| `univers` | Mon multivers | personnel | **toi seul** |
-| `philo` | Ma philosophie | avec tes carrés | les As de tes carrés |
-| `societe` | Ma société harmonieuse | avec tes carrés | les As de tes carrés |
+| axe | branche |
+|---|---|
+| `psy` | Ma psychologie |
+| `moi` | Le moi harmonieux |
+| `univers` | Mon multivers |
+| `philo` | Ma philosophie |
+| `societe` | Ma société harmonieuse |
 
-Les deux premiers **se répondent en miroir** : la psychologie dit le présent
+Les deux premières **se répondent en miroir** : la psychologie dit le présent
 (comment on fonctionne, ce qu'on constate de soi), le moi harmonieux dit vers
 quoi l'on tend. Chaque page porte une ligne « En regard » qui mène à l'autre.
-Ils ne sortent jamais : on ne travaille pas son rapport à soi sous le regard
-des autres.
 
-Le multivers est **redevenu personnel** : les modèles d'univers ne se
-travaillent ni dans un carré ni sous le regard de la plateforme. La galerie
-publique n'existe plus, et l'axe `univers` n'est plus une matière de carré.
+**Il n'y a plus de privé ni de public entre une personne et son carré.** Les
+trois As de son carré lisent les **cinq** branches — et tout ce qu'elle y
+range — et peuvent y **répondre**. Hors de ce carré, rien ne sort : ni pour
+un autre membre de la plateforme, ni pour un visiteur, ni pour les carrés où
+elle aide les autres.
 
-Les deux derniers sont les **matières du travail commun** : ce sont les
-seules choses qu'un As voit chez un autre, et les seules raisons d'être d'un
-carré. Chaque espace le dit sur sa propre page, avant qu'on y écrive.
-
-**Tout se range dans un espace.** Une réflexion ne naît plus hors-sol : elle
-s'ouvre DANS un des cinq espaces, ou dans une **catégorie** qu'on y a créée
+**Tout se range dans une branche.** Une réflexion ne naît pas hors-sol : elle
+s'ouvre DANS une des cinq branches, ou dans une **catégorie** qu'on y a créée
 (`reflection_trees.parent_id`, `genre`). Et tout ce qui est rangé **se lit
-comme son espace racine** : une réflexion rangée dans la philosophie est lue
-par les carrés, une réflexion rangée dans le multivers reste à son porteur.
-Chaque espace a en outre **sa propre cartographie** : ses catégories, ses
-réflexions et les nourritures qui les relient, pour voir la trajectoire de
-ses pensées dans cette branche-là.
+comme sa branche racine**. Chaque branche a en outre **sa propre
+cartographie** : ses catégories, ses réflexions et les nourritures qui les
+relient, pour voir la trajectoire de ses pensées dans cette branche-là.
 
-Pense Mieux **ne parle que des réflexions de la personne** : pas de vitrine
-du carré sur sa page, une recherche qui ne fouille que chez soi, un sélecteur
-de nourriture qui ne propose que ses propres réflexions. Ce qui se vit avec
-un carré se regarde sur la page du carré.
+Techniquement, une branche **est une réflexion** : `reflection_trees` porte
+`axe` (`psy` | `moi` | `univers` | `philo` | `societe`), et des index uniques
+partiels garantissent l'unicité de chacune. Elles héritent donc, sans une
+ligne de moteur nouveau, des pensées emboîtées, des liens de nourriture, du
+vocal, du rendu et de la recherche. Une réflexion se lit par un chemin
+unique, `/reflexion/<id>`, et c'est le serveur qui dit ce que le lecteur a le
+droit d'y faire.
 
-Techniquement, un espace **est une réflexion** : `reflection_trees` porte
-`axe` (`psy` | `moi` | `philo` | `univers` | `societe`) et `carre_id` (nul
-pour un espace personnel), et des index uniques partiels garantissent
-l'unicité de chacun. Ils héritent donc, sans une ligne de moteur nouveau, des
-pensées emboîtées, des liens de nourriture, du vocal, du rendu et de la
-recherche. Une réflexion se lit par un chemin unique, `/reflexion/<id>`, quel
-que soit l'endroit où elle vit : c'est le serveur qui dit sa nature, son axe,
-son carré, et ce que le lecteur a le droit d'y faire.
+## Le carré d'As : trois personnes qui pensent avec toi
 
-## Penser sous le regard de son carré
+**Un carré est celui d'UNE personne.** Elle le fonde — un seul, le sien — et
+elle y cherche **trois As qui vont l'aider** à harmoniser ses cinq branches.
+Le carré n'écrit rien « en commun » à côté : il entre chez son porteur.
 
-Personne n'écrit à la place d'un autre. Chez quelqu'un, on ne peut que
+Chacun a donc son propre carré, et se retrouve dans celui des autres pour les
+aider à leur tour. C'est **à sens unique** : entrer dans le carré de
+quelqu'un ne lui ouvre rien de chez soi.
+
+Personne n'écrit à la place du porteur. Chez lui, on ne peut que
 **répondre**, et une réponse dit toujours ce qu'elle vient faire
 (`reflection_branches.reponse`) :
 
@@ -343,34 +344,26 @@ Personne n'écrit à la place d'un autre. Chez quelqu'un, on ne peut que
 
 Une réponse peut être écrite, dite (avec son vocal et sa vidéo) ou porter une
 **vidéo-réponse** YouTube. Elle reste à celui qui l'a déposée — lui seul la
-retouche — et le porteur garde le dernier mot chez lui. Ce que le carré
-apporte se lit **dans la réflexion même**, signé et étiqueté : Pense Mieux
-n'en fait pas de vitrine.
+retouche — et le porteur garde le dernier mot chez lui. Ce qu'on lui a
+répondu reste chez lui même si l'As qui l'a écrit s'en va.
 
-La règle de nourriture suit la racine : ce qui est rangé dans ma philosophie
-ou ma société peut nourrir un arbre de mon carré (il le lit déjà) ; ma
-psychologie, mon moi harmonieux, mon multivers et ce qu'ils rangent, jamais.
+La nourriture d'une pensée par une autre reste, elle, **entièrement chez
+soi** : on ne tire jamais dans ses propres branches un extrait de ce qu'on
+lit chez quelqu'un d'autre.
 
-Le **Carré d'As** (échelon 5) n'existe que pour **deux matières** : la
-philosophie et la société harmonieuse. Un As peut vivre dans **plusieurs
-carrés** (sept au plus). Un carré de quatre n'a ni rôle, ni domaine, ni
-note, et sa page est **cinq blocs** : le bloc du CARRÉ (les deux arbres que
-les quatre écrivent ensemble — chacun greffe sur la pensée des autres, sans
-jamais la retoucher), puis un bloc par As avec sa philosophie et sa société
-harmonieuse — c'est de là qu'on entre chez un autre pour lui répondre. Rien
-d'autre ne s'y voit : ni psychologie, ni moi harmonieux, ni multivers, ni
-réflexions personnelles. En pied de page, le lien du salon Discord (le lieu
-de parole du carré, que le Brainstorm réutilise) et la sortie.
+La page principale du Carré d'As centralise **mon carré**, **les carrés où
+j'aide**, le **salon de recrutement** (les As s'annoncent d'un mot ; le
+porteur d'un carré incomplet invite ; on n'entre que voulu des deux côtés),
+les **carrés à compléter** (cherchables au clavier) et la **fondation**. La
+page d'un carré montre son porteur, ses As, et ses **cinq branches** : on y
+entre pour lui donner des variables de plus. Un carré qui n'est pas le sien
+ne montre que sa façade. Le porteur ne quitte pas son propre carré ; les As
+qui l'aident s'en vont quand ils veulent.
 
-La page principale du Carré d'As centralise **mes carrés**, le **salon de
-recrutement**, les **carrés à compléter** (cherchables au clavier) et la
-**fondation**. Un carré qui n'est pas le sien ne montre que sa façade : son
-nom et ses As. Les missions n'ont plus de page.
-
-Le **Brainstorm** (échelon 6) est la place des lives : un **carré complet**
-(quatre As) annonce un brainstorming sur YouTube, Twitch ou TikTok, en
-choisissant lequel de ses carrés le porte et lequel de ses As est **l'hôte**
-(celui qui tient l'antenne). Les As du carré voient sur la page du live le
+Le **Brainstorm** (échelon 6) est la place des lives : **le porteur d'un
+carré complet** annonce un brainstorming sur YouTube, Twitch ou TikTok — sur
+le sujet qu'il choisit, celui sur lequel il veut que son carré l'aide à
+réfléchir. C'est lui qui tient l'antenne, et ses trois As pensent avec lui. Les As du carré voient sur la page du live le
 lien de leur **salon Discord** ; les autres ne le voient pas. La salle
 propose des **réflexions** et **vote** ; le carré voit monter les plus
 soutenues du moment. Le classement pondère chaque vote par son âge (dernière

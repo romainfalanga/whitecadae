@@ -170,8 +170,6 @@ async function handleApi(request, env, url) {
   if ((p = route('POST', '/api/carre/:id/quitter'))) return carreLeave(request, env, +p[0]);
   if ((p = route('GET', '/api/carre/:id/conversation'))) return carreChatList(request, env, +p[0]);
   if ((p = route('POST', '/api/carre/:id/conversation'))) return carreChatPost(request, env, +p[0]);
-  // les trois matières d'un carré : /api/carre/:id/axe/philo, /univers, /societe
-  if ((p = route('GET', '/api/carre/:id/axe/:axe'))) return carreAxe(request, env, +p[0], p[1]);
 
   if (route('GET', '/api/brainstorms')) return brainstormsList(request, env, url);
   if (route('POST', '/api/brainstorms')) return brainstormsCreate(request, env);
@@ -199,9 +197,8 @@ async function handleApi(request, env, url) {
   }
 
   // --- lecture
-  if (route('GET', '/api/albums')) return listAlbums(env);
-  if (route('GET', '/api/corpus')) return getCorpus(env);
-  if (route('GET', '/api/feed')) return getFeed(env, request, url);
+  if (route('GET', '/api/albums')) return listAlbums(env, request);
+  if (route('GET', '/api/corpus')) return getCorpus(env, request);
   if (route('GET', '/api/covers/feed')) return getCoverFeed(env, request, url);
   if (route('GET', '/api/covers')) return listCovers(env, request);
   if ((p = route('GET', '/api/songs/:slug/covers'))) return getSongCovers(env, request, p[0]);
@@ -225,7 +222,6 @@ async function handleApi(request, env, url) {
   if (route('POST', '/api/favorites')) return toggleFavorite(request, env);
   if (route('POST', '/api/comments')) return createComment(request, env);
   if ((p = route('DELETE', '/api/comments/:id'))) return deleteComment(request, env, +p[0]);
-  if (route('POST', '/api/profile/publish')) return publishVersion(request, env);
 
   // --- administration
   if (route('POST', '/api/admin/albums')) return adminCreateAlbum(request, env);
@@ -709,7 +705,9 @@ async function me(request, env) {
 // Toutes les phrases de tous les morceaux (hors balises de section et
 // lignes vides) : sert au constructeur d'interprétations d'ensemble et
 // au moteur de suggestions d'échos.
-async function getCorpus(env) {
+async function getCorpus(env, request) {
+  const viewer = await getUser(request, env);
+  const viewerId = viewer ? viewer.id : 0;
   const songs = (await env.DB.prepare(
     'SELECT id, title, slug FROM songs ORDER BY title'
   ).all()).results;
@@ -718,17 +716,17 @@ async function getCorpus(env) {
       WHERE text <> '' AND text NOT LIKE '[%' ORDER BY song_id, line_number`
   ).all()).results;
 
-  // Nombre d'interprétations couvrant chaque phrase : une référence interne
-  // ne peut viser qu'un passage déjà interprété : et publié, puisqu'une
-  // référence relie une lecture publique à une autre lecture publique.
+  // Nombre de MES interprétations couvrant chaque phrase : une référence
+  // interne ne vise qu'un passage que j'ai déjà interprété, puisque je suis
+  // le seul à lire ce que j'écris.
   const spans = (await env.DB.prepare(
     `SELECT a.song_id, ls.line_number AS from_no,
             COALESCE(le.line_number, ls.line_number) AS to_no
        FROM annotations a
        JOIN lyric_lines ls ON ls.id = a.line_id
        LEFT JOIN lyric_lines le ON le.id = a.end_line_id
-      WHERE a.line_id IS NOT NULL AND a.is_published = 1`
-  ).all()).results;
+      WHERE a.line_id IS NOT NULL AND a.user_id = ?1`
+  ).bind(viewerId).all()).results;
 
   // tableau de différences par morceau : O(phrases + interprétations)
   const deltas = new Map();
@@ -765,46 +763,20 @@ async function getCorpus(env) {
   return json({ songs, lines });
 }
 
-// Le fil : les interprétations publiées, de la plus récente à la plus
-// ancienne, avec de quoi afficher le passage visé sans charger le morceau.
-// On demande un élément de plus que la page pour savoir s'il en reste.
-async function getFeed(env, request, url) {
-  const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 5, 1), 30);
-  const offset = Math.max(Number(url.searchParams.get('offset')) || 0, 0);
-
-  const items = (await env.DB.prepare(
-    `SELECT a.id, a.user_id, a.content, a.created_at, a.updated_at, a.grid_number,
-            a.target_type, a.word_start, a.word_end,
-            u.username, s.title AS song_title, s.slug AS song_slug,
-            l.text AS line_text, le.text AS end_line_text
-       FROM annotations a
-       JOIN users u ON u.id = a.user_id
-       JOIN songs s ON s.id = a.song_id
-       LEFT JOIN lyric_lines l ON l.id = a.line_id
-       LEFT JOIN lyric_lines le ON le.id = a.end_line_id
-      WHERE a.is_published = 1
-      ORDER BY a.created_at DESC, a.id DESC
-      LIMIT ?1 OFFSET ?2`
-  ).bind(limit + 1, offset).all()).results;
-
-  const more = items.length > limit;
-  if (more) items.pop();
-
+async function listAlbums(env, request) {
   const viewer = await getUser(request, env);
-  await attachSocial(env, viewer, 'annotation', 'SELECT id FROM annotations WHERE is_published = 1', items);
-  return json({ items, more });
-}
-
-async function listAlbums(env) {
+  const viewerId = viewer ? viewer.id : 0;
   const albums = (await env.DB.prepare(
     'SELECT id, title, slug, release_date, is_single FROM albums ORDER BY position, release_date'
   ).all()).results;
+  // le compteur dit ce que MOI j'ai écrit sur ce morceau : c'est ma mémoire
+  // qui se chiffre, pas celle des autres
   const songs = (await env.DB.prepare(
     `SELECT s.id, s.album_id, s.title, s.slug, s.track_number,
-            (SELECT COUNT(*) FROM annotations a WHERE a.song_id = s.id) AS annotation_count,
+            (SELECT COUNT(*) FROM annotations a WHERE a.song_id = s.id AND a.user_id = ?1) AS annotation_count,
             (SELECT COUNT(*) FROM lyric_lines l WHERE l.song_id = s.id AND l.text <> '') AS line_count
        FROM songs s ORDER BY s.track_number, s.title`
-  ).all()).results;
+  ).bind(viewerId).all()).results;
   for (const album of albums) {
     album.is_single = !!album.is_single;
     album.songs = songs.filter((s) => s.album_id === album.id);
@@ -815,8 +787,11 @@ async function listAlbums(env) {
 
 async function getSong(env, request, slug) {
   await ensureReferenceColumns(env);
-  // Une interprétation non publiée n'est visible que par son auteur : le
-  // reste du monde ne voit que ce qui a été intégré à une version publiée.
+  /* Une interprétation n'appartient qu'à celui qui l'écrit. C'est SA mémoire
+     de ce morceau : ce qu'il y a lu, ce qu'il y a relié. Personne d'autre ne
+     la voit — ni un visiteur, ni un autre membre. Toutes les requêtes qui
+     suivent sont donc bornées à `viewerId`, et un visiteur sans compte lit
+     les paroles sans rien d'autre. */
   const viewer = await getUser(request, env);
   const viewerId = viewer ? viewer.id : 0;
 
@@ -839,7 +814,7 @@ async function getSong(env, request, slug) {
     `SELECT a.id, a.user_id, a.target_type, a.line_id, a.word_start, a.word_end, a.end_line_id,
             a.content, a.created_at, a.updated_at, a.is_published, a.grid_number, u.username
        FROM annotations a JOIN users u ON u.id = a.user_id
-      WHERE a.song_id = ?1 AND (a.is_published = 1 OR a.user_id = ?2)
+      WHERE a.song_id = ?1 AND a.user_id = ?2
       ORDER BY a.created_at`
   ).bind(song.id, viewerId).all()).results;
 
@@ -852,9 +827,9 @@ async function getSong(env, request, slug) {
        JOIN users u ON u.id = c.user_id
        JOIN songs sa ON sa.id = c.song_a_id
        JOIN songs sb ON sb.id = c.song_b_id
-      WHERE c.song_a_id = ?1 OR c.song_b_id = ?1
+      WHERE (c.song_a_id = ?1 OR c.song_b_id = ?1) AND c.user_id = ?2
       ORDER BY c.created_at`
-  ).bind(song.id).all()).results;
+  ).bind(song.id, viewerId).all()).results;
 
   const allSongs = (await env.DB.prepare(
     'SELECT id, title, slug FROM songs ORDER BY title'
@@ -878,7 +853,7 @@ async function getSong(env, request, slug) {
        LEFT JOIN lyric_lines rle ON rle.id = r.ref_end_line_id
        LEFT JOIN lyric_lines sl ON sl.id = a.line_id
        LEFT JOIN lyric_lines sle ON sle.id = a.end_line_id
-      WHERE r.ref_song_id = ?1 AND a.song_id <> ?1 AND (a.is_published = 1 OR a.user_id = ?2)
+      WHERE r.ref_song_id = ?1 AND a.song_id <> ?1 AND a.user_id = ?2
       ORDER BY a.created_at`
   ).bind(song.id, viewerId).all()).results;
 
@@ -892,9 +867,9 @@ async function getSong(env, request, slug) {
        FROM passage_references pr
        JOIN users u ON u.id = pr.user_id
        LEFT JOIN songs rs ON rs.id = pr.ref_song_id
-      WHERE pr.song_id = ?1
+      WHERE pr.song_id = ?1 AND pr.user_id = ?2
       ORDER BY pr.created_at`
-  ).bind(song.id).all()).results;
+  ).bind(song.id, viewerId).all()).results;
 
   // Références venues d'ailleurs et qui pointent vers ce morceau.
   const inboundRefs = (await env.DB.prepare(
@@ -912,15 +887,15 @@ async function getSong(env, request, slug) {
        LEFT JOIN lyric_lines rle ON rle.id = pr.ref_end_line_id
        LEFT JOIN lyric_lines sl ON sl.id = pr.line_id
        LEFT JOIN lyric_lines sle ON sle.id = pr.end_line_id
-      WHERE pr.ref_song_id = ?1 AND pr.song_id <> ?1
+      WHERE pr.ref_song_id = ?1 AND pr.song_id <> ?1 AND pr.user_id = ?2
       ORDER BY pr.created_at`
-  ).bind(song.id).all()).results;
+  ).bind(song.id, viewerId).all()).results;
 
   // Interprétations d'ensemble et leurs connexions entre blocs.
   const essays = (await env.DB.prepare(
     `SELECT e.id, e.user_id, e.content, e.created_at, e.updated_at, e.is_published, u.username
        FROM essays e JOIN users u ON u.id = e.user_id
-      WHERE e.song_id = ?1 AND (e.is_published = 1 OR e.user_id = ?2)
+      WHERE e.song_id = ?1 AND e.user_id = ?2
       ORDER BY e.created_at`
   ).bind(song.id, viewerId).all()).results;
   const essayLinks = (await env.DB.prepare(
@@ -934,7 +909,7 @@ async function getSong(env, request, slug) {
        JOIN songs sf ON sf.id = lf.song_id
        JOIN lyric_lines lt ON lt.id = el.to_line_id
        JOIN songs st ON st.id = lt.song_id
-      WHERE el.essay_id IN (SELECT id FROM essays WHERE song_id = ${song.id})
+      WHERE el.essay_id IN (SELECT id FROM essays WHERE song_id = ${song.id} AND user_id = ${viewerId})
       ORDER BY el.essay_id, el.position`
   ).all()).results;
   for (const e of essays) e.links = essayLinks.filter((l) => l.essay_id === e.id);
@@ -951,23 +926,11 @@ async function getSong(env, request, slug) {
             r.ref_song_id, r.ref_line_id, r.ref_end_line_id, rs.slug AS ref_song_slug
        FROM annotation_references r
        LEFT JOIN songs rs ON rs.id = r.ref_song_id
-      WHERE r.annotation_id IN (SELECT id FROM annotations WHERE song_id = ?1)
+      WHERE r.annotation_id IN (SELECT id FROM annotations WHERE song_id = ?1 AND user_id = ?2)
       ORDER BY r.annotation_id, r.position`
-  ).bind(song.id).all()).results;
+  ).bind(song.id, viewerId).all()).results;
   for (const a of annotations) {
     a.references = refs.filter((r) => r.annotation_id === a.id);
-  }
-
-  // Données sociales : favoris et commentaires des interprétations et connexions.
-  await attachSocial(env, viewer, 'annotation',
-    `SELECT id FROM annotations WHERE song_id = ${song.id}`, annotations);
-  await attachSocial(env, viewer, 'connection',
-    `SELECT id FROM song_connections WHERE song_a_id = ${song.id} OR song_b_id = ${song.id}`, connections);
-  await attachSocial(env, viewer, 'essay',
-    `SELECT id FROM essays WHERE song_id = ${song.id}`, essays);
-  if (inbound.length) {
-    await attachSocial(env, viewer, 'annotation',
-      `SELECT annotation_id AS id FROM annotation_references WHERE ref_song_id = ${song.id}`, inbound);
   }
 
   return json({ song, lines, annotations, connections, essays, inbound, passageRefs, inboundRefs, coverCount, allSongs });
@@ -1066,7 +1029,7 @@ async function getProfile(env, request, username) {
        LEFT JOIN albums al ON al.id = s.album_id
        LEFT JOIN lyric_lines l ON l.id = a.line_id
        LEFT JOIN lyric_lines le ON le.id = a.end_line_id
-      WHERE a.user_id = ?1 AND (a.is_published = 1 OR ?2 = 1)
+      WHERE a.user_id = ?1 AND ?2 = 1
       ORDER BY album_position, s.track_number,
                CASE WHEN a.line_id IS NULL THEN 0 ELSE 1 END,
                COALESCE(l.line_number, 0), COALESCE(a.word_start, -1), a.created_at`
@@ -1089,7 +1052,7 @@ async function getProfile(env, request, username) {
        FROM essays e
        JOIN songs s ON s.id = e.song_id
        LEFT JOIN albums al ON al.id = s.album_id
-      WHERE e.user_id = ?1 AND (e.is_published = 1 OR ?2 = 1)
+      WHERE e.user_id = ?1 AND ?2 = 1
       ORDER BY album_position, s.track_number, e.created_at`
   ).bind(user.id, isOwner).all()).results;
   const essayLinks = (await env.DB.prepare(
@@ -1122,9 +1085,9 @@ async function getProfile(env, request, username) {
        LEFT JOIN lyric_lines l ON l.id = pr.line_id
        LEFT JOIN lyric_lines le ON le.id = pr.end_line_id
        LEFT JOIN songs rs ON rs.id = pr.ref_song_id
-      WHERE pr.user_id = ?1
+      WHERE pr.user_id = ?1 AND ?2 = 1
       ORDER BY pr.created_at DESC`
-  ).bind(user.id).all()).results;
+  ).bind(user.id, isOwner).all()).results;
 
   const connections = (await env.DB.prepare(
     `SELECT c.id, c.explanation, c.created_at,
@@ -1133,8 +1096,8 @@ async function getProfile(env, request, username) {
        FROM song_connections c
        JOIN songs sa ON sa.id = c.song_a_id
        JOIN songs sb ON sb.id = c.song_b_id
-      WHERE c.user_id = ?1 ORDER BY c.created_at`
-  ).bind(user.id).all()).results;
+      WHERE c.user_id = ?1 AND ?2 = 1 ORDER BY c.created_at`
+  ).bind(user.id, isOwner).all()).results;
 
   const covers = (await env.DB.prepare(
     `SELECT c.id, c.user_id, c.title, c.url, c.description, c.created_at, u.username,
@@ -1146,40 +1109,22 @@ async function getProfile(env, request, username) {
   ).bind(user.id).all()).results;
   await attachSocial(env, viewer, 'cover', `SELECT id FROM covers WHERE user_id = ${user.id}`, covers);
 
-  // Les compteurs publics ne portent que sur ce qui a été publié ; le nombre
-  // de brouillons en attente est renvoyé à part (n'a de sens que pour l'auteur).
+  /* Les compteurs disent ce que ce membre a fait, sans rien en montrer :
+     ses interprétations sont sa mémoire, seules ses reprises se lisent. */
   const stats = await env.DB.prepare(
     `SELECT
-       (SELECT COUNT(*) FROM annotations WHERE user_id = ?1 AND is_published = 1) AS annotations,
-       (SELECT COUNT(*) FROM essays WHERE user_id = ?1 AND is_published = 1) AS essays,
+       (SELECT COUNT(*) FROM annotations WHERE user_id = ?1) AS annotations,
+       (SELECT COUNT(*) FROM essays WHERE user_id = ?1) AS essays,
        (SELECT COUNT(*) FROM song_connections WHERE user_id = ?1) AS connections,
        (SELECT COUNT(*) FROM covers WHERE user_id = ?1) AS covers,
-       (SELECT COUNT(*) FROM comments WHERE user_id = ?1) AS comments,
-       (SELECT COUNT(*) FROM annotations WHERE user_id = ?1 AND is_published = 0) +
-       (SELECT COUNT(*) FROM essays WHERE user_id = ?1 AND is_published = 0) AS draft_count,
-       (SELECT COUNT(*) FROM favorites f WHERE f.target_kind = 'annotation'
-          AND f.target_id IN (SELECT id FROM annotations WHERE user_id = ?1)) +
-       (SELECT COUNT(*) FROM favorites f WHERE f.target_kind = 'essay'
-          AND f.target_id IN (SELECT id FROM essays WHERE user_id = ?1)) +
-       (SELECT COUNT(*) FROM favorites f WHERE f.target_kind = 'connection'
-          AND f.target_id IN (SELECT id FROM song_connections WHERE user_id = ?1)) +
        (SELECT COUNT(*) FROM favorites f WHERE f.target_kind = 'cover'
           AND f.target_id IN (SELECT id FROM covers WHERE user_id = ?1)) AS favorites_received`
   ).bind(user.id).first();
 
-  // Historique des publications : les versions successives, la plus récente
-  // en tête, avec le nombre de blocs qu'elle a rendus publics.
-  const versions = (await env.DB.prepare(
-    `SELECT v.id, v.number, v.published_at,
-            (SELECT COUNT(*) FROM annotations WHERE version_id = v.id) +
-            (SELECT COUNT(*) FROM essays WHERE version_id = v.id) AS item_count
-       FROM versions v WHERE v.user_id = ?1 ORDER BY v.number DESC`
-  ).bind(user.id).all()).results;
-
   return json({
     user: { username: user.username, created_at: user.created_at, is_admin: !!user.is_admin },
     jeu,
-    stats, annotations, essays, passageRefs, connections, versions, covers,
+    stats, annotations, essays, passageRefs, connections, covers,
   });
 }
 
@@ -1587,46 +1532,6 @@ async function deleteCover(request, env, id) {
   return json({ ok: true });
 }
 
-/* ------------------------------------------------------------- publication */
-
-// Rend publiques toutes les interprétations et interprétations d'ensemble
-// actuellement en brouillon pour ce membre, regroupées en une nouvelle version.
-async function publishVersion(request, env) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
-
-  const pending = await env.DB.prepare(
-    `SELECT
-       (SELECT COUNT(*) FROM annotations WHERE user_id = ?1 AND is_published = 0) +
-       (SELECT COUNT(*) FROM essays WHERE user_id = ?1 AND is_published = 0) AS n`
-  ).bind(user.id).first();
-  if (!pending.n) return json({ error: 'Aucune modification en attente de publication.' }, 400);
-
-  const last = await env.DB.prepare(
-    'SELECT COALESCE(MAX(number), 0) AS n FROM versions WHERE user_id = ?1'
-  ).bind(user.id).first();
-  const number = last.n + 1;
-
-  const result = await env.DB.prepare(
-    'INSERT INTO versions (user_id, number) VALUES (?1, ?2)'
-  ).bind(user.id, number).run();
-  const versionId = result.meta.last_row_id;
-
-  await env.DB.batch([
-    env.DB.prepare(
-      'UPDATE annotations SET is_published = 1, version_id = ?1 WHERE user_id = ?2 AND is_published = 0'
-    ).bind(versionId, user.id),
-    env.DB.prepare(
-      'UPDATE essays SET is_published = 1, version_id = ?1 WHERE user_id = ?2 AND is_published = 0'
-    ).bind(versionId, user.id),
-  ]);
-
-  const version = await env.DB.prepare(
-    'SELECT id, number, published_at FROM versions WHERE id = ?1'
-  ).bind(versionId).first();
-  return json({ version, count: pending.n }, 201);
-}
-
 /* ------------------------------------------------------------------ compte */
 
 async function updateUsername(request, env) {
@@ -1978,7 +1883,12 @@ async function deletePassageReference(request, env, id) {
 
 /* ------------------------------------------------- favoris & commentaires */
 
-const FAVORITE_KINDS = { annotation: 'annotations', connection: 'song_connections', essay: 'essays', cover: 'covers' };
+/* Les favoris et les commentaires ne portent plus que sur les REPRISES : ce
+   sont les seules choses que les membres se montrent. Une interprétation est
+   la mémoire de son auteur — elle ne se commente pas, elle ne se compte pas.
+   Les lignes des anciens favoris et commentaires restent en base : plus
+   personne ne les lit. */
+const FAVORITE_KINDS = { cover: 'covers' };
 
 async function targetExists(env, kind, id) {
   const table = FAVORITE_KINDS[kind];
@@ -2380,11 +2290,11 @@ async function ensureHautesTables(env) {
   // Le réglage de voix : ce que la chaîne audio applique au timbre de chacun.
   await ajouteColonne(env, 'users', 'voix', 'ALTER TABLE users ADD COLUMN voix TEXT');
 
-  // Un seul tronc par axe, par personne et par outil ; dans un carré, un par
-  // As pour les axes personnels (psychologie, moi) et un seul pour les axes
-  // communs (philosophie, univers, société). Ces index sont partiels : chacun
-  // naît avant le premier arbre de son axe, donc aucun conflit n'est possible
-  // sur une base en service.
+  /* Un seul espace par axe, par personne et par outil. Les index partiels
+     qui suivent et qui portent sur `carre_id` datent du temps où un carré
+     écrivait en commun : plus aucun arbre n'a de carré, ils ne s'appliquent
+     donc à rien. On ne les défait pas — un index qui ne trouve jamais de
+     ligne ne coûte rien, et défaire est toujours plus risqué que laisser. */
   for (const sql of [
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_trees_axe_perso ON reflection_trees(user_id, kind, axe)
        WHERE axe IS NOT NULL AND carre_id IS NULL`,
@@ -2436,6 +2346,34 @@ async function ensureHautesTables(env) {
             title = title || ' · ' || COALESCE((SELECT nom FROM carres WHERE id = carre_id), 'un carré'),
             carre_id = NULL
       WHERE carre_id IS NOT NULL AND axe = 'univers'`
+  ).run();
+
+  /* Un carré est celui d'UNE personne : celle qui l'a fondé. La colonne
+     naît ici, et se remplit avec le premier entré — c'est lui qui l'avait
+     créé. */
+  await ajouteColonne(env, 'carres', 'createur_id',
+    'ALTER TABLE carres ADD COLUMN createur_id INTEGER');
+  await env.DB.prepare(
+    `UPDATE carres SET createur_id = (
+       SELECT m.user_id FROM carre_membres m WHERE m.carre_id = carres.id
+        ORDER BY m.joined_at, m.rowid LIMIT 1)
+      WHERE createur_id IS NULL`
+  ).run();
+  await env.DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_carres_createur ON carres(createur_id)'
+  ).run();
+
+  /* Un carré n'écrit plus rien en commun : il entre chez son porteur. Les
+     arbres qui appartenaient à un carré redescendent donc chez celui qui les
+     avait ouverts, avec le nom du carré accolé — ce qui y a été écrit reste
+     lisible, et par son auteur. Idempotent : au second passage il n'y en a
+     plus. */
+  await env.DB.prepare(
+    `UPDATE reflection_trees
+        SET axe = NULL,
+            title = title || ' · ' || COALESCE((SELECT nom FROM carres WHERE id = carre_id), 'un carré'),
+            carre_id = NULL
+      WHERE carre_id IS NOT NULL`
   ).run();
 
   hautesTablesReady = true;
@@ -2544,59 +2482,40 @@ function urlYoutubeValide(url) {
    c'est là que le champ des possibles s'ouvre, un carré de plus étant une
    version de plus de soi.                                                  */
 
-// Les axes communs d'un carré. Ces listes viennent de nos propres
-// constantes : leur interpolation en SQL est sans danger.
-const AXES_COMMUNS = AXES_ORDRE.filter((a) => AXES[a].commun);
-const AXES_PARTAGES = AXES_ORDRE.filter((a) => AXES[a].partage === 'carre');
-const SQL_COMMUNS = AXES_COMMUNS.map((a) => `'${a}'`).join(',');
-const SQL_PARTAGES = AXES_PARTAGES.map((a) => `'${a}'`).join(',');
-
-// Ce qu'un axe laisse voir. La psychologie, le moi harmonieux et le multivers
-// ne sortent jamais ; la philosophie et la société harmonieuse sont la
-// matière du carré.
-function axePartage(axe) {
-  return !!(axe && AXES[axe] && AXES[axe].partage === 'carre');
+/* Les As de MON carré : les trois personnes que j'ai choisies pour m'aider.
+   Elles lisent mes cinq branches et tout ce que j'y range, et elles peuvent y
+   répondre. C'est la seule ouverture de Pense Mieux, et elle est à sens
+   unique : mon carré est là pour moi, pas l'inverse. Chacun a le sien. */
+async function estDeMonCarre(env, lecteurId, porteurId) {
+  if (!lecteurId || !porteurId || lecteurId === porteurId) return false;
+  const row = await env.DB.prepare(
+    `SELECT 1 AS x FROM carres c
+       JOIN carre_membres m ON m.carre_id = c.id AND m.user_id = ?1
+      WHERE c.createur_id = ?2 LIMIT 1`
+  ).bind(lecteurId, porteurId).first();
+  return !!row;
 }
 
-/* L'axe effectif d'un arbre : le sien, ou celui de l'espace racine dont il
-   descend. Une réflexion rangée dans « Ma philosophie » se lit comme la
-   philosophie ; rangée dans le multivers ou une catégorie du multivers, elle
-   reste à son porteur. C'est l'espace qui décide, jamais la réflexion. */
-async function axeRacine(env, tree) {
-  let t = tree;
-  for (let garde = 0; garde < 12 && t && !t.axe && t.parent_id; garde++) {
-    t = await env.DB.prepare(
-      'SELECT id, axe, parent_id FROM reflection_trees WHERE id = ?1'
-    ).bind(t.parent_id).first();
-  }
-  return t && t.axe ? t.axe : null;
-}
-
-function titreAxe(axe, nomCarre) {
-  return nomCarre ? AXES[axe].titreCarre(nomCarre) : AXES[axe].titre;
+// Une branche porte le nom de son axe : il ne lui appartient pas.
+function titreAxe(axe) {
+  return AXES[axe].titre;
 }
 
 // Le tronc, créé au premier regard s'il manque. Deux requêtes simultanées ne
 // peuvent pas en créer deux : les index uniques partiels tiennent, et
 // INSERT OR IGNORE laisse passer le perdant sans erreur.
-async function assureTronc(env, { userId, kind, axe, carreId = null, nomCarre = null }) {
-  // les quatre paramètres sont toujours cités : D1 exige que la requête les
-  // consomme tous, même quand la condition n'en a pas besoin
-  const ou = carreId == null
-    ? 'user_id = ?1 AND kind = ?2 AND axe = ?3 AND carre_id IS NULL AND ?4 IS NULL'
-    : (AXES[axe].commun
-      ? 'kind = ?2 AND axe = ?3 AND carre_id = ?4 AND ?1 IS NOT NULL'
-      : 'user_id = ?1 AND kind = ?2 AND axe = ?3 AND carre_id = ?4');
+async function assureTronc(env, { userId, kind, axe }) {
   const lit = () => env.DB.prepare(
     `SELECT id, user_id, kind, title, trunk, axe, carre_id, created_at, updated_at
-       FROM reflection_trees WHERE ${ou}`
-  ).bind(userId, kind, axe, carreId).first();
+       FROM reflection_trees
+      WHERE user_id = ?1 AND kind = ?2 AND axe = ?3 AND carre_id IS NULL`
+  ).bind(userId, kind, axe).first();
 
   const deja = await lit();
   if (deja) return deja;
   await env.DB.prepare(
-    'INSERT OR IGNORE INTO reflection_trees (user_id, kind, title, axe, carre_id) VALUES (?1, ?2, ?3, ?4, ?5)'
-  ).bind(userId, kind, titreAxe(axe, nomCarre), axe, carreId).run();
+    'INSERT OR IGNORE INTO reflection_trees (user_id, kind, title, axe) VALUES (?1, ?2, ?3, ?4)'
+  ).bind(userId, kind, titreAxe(axe), axe).run();
   return lit();
 }
 
@@ -2639,27 +2558,19 @@ async function troncMiroir(env, arbre) {
    droit de voir se comporte partout comme un arbre qui n'existe pas.     */
 async function droitsArbre(env, vu, tree) {
   const proprietaire = tree.user_id === vu.user.id;
-  if (tree.carre_id != null) {
-    // l'appartenance implique l'échelon du carré, mais on le revérifie : les
-    // droits ne se déduisent jamais d'un autre droit
-    const membre = !!(vu.access.carre && await monAppartenance(env, tree.carre_id, vu.user.id));
-    if (!membre) return { lire: false, ecrire: false, repondre: false, proprietaire, membre };
-    // les arbres d'un carré appartiennent à ses quatre As
-    return { lire: true, ecrire: true, repondre: false, proprietaire, membre };
-  }
   if (proprietaire) return { lire: true, ecrire: true, repondre: false, proprietaire };
 
-  /* Chez une personne, deux espaces seulement sortent : sa philosophie et sa
-     société harmonieuse — avec tout ce qui y est rangé, catégories et
-     réflexions comprises : c'est l'espace RACINE qui décide. Les As de ses
-     carrés peuvent y RÉPONDRE — approfondir, élargir, opposer en résolvant —
-     sans jamais y écrire à sa place.
+  /* Les trois As de MON carré lisent tout ce que je pense — mes cinq
+     branches et tout ce que j'y range — et peuvent y RÉPONDRE :
+     approfondir, élargir, opposer en résolvant. Ils n'écrivent jamais à ma
+     place : la branche reste la mienne.
 
-     Sa psychologie, son moi harmonieux, son multivers et tout ce qui y est
-     rangé ne sortent pas. On ne travaille ni son rapport à soi ni ses
-     modèles d'univers sous le regard des autres. */
-  const axe = tree.axe || await axeRacine(env, tree);
-  if (axePartage(axe) && await memeCarre(env, vu.user.id, tree.user_id)) {
+     Ils ne le peuvent que parce que je les ai choisis, et seulement chez
+     MOI : mon carré est là pour moi. Le leur est là pour eux.
+
+     (L'échelon du carré est revérifié ici : un droit ne se déduit jamais
+     d'un autre droit.) */
+  if (vu.access.carre && await estDeMonCarre(env, vu.user.id, tree.user_id)) {
     return { lire: true, ecrire: false, repondre: true, proprietaire };
   }
   return { lire: false, ecrire: false, repondre: false, proprietaire };
@@ -2716,25 +2627,6 @@ async function arbresList(request, env, url) {
       ORDER BY t.updated_at DESC`
   ).bind(vu.user.id, kind).all();
 
-  // les arbres de mes carrés, pour que le sélecteur de nourriture y mène
-  let carres = [];
-  if (vu.access.carre) {
-    const { results: rc } = await env.DB.prepare(
-      `SELECT t.id, t.title, t.axe, t.carre_id, c.nom AS carre_nom
-         FROM reflection_trees t
-         JOIN carres c ON c.id = t.carre_id
-         JOIN carre_membres m ON m.carre_id = t.carre_id AND m.user_id = ?1
-        WHERE t.kind = ?2 AND t.axe IN (${SQL_COMMUNS})
-        ORDER BY c.nom, t.axe`
-    ).bind(vu.user.id, kind).all();
-    const parCarre = new Map();
-    for (const t of rc || []) {
-      if (!parCarre.has(t.carre_id)) parCarre.set(t.carre_id, { carre_id: t.carre_id, carre_nom: t.carre_nom, arbres: [] });
-      parCarre.get(t.carre_id).arbres.push({ id: t.id, title: t.title, axe: t.axe });
-    }
-    carres = [...parCarre.values()];
-  }
-
   /* La cartographie : quelles réflexions se nourrissent entre elles. Une
      arête par couple de réflexions relié par au moins une nourriture — c'est
      la géographie de la pensée, pas son détail, qui se dessine ici. */
@@ -2751,7 +2643,7 @@ async function arbresList(request, env, url) {
       GROUP BY ts.id, tc.id`
   ).bind(vu.user.id, kind).all();
 
-  return json({ troncs, arbres: results || [], carres, reponses: REPONSES, carte: carte || [] });
+  return json({ troncs, arbres: results || [], reponses: REPONSES, carte: carte || [] });
 }
 
 async function arbresCreate(request, env) {
@@ -2844,37 +2736,6 @@ async function chargeArbre(env, id) {
   };
 }
 
-/* Le champ des possibles : le même axe, ailleurs — mais seulement DEPUIS un
-   arbre de carré. Une page personnelle de Pense Mieux ne parle que des
-   réflexions de la personne : c'est sur la page du carré qu'on passe la
-   frontière, jamais depuis chez soi.                                      */
-async function memeAxeAilleurs(env, vu, arbre) {
-  if (!arbre.axe) return [];
-  const ailleurs = [];
-  if (arbre.carre_id == null) return ailleurs;
-  // depuis l'arbre d'un carré : ma version personnelle du même axe…
-  const { results: perso } = await env.DB.prepare(
-    `SELECT id, kind, title FROM reflection_trees
-      WHERE user_id = ?1 AND axe = ?2 AND carre_id IS NULL AND id <> ?3`
-  ).bind(vu.user.id, arbre.axe, arbre.id).all();
-  for (const t of perso || []) {
-    if (t.kind === 'video' && !vu.access.videographie) continue;
-    ailleurs.push({ id: t.id, kind: t.kind, carre_id: null, carre_nom: null });
-  }
-  if (!vu.access.carre) return ailleurs;
-  // …et celle de mes autres carrés
-  const { results: cs } = await env.DB.prepare(
-    `SELECT t.id, t.kind, t.carre_id, c.nom AS carre_nom
-       FROM reflection_trees t
-       JOIN carres c ON c.id = t.carre_id
-       JOIN carre_membres m ON m.carre_id = t.carre_id AND m.user_id = ?1
-      WHERE t.axe = ?2 AND t.id <> ?3 AND (t.axe IN (${SQL_COMMUNS}) OR t.user_id = ?1)
-      ORDER BY c.nom`
-  ).bind(vu.user.id, arbre.axe, arbre.id).all();
-  for (const t of cs || []) ailleurs.push({ id: t.id, kind: t.kind, carre_id: t.carre_id, carre_nom: t.carre_nom });
-  return ailleurs;
-}
-
 async function arbresGet(request, env, id) {
   await ensureHautesTables(env);
   const arbre = await chargeArbre(env, id);
@@ -2921,7 +2782,6 @@ async function arbresGet(request, env, id) {
     if (cran) chemin.unshift({ id: cran.id, title: cran.title, axe: cran.axe });
   }
 
-  const axeEffectif = arbre.axe || await axeRacine(env, arbre);
   return json({
     arbre: {
       ...arbre,
@@ -2929,12 +2789,10 @@ async function arbresGet(request, env, id) {
       editable: droits.ecrire,
       repondable: !!droits.repondre,
       reponses: REPONSES,
-      partage: AXES[axeEffectif] ? AXES[axeEffectif].partage : null,
       membre: !!droits.membre,
       sous: AXES[arbre.axe] ? AXES[arbre.axe].sous : null,
       miroir: await troncMiroir(env, arbre),
       moi: vu.user.id,
-      ailleurs: await memeAxeAilleurs(env, vu, arbre),
       dedans,
       chemin,
     },
@@ -2959,12 +2817,7 @@ async function arbresUpdate(request, env, id) {
   if (trunk.length > 4000) return json({ error: 'Point de départ trop long.' }, 400);
   let title = String(body?.title || '').trim();
   if (tree.axe) {
-    const nom = tree.carre_id == null ? null
-      : (await env.DB.prepare('SELECT nom FROM carres WHERE id = ?1').bind(tree.carre_id).first())?.nom;
-    const porteur = tree.axe === 'moi' && tree.carre_id != null
-      ? (await env.DB.prepare('SELECT username FROM users WHERE id = ?1').bind(tree.user_id).first())?.username
-      : nom;
-    title = titreAxe(tree.axe, tree.carre_id == null ? null : porteur);
+    title = titreAxe(tree.axe);
   } else if (!title || title.length > 120) {
     return json({ error: 'Sujet invalide.' }, 400);
   }
@@ -3128,21 +2981,10 @@ async function lienCreate(request, env, brancheId) {
      psychologie, mon moi harmonieux, mon multivers, et tout ce qui vient
      d'un AUTRE carré. */
   const src = await env.DB.prepare(
-    `SELECT b.id, t.user_id, t.kind, t.axe, t.parent_id, t.carre_id
-       FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
-      WHERE b.id = ?1`
+    `SELECT b.id, t.user_id, t.kind FROM reflection_branches b
+       JOIN reflection_trees t ON t.id = b.tree_id WHERE b.id = ?1`
   ).bind(sourceId).first();
-  let permis = false;
-  if (src && src.kind === row.kind) {
-    if (row.carre_id == null) {
-      permis = (src.carre_id == null && src.user_id === vu.user.id)
-        || (src.carre_id != null && !!(await monAppartenance(env, src.carre_id, vu.user.id)));
-    } else {
-      permis = src.carre_id === row.carre_id
-        || (src.carre_id == null && src.user_id === vu.user.id
-            && axePartage(src.axe || await axeRacine(env, src)));
-    }
-  }
+  const permis = !!src && src.kind === row.kind && src.user_id === vu.user.id;
   if (!permis) return json({ error: 'Pensée source introuvable.' }, 404);
 
   await env.DB.prepare(
@@ -3681,16 +3523,6 @@ async function membresDe(env, carreId) {
   return results || [];
 }
 
-async function memeCarre(env, a, b) {
-  if (a === b) return true;
-  await ensureHautesTables(env);
-  const row = await env.DB.prepare(
-    `SELECT 1 AS oui FROM carre_membres ma JOIN carre_membres mb ON ma.carre_id = mb.carre_id
-      WHERE ma.user_id = ?1 AND mb.user_id = ?2`
-  ).bind(a, b).first();
-  return !!row;
-}
-
 // la garde commune des gestes de carré : l'échelon, un compte, les tables
 async function gateCarreUser(request, env) {
   const { vu, refus } = await requireEchelon(request, env, ECHELON_CARRE, 'carre');
@@ -3706,10 +3538,16 @@ async function carreGet(request, env) {
   if (refus) return refus;
   await ensureHautesTables(env);
 
-  const reponse = { carres: [], ouverts: [], invitations: 0 };
+  const reponse = { carres: [], ouverts: [], invitations: 0, mien: null };
   if (vu.user) {
     const carres = await mesCarres(env, vu.user.id);
-    for (const c of carres) c.membres = await membresDe(env, c.id);
+    for (const c of carres) {
+      c.membres = await membresDe(env, c.id);
+      const row = await env.DB.prepare('SELECT createur_id FROM carres WHERE id = ?1').bind(c.id).first();
+      c.createur_id = row?.createur_id ?? null;
+      c.mien = c.createur_id === vu.user.id;
+      if (c.mien) reponse.mien = c.id;
+    }
     reponse.carres = carres;
     const inv = await env.DB.prepare(
       'SELECT COUNT(*) AS n FROM carre_invitations WHERE user_id = ?1'
@@ -3719,7 +3557,9 @@ async function carreGet(request, env) {
   // les carrés où il reste une place, hors les miens : pour en rejoindre un
   const moi = vu.user ? vu.user.id : 0;
   const { results } = await env.DB.prepare(
-    `SELECT c.id, c.nom, COUNT(m.user_id) AS membres FROM carres c
+    `SELECT c.id, c.nom, u.username AS createur, COUNT(m.user_id) AS membres
+       FROM carres c
+       LEFT JOIN users u ON u.id = c.createur_id
        LEFT JOIN carre_membres m ON m.carre_id = c.id
       WHERE c.id NOT IN (SELECT carre_id FROM carre_membres WHERE user_id = ?1)
       GROUP BY c.id HAVING membres < 4 ORDER BY c.created_at DESC LIMIT 25`
@@ -3728,11 +3568,15 @@ async function carreGet(request, env) {
   return json(reponse);
 }
 
+/* Fonder son carré. On n'en fonde qu'UN : c'est le sien, celui où trois As
+   viendront l'aider. On peut ensuite entrer dans ceux des autres, autant de
+   fois qu'on le veut, pour les aider à leur tour. */
 async function carreCreate(request, env) {
   const { vu, refus } = await gateCarreUser(request, env);
   if (refus) return refus;
-  const dejas = await mesCarres(env, vu.user.id);
-  if (dejas.length >= MAX_CARRES_PAR_AS) {
+  const mien = await monCarre(env, vu.user.id);
+  if (mien) return json({ error: 'Tu as déjà ton carré : c’est celui-là qu’il faut compléter.' }, 409);
+  if ((await mesCarres(env, vu.user.id)).length >= MAX_CARRES_PAR_AS) {
     return json({ error: `${MAX_CARRES_PAR_AS} carrés au plus par As.` }, 409);
   }
 
@@ -3740,10 +3584,18 @@ async function carreCreate(request, env) {
   const nom = String(body?.nom || '').trim();
   if (!nom || nom.length > 60) return json({ error: 'Donnez un nom à votre carré (60 caractères au plus).' }, 400);
 
-  const r = await env.DB.prepare('INSERT INTO carres (nom) VALUES (?1)').bind(nom).run();
+  const r = await env.DB.prepare('INSERT INTO carres (nom, createur_id) VALUES (?1, ?2)')
+    .bind(nom, vu.user.id).run();
   await env.DB.prepare('INSERT INTO carre_membres (user_id, carre_id) VALUES (?1, ?2)')
     .bind(vu.user.id, r.meta.last_row_id).run();
   return json({ ok: true, id: r.meta.last_row_id }, 201);
+}
+
+// Mon carré : celui que j'ai fondé. Il n'y en a qu'un.
+async function monCarre(env, userId) {
+  return env.DB.prepare(
+    'SELECT id, nom, discord_url, created_at FROM carres WHERE createur_id = ?1'
+  ).bind(userId).first();
 }
 
 async function carreJoin(request, env, carreId) {
@@ -3772,29 +3624,53 @@ async function carreDetail(request, env, carreId) {
   await ensureHautesTables(env);
   if (!Number.isFinite(carreId)) return json({ error: 'Carré introuvable.' }, 404);
   const carre = await env.DB.prepare(
-    'SELECT id, nom, discord_url, created_at FROM carres WHERE id = ?1'
+    `SELECT c.id, c.nom, c.discord_url, c.created_at, c.createur_id, u.username AS createur
+       FROM carres c LEFT JOIN users u ON u.id = c.createur_id WHERE c.id = ?1`
   ).bind(carreId).first();
   if (!carre) return json({ error: 'Carré introuvable.' }, 404);
   const membres = await membresDe(env, carreId);
   const moi = vu.user ? await monAppartenance(env, carreId, vu.user.id) : null;
 
-  // Un carré n'a plus ni rôle ni note : il a quatre As et trois matières. La
-  // façade d'un carré qui n'est pas le mien montre son nom et ses As, rien de
-  // plus que ce que le salon de recrutement dit déjà.
-  const noms = membres.map((m) => ({ user_id: m.user_id, username: m.username }));
+  /* La façade d'un carré qui n'est pas le mien : son porteur, ses As, ses
+     places. Rien de plus que ce que le salon de recrutement dit déjà. */
+  const noms = membres.map((m) => ({
+    user_id: m.user_id, username: m.username, createur: m.user_id === carre.createur_id,
+  }));
   if (!moi) {
     return json({
       publique: true,
-      carre: { id: carre.id, nom: carre.nom },
+      carre: { id: carre.id, nom: carre.nom, createur: carre.createur },
       membres: noms,
       places: 4 - membres.length,
     });
   }
+
+  /* Dedans : les CINQ branches du porteur. C'est tout ce qu'un carré
+     regarde — il est là pour l'aider à les harmoniser, pas pour écrire une
+     sixième chose à côté. */
+  const branches = [];
+  if (carre.createur_id) {
+    for (const t of await troncsDe(env, carre.createur_id, 'pensee')) {
+      const n = await env.DB.prepare(
+        `SELECT (SELECT COUNT(*) FROM reflection_branches b WHERE b.tree_id = ?1) AS pensees,
+                (SELECT COUNT(*) FROM reflection_branches b
+                  WHERE b.tree_id = ?1 AND b.reponse IS NOT NULL) AS reponses,
+                (SELECT COUNT(*) FROM reflection_trees e WHERE e.parent_id = ?1) AS dedans`
+      ).bind(t.id).first();
+      branches.push({
+        id: t.id, axe: t.axe, titre: AXES[t.axe].titre, court: AXES[t.axe].court,
+        sous: AXES[t.axe].sous, trunk: t.trunk,
+        pensees: n?.pensees || 0, reponses: n?.reponses || 0, dedans: n?.dedans || 0,
+      });
+    }
+  }
+
   return json({
     publique: false,
-    carre,
+    carre: { ...carre, createur: carre.createur },
+    mien: carre.createur_id === vu.user.id,
     membres: noms,
-    matieres: AXES_COMMUNS.map((axe) => ({ axe, court: AXES[axe].court })),
+    branches,
     places: 4 - membres.length,
   });
 }
@@ -3826,78 +3702,6 @@ async function carreUpdate(request, env, carreId) {
   await env.DB.prepare('UPDATE carres SET nom = ?1, cap = ?2, discord_url = ?3 WHERE id = ?4')
     .bind(nom, cap, discord, carreId).run();
   return json({ ok: true });
-}
-
-/* --------------------------------------------- les trois du carré --------
-   Un carré n'existe que pour trois matières : la philosophie, le multivers et
-   la société harmonieuse. Chacune a son onglet, et chaque onglet montre deux
-   choses — ce que les quatre écrivent ENSEMBLE, et ce que chacun porte de son
-   côté sur la même matière.
-
-   Rien d'autre ne s'y voit. La psychologie et le moi harmonieux d'un As ne
-   sortent jamais de chez lui, et ses réflexions personnelles non plus : on ne
-   travaille pas son rapport à soi sous le regard des autres.            */
-
-// L'arbre commun de chaque matière. On ne provisionne que les trois : dans un
-// carré, personne ne tient de psychologie ni de moi harmonieux.
-async function assureTroncsCarre(env, vu, carre) {
-  for (const axe of AXES_COMMUNS) {
-    await assureTronc(env, {
-      userId: vu.user.id, kind: 'pensee', axe, carreId: carre.id, nomCarre: carre.nom,
-    });
-  }
-}
-
-async function carreAxe(request, env, carreId, axe) {
-  const { vu, refus } = await gateCarreUser(request, env);
-  if (refus) return refus;
-  if (!AXES_COMMUNS.includes(axe)) return json({ error: 'Matière inconnue.' }, 404);
-  if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
-  const carre = await env.DB.prepare('SELECT id, nom FROM carres WHERE id = ?1').bind(carreId).first();
-  const membres = await membresDe(env, carreId);
-  await assureTroncsCarre(env, vu, carre);
-  // le mien existe aussi : on entre ici autant qu'ailleurs
-  await assureTronc(env, { userId: vu.user.id, kind: 'pensee', axe });
-
-  const compte = `
-    (SELECT COUNT(*) FROM reflection_branches b WHERE b.tree_id = t.id) AS pensees,
-    (SELECT COUNT(*) FROM reflection_branches b
-      WHERE b.tree_id = t.id AND b.reponse IS NOT NULL) AS reponses`;
-
-  const commun = await env.DB.prepare(
-    `SELECT t.id, t.trunk, ${compte} FROM reflection_trees t
-      WHERE t.carre_id = ?1 AND t.axe = ?2 AND t.kind = 'pensee'`
-  ).bind(carreId, axe).first();
-
-  const marques = membres.map((_, i) => `?${i + 2}`).join(',');
-  const { results } = await env.DB.prepare(
-    `SELECT t.id, t.user_id, t.trunk, ${compte} FROM reflection_trees t
-      WHERE t.axe = ?1 AND t.kind = 'pensee' AND t.carre_id IS NULL
-        AND t.user_id IN (${marques})`
-  ).bind(axe, ...membres.map((m) => m.user_id)).all();
-  const parAs = new Map((results || []).map((t) => [t.user_id, t]));
-
-  return json({
-    carre: { id: carre.id, nom: carre.nom },
-    axe,
-    titre: AXES[axe].titreCarre(carre.nom),
-    sous: AXES[axe].sousCarre || AXES[axe].sous,
-    reponses: REPONSES,
-    commun: commun ? { id: commun.id, trunk: commun.trunk, pensees: commun.pensees } : null,
-    membres: membres.map((m) => {
-      const t = parAs.get(m.user_id);
-      return {
-        user_id: m.user_id,
-        username: m.username,
-        moi: m.user_id === vu.user.id,
-        titre: m.user_id === vu.user.id ? AXES[axe].titre : `${AXES[axe].court} de ${m.username}`,
-        tree_id: t ? t.id : null,
-        trunk: t ? t.trunk : '',
-        pensees: t ? t.pensees : 0,
-        reponses: t ? t.reponses : 0,
-      };
-    }),
-  });
 }
 
 /* La conversation du carré : privée, réservée à ses As. C'est aussi son
@@ -3933,40 +3737,23 @@ async function carreLeave(request, env, carreId) {
   const { vu, refus } = await gateCarreUser(request, env);
   if (refus) return refus;
   if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
-  const carre = await env.DB.prepare('SELECT nom FROM carres WHERE id = ?1').bind(carreId).first();
+  const carre = await env.DB.prepare('SELECT nom, createur_id FROM carres WHERE id = ?1').bind(carreId).first();
+  // un carré est celui de son porteur : il ne s'en va pas de chez lui
+  if (carre?.createur_id === vu.user.id) {
+    return json({ error: 'C’est ton carré : tu ne peux pas le quitter.' }, 400);
+  }
 
   await env.DB.batch([
     env.DB.prepare('DELETE FROM carre_membres WHERE carre_id = ?1 AND user_id = ?2').bind(carreId, vu.user.id),
   ]);
 
-  /* Les trois arbres du carré appartiennent aux quatre : ce que j'y ai écrit
-     y reste, sans plus personne pour le toucher si je pars. En revanche les
-     nourritures qui traversaient la frontière sont coupées DANS LES DEUX
-     SENS : sans cela je continuerais de lire un extrait des pensées du carré
-     par mes chips, et le carré lirait les miennes par les siennes. */
-  const miennes = `SELECT b.id FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
-                    WHERE t.user_id = ?2 AND t.carre_id IS NULL`;
-  const duCarre = `SELECT b.id FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
-                    WHERE t.carre_id = ?1`;
-  await env.DB.batch([
-    env.DB.prepare(`DELETE FROM reflection_branch_links WHERE branch_id IN (${miennes}) AND source_id IN (${duCarre})`)
-      .bind(carreId, vu.user.id),
-    env.DB.prepare(`DELETE FROM reflection_branch_links WHERE source_id IN (${miennes}) AND branch_id IN (${duCarre})`)
-      .bind(carreId, vu.user.id),
-  ]);
+  /* Ce que j'ai déposé chez le porteur en partant reste chez lui : ce sont
+     SES branches, et une réponse qu'on lui a faite ne s'efface pas parce
+     qu'on s'en va. Rien à couper, donc : je cesse simplement de lire. */
 
   // un carré vide ne garde pas de coquille : tout ce qui était à lui s'en va
   const restants = await membresDe(env, carreId);
   if (!restants.length) {
-    await env.DB.batch([
-      env.DB.prepare(
-        `DELETE FROM reflection_branch_links WHERE branch_id IN (${duCarre}) OR source_id IN (${duCarre})`
-      ).bind(carreId),
-      env.DB.prepare(
-        'DELETE FROM reflection_branches WHERE tree_id IN (SELECT id FROM reflection_trees WHERE carre_id = ?1)'
-      ).bind(carreId),
-      env.DB.prepare('DELETE FROM reflection_trees WHERE carre_id = ?1').bind(carreId),
-    ]);
     await env.DB.batch([
       env.DB.prepare(
         `DELETE FROM brainstorm_votes WHERE idee_id IN (
@@ -4039,12 +3826,13 @@ async function carreRecrutement(request, env) {
       ORDER BY a.created_at DESC LIMIT 50`
   ).all()).results || [];
 
-  const carres = await mesCarres(env, vu.user.id);
-  const mesCarresAvecPlaces = [];
-  for (const c of carres) {
-    const membres = await membresDe(env, c.id);
-    mesCarresAvecPlaces.push({ id: c.id, nom: c.nom, places: 4 - membres.length });
-  }
+  /* On n'invite que dans SON carré : celui qu'on a fondé, et qu'on cherche à
+     compléter. On n'invite personne chez quelqu'un d'autre. */
+  const mien = await monCarre(env, vu.user.id);
+  const carres = mien ? [mien] : [];
+  const mesCarresAvecPlaces = mien
+    ? [{ id: mien.id, nom: mien.nom, places: 4 - (await membresDe(env, mien.id)).length }]
+    : [];
 
   const reponse = {
     // la charte du bon carré, en une phrase : celle des missions
@@ -4104,13 +3892,15 @@ async function carreInvite(request, env) {
   if (refus) return refus;
 
   const body = await readJson(request);
-  const carreId = Number(body?.carre_id);
   const username = String(body?.username || '').trim();
   const note = String(body?.note || '').trim();
   if (note.length > 300) return json({ error: 'Le mot d’invitation tient en 300 caractères.' }, 400);
-  if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
+  // on n'invite que dans SON carré : celui qu'on porte
+  const mien = await monCarre(env, vu.user.id);
+  if (!mien) return json({ error: 'Fonde ton carré avant d’y inviter quelqu’un.' }, 404);
+  const carreId = mien.id;
   const membres = await membresDe(env, carreId);
-  if (membres.length >= 4) return json({ error: 'Ce carré est complet.' }, 409);
+  if (membres.length >= 4) return json({ error: 'Ton carré est complet.' }, 409);
 
   // on n'invite que ceux qui se sont annoncés au salon, et pas dans ce carré
   const cible = await env.DB.prepare(
@@ -4215,21 +4005,16 @@ async function brainstormsCreate(request, env) {
 
   const body = await readJson(request);
 
-  // un brainstorm est porté par UN de mes carrés, complet : quatre As
-  const carreId = Number(body?.carre_id);
-  if (!(await monAppartenance(env, carreId, vu.user.id))) {
-    return json({ error: 'Un brainstorm est porté par un de vos carrés d’as.' }, 403);
-  }
-  const carre = await env.DB.prepare('SELECT id, nom FROM carres WHERE id = ?1').bind(carreId).first();
+  /* Un brainstorm, c'est MON carré qui réfléchit avec moi, en public, sur un
+     sujet que je choisis. Il est donc porté par le carré que j'ai fondé, et
+     c'est moi qui tiens l'antenne : les trois autres sont là pour m'aider,
+     comme partout ailleurs. */
+  const carre = await monCarre(env, vu.user.id);
+  if (!carre) return json({ error: 'Fonde ton carré d’abord : c’est lui qui porte le live.' }, 403);
+  const carreId = carre.id;
   const membres = await membresDe(env, carreId);
-  if (membres.length < 4) return json({ error: 'Le carré doit être complet : quatre As.' }, 403);
-
-  // l'hôte : l'As du carré qui tient l'antenne, celui du meilleur matériel
-  const hote = body?.hote_user_id == null || body.hote_user_id === ''
-    ? vu.user.id : Number(body.hote_user_id);
-  if (!membres.some((m) => m.user_id === hote)) {
-    return json({ error: 'L’hôte doit être un As du carré.' }, 400);
-  }
+  if (membres.length < 4) return json({ error: 'Ton carré doit être complet : toi et trois As.' }, 403);
+  const hote = vu.user.id;
 
   const sujet = String(body?.sujet || '').trim();
   const plateforme = String(body?.plateforme || '');

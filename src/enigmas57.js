@@ -279,31 +279,6 @@ export const NODES = [
     ],
   },
 
-  {
-    id: 'n-j',
-    source: 'M = M',
-    requires: [],
-    answers: [
-      {
-        id: 'n-j-1',
-        label: 'Mécanisme = Matière',
-        parties: [
-          { t: 'Mécanisme', formes: ['mecanisme'] },
-          { t: 'Matière', formes: ['matiere'] },
-        ],
-        seps: [' = '],
-        extra: [{
-          idx: [0, 1],
-          formes: ['mecanisme egale matiere', 'mecanisme egal matiere',
-                   'matiere mecanisme', 'matiere egale mecanisme'],
-        }],
-        note: 'Les deux mots reviennent toujours ensemble, toujours équivalents.',
-        quotes: ['Je sais que le QI change, M égale M à jamais. (30 vins divins)',
-                 'Tout a une logique, matière et mécanisme. (Multivers)'],
-      },
-    ],
-  },
-
 ];
 
 /* --------------------------------------------------- moteur des parties ---
