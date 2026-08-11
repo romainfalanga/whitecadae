@@ -2708,19 +2708,23 @@ async function arbresList(request, env, url) {
     carres = [...parCarre.values()];
   }
 
-  /* Ce que mon carré m'a répondu. C'est la contrepartie de l'ouverture : si
-     trois de mes espaces sont lus, ce qu'on m'y apporte doit me revenir. */
-  const { results: reponses } = await env.DB.prepare(
-    `SELECT b.id, b.body, b.reponse, b.created_at, u.username,
-            t.id AS tree_id, t.title AS tree_title
-       FROM reflection_branches b
-       JOIN reflection_trees t ON t.id = b.tree_id
-       JOIN users u ON u.id = b.user_id
-      WHERE t.user_id = ?1 AND t.kind = ?2 AND b.reponse IS NOT NULL AND b.user_id <> ?1
-      ORDER BY b.id DESC LIMIT 12`
+  /* La cartographie : quelles réflexions se nourrissent entre elles. Une
+     arête par couple de réflexions relié par au moins une nourriture — c'est
+     la géographie de la pensée, pas son détail, qui se dessine ici. */
+  const { results: carte } = await env.DB.prepare(
+    `SELECT ts.id AS de, tc.id AS vers, COUNT(*) AS n
+       FROM reflection_branch_links l
+       JOIN reflection_branches bs ON bs.id = l.source_id
+       JOIN reflection_branches bc ON bc.id = l.branch_id
+       JOIN reflection_trees ts ON ts.id = bs.tree_id
+       JOIN reflection_trees tc ON tc.id = bc.tree_id
+      WHERE ts.user_id = ?1 AND tc.user_id = ?1
+        AND ts.carre_id IS NULL AND tc.carre_id IS NULL
+        AND ts.kind = ?2 AND tc.kind = ?2 AND ts.id <> tc.id
+      GROUP BY ts.id, tc.id`
   ).bind(vu.user.id, kind).all();
 
-  return json({ troncs, arbres: results || [], carres, reponses: REPONSES, recues: reponses || [] });
+  return json({ troncs, arbres: results || [], carres, reponses: REPONSES, carte: carte || [] });
 }
 
 async function arbresCreate(request, env) {
@@ -2799,14 +2803,15 @@ async function chargeArbre(env, id) {
   };
 }
 
-/* Le champ des possibles : le même axe, ailleurs. Depuis mon moi personnel je
-   vois mes moi dans chacun de mes carrés, et depuis chacun je reviens aux
-   autres. C'est ce que l'on gagne à vivre dans plusieurs carrés : autant de
-   versions de soi qui se répondent.                                       */
+/* Le champ des possibles : le même axe, ailleurs — mais seulement DEPUIS un
+   arbre de carré. Une page personnelle de Pense Mieux ne parle que des
+   réflexions de la personne : c'est sur la page du carré qu'on passe la
+   frontière, jamais depuis chez soi.                                      */
 async function memeAxeAilleurs(env, vu, arbre) {
   if (!arbre.axe) return [];
   const ailleurs = [];
-  // mes deux troncs personnels, dans les deux outils
+  if (arbre.carre_id == null) return ailleurs;
+  // depuis l'arbre d'un carré : ma version personnelle du même axe…
   const { results: perso } = await env.DB.prepare(
     `SELECT id, kind, title FROM reflection_trees
       WHERE user_id = ?1 AND axe = ?2 AND carre_id IS NULL AND id <> ?3`
@@ -2816,7 +2821,7 @@ async function memeAxeAilleurs(env, vu, arbre) {
     ailleurs.push({ id: t.id, kind: t.kind, carre_id: null, carre_nom: null });
   }
   if (!vu.access.carre) return ailleurs;
-  // le même axe dans chacun de mes carrés : ma version, ou la leur
+  // …et celle de mes autres carrés
   const { results: cs } = await env.DB.prepare(
     `SELECT t.id, t.kind, t.carre_id, c.nom AS carre_nom
        FROM reflection_trees t
@@ -3347,10 +3352,9 @@ async function arbresRecherche(request, env, url) {
   if (q.length < 2) return json({ arbres: [], branches: [] });
   const motif = '%' + q.replace(/[%_\\]/g, ' ') + '%';
 
-  const mien = vu.access.carre
-    ? `(t.user_id = ?1 OR (t.carre_id IS NOT NULL AND EXISTS (
-          SELECT 1 FROM carre_membres m WHERE m.carre_id = t.carre_id AND m.user_id = ?1)))`
-    : 't.user_id = ?1 AND t.carre_id IS NULL';
+  // La recherche de Pense Mieux ne fouille que les réflexions de la personne :
+  // ce qui s'écrit dans un carré se retrouve sur la page du carré, pas ici.
+  const mien = 't.user_id = ?1 AND t.carre_id IS NULL';
 
   const arbres = (await env.DB.prepare(
     `SELECT t.id, t.title, t.trunk, t.carre_id FROM reflection_trees t
@@ -3449,6 +3453,69 @@ function periodeDe(cadence, maintenant) {
   };
 }
 
+/* Le jour tel qu'il se vit en France : c'est là que « dimanche » a un sens.
+   On projette l'instant sur le calendrier de Paris, et tout le raisonnement
+   de fenêtre se fait sur cette projection.                                */
+function jourParis(maintenant) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Paris', year: 'numeric', month: 'numeric', day: 'numeric',
+  }).formatToParts(new Date(maintenant));
+  const v = {};
+  for (const p of parts) v[p.type] = p.value;
+  const an = +v.year;
+  const mois = +v.month - 1;
+  const jour = +v.day;
+  return { an, mois, jour, dow: new Date(Date.UTC(an, mois, jour)).getUTCDay() };
+}
+
+/* La fenêtre de dépôt d'une cadence. Un récap ne se dépose pas n'importe
+   quand : la vidéo de la semaine se fait LE dimanche (elle clôt la semaine
+   qui s'achève), celle du mois le premier dimanche du mois (elle raconte le
+   mois écoulé), celle de l'année du 1er au 3 janvier (elle raconte l'année
+   écoulée). Le reste du temps on vit ; le jour venu, on raconte.
+
+   Hors fenêtre, `periode` est celle que la PROCHAINE fenêtre racontera : la
+   carte montre ainsi la matière qui s'accumule pour le jour dit.          */
+function fenetreDe(cadence, maintenant) {
+  const { an, mois, jour, dow } = jourParis(maintenant);
+  // au milieu du jour : les bornes de périodes restent loin des bords de fuseau
+  const midi = (a, m, j) => Date.UTC(a, m, j, 12);
+  const versDimanche = (depuis) => {
+    const d = new Date(depuis);
+    d.setUTCDate(d.getUTCDate() + ((7 - d.getUTCDay()) % 7));
+    return d;
+  };
+
+  if (cadence === 'semaine') {
+    const ouverte = dow === 0;
+    const prochaine = versDimanche(midi(an, mois, jour + (ouverte ? 0 : 1)));
+    return {
+      ouverte,
+      // le dimanche est le dernier jour de sa semaine ISO : ouvert ou pas, la
+      // semaine du prochain dimanche est celle qu'on est en train de vivre
+      periode: periodeDe('semaine', ouverte ? midi(an, mois, jour) : prochaine.getTime()),
+      jour: 'le dimanche', prochaine,
+    };
+  }
+  if (cadence === 'mois') {
+    const ouverte = dow === 0 && jour <= 7;
+    let fen = versDimanche(midi(an, mois, 1));
+    if (!ouverte && midi(an, mois, jour) > fen.getTime()) fen = versDimanche(midi(an, mois + 1, 1));
+    return {
+      ouverte,
+      // la fenêtre raconte le mois qui précède son dimanche
+      periode: periodeDe('mois', Date.UTC(fen.getUTCFullYear(), fen.getUTCMonth(), 0, 12)),
+      jour: 'le premier dimanche du mois', prochaine: fen,
+    };
+  }
+  const ouverte = mois === 0 && jour <= 3;
+  return {
+    ouverte,
+    periode: periodeDe('annee', midi(ouverte ? an - 1 : an, 6, 1)),
+    jour: 'du 1er au 3 janvier', prochaine: new Date(midi(ouverte ? an : an + 1, 0, 1)),
+  };
+}
+
 /* La matière du récap : ce que la période a produit. Rien n'est inventé, tout
    est daté — c'est le carnet qu'on relit avant de parler. */
 async function matiereDe(env, userId, debut, fin) {
@@ -3515,7 +3582,8 @@ async function videographieRythme(request, env) {
 
   const cadences = [];
   for (const def of CADENCES) {
-    const periode = periodeDe(def.cle, maintenant);
+    const fenetre = fenetreDe(def.cle, maintenant);
+    const periode = fenetre.periode;
     const faite = await env.DB.prepare(
       `SELECT id, url, note, updated_at FROM videographie_recaps
         WHERE user_id = ?1 AND cadence = ?2 AND periode = ?3`
@@ -3528,9 +3596,10 @@ async function videographieRythme(request, env) {
     cadences.push({
       ...def,
       periode,
+      ouverte: fenetre.ouverte,
+      jour: fenetre.jour,
+      prochaine: { ts: fenetre.prochaine.getTime(), libelle: jourFr(fenetre.prochaine) },
       faite: faite || null,
-      // ce qu'il reste avant que la période se ferme
-      restant: Math.max(0, Date.parse(periode.fin.replace(' ', 'T') + 'Z') - maintenant),
       matiere: await matiereDe(env, vu.user.id, periode.debut, periode.fin),
       histoire: histoire || [],
     });
@@ -3549,9 +3618,18 @@ async function videographieRecap(request, env) {
   if (!urlYoutubeValide(url)) return json({ error: 'Le récap est une vidéo YouTube.' }, 400);
   if (note.length > 1000) return json({ error: 'La note tient en 1000 caractères.' }, 400);
 
-  // on ne dépose que sur la période en cours : le récap se fait dans son
-  // temps, pas après coup. Corriger l'adresse, en revanche, reste possible.
-  const periode = periodeDe(cadence, Date.now());
+  /* Le récap se dépose LE jour dit, jamais un autre : le dimanche pour la
+     semaine, le premier dimanche du mois pour le mois écoulé, du 1er au 3
+     janvier pour l'année écoulée. Corriger l'adresse suit la même règle :
+     hors fenêtre, rien ne bouge. */
+  const fenetre = fenetreDe(cadence, Date.now());
+  if (!fenetre.ouverte) {
+    const quoi = { semaine: 'de la semaine', mois: 'du mois', annee: 'de l’année' }[cadence];
+    return json({
+      error: `La vidéo ${quoi} se dépose ${fenetre.jour}. Prochaine fenêtre : le ${jourFr(fenetre.prochaine)}.`,
+    }, 403);
+  }
+  const periode = fenetre.periode;
   await env.DB.prepare(
     `INSERT INTO videographie_recaps (user_id, cadence, periode, url, note)
      VALUES (?1, ?2, ?3, ?4, ?5)
