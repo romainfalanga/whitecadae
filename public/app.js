@@ -188,9 +188,11 @@ async function route() {
   if (path === '/pense-mieux') return vueForet('pensee');
   if (path === '/pense-mieux/nouveau') return vueNouvelArbre('pensee');
   if (path === '/pense-mieux/recherche') return vueRecherche('pensee');
+  if (path === '/pense-mieux/univers') return vueUnivers('pensee');
   if ((m = path.match(/^\/pense-mieux\/(\d+)$/))) return pageArbre(+m[1]);
   if (path === '/videographie') return vueForet('video');
   if (path === '/videographie/nouveau') return vueNouvelArbre('video');
+  if (path === '/videographie/univers') return vueUnivers('video');
   if (path === '/videographie/carre') return vueVideoCarre();
   if ((m = path.match(/^\/videographie\/(\d+)$/))) return pageArbre(+m[1]);
   if (path === '/carre-d-as') return vueMesCarres();
@@ -622,11 +624,13 @@ const SOUS_APPS = {
   pm: [
     { cle: 'foret', chemin: '/pense-mieux', label: 'Forêt' },
     { cle: 'nouveau', chemin: '/pense-mieux/nouveau', label: 'Nouvel arbre' },
+    { cle: 'univers', chemin: '/pense-mieux/univers', label: 'Univers' },
     { cle: 'recherche', chemin: '/pense-mieux/recherche', label: 'Recherche' },
   ],
   vg: [
     { cle: 'foret', chemin: '/videographie', label: 'Forêt' },
     { cle: 'nouveau', chemin: '/videographie/nouveau', label: 'Nouvel arbre' },
+    { cle: 'univers', chemin: '/videographie/univers', label: 'Univers' },
     { cle: 'carre', chemin: '/videographie/carre', label: 'Carré' },
   ],
   ca: [
@@ -688,12 +692,16 @@ async function vueForet(kind) {
       </a>`).join('') : `<p class="empty-note">${esc(data.arbres.length ? 'Rien ne porte ce nom.' : def.vide)}</p>`;
   };
 
-  // Les deux troncs sont là d'avance et ne descendent jamais dans la forêt :
-  // on ne les plante pas, on les nourrit.
+  // Les cinq troncs sont là d'avance et ne descendent jamais dans la forêt :
+  // on ne les plante pas, on les nourrit. Les deux premiers se répondent en
+  // miroir : la psychologie dit le présent, le moi harmonieux dit vers quoi
+  // il tend.
   const troncs = (data.troncs || []).map((t) => `
-    <a class="arbre-card arbre-card--tronc" href="/arbre/${t.id}" data-link>
+    <a class="arbre-card arbre-card--tronc${t.publique ? ' arbre-card--publique' : ''}"
+       href="/arbre/${t.id}" data-link>
       <h2>${esc(t.title)}</h2>
-      <span class="arbre-meta">${t.branches} branche${t.branches > 1 ? 's' : ''}</span>
+      ${t.sous ? `<p class="arbre-sous">${esc(t.sous)}</p>` : ''}
+      <span class="arbre-meta">${t.branches} branche${t.branches > 1 ? 's' : ''}${t.publique ? ' · lu par tous' : ''}</span>
     </a>`).join('');
 
   docke(def.app, 'foret', `
@@ -716,6 +724,63 @@ async function vueForet(kind) {
   document.getElementById('foret-tri').onchange = (e) => {
     tri = e.target.value;
     document.getElementById('foret').innerHTML = cartes();
+  };
+}
+
+/* ------------------------------------------------ la galerie des univers ---
+   Le seul endroit où les arbres de tout le monde se lisent. On y regarde les
+   modèles d'univers des autres, et on fabrique le sien en reliant ce qu'on y
+   trouve : une branche de n'importe quel univers peut nourrir le tien.     */
+
+async function vueUnivers(kind) {
+  const def = ARBRES_PAGES[kind];
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  let data;
+  try { data = await api(`/api/univers?kind=${kind}`); }
+  catch (err) {
+    if (err.status === 401) {
+      docke(def.app, 'univers', '<h1>Les univers</h1><p class="empty-note">Connecte-toi.</p>');
+      return;
+    }
+    return navigate('/57', true);
+  }
+  if (stale(epoch)) return;
+
+  const carte = (u) => `
+    <a class="arbre-card arbre-card--univers${u.mien ? ' arbre-card--mien' : ''}"
+       href="/arbre/${u.id}" data-link>
+      <h2>${esc(u.carre_nom ? `${u.carre_nom} · Nos univers` : `${u.username} · Mes univers`)}</h2>
+      ${u.trunk ? `<p class="arbre-tronc-apercu">${esc(u.trunk)}</p>` : ''}
+      <span class="arbre-meta">${u.branches} univers${u.mien ? ' · les tiens' : ''}</span>
+    </a>`;
+
+  const peint = (liste) => liste.length
+    ? liste.map(carte).join('')
+    : '<p class="empty-note">Aucun univers pour l’instant. Ouvre le tien : il sera le premier.</p>';
+
+  docke(def.app, 'univers', `
+    <h1>Les univers</h1>
+    <p class="univers-intro">Les modèles d’univers de tous les As. Regarde ceux des
+      autres, puis fais-en naître de nouveaux : dans ton tronc « Mes univers », une
+      branche peut être nourrie par n’importe quelle branche d’ici.</p>
+    <div class="foret-outils">
+      <input id="univers-q" placeholder="Chercher dans les univers…" autocomplete="off">
+    </div>
+    <div class="foret" id="univers-liste">${peint(data.univers)}</div>`);
+
+  const champ = document.getElementById('univers-q');
+  let minuterie = null;
+  champ.oninput = () => {
+    clearTimeout(minuterie);
+    minuterie = setTimeout(async () => {
+      const q = champ.value.trim();
+      let d;
+      try { d = await api(`/api/univers?kind=${kind}&q=${encodeURIComponent(q)}`); }
+      catch { return; }
+      if (champ.value.trim() !== q) return; // une frappe plus récente a gagné
+      document.getElementById('univers-liste').innerHTML = peint(d.univers);
+    }, 250);
   };
 }
 
@@ -925,10 +990,14 @@ async function pageArbre(id) {
   };
 
   // le retour et le dock suivent l'arbre : celui d'un carré ne s'affiche pas
-  // sous le dock de Pense Mieux
-  const retour = collectif
+  // sous le dock de Pense Mieux, et l'univers d'un autre As ramène à la
+  // galerie d'où l'on vient
+  const etranger = !arbre.proprietaire && !(collectif && arbre.membre);
+  const retour = collectif && arbre.membre
     ? { app: 'ca', onglet: 'carre', chemin: `/carre-d-as/${arbre.carre_id}/harmonie`, titre: arbre.carre_nom || 'Le carré' }
-    : { app: def.app, onglet: 'foret', chemin: def.chemin, titre: def.titre };
+    : etranger && arbre.publique
+      ? { app: def.app, onglet: 'univers', chemin: `${def.chemin}/univers`, titre: 'Les univers' }
+      : { app: def.app, onglet: 'foret', chemin: def.chemin, titre: def.titre };
 
   // le champ des possibles : le même axe, ailleurs. Une ligne, pas une page.
   const ailleurs = (arbre.ailleurs || []).map((a) => {
@@ -936,9 +1005,18 @@ async function pageArbre(id) {
     return `<a href="/arbre/${a.id}" data-link>${esc(nom)}</a>`;
   }).join(' · ');
 
+  // chez un autre, l'arbre porte son nom : « Mes univers » n'aurait aucun
+  // sens sur la page de quelqu'un d'autre
+  const titre = etranger && (arbre.carre_nom || arbre.porteur)
+    ? `${arbre.carre_nom || arbre.porteur} · ${arbre.title}`
+    : arbre.title;
+
   docke(retour.app, retour.onglet, `
     <p class="fil-retour"><a href="${retour.chemin}" data-link>← ${esc(retour.titre)}</a></p>
-    <h1>${esc(arbre.title)}</h1>
+    <h1>${esc(titre)}</h1>
+    ${arbre.sous && !etranger ? `<p class="arbre-sous">${esc(arbre.sous)}</p>` : ''}
+    ${arbre.publique ? '<p class="arbre-public">Lu par tous les As : ce que tu écris ici entre dans la galerie des univers.</p>' : ''}
+    ${arbre.miroir ? `<p class="arbre-miroir">En regard : <a href="/arbre/${arbre.miroir.id}" data-link>${esc(arbre.miroir.title)}</a></p>` : ''}
     ${arbre.trunk ? `<p class="tronc">${esc(arbre.trunk)}</p>` : ''}
     ${ailleurs ? `<p class="arbre-ailleurs">Le même ailleurs : ${ailleurs}</p>` : ''}
     <div class="liaison-bandeau" id="liaison-bandeau" hidden>
@@ -965,7 +1043,9 @@ async function pageArbre(id) {
       <p class="form-error" id="branche-err"></p>
     </form>
     ${arbre.axe ? '' : '<p class="arbre-suppr"><button type="button" class="link-btn danger" id="arbre-suppr">Abattre cet arbre</button></p>'}
-    ` : `<p class="empty-note">L’arbre d’un As de ton carré (lecture seule).</p>`}`);
+    ` : `<p class="empty-note">${arbre.publique && etranger
+      ? 'L’univers d’un autre As (lecture seule). Depuis le tien, une branche peut être nourrie par les siennes.'
+      : 'L’arbre d’un As de ton carré (lecture seule).'}</p>`}`);
 
   // le saut vers une source : pour tout le monde, lecteur compris
   const vaVers = (cible) => {
@@ -1000,33 +1080,55 @@ async function pageArbre(id) {
   };
   document.getElementById('liaison-annule').onclick = fermeLiaison;
 
-  // Les autres arbres où puiser, chargés à la première liaison. Dans un
-  // arbre de carré on ne propose que ce carré : c'est la règle du serveur, et
-  // la proposer autrement mènerait à un refus.
+  /* Les autres arbres où puiser, chargés à la première liaison. On ne propose
+     que ce que le serveur accepterait : dans un arbre de carré, ce carré ;
+     dans un arbre public, les seuls univers — un arbre lu par tous ne peut
+     pas porter l'extrait d'une pensée qui ne l'est pas. Partout, les univers
+     de tous s'ajoutent : c'est ainsi qu'on en fabrique de nouveaux.       */
   let autresArbres = null;
+  const groupe = (label, arbres) => arbres.length
+    ? `<optgroup label="${esc(label)}">${arbres.map((a) => `<option value="${a.id}">${esc(a.title)}</option>`).join('')}</optgroup>`
+    : '';
+  const universOptions = async (dejaVus) => {
+    let g;
+    try { g = await api(`/api/univers?kind=${kind}`); } catch { return []; }
+    return (g.univers || [])
+      .filter((u) => u.id !== id && !dejaVus.has(u.id))
+      .map((u) => ({ id: u.id, title: u.carre_nom ? `${u.carre_nom} · Nos univers` : `${u.username} · Mes univers` }));
+  };
   const chargeAutres = async () => {
-    if (autresArbres) return;
+    if (autresArbres != null) return;
     try {
-      const d = await api(`/api/arbres?kind=${kind}`);
-      const groupe = (label, arbres) => arbres.length
-        ? `<optgroup label="${esc(label)}">${arbres.map((a) => `<option value="${a.id}">${esc(a.title)}</option>`).join('')}</optgroup>`
-        : '';
       let options = '';
       let total = 0;
-      if (collectif) {
-        const c = (d.carres || []).find((x) => x.carre_id === arbre.carre_id);
-        const arbres = (c ? c.arbres : []).filter((a) => a.id !== id);
-        total = arbres.length;
-        options = groupe(c ? c.carre_nom : 'Le carré', arbres);
+      const vus = new Set([id]);
+      if (arbre.publique) {
+        const univers = await universOptions(vus);
+        total = univers.length;
+        options = groupe('Les univers', univers);
       } else {
-        const mienne = [...(d.troncs || []), ...(d.arbres || [])].filter((a) => a.id !== id);
-        total = mienne.length;
-        options = groupe('Ma forêt', mienne);
-        for (const c of d.carres || []) {
-          const arbres = c.arbres.filter((a) => a.id !== id);
-          total += arbres.length;
-          options += groupe(c.carre_nom, arbres);
+        const d = await api(`/api/arbres?kind=${kind}`);
+        if (collectif) {
+          const c = (d.carres || []).find((x) => x.carre_id === arbre.carre_id);
+          const arbres = (c ? c.arbres : []).filter((a) => a.id !== id);
+          for (const a of arbres) vus.add(a.id);
+          total = arbres.length;
+          options = groupe(c ? c.carre_nom : 'Le carré', arbres);
+        } else {
+          const mienne = [...(d.troncs || []), ...(d.arbres || [])].filter((a) => a.id !== id);
+          for (const a of mienne) vus.add(a.id);
+          total = mienne.length;
+          options = groupe('Ma forêt', mienne);
+          for (const c of d.carres || []) {
+            const arbres = c.arbres.filter((a) => a.id !== id);
+            for (const a of arbres) vus.add(a.id);
+            total += arbres.length;
+            options += groupe(c.carre_nom, arbres);
+          }
         }
+        const univers = await universOptions(vus);
+        total += univers.length;
+        options += groupe('Les univers', univers);
       }
       autresArbres = total;
       selArbre.innerHTML = '<option value="">ou depuis un autre arbre…</option>' + options;
@@ -1401,28 +1503,45 @@ async function carreOngletHarmonie(id, d, epoch) {
   const compte = (n) => n
     ? `${n} branche${n > 1 ? 's' : ''}`
     : 'le tronc attend ses premières branches';
+  const parAxe = (as, axe) => as.arbres.find((x) => x.axe === axe) || {};
+
   docke('ca', 'carre', `
     ${carreTete(d, id, 'harmonie')}
     <section class="harmonie">
-      <h2>Notre société harmonieuse</h2>
-      <a class="arbre-card arbre-card--tronc" href="/arbre/${h.societe.id}" data-link>
-        <span class="arbre-meta">${compte(h.societe.branches)}</span>
-      </a>
-      <p class="harmonie-note">Les quatre y écrivent ensemble.</p>
+      <h2>Ce que nous imaginons ensemble</h2>
+      <div class="harmonie-communs">
+        ${h.communs.map((c) => `
+          <a class="arbre-card arbre-card--tronc${c.publique ? ' arbre-card--publique' : ''}"
+             href="/arbre/${c.id}" data-link>
+            <h2>${esc(c.titre)}</h2>
+            <p class="arbre-sous">${esc(c.sous)}</p>
+            <span class="arbre-meta">${compte(c.branches)}${c.publique ? ' · lu par tous' : ''}</span>
+          </a>`).join('')}
+      </div>
+      <p class="harmonie-note">Les quatre y écrivent ensemble : chacun greffe sur la
+        branche des autres, chacun ne retouche que la sienne.</p>
     </section>
     <section class="harmonie">
-      <h2>Le moi harmonieux de chacun</h2>
+      <h2>Chacun, tel que ce carré le révèle</h2>
       <div class="harmonie-mois">
-        ${h.mois.map((m) => `
+        ${h.as.map((m) => `
           <div class="harmonie-as">
             ${authorLink(m.username)}
-            ${m.tree_id
-              ? `<a class="arbre-card arbre-card--tronc" href="/arbre/${m.tree_id}" data-link>
-                   <span class="arbre-meta">${compte(m.branches)}</span></a>`
-              : '<span class="empty-note">pas encore ouvert</span>'}
+            <div class="harmonie-paire">
+              ${h.axesPersonnels.map((a) => {
+                const t = parAxe(m, a.axe);
+                return t.id
+                  ? `<a class="arbre-card arbre-card--tronc" href="/arbre/${t.id}" data-link>
+                       <h2>${esc(a.court)}</h2>
+                       <span class="arbre-meta">${compte(t.branches)}</span></a>`
+                  : `<span class="arbre-card arbre-card--vide">${esc(a.court)}<span
+                       class="arbre-meta">pas encore ouvert</span></span>`;
+              }).join('')}
+            </div>
           </div>`).join('')}
       </div>
-      <p class="harmonie-note">Chacun le sien, lu par les trois autres.</p>
+      <p class="harmonie-note">La psychologie dit le présent, le moi harmonieux dit vers
+        quoi il tend. Chacun écrit les siens ; les trois autres les lisent.</p>
     </section>`);
 }
 
@@ -1443,6 +1562,10 @@ function carreOngletNotes(id, d, epoch) {
     }
   }
 
+  // ce que chacun dit de lui-même au recrutement, en regard de ce que le
+  // carré en dit : deux regards, jamais le même
+  const soi = new Map((d.autoNotes || []).map((n) => [`${n.user_id}:${n.domaine}`, n.note]));
+
   const sections = d.domaines.map((dom) => {
     let meilleure = 0;
     for (const m of d.membres) meilleure = Math.max(meilleure, moyennes.get(`${m.user_id}:${dom}`) || 0);
@@ -1452,6 +1575,7 @@ function carreOngletNotes(id, d, epoch) {
       return `
         <div class="note-ligne${moy && moy === meilleure ? ' note-meilleur' : ''}">
           <span class="note-nom">${esc(m.username)}</span>
+          <span class="note-soi" title="ce qu’il dit de lui-même">${soi.get(`${m.user_id}:${dom}`) || '·'}</span>
           <span class="note-moy">${moy ? moy.toFixed(1).replace('.0', '') : '·'}</span>
           ${estMoi ? '<span class="note-saisie"></span>' : `
           <select class="note-saisie" data-cible="${m.user_id}" data-domaine="${esc(dom)}">
@@ -1468,6 +1592,8 @@ function carreOngletNotes(id, d, epoch) {
     ${carreTete(d, id, 'notes')}
     <p class="notes-regle">Le meilleur du domaine vaut 10 ; les autres notes se lisent par
       rapport à lui. Discutez d’abord, notez ensuite, affinez toujours.</p>
+    <p class="notes-legende">Chaque ligne : ce qu’il dit de lui au
+      <a href="/carre-d-as/recrutement" data-link>recrutement</a>, puis ce que le carré en dit.</p>
     ${d.membres.length > 1 ? `
     <div class="notes-grille">${sections}</div>
     <button type="button" class="primary" id="notes-envoi">Enregistrer mes notes</button>
@@ -1646,6 +1772,7 @@ async function vueRecrutement() {
 
   // les invitations que je reçois, et mon annonce au salon
   const a = d.monAnnonce;
+  const mesNotes = d.mesAutoNotes || {};
   const maZone = `
     ${d.invitations.length ? `
     <div class="recrut-invitations">
@@ -1662,6 +1789,21 @@ async function vueRecrutement() {
     <form id="annonce-form" class="annonce-form">
       <textarea id="annonce-note" maxlength="500" rows="2"
         placeholder="Ce que tu apporterais à un carré…">${esc(a?.note || '')}</textarea>
+      <fieldset class="annonce-auto">
+        <legend>Où je suis le meilleur</legend>
+        <p class="annonce-auto-regle">Ta meilleure connaissance vaut 10 ; les trois autres
+          se lisent par rapport à elle. Ce n’est pas un classement entre As : c’est
+          l’endroit où tu es le plus fort, à toi.</p>
+        <div class="annonce-auto-lignes">
+          ${d.domaines.map((x) => `
+            <label class="annonce-auto-ligne">${esc(x)}
+              <select data-auto="${esc(x)}">
+                <option value="">·</option>
+                ${Array.from({ length: 10 }, (_, i) => 10 - i).map((n) =>
+                  `<option value="${n}"${String(mesNotes[x] || '') === String(n) ? ' selected' : ''}>${n}</option>`).join('')}
+              </select></label>`).join('')}
+        </div>
+      </fieldset>
       <div class="annonce-ligne">
         <select id="annonce-role"><option value="">nature</option>
           ${d.roles.map((r) => `<option value="${esc(r)}"${a?.role === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}
@@ -1702,6 +1844,9 @@ async function vueRecrutement() {
             ${x.carres ? `<span class="vie-meta">${x.carres} carré${x.carres > 1 ? 's' : ''}</span>` : ''}
           </div>
           ${x.note ? `<p class="recrut-note">${esc(x.note)}</p>` : ''}
+          ${x.auto ? `<div class="recrut-auto">${d.domaines.map((dom) => `
+            <span class="recrut-auto-dom${x.auto[dom] === 10 ? ' fort' : ''}">${esc(dom)}
+              <strong>${x.auto[dom] || '·'}</strong></span>`).join('')}</div>` : ''}
           ${avecPlaces.length && !x.moi ? `<button type="button" data-invite="${esc(x.username)}">Inviter</button>` : ''}
         </div>`).join('')}
     </div>` : '<p class="empty-note">Personne au salon.</p>';
@@ -1747,12 +1892,15 @@ async function vueRecrutement() {
     annonceForm.onsubmit = async (e) => {
       e.preventDefault();
       try {
+        const notes = {};
+        app.querySelectorAll('[data-auto]').forEach((s) => { notes[s.dataset.auto] = s.value; });
         await api('/api/carre/annonce', {
           method: 'PUT',
           body: {
             note: document.getElementById('annonce-note').value,
             role: document.getElementById('annonce-role').value,
             domaine: document.getElementById('annonce-domaine').value,
+            notes,
           },
         });
         vueRecrutement();
@@ -1830,11 +1978,13 @@ async function vueArchives() {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
   let data;
-  try { data = await api('/api/brainstorms'); }
+  // les archives demandent les leurs : reléguées en fin de liste commune,
+  // elles disparaissaient dès que le direct et l'annoncé remplissaient la page
+  try { data = await api('/api/brainstorms?statut=termine'); }
   catch { return navigate('/57', true); }
   if (stale(epoch)) return;
 
-  const finis = data.brainstorms.filter((b) => b.statut === 'termine');
+  const finis = data.brainstorms;
   docke('bs', 'archives', `
     <h1>Les archives</h1>
     <div class="bs-liste">${finis.length ? finis.map(bsCarte).join('')

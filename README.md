@@ -185,9 +185,10 @@ en bas de l'écran**, au pouce sur mobile, sous les yeux sur ordinateur : qui
 suit l'utilisateur dans toutes ses vues. Le dock est purement typographique
 (pas d'icônes) et les vues ne s'expliquent pas : on est dans un escape game,
 l'interface se comprend en la touchant. Pense Mieux : **Forêt** (filtre, tri,
-statistiques), **Nouvel arbre** (la création est un geste du menu) et
-**Recherche** (plein texte dans sujets, troncs et branches). Vidéographie :
-**Forêt**, **Nouvel arbre**, **Carré** (les forêts vidéo de ses As). Carré
+statistiques), **Nouvel arbre** (la création est un geste du menu), **Univers**
+(la galerie, voir plus bas) et **Recherche** (plein texte dans sujets, troncs et
+branches). Vidéographie : **Forêt**, **Nouvel arbre**, **Univers**, **Carré**
+(les forêts vidéo de ses As). Carré
 d'As : **Mon carré**, **Conversation**, **Recrutement**, **Missions**.
 Brainstorm : **La scène** (le direct et l'annoncé), **Archives** (les
 brainstorms passés et leur récolte : rien ne s'évapore), **Annoncer**.
@@ -199,7 +200,8 @@ chaque présent est le futur de plusieurs passés, y compris à travers les
 arbres.
 
 Le **Recrutement** est le salon où les carrés se composent : un As libre
-**s'annonce** (ce qu'il apporterait, sa nature, sa connaissance), un carré
+**s'annonce** (ce qu'il apporterait, sa nature, sa connaissance, et **où il est
+le meilleur** : ses quatre auto-notes, la plus haute valant 10), un carré
 incomplet l'**invite** avec un mot, et l'invité **accepte ou décline** : on
 n'entre dans un carré que voulu des deux côtés. À l'acceptation, la nature et
 la connaissance de l'annonce suivent dans le carré, l'annonce quitte le salon
@@ -229,27 +231,48 @@ ou privée) : on y organise ce qu'on a extériorisé en vidéo. Les arbres de
 pensée restent à leur auteur ; les vidéographies se partagent **en lecture au
 sein de son carré**, puisque les As doivent les analyser mutuellement.
 
-## Les deux troncs
+## Les cinq troncs
 
-Chacun poursuit deux choses : devenir **sa version la plus harmonieuse**, et
-imaginer **sa société la plus harmonieuse**. Ce sont les mécanismes 2 et 3 de
-l'orange ; ce sont aussi, désormais, deux arbres qui existent d'avance.
+Chacun poursuit la même chose sous cinq angles, et chaque angle est un arbre
+qui existe d'avance. En tête de la forêt de **Pense Mieux** et de celle de la
+**Vidéographie**, cinq troncs épinglés, dans cet ordre :
 
-En tête de la forêt de **Pense Mieux** et de celle de la **Vidéographie**,
-deux troncs épinglés : **« Le moi harmonieux »** et **« Ma société
-harmonieuse »**. Ils se créent au premier regard, ne se plantent pas, ne
-s'abattent pas et ne se renomment pas : on ne fait que les nourrir, branche
-après branche, avec le même éditeur que tout le reste. En Pense Mieux ils sont
-à leur seul porteur ; en Vidéographie ils suivent la règle de l'outil et se
-lisent au sein du carré.
+| axe | personnel | dans un carré |
+|---|---|---|
+| `psy` | Ma psychologie | La psychologie de … (un par As) |
+| `moi` | Le moi harmonieux | Le moi harmonieux de … (un par As) |
+| `philo` | Ma philosophie | Notre philosophie (commun) |
+| `univers` | Mes univers | Nos univers (commun, **public**) |
+| `societe` | Ma société harmonieuse | Notre société harmonieuse (commun) |
 
-Dans un **carré**, l'onglet **Harmonie** porte les deux mêmes axes, devenus
-collectifs : **« Notre société harmonieuse »**, commune aux quatre, où chacun
-écrit et où chacun greffe sur la branche des autres sans jamais pouvoir la
-retoucher ni la couper (chaque branche porte son auteur) ; et **« Le moi
-harmonieux de … »**, un par As, écrit par lui seul et lu par les trois autres.
-C'est la matière du travail mutuel : sa version la plus harmonieuse telle que
-ce carré-là la révèle.
+Les deux premiers **se répondent en miroir** : la psychologie dit le présent
+(comment on fonctionne, ce qu'on constate de soi), le moi harmonieux dit vers
+quoi l'on tend. L'un décrit, l'autre vise, et la distance entre les deux est le
+travail : chaque page porte une ligne « En regard » qui mène à l'autre.
+
+Les troncs se créent au premier regard, ne se plantent pas, ne s'abattent pas
+et ne se renomment pas : on ne fait que les nourrir, branche après branche,
+avec le même éditeur que tout le reste. En Pense Mieux ils sont à leur seul
+porteur ; en Vidéographie ils suivent la règle de l'outil et se lisent au sein
+du carré.
+
+Dans un **carré**, l'onglet **Harmonie** porte les cinq axes. Les trois
+derniers sont **communs aux quatre** : chacun y écrit, chacun greffe sur la
+branche des autres sans jamais pouvoir la retoucher ni la couper (chaque
+branche porte son auteur). Les deux premiers restent **un par As**, écrits par
+lui seul et lus par les trois autres : c'est la matière du travail mutuel : sa
+psychologie et sa version la plus harmonieuse telles que ce carré-là les
+révèle.
+
+**Les univers sont publics.** C'est le seul axe ainsi, et c'est l'axe qui le
+décide, jamais celui qui écrit : un modèle d'univers ne vaut que confronté aux
+autres. L'onglet **Univers** de Pense Mieux et de la Vidéographie est la
+**galerie** : tous les troncs d'univers de la plateforme, personnels comme
+collectifs, avec le nom de leur porteur ou de leur carré, cherchables en plein
+texte. Un tronc vide n'y paraît pas (ils existent d'avance pour chacun) : un
+univers entre dans la galerie au moment où quelqu'un y écrit. On regarde ceux
+des autres, et on en fabrique de nouveaux **en les reliant** : n'importe quelle
+branche de la galerie peut nourrir la sienne.
 
 **Le champ des possibles.** Un As vit dans plusieurs carrés, donc il a
 plusieurs versions de lui-même, et plusieurs sociétés imaginées. Sur la page
@@ -258,7 +281,9 @@ depuis son moi personnel vers son moi de chaque carré, et de l'un à l'autre.
 Un carré de plus est une version de plus, et le champ s'ouvre d'autant.
 
 Techniquement, un tronc **est un arbre** : `reflection_trees` porte `axe`
-(`moi` | `societe`) et `carre_id` (nul pour un arbre personnel). Les troncs
+(`psy` | `moi` | `philo` | `univers` | `societe`) et `carre_id` (nul pour un
+arbre personnel), et des index uniques partiels garantissent l'unicité de
+chacun. Les troncs
 héritent donc, sans une ligne de moteur nouveau, des branches emboîtées, des
 liens de nourriture, du rendu et de la recherche. Un arbre se lit par un
 chemin unique, `/arbre/<id>`, quel que soit l'endroit où il vit : c'est le
@@ -269,9 +294,16 @@ branche personnelle peut se nourrir d'un arbre de carré (c'est ainsi que ce
 qu'un carré produit entre dans le tronc de chacun de ses As, avec sa chip de
 provenance), mais une branche d'un arbre de carré ne peut se nourrir que du
 **même** carré. Sans cette règle, l'extrait affiché par une chip livrerait une
-pensée privée, ou celle d'un autre carré, aux trois autres As. En quittant un
-carré, son moi redescend dans sa forêt sous le nom du carré quitté, et les
-nourritures qui traversaient la frontière sont coupées **dans les deux sens**.
+pensée privée, ou celle d'un autre carré, aux trois autres As.
+
+Les univers ajoutent la règle symétrique : **un arbre public ne se nourrit que
+de public**. Un arbre lu par tous ne peut pas porter l'extrait d'une pensée qui
+ne l'est pas, fût-elle la mienne. Dans l'autre sens, un univers public nourrit
+n'importe quel arbre : c'est tout l'intérêt de la galerie.
+
+En quittant un carré, sa psychologie et son moi redescendent dans sa forêt sous
+le nom du carré quitté, et les nourritures qui traversaient la frontière sont
+coupées **dans les deux sens**.
 
 Le **Carré d'As** (échelon 5) est un réseau social des réflexions. Un As peut
 vivre dans **plusieurs carrés** (sept au plus) : des groupes de réflexion qui
@@ -285,12 +317,18 @@ cinq onglets :
   **salon Discord** où il s'organise, et **le live du carré** : l'As au
   meilleur matériel tient l'antenne, les quatre se retrouvent au salon, et
   l'hôte retransmet leurs quatre voix en direct.
-- **Harmonie** : les deux troncs du carré, décrits plus haut : la société
-  commune aux quatre, et le moi harmonieux de chacun.
+- **Harmonie** : les cinq troncs du carré, décrits plus haut : ce que les
+  quatre imaginent ensemble (philosophie, univers, société), et la
+  psychologie et le moi harmonieux de chacun.
 - **Notes** : l'évaluation mutuelle, domaine par domaine, de 1 à 10. Le
   **meilleur du domaine vaut 10** et toutes les autres notes se lisent par
   rapport à lui ; tout le carré voit toutes les notes (la transparence est
-  la discussion) et rien n'est figé : on affine (`carre_notes`).
+  la discussion) et rien n'est figé : on affine (`carre_notes`). Chaque ligne
+  porte aussi ce que l'As **dit de lui-même** : au recrutement, chacun se note
+  dans les quatre connaissances, sa meilleure valant 10 et les trois autres se
+  lisant par rapport à elle (`carre_auto_notes`). Ce n'est pas un classement
+  entre As : c'est l'endroit où l'on est le plus fort, à soi. Les deux regards
+  se lisent côte à côte.
 - **Conversation** : privée, réservée à ses As, par carré.
 - **Relatif** : l'IA du carré, bâtie sur Pense Mieux (voir plus bas).
 
@@ -305,10 +343,10 @@ conversation.
 La voix d'un As est bâtie sur ses **arbres de pensée offerts** à ce carré
 (consentement explicite, arbre par arbre : rien de privé ne nourrit le
 relatif sans ce geste) et ses vidéographies, déjà partagées au carré. La
-voix du carré ajoute le cap, la société harmonieuse que les quatre imaginent
-ensemble, et la récolte de ses brainstorms ; la voix d'un As ajoute son moi
-harmonieux dans ce carré. Ces deux troncs y entrent d'office, ils sont déjà
-écrits pour les quatre. Le **portrait**
+voix du carré ajoute le cap, ce que les quatre imaginent ensemble (philosophie,
+univers, société) et la récolte de ses brainstorms ; la voix d'un As ajoute sa
+psychologie et son moi harmonieux dans ce carré. Ces troncs y entrent d'office,
+ils sont déjà écrits pour les quatre. Le **portrait**
 de chaque voix se copie d'un bouton, pour la porter à n'importe quelle IA ;
 sur place, le relatif répond par **Workers AI** (binding `AI` dans
 `wrangler.jsonc`) et garde ses échanges (`carre_relatif_messages`). Sans le

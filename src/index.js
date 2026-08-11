@@ -138,6 +138,8 @@ async function handleApi(request, env, url) {
   if ((p = route('POST', '/api/branches/:id/liens'))) return lienCreate(request, env, +p[0]);
   if ((p = route('DELETE', '/api/branches/:id/liens/:source'))) return lienDelete(request, env, +p[0], +p[1]);
   if ((p = route('GET', '/api/videographie/membre/:id'))) return videographieDuMembre(request, env, +p[0]);
+  // la galerie des univers : le seul endroit où les arbres de tous se lisent
+  if (route('GET', '/api/univers')) return universGalerie(request, env, url);
 
   // les littéraux d'abord, la page d'un carré (:id) ensuite
   if (route('GET', '/api/carre')) return carreGet(request, env);
@@ -162,7 +164,7 @@ async function handleApi(request, env, url) {
   if ((p = route('POST', '/api/carre/:id/relatif'))) return relatifPost(request, env, +p[0]);
   if ((p = route('PUT', '/api/carre/:id/relatif/sources'))) return relatifSources(request, env, +p[0]);
 
-  if (route('GET', '/api/brainstorms')) return brainstormsList(request, env);
+  if (route('GET', '/api/brainstorms')) return brainstormsList(request, env, url);
   if (route('POST', '/api/brainstorms')) return brainstormsCreate(request, env);
   if ((p = route('GET', '/api/brainstorms/:id'))) return brainstormGet(request, env, +p[0]);
   if ((p = route('PUT', '/api/brainstorms/:id'))) return brainstormUpdate(request, env, +p[0]);
@@ -2216,6 +2218,18 @@ async function ensureHautesTables(env) {
          PRIMARY KEY (carre_id, user_id, tree_id)
        )`
     ),
+    // se situer soi-même, au recrutement : dans les quatre connaissances, la
+    // meilleure vaut 10 et les trois autres se lisent par rapport à elle. La
+    // note ne dit pas ce qu'on vaut, elle dit où l'on est le meilleur.
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS carre_auto_notes (
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         domaine TEXT NOT NULL,
+         note INTEGER NOT NULL CHECK (note BETWEEN 1 AND 10),
+         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+         PRIMARY KEY (user_id, domaine)
+       )`
+    ),
   ]);
   // `retenue` est arrivée après la création de la table sur les bases déjà
   // en service : on regarde avant d'ajouter, ALTER n'est pas idempotent.
@@ -2286,18 +2300,27 @@ async function ensureHautesTables(env) {
   await ajouteColonne(env, 'reflection_trees', 'carre_id', 'ALTER TABLE reflection_trees ADD COLUMN carre_id INTEGER');
   await ajouteColonne(env, 'reflection_branches', 'user_id', 'ALTER TABLE reflection_branches ADD COLUMN user_id INTEGER');
 
-  // Un seul moi et une seule société par personne et par outil ; dans un
-  // carré, un moi par As et une seule société. Ces index sont partiels : au
-  // moment de leur création, aucun arbre ne porte d'axe, donc aucun conflit
-  // n'est possible sur une base en service.
+  // Un seul tronc par axe, par personne et par outil ; dans un carré, un par
+  // As pour les axes personnels (psychologie, moi) et un seul pour les axes
+  // communs (philosophie, univers, société). Ces index sont partiels : chacun
+  // naît avant le premier arbre de son axe, donc aucun conflit n'est possible
+  // sur une base en service.
   for (const sql of [
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_trees_axe_perso ON reflection_trees(user_id, kind, axe)
        WHERE axe IS NOT NULL AND carre_id IS NULL`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_trees_axe_moi ON reflection_trees(carre_id, user_id, axe)
        WHERE carre_id IS NOT NULL AND axe = 'moi'`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_trees_axe_psy ON reflection_trees(carre_id, user_id, axe)
+       WHERE carre_id IS NOT NULL AND axe = 'psy'`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_trees_axe_societe ON reflection_trees(carre_id, axe)
        WHERE carre_id IS NOT NULL AND axe = 'societe'`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_trees_axe_philo ON reflection_trees(carre_id, axe)
+       WHERE carre_id IS NOT NULL AND axe = 'philo'`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_trees_axe_univers ON reflection_trees(carre_id, axe)
+       WHERE carre_id IS NOT NULL AND axe = 'univers'`,
     'CREATE INDEX IF NOT EXISTS idx_trees_carre ON reflection_trees(carre_id)',
+    // la galerie des univers lit tous les troncs publics d'un outil
+    `CREATE INDEX IF NOT EXISTS idx_trees_axe ON reflection_trees(axe, kind)`,
   ]) {
     await env.DB.prepare(sql).run();
   }
@@ -2396,13 +2419,32 @@ function urlYoutubeValide(url) {
   } catch { return false; }
 }
 
-/* ------------------------------------------------------- les deux troncs ---
-   Deux arbres existent d'avance pour chacun, dans Pense Mieux comme dans la
-   Vidéographie : le moi harmonieux et la société harmonieuse. Ils ne se
-   plantent pas et ne s'abattent pas, on ne fait que les nourrir. Dans un
-   carré, la société est commune aux quatre et chaque As y tient son propre
-   moi, lu par les trois autres : c'est là que le champ des possibles s'ouvre,
-   un carré de plus étant une version de plus de soi.                      */
+/* ------------------------------------------------------- les cinq troncs ---
+   Cinq arbres existent d'avance pour chacun, dans Pense Mieux comme dans la
+   Vidéographie : la psychologie et le moi harmonieux, qui se répondent en
+   miroir (le présent, et ce vers quoi il tend), puis la philosophie, les
+   univers et la société harmonieuse. Ils ne se plantent pas et ne s'abattent
+   pas, on ne fait que les nourrir.
+
+   Dans un carré, les trois derniers sont communs aux quatre, et chaque As y
+   tient sa propre psychologie et son propre moi, lus par les trois autres :
+   c'est là que le champ des possibles s'ouvre, un carré de plus étant une
+   version de plus de soi.                                                  */
+
+// Les axes communs d'un carré, et le seul axe public. Ces listes viennent de
+// nos propres constantes : leur interpolation en SQL est sans danger.
+const AXES_COMMUNS = AXES_ORDRE.filter((a) => AXES[a].commun);
+const AXES_PERSONNELS = AXES_ORDRE.filter((a) => !AXES[a].commun);
+const AXES_PUBLICS = AXES_ORDRE.filter((a) => AXES[a].publique);
+const SQL_COMMUNS = AXES_COMMUNS.map((a) => `'${a}'`).join(',');
+const SQL_PERSONNELS = AXES_PERSONNELS.map((a) => `'${a}'`).join(',');
+const SQL_PUBLICS = AXES_PUBLICS.map((a) => `'${a}'`).join(',');
+
+// Un axe public est lu par tous les As de l'échelon de l'outil, où qu'il
+// vive : c'est un choix de l'axe, jamais de celui qui écrit.
+function axePublic(axe) {
+  return !!(axe && AXES[axe] && AXES[axe].publique);
+}
 
 function titreAxe(axe, nomCarre) {
   return nomCarre ? AXES[axe].titreCarre(nomCarre) : AXES[axe].titre;
@@ -2416,7 +2458,7 @@ async function assureTronc(env, { userId, kind, axe, carreId = null, nomCarre = 
   // consomme tous, même quand la condition n'en a pas besoin
   const ou = carreId == null
     ? 'user_id = ?1 AND kind = ?2 AND axe = ?3 AND carre_id IS NULL AND ?4 IS NULL'
-    : (axe === 'societe'
+    : (AXES[axe].commun
       ? 'kind = ?2 AND axe = ?3 AND carre_id = ?4 AND ?1 IS NOT NULL'
       : 'user_id = ?1 AND kind = ?2 AND axe = ?3 AND carre_id = ?4');
   const lit = () => env.DB.prepare(
@@ -2432,14 +2474,36 @@ async function assureTronc(env, { userId, kind, axe, carreId = null, nomCarre = 
   return lit();
 }
 
-// Les deux troncs d'une personne dans un outil, dans l'ordre.
+// Les cinq troncs d'une personne dans un outil, dans l'ordre. On les lit d'un
+// coup : au régime de croisière ils sont tous là, et la création ne concerne
+// que ceux qui manquent encore.
 async function troncsDe(env, userId, kind) {
+  const { results } = await env.DB.prepare(
+    `SELECT id, user_id, kind, title, trunk, axe, carre_id, created_at, updated_at
+       FROM reflection_trees
+      WHERE user_id = ?1 AND kind = ?2 AND axe IS NOT NULL AND carre_id IS NULL`
+  ).bind(userId, kind).all();
+  const parAxe = new Map((results || []).map((t) => [t.axe, t]));
   const troncs = [];
   for (const axe of AXES_ORDRE) {
-    const t = await assureTronc(env, { userId, kind, axe });
+    const t = parAxe.get(axe) || await assureTronc(env, { userId, kind, axe });
     if (t) troncs.push(t);
   }
   return troncs;
+}
+
+/* Le miroir : la psychologie dit le présent, le moi harmonieux dit vers quoi
+   il tend. Depuis l'un on passe à l'autre, dans le même contexte : même
+   outil, même carré, même personne.                                        */
+async function troncMiroir(env, arbre) {
+  const autre = arbre.axe && AXES[arbre.axe] ? AXES[arbre.axe].miroir : null;
+  if (!autre) return null;
+  const t = await env.DB.prepare(
+    `SELECT id, title FROM reflection_trees
+      WHERE user_id = ?1 AND kind = ?2 AND axe = ?3
+        AND ((carre_id IS NULL AND ?4 IS NULL) OR carre_id = ?4)`
+  ).bind(arbre.user_id, arbre.kind, autre, arbre.carre_id).first();
+  return t ? { id: t.id, title: t.title, axe: autre } : null;
 }
 
 /* Qui a le droit de lire, qui a le droit d'écrire. Un seul endroit, pour que
@@ -2447,24 +2511,28 @@ async function troncsDe(env, userId, kind) {
    droit de voir se comporte partout comme un arbre qui n'existe pas.     */
 async function droitsArbre(env, vu, tree) {
   const proprietaire = tree.user_id === vu.user.id;
+  // Les univers sont lus par tous les As de l'échelon de l'outil : un modèle
+  // d'univers ne vaut que confronté aux autres. C'est le seul axe ainsi, et
+  // c'est l'axe qui le décide, jamais celui qui écrit.
+  const publique = axePublic(tree.axe);
   if (tree.carre_id != null) {
     // l'appartenance implique l'échelon du carré, mais on le revérifie : les
     // droits ne se déduisent jamais d'un autre droit
-    if (!vu.access.carre) return { lire: false, ecrire: false, proprietaire };
-    if (!(await monAppartenance(env, tree.carre_id, vu.user.id))) {
-      return { lire: false, ecrire: false, proprietaire };
-    }
-    // la société est commune aux quatre ; le moi d'un As est à lui seul,
-    // ouvert aux regards des trois autres
-    return { lire: true, ecrire: tree.axe === 'societe' || proprietaire, proprietaire };
+    const membre = !!(vu.access.carre && await monAppartenance(env, tree.carre_id, vu.user.id));
+    if (!membre) return { lire: publique, ecrire: false, proprietaire, publique, membre };
+    // les axes communs appartiennent aux quatre ; la psychologie et le moi
+    // d'un As sont à lui seul, ouverts aux regards des trois autres
+    const commun = !!(AXES[tree.axe] && AXES[tree.axe].commun);
+    return { lire: true, ecrire: commun || proprietaire, proprietaire, publique, membre };
   }
-  if (proprietaire) return { lire: true, ecrire: true, proprietaire };
+  if (proprietaire) return { lire: true, ecrire: true, proprietaire, publique };
+  if (publique) return { lire: true, ecrire: false, proprietaire, publique };
   // Une vidéographie se partage au sein d'un carré : « analysez mutuellement
   // vos vidéographies ». Un arbre de pensée, lui, reste à son auteur.
   if (tree.kind === 'video' && await memeCarre(env, vu.user.id, tree.user_id)) {
-    return { lire: true, ecrire: false, proprietaire };
+    return { lire: true, ecrire: false, proprietaire, publique };
   }
-  return { lire: false, ecrire: false, proprietaire };
+  return { lire: false, ecrire: false, proprietaire, publique };
 }
 
 // L'auteur d'une branche : celui qui l'a écrite, ou le porteur de l'arbre
@@ -2473,11 +2541,11 @@ function auteurBranche(row) {
   return row.auteur_id == null ? row.user_id : row.auteur_id;
 }
 
-// Dans la société commune, chacun greffe sur la branche de n'importe qui,
-// mais ne retouche et ne coupe que les siennes.
+// Dans un arbre commun d'un carré, chacun greffe sur la branche de n'importe
+// qui, mais ne retouche et ne coupe que les siennes.
 function peutToucherBranche(row, droits, moi) {
   if (!droits.ecrire) return false;
-  if (row.carre_id == null || row.axe !== 'societe') return true;
+  if (row.carre_id == null || !(AXES[row.axe] && AXES[row.axe].commun)) return true;
   return auteurBranche(row) === moi;
 }
 
@@ -2489,6 +2557,9 @@ async function arbresList(request, env, url) {
 
   const compte = async (t) => ({
     ...t,
+    // ce que porte l'axe : sa phrase, et s'il est lu par tous
+    sous: AXES[t.axe] ? AXES[t.axe].sous : null,
+    publique: axePublic(t.axe),
     branches: (await env.DB.prepare(
       'SELECT COUNT(*) AS n FROM reflection_branches WHERE tree_id = ?1'
     ).bind(t.id).first())?.n || 0,
@@ -2514,7 +2585,7 @@ async function arbresList(request, env, url) {
          FROM reflection_trees t
          JOIN carres c ON c.id = t.carre_id
          JOIN carre_membres m ON m.carre_id = t.carre_id AND m.user_id = ?1
-        WHERE t.kind = ?2 AND (t.axe = 'societe' OR t.user_id = ?1)
+        WHERE t.kind = ?2 AND (t.axe IN (${SQL_COMMUNS}) OR t.user_id = ?1)
         ORDER BY c.nom, t.axe`
     ).bind(vu.user.id, kind).all();
     const parCarre = new Map();
@@ -2554,8 +2625,10 @@ async function arbresCreate(request, env) {
 async function chargeArbre(env, id) {
   const tree = await env.DB.prepare(
     `SELECT t.id, t.user_id, t.kind, t.title, t.trunk, t.axe, t.carre_id,
-            t.created_at, t.updated_at, c.nom AS carre_nom
-       FROM reflection_trees t LEFT JOIN carres c ON c.id = t.carre_id
+            t.created_at, t.updated_at, c.nom AS carre_nom, u.username AS porteur
+       FROM reflection_trees t
+       LEFT JOIN carres c ON c.id = t.carre_id
+       LEFT JOIN users u ON u.id = t.user_id
       WHERE t.id = ?1`
   ).bind(id).first();
   if (!tree) return null;
@@ -2606,7 +2679,7 @@ async function memeAxeAilleurs(env, vu, arbre) {
        FROM reflection_trees t
        JOIN carres c ON c.id = t.carre_id
        JOIN carre_membres m ON m.carre_id = t.carre_id AND m.user_id = ?1
-      WHERE t.axe = ?2 AND t.id <> ?3 AND (t.axe = 'societe' OR t.user_id = ?1)
+      WHERE t.axe = ?2 AND t.id <> ?3 AND (t.axe IN (${SQL_COMMUNS}) OR t.user_id = ?1)
       ORDER BY c.nom`
   ).bind(vu.user.id, arbre.axe, arbre.id).all();
   for (const t of cs || []) ailleurs.push({ id: t.id, kind: t.kind, carre_id: t.carre_id, carre_nom: t.carre_nom });
@@ -2626,14 +2699,73 @@ async function arbresGet(request, env, id) {
 
   const droits = await droitsArbre(env, vu, arbre);
   if (!droits.lire) return json({ error: 'Arbre introuvable.' }, 404);
+
+  // le miroir : de la psychologie au moi harmonieux, et retour. Chez soi, on
+  // le crée s'il manque ; ailleurs on se contente de celui qui existe.
+  if (droits.proprietaire && arbre.carre_id == null && AXES[arbre.axe] && AXES[arbre.axe].miroir) {
+    await assureTronc(env, { userId: vu.user.id, kind: arbre.kind, axe: AXES[arbre.axe].miroir });
+  }
+
   return json({
     arbre: {
       ...arbre,
       proprietaire: droits.proprietaire,
       editable: droits.ecrire,
+      publique: droits.publique,
+      membre: !!droits.membre,
+      sous: AXES[arbre.axe] ? AXES[arbre.axe].sous : null,
+      miroir: await troncMiroir(env, arbre),
       moi: vu.user.id,
       ailleurs: await memeAxeAilleurs(env, vu, arbre),
     },
+  });
+}
+
+/* ------------------------------------------------- la galerie des univers ---
+   Le seul endroit de la plateforme où les arbres de tout le monde se lisent.
+   Un modèle d'univers ne vaut que confronté aux autres : on regarde, et on
+   fabrique le sien en reliant ce qu'on y trouve.
+
+   Les troncs vides n'y paraissent pas : ils existent d'avance pour chacun, et
+   une galerie de troncs vides ne dirait rien. Un univers entre dans la
+   galerie au moment où quelqu'un y écrit.                                  */
+async function universGalerie(request, env, url) {
+  const kind = kindDe(url.searchParams.get('kind'));
+  if (!kind) return json({ error: 'Nature d’arbre inconnue.' }, 400);
+  const { vu, refus } = await gateArbre(request, env, kind);
+  if (refus) return refus;
+
+  const q = String(url.searchParams.get('q') || '').trim();
+  const motif = q.length >= 2 ? '%' + q.replace(/[%_\\]/g, ' ') + '%' : null;
+  const filtre = motif
+    ? 'AND (t.trunk LIKE ?3 OR u.username LIKE ?3 OR c.nom LIKE ?3 OR EXISTS (SELECT 1 FROM reflection_branches b WHERE b.tree_id = t.id AND b.body LIKE ?3))'
+    : 'AND ?3 IS NULL';
+
+  const { results } = await env.DB.prepare(
+    `SELECT t.id, t.title, t.trunk, t.updated_at, t.user_id, t.carre_id,
+            u.username, c.nom AS carre_nom,
+            (SELECT COUNT(*) FROM reflection_branches b WHERE b.tree_id = t.id) AS branches,
+            (SELECT b.body FROM reflection_branches b
+              WHERE b.tree_id = t.id AND b.body <> '' ORDER BY b.id LIMIT 1) AS apercu
+       FROM reflection_trees t
+       LEFT JOIN users u ON u.id = t.user_id
+       LEFT JOIN carres c ON c.id = t.carre_id
+      WHERE t.axe IN (${SQL_PUBLICS}) AND t.kind = ?2 ${filtre}
+        AND (t.trunk <> '' OR EXISTS (SELECT 1 FROM reflection_branches b WHERE b.tree_id = t.id))
+        AND ?1 IS NOT NULL
+      ORDER BY t.updated_at DESC LIMIT 60`
+  ).bind(vu.user.id, kind, motif).all();
+
+  return json({
+    univers: (results || []).map((t) => ({
+      id: t.id, title: t.title, branches: t.branches,
+      // de quoi donner envie d'entrer : le tronc, ou la première branche.
+      // Ces textes sont publics par nature de l'axe : rien ne fuit ici.
+      trunk: t.trunk || (t.apercu ? String(t.apercu).slice(0, 200) : ''),
+      updated_at: t.updated_at, carre_nom: t.carre_nom,
+      username: t.carre_id == null ? t.username : null,
+      mien: t.carre_id == null && t.user_id === vu.user.id,
+    })),
   });
 }
 
@@ -2803,20 +2935,35 @@ async function lienCreate(request, env, brancheId) {
 
      Vers une branche d'un arbre de carré : la source doit venir du MÊME
      carré. Sinon une pensée privée, ou celle d'un autre carré, s'afficherait
-     aux trois autres As par la chip.                                      */
+     aux trois autres As par la chip.
+
+     Vers une branche d'un arbre PUBLIC (les univers) : la source doit être
+     elle-même publique. Un arbre lu par tous ne peut pas porter l'extrait
+     d'une pensée qui ne l'est pas — ni la mienne, ni celle de mon carré.
+
+     Dans l'autre sens, un arbre public nourrit n'importe quoi : c'est là tout
+     l'intérêt de la galerie. On regarde les univers des autres, on relie, et
+     un univers nouveau naît de ce qu'on a relié.                          */
+  const publique = 't.axe IN (' + SQL_PUBLICS + ')';
   const memeKind = 'b.id = ?1 AND t.kind = ?2';
-  const source = row.carre_id == null
+  const source = axePublic(row.axe)
     ? await env.DB.prepare(
       `SELECT b.id FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
-        WHERE ${memeKind} AND (
-          t.user_id = ?3
-          OR (t.carre_id IS NOT NULL AND EXISTS (
-                SELECT 1 FROM carre_membres m WHERE m.carre_id = t.carre_id AND m.user_id = ?3)))`
+        WHERE ${memeKind} AND ${publique} AND ?3 IS NOT NULL`
     ).bind(sourceId, row.kind, vu.user.id).first()
-    : await env.DB.prepare(
-      `SELECT b.id FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
-        WHERE ${memeKind} AND t.carre_id = ?3`
-    ).bind(sourceId, row.kind, row.carre_id).first();
+    : row.carre_id == null
+      ? await env.DB.prepare(
+        `SELECT b.id FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
+          WHERE ${memeKind} AND (
+            ${publique}
+            OR t.user_id = ?3
+            OR (t.carre_id IS NOT NULL AND EXISTS (
+                  SELECT 1 FROM carre_membres m WHERE m.carre_id = t.carre_id AND m.user_id = ?3)))`
+      ).bind(sourceId, row.kind, vu.user.id).first()
+      : await env.DB.prepare(
+        `SELECT b.id FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
+          WHERE ${memeKind} AND (${publique} OR t.carre_id = ?3)`
+      ).bind(sourceId, row.kind, row.carre_id).first();
   if (!source) return json({ error: 'Branche source introuvable.' }, 404);
 
   await env.DB.prepare(
@@ -2886,9 +3033,12 @@ async function videographieDuMembre(request, env, membreId) {
             (SELECT COUNT(*) FROM reflection_branches b WHERE b.tree_id = t.id) AS branches
        FROM reflection_trees t
       WHERE t.user_id = ?1 AND t.kind = 'video' AND t.carre_id IS NULL
-      ORDER BY t.axe IS NULL, t.axe, t.updated_at DESC`
+      ORDER BY t.updated_at DESC`
   ).bind(membreId).all();
-  return json({ membre: membre?.username || '', arbres: results || [] });
+  // les troncs d'abord, dans l'ordre des axes ; la forêt plantée ensuite
+  const rang = (t) => (t.axe ? AXES_ORDRE.indexOf(t.axe) : AXES_ORDRE.length);
+  const arbres = (results || []).sort((a, b) => rang(a) - rang(b));
+  return json({ membre: membre?.username || '', arbres });
 }
 
 /* --------------------------------------------- le carré d'as (échelon 5)
@@ -3040,6 +3190,14 @@ async function carreDetail(request, env, carreId) {
   const { results: notes } = await env.DB.prepare(
     'SELECT rateur_id, cible_id, domaine, note FROM carre_notes WHERE carre_id = ?1'
   ).bind(carreId).all();
+  // ce que chacun dit de lui-même au recrutement, en regard de ce que le
+  // carré en dit : les deux regards se lisent côte à côte
+  const marques = membres.map((_, i) => `?${i + 1}`).join(',');
+  const autoNotes = membres.length
+    ? (await env.DB.prepare(
+      `SELECT user_id, domaine, note FROM carre_auto_notes WHERE user_id IN (${marques})`
+    ).bind(...membres.map((m) => m.user_id)).all()).results || []
+    : [];
   const { results: bs } = await env.DB.prepare(
     `SELECT b.id, b.sujet, b.statut, b.plateforme, b.created_at, u.username AS hote_username,
             (SELECT COUNT(*) FROM brainstorm_idees i WHERE i.brainstorm_id = b.id AND i.retenue = 1) AS retenues
@@ -3055,6 +3213,7 @@ async function carreDetail(request, env, carreId) {
     membres,
     moi: { role: moi.role, domaine: moi.domaine },
     notes: notes || [],
+    autoNotes,
     brainstorms: bs || [],
     places: 4 - membres.length,
   });
@@ -3138,44 +3297,59 @@ async function carreNotes(request, env, carreId) {
   return json({ ok: true });
 }
 
-/* L'harmonie du carré : les deux troncs, ici collectifs. La société est
-   commune aux quatre, et chacun tient son moi harmonieux tel que ce carré le
-   révèle : c'est la matière du travail mutuel. On provisionne la société et
-   MON moi, jamais celui d'un autre : un As qui n'a pas encore ouvert le sien
-   apparaît en creux.                                                      */
+/* L'harmonie du carré : les cinq troncs, ici collectifs. La philosophie, les
+   univers et la société appartiennent aux quatre ; chacun tient sa
+   psychologie et son moi harmonieux tels que ce carré les révèle, lus par les
+   trois autres. On provisionne les communs et LES MIENS, jamais ceux d'un
+   autre : un As qui n'a pas encore ouvert les siens apparaît en creux.    */
 async function carreHarmonie(request, env, carreId) {
   const { vu, refus } = await gateCarreUser(request, env);
   if (refus) return refus;
   if (!(await monAppartenance(env, carreId, vu.user.id))) return json({ error: 'Carré introuvable.' }, 404);
   const carre = await env.DB.prepare('SELECT id, nom FROM carres WHERE id = ?1').bind(carreId).first();
   const membres = await membresDe(env, carreId);
+  const monNom = (membres.find((m) => m.user_id === vu.user.id) || {}).username;
 
-  const societe = await assureTronc(env, {
-    userId: vu.user.id, kind: 'pensee', axe: 'societe', carreId, nomCarre: carre.nom,
-  });
-  await assureTronc(env, {
-    userId: vu.user.id, kind: 'pensee', axe: 'moi', carreId,
-    nomCarre: (membres.find((m) => m.user_id === vu.user.id) || {}).username,
-  });
+  for (const axe of AXES_ORDRE) {
+    await assureTronc(env, {
+      userId: vu.user.id, kind: 'pensee', axe, carreId,
+      nomCarre: AXES[axe].commun ? carre.nom : monNom,
+    });
+  }
 
-  const compte = async (id) => (await env.DB.prepare(
-    'SELECT COUNT(*) AS n FROM reflection_branches WHERE tree_id = ?1'
-  ).bind(id).first())?.n || 0;
-
-  const { results: mois } = await env.DB.prepare(
-    `SELECT user_id, id FROM reflection_trees WHERE carre_id = ?1 AND axe = 'moi'`
+  const { results } = await env.DB.prepare(
+    `SELECT t.id, t.user_id, t.axe, t.title,
+            (SELECT COUNT(*) FROM reflection_branches b WHERE b.tree_id = t.id) AS branches
+       FROM reflection_trees t WHERE t.carre_id = ?1 AND t.axe IS NOT NULL`
   ).bind(carreId).all();
-  const parAs = new Map((mois || []).map((t) => [t.user_id, t.id]));
+  const arbres = results || [];
+  const trouve = (axe, userId) => arbres.find(
+    (t) => t.axe === axe && (AXES[axe].commun || t.user_id === userId)
+  );
 
   return json({
     carre: { id: carre.id, nom: carre.nom },
-    societe: { id: societe.id, branches: await compte(societe.id) },
-    mois: await Promise.all(membres.map(async (m) => ({
+    // ce que les quatre imaginent ensemble
+    communs: AXES_COMMUNS.map((axe) => {
+      const t = trouve(axe, null);
+      return {
+        axe, titre: AXES[axe].titreCarre(carre.nom), court: AXES[axe].court,
+        sous: AXES[axe].sousCarre || AXES[axe].sous,
+        publique: !!AXES[axe].publique,
+        id: t ? t.id : null, branches: t ? t.branches : 0,
+      };
+    }),
+    // et ce que chacun tient pour lui, sous le regard des trois autres
+    axesPersonnels: AXES_ORDRE.filter((a) => !AXES[a].commun)
+      .map((axe) => ({ axe, court: AXES[axe].court, sous: AXES[axe].sous })),
+    as: membres.map((m) => ({
       user_id: m.user_id,
       username: m.username,
-      tree_id: parAs.get(m.user_id) || null,
-      branches: parAs.has(m.user_id) ? await compte(parAs.get(m.user_id)) : 0,
-    }))),
+      arbres: AXES_ORDRE.filter((a) => !AXES[a].commun).map((axe) => {
+        const t = trouve(axe, m.user_id);
+        return { axe, id: t ? t.id : null, branches: t ? t.branches : 0 };
+      }),
+    })),
   });
 }
 
@@ -3220,20 +3394,22 @@ async function carreLeave(request, env, carreId) {
     env.DB.prepare('DELETE FROM carre_relatif_sources WHERE carre_id = ?1 AND user_id = ?2').bind(carreId, vu.user.id),
   ]);
 
-  /* Mon moi harmonieux dans ce carré redescend dans ma forêt : rien de ce que
-     j'y ai écrit n'est perdu, mais il n'a plus d'axe (le mien est ailleurs) et
-     plus de carré. Ce qui est écrit dans la société commune y reste, sans
-     plus personne pour le toucher.
+  /* Ma psychologie et mon moi harmonieux dans ce carré redescendent dans ma
+     forêt : rien de ce que j'y ai écrit n'est perdu, mais ils n'ont plus
+     d'axe (les miens sont ailleurs) ni de carré. Ce qui est écrit dans les
+     arbres communs y reste, sans plus personne pour le toucher.
 
      Puis on coupe les nourritures qui traversaient la frontière, DANS LES
      DEUX SENS : sans cela je continuerais de lire un extrait des branches du
      carré par mes chips, et le carré lirait les miennes par les siennes. Le
      détachement vient d'abord : les liens qui restent entièrement dans ma
      forêt, eux, survivent.                                                */
-  await env.DB.prepare(
-    `UPDATE reflection_trees SET axe = NULL, carre_id = NULL, title = ?3
-      WHERE carre_id = ?1 AND user_id = ?2 AND axe = 'moi'`
-  ).bind(carreId, vu.user.id, `Mon moi harmonieux dans ${carre?.nom || 'un carré'}`).run();
+  for (const axe of AXES_ORDRE.filter((a) => !AXES[a].commun)) {
+    await env.DB.prepare(
+      `UPDATE reflection_trees SET axe = NULL, carre_id = NULL, title = ?3
+        WHERE carre_id = ?1 AND user_id = ?2 AND axe = ?4`
+    ).bind(carreId, vu.user.id, `${AXES[axe].titre} dans ${carre?.nom || 'un carré'}`, axe).run();
+  }
 
   const miennes = `SELECT b.id FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
                     WHERE t.user_id = ?2 AND t.carre_id IS NULL`;
@@ -3333,6 +3509,21 @@ async function carreRecrutement(request, env) {
       ORDER BY a.created_at DESC LIMIT 50`
   ).all()).results || [];
 
+  // ce que chacun dit de lui-même dans les quatre connaissances : sa
+  // meilleure vaut 10, les trois autres se lisent par rapport à elle. C'est
+  // une carte de soi, pas un classement entre As.
+  const auto = new Map();
+  if (annonces.length) {
+    const marques = annonces.map((_, i) => `?${i + 1}`).join(',');
+    const { results } = await env.DB.prepare(
+      `SELECT user_id, domaine, note FROM carre_auto_notes WHERE user_id IN (${marques})`
+    ).bind(...annonces.map((a) => a.user_id)).all();
+    for (const n of results || []) {
+      if (!auto.has(n.user_id)) auto.set(n.user_id, {});
+      auto.get(n.user_id)[n.domaine] = n.note;
+    }
+  }
+
   const carres = await mesCarres(env, vu.user.id);
   const mesCarresAvecPlaces = [];
   for (const c of carres) {
@@ -3345,10 +3536,21 @@ async function carreRecrutement(request, env) {
     charte: MISSIONS_CARRE.blocs[0].texte,
     roles: ROLES_CARRE,
     domaines: DOMAINES_CARRE,
-    annonces: annonces.map((a) => ({ ...a, moi: a.user_id === vu.user.id })),
+    annonces: annonces.map((a) => ({
+      ...a, moi: a.user_id === vu.user.id, auto: auto.get(a.user_id) || null,
+    })),
     monAnnonce: await env.DB.prepare(
       'SELECT note, role, domaine FROM carre_annonces WHERE user_id = ?1'
     ).bind(vu.user.id).first(),
+    mesAutoNotes: auto.get(vu.user.id) || (await (async () => {
+      // même sans annonce au salon, ce que j'ai dit de moi me revient
+      const { results } = await env.DB.prepare(
+        'SELECT domaine, note FROM carre_auto_notes WHERE user_id = ?1'
+      ).bind(vu.user.id).all();
+      const m = {};
+      for (const n of results || []) m[n.domaine] = n.note;
+      return Object.keys(m).length ? m : null;
+    })()),
     invitations: (await env.DB.prepare(
       `SELECT i.id, i.note, i.created_at, i.carre_id, c.nom AS carre_nom, u.username AS de_username
          FROM carre_invitations i
@@ -3385,10 +3587,42 @@ async function carreAnnoncePut(request, env) {
   if (role && !ROLES_CARRE.includes(role)) return json({ error: 'Rôle inconnu.' }, 400);
   if (domaine && !DOMAINES_CARRE.includes(domaine)) return json({ error: 'Connaissance inconnue.' }, 400);
 
+  /* Se situer soi-même : dans les quatre connaissances, la meilleure vaut 10
+     et les trois autres se lisent par rapport à elle. La note ne dit pas ce
+     qu'on vaut face aux autres, elle dit où l'on est le meilleur : le repère
+     est donc obligatoire, sans quoi les quatre chiffres ne veulent rien dire
+     et ne se comparent à rien.                                             */
+  const auto = body?.notes && typeof body.notes === 'object' ? body.notes : null;
+  const lot = [];
+  if (auto) {
+    let plusHaute = 0;
+    for (const dom of DOMAINES_CARRE) {
+      const brut = auto[dom];
+      if (brut == null || brut === '') continue;
+      const n = Number(brut);
+      if (!Number.isInteger(n) || n < 1 || n > 10) return json({ error: 'Une note va de 1 à 10.' }, 400);
+      plusHaute = Math.max(plusHaute, n);
+      lot.push({ domaine: dom, note: n });
+    }
+    if (lot.length && plusHaute !== 10) {
+      return json({ error: 'Ta meilleure connaissance vaut 10 : c’est le repère des trois autres.' }, 400);
+    }
+  }
+
   await env.DB.prepare(
     `INSERT INTO carre_annonces (user_id, note, role, domaine) VALUES (?1, ?2, ?3, ?4)
      ON CONFLICT(user_id) DO UPDATE SET note = ?2, role = ?3, domaine = ?4`
   ).bind(vu.user.id, note, role, domaine).run();
+
+  if (auto) {
+    const gestes = [env.DB.prepare('DELETE FROM carre_auto_notes WHERE user_id = ?1').bind(vu.user.id)];
+    for (const n of lot) {
+      gestes.push(env.DB.prepare(
+        'INSERT INTO carre_auto_notes (user_id, domaine, note) VALUES (?1, ?2, ?3)'
+      ).bind(vu.user.id, n.domaine, n.note));
+    }
+    await env.DB.batch(gestes);
+  }
   return json({ ok: true });
 }
 
@@ -3486,14 +3720,14 @@ const RELATIF_MODELES = ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/l
 // texte borné. C'est la matière du relatif, et c'est aussi ce qu'on copie
 // pour porter la voix ailleurs.
 async function portraitDe(env, carreId, userId, plafond = 6000) {
-  // Son moi harmonieux dans CE carré entre d'office : il y est déjà écrit
-  // pour les quatre. Ses vidéographies aussi, comme avant. Ses arbres de
-  // pensée personnels, eux, n'entrent que s'il les a offerts.
+  // Sa psychologie et son moi harmonieux dans CE carré entrent d'office : ils
+  // y sont déjà écrits pour les quatre. Ses vidéographies aussi, comme avant.
+  // Ses arbres de pensée personnels, eux, n'entrent que s'il les a offerts.
   const { results: arbres } = await env.DB.prepare(
     `SELECT t.id, t.title, t.trunk FROM reflection_trees t
       WHERE t.user_id = ?1 AND (
         (t.kind = 'video' AND t.carre_id IS NULL)
-        OR (t.carre_id = ?2 AND t.axe = 'moi')
+        OR (t.carre_id = ?2 AND t.axe IN (${SQL_PERSONNELS}))
         OR t.id IN (SELECT tree_id FROM carre_relatif_sources WHERE carre_id = ?2 AND user_id = ?1))
       ORDER BY t.updated_at DESC LIMIT 12`
   ).bind(userId, carreId).all();
@@ -3512,19 +3746,22 @@ async function portraitDe(env, carreId, userId, plafond = 6000) {
 async function portraitCarre(env, carre, membres) {
   const morceaux = [];
   if (carre.cap) morceaux.push(`Le cap du carré : ${carre.cap}`);
-  // la société harmonieuse que les quatre imaginent ensemble : c'est le
-  // premier matériau du relatif, avant même la récolte des brainstorms
-  const societe = await env.DB.prepare(
-    `SELECT id, trunk FROM reflection_trees WHERE carre_id = ?1 AND axe = 'societe'`
-  ).bind(carre.id).first();
-  if (societe) {
+  // ce que les quatre imaginent ensemble — leur philosophie, leurs univers,
+  // leur société : c'est le premier matériau du relatif, avant même la
+  // récolte des brainstorms
+  const { results: communs } = await env.DB.prepare(
+    `SELECT id, trunk, axe FROM reflection_trees
+      WHERE carre_id = ?1 AND axe IN (${SQL_COMMUNS})`
+  ).bind(carre.id).all();
+  for (const axe of AXES_COMMUNS) {
+    const arbre = (communs || []).find((t) => t.axe === axe);
+    if (!arbre) continue;
     const { results: bs } = await env.DB.prepare(
       "SELECT body FROM reflection_branches WHERE tree_id = ?1 AND body <> '' ORDER BY id LIMIT 40"
-    ).bind(societe.id).all();
-    if ((bs || []).length || societe.trunk) {
-      morceaux.push(`Notre société harmonieuse${societe.trunk ? ` : ${societe.trunk}` : ' :'}`);
-      for (const b of bs || []) morceaux.push(`- ${b.body}`);
-    }
+    ).bind(arbre.id).all();
+    if (!(bs || []).length && !arbre.trunk) continue;
+    morceaux.push(`${AXES[axe].titreCarre(carre.nom)}${arbre.trunk ? ` : ${arbre.trunk}` : ' :'}`);
+    for (const b of bs || []) morceaux.push(`- ${b.body}`);
   }
   const { results: retenues } = await env.DB.prepare(
     `SELECT i.body FROM brainstorm_idees i
@@ -3688,10 +3925,16 @@ const PLATEFORMES_LIVE = {
   tiktok: (u) => /(^|\.)tiktok\.com$/.test(u.hostname.replace(/^www\./, '')),
 };
 
-async function brainstormsList(request, env) {
+/* La liste des brainstorms. `statut` la restreint : sans lui, la scène
+   remonte le direct puis l'annoncé, et les archives se retrouvaient reléguées
+   en fin de liste — donc coupées par la limite dès que la plateforme vit un
+   peu. Les archives demandent maintenant les leurs.                        */
+async function brainstormsList(request, env, url) {
   const { refus } = await requireEchelon(request, env, ECHELON_BRAINSTORM, 'brainstorm');
   if (refus) return refus;
   await ensureHautesTables(env);
+  const brut = String(url.searchParams.get('statut') || '');
+  const statut = ['live', 'annonce', 'termine'].includes(brut) ? brut : null;
   const { results } = await env.DB.prepare(
     `SELECT b.id, b.sujet, b.plateforme, b.url, b.statut, b.created_at, b.live_depuis,
             c.nom AS carre_nom, h.username AS hote_username,
@@ -3699,10 +3942,11 @@ async function brainstormsList(request, env) {
             (SELECT COUNT(*) FROM brainstorm_idees i WHERE i.brainstorm_id = b.id AND i.retenue = 1) AS retenues
        FROM brainstorms b JOIN carres c ON c.id = b.carre_id
        LEFT JOIN users h ON h.id = b.hote_user_id
+      WHERE ?1 IS NULL OR b.statut = ?1
       ORDER BY CASE b.statut WHEN 'live' THEN 0 WHEN 'annonce' THEN 1 ELSE 2 END,
                COALESCE(b.live_depuis, b.created_at) DESC
       LIMIT 50`
-  ).all();
+  ).bind(statut).all();
   return json({ brainstorms: results || [] });
 }
 

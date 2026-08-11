@@ -4,20 +4,75 @@
 // sont servis qu'à ceux dont l'échelon y donne droit. Les mettre dans
 // public/ reviendrait à les offrir à quiconque lit le JavaScript.
 
-/* ------------------------------------------------------- les deux axes ---
-   Deux troncs existent d'avance pour chacun, dans Pense Mieux, dans la
-   Vidéographie et dans chaque carré : devenir sa version la plus harmonieuse,
-   et imaginer sa société la plus harmonieuse. Ce sont les mécanismes 2 et 3
-   de l'orange, devenus des arbres qu'on nourrit. Dans un carré, le moi porte
-   le nom de son As et la société est commune aux quatre : c'est là que le
-   champ des possibles s'ouvre, un carré de plus étant une version de plus. */
+/* ---------------------------------------------------------- les cinq axes ---
+   Cinq troncs existent d'avance pour chacun, dans Pense Mieux, dans la
+   Vidéographie et dans chaque carré. Ils ne se plantent pas, ne s'abattent
+   pas : on les nourrit.
+
+   Deux d'entre eux se répondent en miroir. La psychologie dit le présent :
+   comment on fonctionne, ce qu'on constate de soi. Le moi harmonieux dit vers
+   quoi l'on tend. L'un décrit, l'autre vise, et la distance entre les deux est
+   le travail.
+
+   Les trois autres élargissent : la philosophie (les questions et les constats
+   qui font la façon de penser), les univers (les modèles d'univers qu'on
+   imagine) et la société harmonieuse (mécanismes 2 et 3 de l'orange).
+
+   `commun` : dans un carré, l'arbre est-il celui des quatre, ou celui d'un As ?
+   La psychologie et le moi restent personnels — chacun le sien, lu par les
+   trois autres. Les trois autres sont communs.
+
+   `publique` : les univers seuls sont lus par tous les As de la plateforme. Un
+   modèle d'univers ne vaut que confronté aux autres : on regarde ceux de tout
+   le monde, et on en fabrique de nouveaux en les reliant.                    */
 
 export const AXES = {
-  moi: { titre: 'Le moi harmonieux', titreCarre: (nom) => `Le moi harmonieux de ${nom}` },
-  societe: { titre: 'Ma société harmonieuse', titreCarre: () => 'Notre société harmonieuse' },
+  psy: {
+    titre: 'Ma psychologie',
+    court: 'Psychologie',
+    titreCarre: (nom) => `La psychologie de ${nom}`,
+    sous: 'Le présent : comment tu fonctionnes, ce que tu constates de toi.',
+    miroir: 'moi',
+    commun: false,
+  },
+  moi: {
+    titre: 'Le moi harmonieux',
+    court: 'Moi harmonieux',
+    titreCarre: (nom) => `Le moi harmonieux de ${nom}`,
+    sous: 'Ce vers quoi tu tends : ta version la plus harmonieuse.',
+    miroir: 'psy',
+    commun: false,
+  },
+  philo: {
+    titre: 'Ma philosophie',
+    court: 'Philosophie',
+    titreCarre: () => 'Notre philosophie',
+    sous: 'Tes questions, tes constats, et ce qu’ils font de ta façon de penser.',
+    sousCarre: 'Vos questions, vos constats, et ce qu’ils font de votre façon de penser.',
+    commun: true,
+  },
+  univers: {
+    titre: 'Mes univers',
+    court: 'Univers',
+    titreCarre: () => 'Nos univers',
+    sous: 'Tes modèles d’univers. Ils sont lus par tous les As.',
+    sousCarre: 'Les modèles d’univers que vous imaginez ensemble. Lus par tous les As.',
+    commun: true,
+    publique: true,
+  },
+  societe: {
+    titre: 'Ma société harmonieuse',
+    court: 'Société harmonieuse',
+    titreCarre: () => 'Notre société harmonieuse',
+    sous: 'La société la plus harmonieuse que tu imagines, et son chemin du réel.',
+    sousCarre: 'La société la plus harmonieuse que vous imaginez ensemble, et son chemin du réel.',
+    commun: true,
+  },
 };
 
-export const AXES_ORDRE = ['moi', 'societe'];
+// L'ordre de lecture : le miroir d'abord (le présent, puis ce vers quoi il
+// tend), la pensée ensuite, le monde enfin.
+export const AXES_ORDRE = ['psy', 'moi', 'philo', 'univers', 'societe'];
 
 /* --------------------------------------------- Carré d'As (échelon 5) --- */
 
@@ -38,7 +93,10 @@ export const MISSIONS_CARRE = {
         'Dans chaque domaine, discutez pour trouver qui est le meilleur du '
         + 'carré : il vaut 10. Toutes les autres notes, de 1 à 10, se lisent '
         + 'par rapport à lui. Quand le carré affine son regard, affinez les '
-        + 'notes : elles ne sont jamais figées.',
+        + 'notes : elles ne sont jamais figées. Avant cela, chacun se situe '
+        + 'seul, au recrutement : ta meilleure connaissance vaut 10 et les '
+        + 'trois autres se lisent par rapport à elle. Ce que tu dis de toi et '
+        + 'ce que le carré en dit se lisent alors côte à côte.',
     },
     {
       titre: 'S’élever ensemble',
@@ -54,8 +112,11 @@ export const MISSIONS_CARRE = {
       titre: 'Montrer le chemin du réel',
       texte:
         'Imaginez ensemble votre société harmonieuse et montrez-lui le chemin '
-        + 'du réel. Cultivez les idées de votre carré et faites-les grandir en '
-        + 'leur permettant d’exister sous plusieurs formes.',
+        + 'du réel. Creusez ensemble votre philosophie et vos modèles '
+        + 'd’univers, pendant que chacun tient sa psychologie et son moi '
+        + 'harmonieux tels que ce carré les révèle. Cultivez les idées de '
+        + 'votre carré et faites-les grandir en leur permettant d’exister sous '
+        + 'plusieurs formes.',
     },
     {
       titre: 'Le Dieu relatif',
@@ -159,8 +220,11 @@ export const MECANISMES_GMO = {
       etapes: [
         'Propage les symboles de l’Escape Game Orange de sorte à le faire grandir.',
         'Tu n’es plus un simple joueur : tu es un créateur de nouvelles grilles de lecture.',
+        'Imagine tes modèles d’univers, regarde ceux des autres, et fais-en naître de nouveaux en les reliant.',
         'Utilise les IA pour réduire le temps et les ressources nécessaires à la concrétisation de tes idées.',
       ],
+      page: '/pense-mieux/univers',
+      pageLabel: 'Les univers',
     },
   ],
 };

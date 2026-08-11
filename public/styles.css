@@ -1529,12 +1529,32 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .carres-ouverts li:last-child { border-bottom: none; }
 .carres-ouverts li span { color: var(--text-dim); font-size: 0.85rem; }
 .carres-ouverts li button { margin-left: auto; }
-/* les deux troncs : ils ne se plantent pas, ils se distinguent */
+/* les cinq troncs : ils ne se plantent pas, ils se distinguent */
 .foret-troncs { margin-bottom: 1.4rem; }
 .arbre-card--tronc {
   border-left: 2px solid var(--accent);
   background: linear-gradient(90deg, rgba(216, 192, 122, 0.06), transparent 40%);
 }
+/* l'axe public : les univers, lus par tous */
+.arbre-card--publique { border-left-color: #7fa6c9; }
+.arbre-card--publique.arbre-card--tronc {
+  background: linear-gradient(90deg, rgba(127, 166, 201, 0.08), transparent 40%);
+}
+.arbre-card--mien { border-color: rgba(216, 192, 122, 0.45); }
+.arbre-card--vide {
+  display: block;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.arbre-card--vide .arbre-meta { display: block; }
+.arbre-sous { color: var(--text-dim); font-size: 0.85rem; margin: 0.15rem 0 0.3rem; }
+.arbre-public { color: #7fa6c9; font-size: 0.85rem; margin: 0.2rem 0 0.6rem; }
+.arbre-miroir { color: var(--text-dim); font-size: 0.88rem; margin: 0.2rem 0 0.6rem; }
+.arbre-miroir a { color: var(--accent); }
+.univers-intro { color: var(--text-dim); max-width: 44rem; margin-bottom: 1rem; }
 .branche-auteur { color: var(--text-dim); font-size: 0.8rem; margin-top: 0.2rem; }
 .arbre-ailleurs { color: var(--text-dim); font-size: 0.88rem; margin: 0.3rem 0 1rem; }
 .arbre-ailleurs a { color: var(--accent); }
@@ -1542,9 +1562,13 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .harmonie { margin: 1.2rem 0 2rem; max-width: 46rem; }
 .harmonie h2 { font-size: 1.1rem; }
 .harmonie-note { color: var(--text-dim); font-size: 0.88rem; margin-top: 0.5rem; }
-.harmonie-mois { display: grid; gap: 0.7rem; }
-.harmonie-as { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
-.harmonie-as .arbre-card { flex: 1; min-width: 180px; padding: 0.6rem 0.9rem; }
+.harmonie-communs { display: grid; gap: 0.7rem; }
+.harmonie-communs .arbre-card h2 { font-size: 1rem; margin: 0; }
+.harmonie-mois { display: grid; gap: 0.9rem; }
+.harmonie-as { display: grid; gap: 0.4rem; }
+.harmonie-paire { display: flex; gap: 0.7rem; flex-wrap: wrap; }
+.harmonie-paire > * { flex: 1; min-width: 180px; padding: 0.6rem 0.9rem; }
+.harmonie-paire .arbre-card h2 { font-size: 0.95rem; margin: 0 0 0.15rem; }
 .harmonie .arbre-card { text-decoration: none; }
 
 /* le réseau des carrés : cartes, onglets, cap, notes, relatif */
@@ -1625,6 +1649,17 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .note-nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .note-moy { font-variant-numeric: tabular-nums; color: var(--text-dim); min-width: 2rem; text-align: right; }
 .note-meilleur .note-moy { color: var(--accent); }
+/* ce qu'il dit de lui-même, avant ce que le carré en dit */
+.note-soi {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  opacity: 0.65;
+  min-width: 1.6rem;
+  text-align: right;
+  font-size: 0.85rem;
+}
+.notes-legende { color: var(--text-dim); font-size: 0.85rem; margin: 0.2rem 0 0.9rem; }
+.notes-legende a { color: var(--accent); }
 select.note-saisie { width: auto; padding: 0.3rem 0.4rem; }
 
 .relatif-voix { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.8rem 0; }
@@ -1937,6 +1972,34 @@ body.avec-dock main { padding-bottom: 7rem; }
 .annonce-form { max-width: 40rem; margin-bottom: 1.6rem; display: grid; gap: 0.55rem; }
 .annonce-ligne { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
 .annonce-ligne select { width: auto; }
+/* se situer soi-même : la meilleure vaut 10, les autres se lisent par rapport */
+.annonce-auto {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem 0.9rem;
+}
+.annonce-auto legend { color: var(--text-dim); font-size: 0.85rem; padding: 0 0.35rem; }
+.annonce-auto-regle { color: var(--text-dim); font-size: 0.82rem; margin: 0 0 0.6rem; }
+.annonce-auto-lignes { display: flex; gap: 0.7rem; flex-wrap: wrap; }
+.annonce-auto-ligne {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.annonce-auto-ligne select { width: auto; padding: 0.25rem 0.35rem; }
+.recrut-auto { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.3rem 0 0.1rem; }
+.recrut-auto-dom {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 0.1rem 0.55rem;
+}
+.recrut-auto-dom strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.recrut-auto-dom.fort { border-color: rgba(216, 192, 122, 0.5); }
+.recrut-auto-dom.fort strong { color: var(--accent); }
 .recrut-envoyees { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .recrut-attente {
   font-size: 0.85rem;
