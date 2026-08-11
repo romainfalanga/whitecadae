@@ -1529,7 +1529,6 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .carres-ouverts li:last-child { border-bottom: none; }
 .carres-ouverts li span { color: var(--text-dim); font-size: 0.85rem; }
 .carres-ouverts li button { margin-left: auto; }
-/* les cinq troncs : ils ne se plantent pas, ils se distinguent */
 .foret-troncs { margin-bottom: 1.4rem; }
 .arbre-card--tronc {
   border-left: 2px solid var(--accent);
@@ -1559,19 +1558,7 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .arbre-ailleurs { color: var(--text-dim); font-size: 0.88rem; margin: 0.3rem 0 1rem; }
 .arbre-ailleurs a { color: var(--accent); }
 
-.harmonie { margin: 1.2rem 0 2rem; max-width: 46rem; }
-.harmonie h2 { font-size: 1.1rem; }
-.harmonie-note { color: var(--text-dim); font-size: 0.88rem; margin-top: 0.5rem; }
-.harmonie-communs { display: grid; gap: 0.7rem; }
-.harmonie-communs .arbre-card h2 { font-size: 1rem; margin: 0; }
-.harmonie-mois { display: grid; gap: 0.9rem; }
-.harmonie-as { display: grid; gap: 0.4rem; }
-.harmonie-paire { display: flex; gap: 0.7rem; flex-wrap: wrap; }
-.harmonie-paire > * { flex: 1; min-width: 180px; padding: 0.6rem 0.9rem; }
-.harmonie-paire .arbre-card h2 { font-size: 0.95rem; margin: 0 0 0.15rem; }
-.harmonie .arbre-card { text-decoration: none; }
-
-/* le réseau des carrés : cartes, onglets, cap, notes, relatif */
+/* le réseau des carrés : cartes et onglets */
 .carres-liste {
   display: grid;
   gap: 0.8rem;
@@ -1609,90 +1596,6 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 }
 .co-tab.actif { color: var(--accent); border-bottom-color: var(--accent); }
 .co-tab:hover { color: var(--text); }
-
-.carre-cap, .carre-live { margin: 1.6rem 0; max-width: 46rem; }
-.carre-cap h2, .carre-live h2 { font-size: 1.1rem; }
-.carre-cap textarea { width: 100%; }
-.cap-ligne { display: flex; gap: 0.6rem; margin-top: 0.5rem; flex-wrap: wrap; }
-.cap-ligne input { flex: 1; min-width: 220px; }
-.carre-salon { margin-top: 0.5rem; }
-.carre-live-note { color: var(--text-dim); font-size: 0.9rem; }
-
-.notes-regle { color: var(--text-dim); max-width: 42rem; }
-.notes-grille {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  margin: 1rem 0;
-}
-.note-domaine {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 0.8rem 1rem;
-}
-.note-domaine h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1rem;
-  color: var(--accent);
-  font-family: var(--serif);
-  font-weight: normal;
-}
-.note-ligne {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.3rem 0;
-  border-bottom: 1px solid var(--border);
-}
-.note-ligne:last-child { border-bottom: none; }
-.note-nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.note-moy { font-variant-numeric: tabular-nums; color: var(--text-dim); min-width: 2rem; text-align: right; }
-.note-meilleur .note-moy { color: var(--accent); }
-/* ce qu'il dit de lui-même, avant ce que le carré en dit */
-.note-soi {
-  font-variant-numeric: tabular-nums;
-  color: var(--text-dim);
-  opacity: 0.65;
-  min-width: 1.6rem;
-  text-align: right;
-  font-size: 0.85rem;
-}
-.notes-legende { color: var(--text-dim); font-size: 0.85rem; margin: 0.2rem 0 0.9rem; }
-.notes-legende a { color: var(--accent); }
-select.note-saisie { width: auto; padding: 0.3rem 0.4rem; }
-
-.relatif-voix { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.8rem 0; }
-.voix-chip {
-  border: 1px solid var(--border);
-  background: none;
-  color: var(--text-dim);
-  border-radius: 99px;
-  padding: 0.35rem 0.9rem;
-  cursor: pointer;
-}
-.voix-chip.actif { border-color: var(--accent); color: var(--accent); }
-.relatif-dort { color: var(--text-dim); font-size: 0.9rem; }
-.relatif-fil { display: flex; flex-direction: column; gap: 0.8rem; margin: 1rem 0; max-width: 46rem; }
-.relatif-echange { border-left: 2px solid var(--border); padding-left: 0.9rem; }
-.relatif-question { color: var(--text-dim); font-size: 0.92rem; }
-.relatif-qui { color: var(--accent); margin-right: 0.4rem; font-size: 0.85rem; }
-.relatif-reponse { font-family: var(--serif); white-space: pre-wrap; }
-.relatif-form { max-width: 46rem; }
-.relatif-form textarea { width: 100%; }
-.relatif-actions { display: flex; gap: 0.8rem; align-items: center; margin-top: 0.5rem; }
-.relatif-nourrir { margin: 1.6rem 0; max-width: 46rem; }
-.relatif-nourrir summary { cursor: pointer; color: var(--accent); }
-.relatif-note { color: var(--text-dim); font-size: 0.88rem; }
-.source-ligne { display: flex; gap: 0.5rem; align-items: center; padding: 0.25rem 0; }
-.relatif-nourrir button { margin-top: 0.6rem; }
-.recrut-depuis { margin: 0.8rem 0; }
-.recrut-depuis select { width: auto; }
-
-.missions { max-width: 46rem; }
-.mission-bloc { margin-bottom: 1.4rem; }
-.mission-bloc h3 { color: var(--accent); font-family: var(--serif); font-size: 1.1rem; font-weight: normal; }
-.mission-bloc p { color: var(--text); }
 
 /* -- le brainstorm -- */
 .bs-form {
@@ -1973,41 +1876,6 @@ body.avec-dock main { padding-bottom: 7rem; }
 .annonce-ligne { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
 .annonce-ligne select { width: auto; }
 /* se situer soi-même : la meilleure vaut 10, les autres se lisent par rapport */
-.annonce-auto {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.7rem 0.9rem 0.9rem;
-}
-.annonce-auto legend { color: var(--text-dim); font-size: 0.85rem; padding: 0 0.35rem; }
-.annonce-auto-regle { color: var(--text-dim); font-size: 0.82rem; margin: 0 0 0.6rem; }
-.annonce-auto-lignes { display: flex; gap: 0.7rem; flex-wrap: wrap; }
-.annonce-auto-ligne {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.85rem;
-  color: var(--text-dim);
-}
-.annonce-auto-ligne select { width: auto; padding: 0.25rem 0.35rem; }
-.recrut-auto { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.3rem 0 0.1rem; }
-.recrut-auto-dom {
-  font-size: 0.78rem;
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-  border-radius: 99px;
-  padding: 0.1rem 0.55rem;
-}
-.recrut-auto-dom strong { color: var(--text); font-variant-numeric: tabular-nums; }
-.recrut-auto-dom.fort { border-color: rgba(216, 192, 122, 0.5); }
-.recrut-auto-dom.fort strong { color: var(--accent); }
-.recrut-envoyees { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem; }
-.recrut-attente {
-  font-size: 0.85rem;
-  color: var(--text-dim);
-  border: 1px dashed var(--border);
-  border-radius: 99px;
-  padding: 0.15rem 0.7rem;
-}
 .recrut-salon { display: grid; gap: 0.8rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .recrut-annonce {
   background: var(--bg-card);
@@ -2043,9 +1911,7 @@ body.avec-dock main { padding-bottom: 7rem; }
 .nourrie-chip a.nourrie-va { display: inline-block; padding: 0.1rem 0.6rem; font-size: 0.78rem; }
 .nourrie-chip a.nourrie-va:hover { text-decoration: underline; }
 
-/* ---------------------------------------- la Vidéographie : le rythme ---
-   Une vidéo par semaine, par mois, par an : trois cartes, la matière du
-   récap sous les yeux, et le dépôt en bas de chacune. */
+/* ---------------------------------------- la Vidéographie : le rythme --- */
 .rythme-intro { color: var(--text-dim); max-width: 44rem; margin-bottom: 1.2rem; }
 .rythme { display: grid; gap: 1rem; margin-bottom: 2rem; }
 .rythme-carte {
@@ -2114,19 +1980,6 @@ body.avec-dock main { padding-bottom: 7rem; }
 .vocal-dit span.dit { color: var(--text); opacity: 1; }
 
 /* ------------------------------------- les regards : solo, ou un carré --- */
-.foret-regards { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
-.regard {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 99px;
-  padding: 0.2rem 0.8rem;
-  color: var(--text-dim);
-  font-size: 0.85rem;
-  cursor: pointer;
-  width: auto;
-}
-.regard.actif { border-color: var(--accent); color: var(--accent); }
-.foret-regard-note { color: var(--text-dim); font-size: 0.85rem; margin: 0 0 0.9rem; }
 .arbre-voix { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.6rem 0 1rem; }
 .voix-filtre {
   background: none;
@@ -2226,26 +2079,100 @@ body.avec-dock main { padding-bottom: 7rem; }
 .recue p { margin: 0.25rem 0 0; font-size: 0.88rem; color: var(--text-dim); }
 
 /* le multivers d'un carré */
-.mv-intro { color: var(--text-dim); max-width: 46rem; margin-bottom: 1.4rem; }
-.mv-bloc { margin-bottom: 1.6rem; }
-.mv-bloc h2 { font-size: 1rem; display: flex; align-items: baseline; gap: 0.6rem; }
-.mv-role { font-size: 0.78rem; color: var(--text-dim); }
-.mv-as.moi h2 { color: var(--accent); }
-.mv-grille { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
-.mv-carte {
-  display: block;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.6rem 0.8rem;
-  text-decoration: none;
-}
-.mv-carte--axe { border-left: 2px solid var(--accent); }
-.mv-carte h3 { font-size: 0.92rem; margin: 0; font-family: var(--serif); font-weight: normal; }
-.mv-apercu { color: var(--text-dim); font-size: 0.82rem; margin: 0.25rem 0 0; }
-.mv-meta { display: block; color: var(--text-dim); font-size: 0.78rem; margin-top: 0.3rem; }
-.mv-sous { color: var(--text-dim); font-size: 0.82rem; margin: 0.8rem 0 0.4rem; }
-
 /* la vidéo qui se fabrique toute seule */
 .branche-video-zone { display: inline-flex; gap: 0.5rem; align-items: center; }
 .video-etat { color: var(--text-dim); font-size: 0.82rem; }
+
+/* ------------------------------------- la Vidéographie : trois cartes ---
+   On arrive, on voit les trois périodes d'un coup, on dépose. Pas un mot de
+   trop : c'est une interface, pas une page. */
+.rythme {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  align-items: start;
+  margin-top: 0.4rem;
+}
+.ry-carte {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--accent);
+  border-radius: 12px;
+  padding: 0.8rem 0.9rem;
+}
+.ry-carte.faite { border-top-color: #79c98d; }
+.ry-carte header { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.ry-carte h2 { font-size: 1rem; margin: 0; }
+.ry-periode { color: var(--text-dim); font-size: 0.8rem; }
+.ry-reste { margin-left: auto; font-size: 0.78rem; color: var(--accent); }
+.ry-carte.faite .ry-reste { color: #79c98d; }
+.ry-matiere { display: flex; gap: 0.3rem; flex-wrap: wrap; margin: 0.6rem 0; }
+.ry-chip {
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 0.08rem 0.5rem;
+}
+.ry-chip--vide { opacity: 0.55; }
+.ry-faite { margin: 0.4rem 0; }
+.ry-note { color: var(--text-dim); font-size: 0.85rem; margin: 0.3rem 0; }
+.ry-form { display: grid; gap: 0.4rem; }
+.ry-form[hidden] { display: none; }
+.ry-form input, .ry-form textarea { font-size: 0.85rem; }
+.ry-form button { justify-self: start; }
+.ry-histoire { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.6rem; }
+.ry-histoire a {
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 0.05rem 0.5rem;
+  text-decoration: none;
+}
+.vg-as { display: grid; gap: 1.2rem; }
+.vg-as-bloc h2 { font-size: 1rem; margin-bottom: 0.4rem; }
+.vg-as-recaps { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.vg-recap {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.4rem 0.7rem;
+  text-decoration: none;
+  font-size: 0.82rem;
+  color: var(--accent);
+}
+.vg-recap-cadence { display: block; color: var(--text-dim); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.vg-recap-note { display: block; color: var(--text-dim); font-size: 0.76rem; }
+
+/* ------------------------------------- le carré : ses trois matières --- */
+.carre-as { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; margin: -0.4rem 0 0.8rem; }
+.carre-sep { color: var(--text-dim); }
+.carre-places { color: var(--text-dim); font-size: 0.82rem; }
+.mat-commun { margin-bottom: 1.6rem; }
+.mat-chacun h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+.mat-grille { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.mat-carte {
+  display: block;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  text-decoration: none;
+}
+.mat-carte--commun { border-left: 2px solid var(--accent); }
+.mat-carte--commun h2 { font-size: 1.1rem; margin: 0; }
+.mat-carte--moi { border-color: rgba(216, 192, 122, 0.45); }
+.mat-carte--vide { opacity: 0.5; }
+.mat-carte h3 { font-size: 0.95rem; margin: 0; font-family: var(--serif); font-weight: normal; }
+.mat-apercu { color: var(--text-dim); font-size: 0.84rem; margin: 0.3rem 0 0; }
+.mat-meta { display: block; color: var(--text-dim); font-size: 0.78rem; margin-top: 0.35rem; }
+.mat-note { color: var(--text-dim); font-size: 0.85rem; margin-top: 0.8rem; }
+.carre-sortie { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
+.carre-salon { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-dim); }
+.carre-salon input { width: auto; min-width: 200px; font-size: 0.82rem; }
+
+/* qui lit un espace : la règle se voit avant d'écrire */
+.arbre-qui { color: var(--text-dim); opacity: 0.8; }
+.arbre-qui::before { content: '· '; }
+.arbre-card--intime { border-left-color: #6f6f79; }
+.arbre-partage { color: var(--text-dim); font-size: 0.85rem; margin: 0.2rem 0 0.8rem; }

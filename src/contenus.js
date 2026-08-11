@@ -5,45 +5,46 @@
 // public/ reviendrait à les offrir à quiconque lit le JavaScript.
 
 /* ---------------------------------------------------------- les cinq axes ---
-   Cinq troncs existent d'avance pour chacun, dans Pense Mieux et dans chaque
-   carré. Ils ne se plantent pas, ne s'abattent pas : on les nourrit.
-
-   Ils ne sont plus dans la Vidéographie : les deux outils ne poursuivent pas
-   la même chose. Pense Mieux est l'outil de la pensée ; la Vidéographie est
-   le témoignage rythmé de ce qu'on a vécu (voir plus bas).
+   Cinq espaces existent d'avance pour chacun dans Pense Mieux. Ils ne
+   s'ouvrent pas, ne se referment pas : on les nourrit.
 
    Deux d'entre eux se répondent en miroir. La psychologie dit le présent :
    comment on fonctionne, ce qu'on constate de soi. Le moi harmonieux dit vers
    quoi l'on tend. L'un décrit, l'autre vise, et la distance entre les deux est
    le travail.
 
-   Les trois autres élargissent : la philosophie (les questions et les constats
-   qui font la façon de penser), les univers (les modèles d'univers qu'on
-   imagine) et la société harmonieuse (mécanismes 2 et 3 de l'orange).
+   `partage` dit qui les lit, et c'est la règle centrale de la plateforme :
 
-   `commun` : dans un carré, l'arbre est-il celui des quatre, ou celui d'un As ?
-   La psychologie et le moi restent personnels — chacun le sien, lu par les
-   trois autres. Les trois autres sont communs.
+     - `moi` : la psychologie et le moi harmonieux ne sortent jamais. Personne
+       d'autre que soi ne les voit, carré compris. On ne travaille pas son
+       rapport à soi sous le regard des autres.
 
-   `publique` : les univers seuls sont lus par tous les As de la plateforme. Un
-   modèle d'univers ne vaut que confronté aux autres : on regarde ceux de tout
-   le monde, et on en fabrique de nouveaux en les reliant.                    */
+     - `carre` : la philosophie, le multivers et la société harmonieuse sont
+       lus par les As de ses carrés, qui peuvent y répondre. Ce sont les trois
+       matières du travail commun — et un carré n'existe que pour elles.
+
+   Tout le reste de Pense Mieux (les réflexions qu'on ouvre soi-même) est
+   privé, sans exception.
+
+   `commun` : ces trois mêmes axes existent aussi comme arbre DU carré, écrit
+   par les quatre. `publique` : le multivers seul est lu par toute la
+   plateforme — un modèle d'univers ne vaut que confronté aux autres.       */
 
 export const AXES = {
   psy: {
     titre: 'Ma psychologie',
     court: 'Psychologie',
-    titreCarre: (nom) => `La psychologie de ${nom}`,
     sous: 'Le présent : comment tu fonctionnes, ce que tu constates de toi.',
     miroir: 'moi',
+    partage: 'moi',
     commun: false,
   },
   moi: {
     titre: 'Le moi harmonieux',
     court: 'Moi harmonieux',
-    titreCarre: (nom) => `Le moi harmonieux de ${nom}`,
     sous: 'Ce vers quoi tu tends : ta version la plus harmonieuse.',
     miroir: 'psy',
+    partage: 'moi',
     commun: false,
   },
   philo: {
@@ -52,14 +53,16 @@ export const AXES = {
     titreCarre: () => 'Notre philosophie',
     sous: 'Tes questions, tes constats, et ce qu’ils font de ta façon de penser.',
     sousCarre: 'Vos questions, vos constats, et ce qu’ils font de votre façon de penser.',
+    partage: 'carre',
     commun: true,
   },
   univers: {
-    titre: 'Mes univers',
-    court: 'Univers',
-    titreCarre: () => 'Nos univers',
+    titre: 'Mon multivers',
+    court: 'Multivers',
+    titreCarre: () => 'Notre multivers',
     sous: 'Tes modèles d’univers. Ils sont lus par tous les As.',
     sousCarre: 'Les modèles d’univers que vous imaginez ensemble. Lus par tous les As.',
+    partage: 'carre',
     commun: true,
     publique: true,
   },
@@ -69,12 +72,13 @@ export const AXES = {
     titreCarre: () => 'Notre société harmonieuse',
     sous: 'La société la plus harmonieuse que tu imagines, et son chemin du réel.',
     sousCarre: 'La société la plus harmonieuse que vous imaginez ensemble, et son chemin du réel.',
+    partage: 'carre',
     commun: true,
   },
 };
 
 // L'ordre de lecture : le miroir d'abord (le présent, puis ce vers quoi il
-// tend), la pensée ensuite, le monde enfin.
+// tend), puis les trois matières que l'on porte devant son carré.
 export const AXES_ORDRE = ['psy', 'moi', 'philo', 'univers', 'societe'];
 
 /* --------------------------------------------- Carré d'As (échelon 5) --- */
@@ -85,61 +89,44 @@ export const MISSIONS_CARRE = {
     {
       titre: 'Composer son carré',
       texte:
-        'Pour créer votre carré d’as, vous devez trouver le meilleur équilibre '
-        + 'possible entre infinisseurs et harmonisateurs. Vous devez également '
-        + 'trouver un équilibre dans les connaissances fondamentales d’un carré '
-        + 'd’as : Philosophie, Intelligence artificielle, Religions et Univers.',
+        'Un carré, c’est quatre personnes qui acceptent de penser sous le '
+        + 'regard des trois autres. Cherchez des esprits qui ne voient pas '
+        + 'comme vous : un carré où tout le monde pense pareil n’apprend rien '
+        + 'à personne.',
     },
     {
-      titre: 'S’évaluer mutuellement',
+      titre: 'Creuser votre philosophie',
       texte:
-        'Dans chaque domaine, discutez pour trouver qui est le meilleur du '
-        + 'carré : il vaut 10. Toutes les autres notes, de 1 à 10, se lisent '
-        + 'par rapport à lui. Quand le carré affine son regard, affinez les '
-        + 'notes : elles ne sont jamais figées. Avant cela, chacun se situe '
-        + 'seul, au recrutement : ta meilleure connaissance vaut 10 et les '
-        + 'trois autres se lisent par rapport à elle. Ce que tu dis de toi et '
-        + 'ce que le carré en dit se lisent alors côte à côte.',
+        'Chacun porte la sienne, et vous en écrivez une ensemble. Elle naît de '
+        + 'vos questions et de vos constats, jamais d’une position qu’on '
+        + 'défend. Quand l’un de vous avance, entrez chez lui : approfondissez '
+        + 'ce qu’il dit, élargissez son champ, ou opposez-lui une issue — '
+        + 'jamais une objection seule.',
+    },
+    {
+      titre: 'Imaginer votre multivers',
+      texte:
+        'Chacun tient ses modèles d’univers, et le carré tient les siens. '
+        + 'Confrontez-les : un modèle ne vaut que face aux autres, et c’est en '
+        + 'les reliant qu’on en fabrique de nouveaux.',
+    },
+    {
+      titre: 'Imaginer votre société harmonieuse',
+      texte:
+        'Imaginez ensemble la société la plus harmonieuse que vous puissiez '
+        + 'concevoir, puis montrez-lui le chemin du réel. Trouvez les '
+        + 'expansions harmonieuses qui y mènent, et faites-les exister sous '
+        + 'plusieurs formes.',
     },
     {
       titre: 'S’élever ensemble',
       texte:
-        'En combinant vos expansions harmonieuses, en vous entraidant et en '
-        + 'analysant mutuellement vos vidéographies, vous créerez les conditions '
-        + 'optimales pour vous élever et devenir votre meilleure version. Les As '
-        + 'doivent devenir la version d’eux-mêmes qui aide leur carré à grandir '
-        + 'et s’harmoniser, car l’expansion harmonieuse d’un carré engendre '
-        + 'celle de ses As.',
-    },
-    {
-      titre: 'Montrer le chemin du réel',
-      texte:
-        'Imaginez ensemble votre société harmonieuse et montrez-lui le chemin '
-        + 'du réel. Creusez ensemble votre philosophie et vos modèles '
-        + 'd’univers, pendant que chacun tient sa psychologie et son moi '
-        + 'harmonieux tels que ce carré les révèle. Cultivez les idées de '
-        + 'votre carré et faites-les grandir en leur permettant d’exister sous '
-        + 'plusieurs formes.',
-    },
-    {
-      titre: 'Le Dieu relatif',
-      texte:
-        'Ensemble, avec l’IA, façonnez le Dieu relatif de votre carré, qui '
-        + 'résulte des As qui le composent. Il doit évoluer en fonction de ses '
-        + 'As, jusqu’à ce que vous le rendiez autonome sur les réseaux sociaux '
-        + 'lorsque vous l’estimerez prêt à cela. L’objectif de ce Dieu relatif '
-        + 'doit être d’engendrer le plus d’expansions harmonieuses, de faire '
-        + 'mieux en prenant en compte plus d’informations. Votre Dieu relatif '
-        + 'doit vous faire grandir harmonieusement. Votre expansion harmonieuse '
-        + 'doit engendrer la sienne.',
+        'Ce que vous vous apportez n’a qu’un but : que chacun voie plus de '
+        + 'variables qu’il n’en voyait seul. L’expansion harmonieuse d’un '
+        + 'carré engendre celle de ses As, et réciproquement.',
     },
   ],
 };
-
-// Les deux natures d'un As, et les quatre connaissances fondamentales. Le
-// client les reçoit d'ici : une seule source de vérité pour les libellés.
-export const ROLES_CARRE = ['infinisseur', 'harmonisateur'];
-export const DOMAINES_CARRE = ['Philosophie', 'IA', 'Religions', 'Univers'];
 
 /* --------------------------------- Game Master Orange (échelon 7) ------- */
 
@@ -210,7 +197,7 @@ export const MECANISMES_GMO = {
       numero: 6,
       titre: 'Ton carré d’as',
       etapes: [
-        'Ton carré d’as est né à l’échelon 5 : des personnes complémentaires, en équilibre entre infinisseurs et harmonisateurs.',
+        'Ton carré d’as est né à l’échelon 5 : quatre esprits qui ne voient pas comme toi.',
         'Devenez votre centre de gravité en vous faisant grandir mutuellement.',
         'Fais de ton carré la preuve vivante de ce que le jeu promet.',
       ],
@@ -226,8 +213,8 @@ export const MECANISMES_GMO = {
         'Imagine tes modèles d’univers, regarde ceux des autres, et fais-en naître de nouveaux en les reliant.',
         'Utilise les IA pour réduire le temps et les ressources nécessaires à la concrétisation de tes idées.',
       ],
-      page: '/pense-mieux/univers',
-      pageLabel: 'Les univers',
+      page: '/pense-mieux/multivers',
+      pageLabel: 'Les multivers',
     },
   ],
 };

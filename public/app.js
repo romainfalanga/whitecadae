@@ -188,10 +188,10 @@ async function route() {
   if (path === '/pense-mieux') return vueForet('pensee');
   if (path === '/pense-mieux/nouveau') return vueNouvelArbre('pensee');
   if (path === '/pense-mieux/recherche') return vueRecherche('pensee');
-  if (path === '/pense-mieux/univers') return vueUnivers('pensee');
+  if (path === '/pense-mieux/multivers') return vueUnivers('pensee');
+  if (path === '/pense-mieux/univers') return navigate('/pense-mieux/multivers', true);
   if ((m = path.match(/^\/pense-mieux\/(\d+)$/))) return pageArbre(+m[1]);
   if (path === '/videographie') return vueRythme();
-  if (path === '/videographie/nouveau') return vueNouvelArbre('video');
   if (path === '/videographie/carre') return vueVideoCarre();
   if ((m = path.match(/^\/videographie\/(\d+)$/))) return pageArbre(+m[1]);
   if (path === '/carre-d-as') return vueMesCarres();
@@ -201,8 +201,8 @@ async function route() {
   if (path === '/carre-d-as/annuaire') return navigate('/carre-d-as/recrutement', true);
   if (path === '/carre-d-as/conversation') return navigate('/carre-d-as', true);
   if (path === '/carre-d-as/missions') return vueMissions();
-  if ((m = path.match(/^\/carre-d-as\/(\d+)(?:\/(multivers|harmonie|notes|conversation|relatif))?$/))) {
-    return pageCarre(+m[1], m[2] || 'carre');
+  if ((m = path.match(/^\/carre-d-as\/(\d+)(?:\/(multivers|philosophie|societe|conversation))?$/))) {
+    return pageCarre(+m[1], m[2] || 'multivers');
   }
   if ((m = path.match(/^\/reflexion\/(\d+)$/))) return pageArbre(+m[1]);
   // l'ancien chemin mène au même endroit : rien de ce qui a été partagé ne casse
@@ -625,13 +625,12 @@ const SOUS_APPS = {
   pm: [
     { cle: 'foret', chemin: '/pense-mieux', label: 'Mes réflexions' },
     { cle: 'nouveau', chemin: '/pense-mieux/nouveau', label: 'Ouvrir' },
-    { cle: 'univers', chemin: '/pense-mieux/univers', label: 'Univers' },
+    { cle: 'univers', chemin: '/pense-mieux/multivers', label: 'Multivers' },
     { cle: 'recherche', chemin: '/pense-mieux/recherche', label: 'Recherche' },
   ],
   vg: [
-    { cle: 'foret', chemin: '/videographie', label: 'Le rythme' },
-    { cle: 'nouveau', chemin: '/videographie/nouveau', label: 'Nouvel ensemble' },
-    { cle: 'carre', chemin: '/videographie/carre', label: 'Carré' },
+    { cle: 'foret', chemin: '/videographie', label: 'Mon rythme' },
+    { cle: 'carre', chemin: '/videographie/carre', label: 'Le carré' },
   ],
   ca: [
     { cle: 'carre', chemin: '/carre-d-as', label: 'Mes carrés' },
@@ -658,22 +657,20 @@ function docke(appCle, actif, contenu) {
 
 /* -------------------------------------------- la forêt (arbres, racine) */
 
-async function vueForet(kind, contexte = 'solo') {
+async function vueForet(kind) {
   const def = ARBRES_PAGES[kind];
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
   let data;
-  try { data = await api(`/api/arbres?kind=${kind}&contexte=${encodeURIComponent(contexte)}`); }
+  try { data = await api(`/api/arbres?kind=${kind}`); }
   catch (err) {
     if (err.status === 401) {
       docke(def.app, 'foret', `<h1>${esc(def.titre)}</h1><p class="empty-note">Connecte-toi pour ouvrir tes réflexions.</p>`);
       return;
     }
-    if (err.status === 404 && contexte !== 'solo') return vueForet(kind, 'solo');
     return navigate('/57', true);
   }
   if (stale(epoch)) return;
-  const dansCarre = data.contexte !== 'solo';
 
   const totalBranches = data.arbres.reduce((somme, a) => somme + a.branches, 0);
   let tri = 'recent';
@@ -686,36 +683,32 @@ async function vueForet(kind, contexte = 'solo') {
       arbres = arbres.filter((a) => a.title.toLowerCase().includes(q) || (a.trunk || '').toLowerCase().includes(q));
     }
     if (tri === 'branches') arbres.sort((a, b) => b.branches - a.branches);
-    const vide = dansCarre
-      ? 'Personne n’a encore ouvert le sien dans ce carré.'
-      : def.vide;
     return arbres.length ? arbres.map((a) => `
       <a class="arbre-card${a.axe ? ' arbre-card--tronc' : ''}${a.mien ? ' arbre-card--mien' : ''}"
          href="/reflexion/${a.id}" data-link>
         <h2>${esc(a.title)}</h2>
         ${a.trunk ? `<p class="arbre-tronc-apercu">${esc(a.trunk)}</p>` : ''}
         <span class="arbre-meta">${a.branches} pensée${a.branches > 1 ? 's' : ''}${a.mien ? ' · à toi' : ''}</span>
-      </a>`).join('') : `<p class="empty-note">${esc(data.arbres.length ? 'Rien ne porte ce nom.' : vide)}</p>`;
+      </a>`).join('') : `<p class="empty-note">${esc(data.arbres.length ? 'Rien ne porte ce nom.' : def.vide)}</p>`;
   };
-
-  /* Le regard : mes réflexions en solo, ou celles d'un de mes carrés. Le même
-     outil, le même moteur ; ce qui change est avec qui l'on pense. */
-  const regards = (data.contextes || []).length > 1 ? `
-    <nav class="foret-regards">
-      ${data.contextes.map((c) => `<button type="button" class="regard${c.cle === data.contexte ? ' actif' : ''}"
-        data-regard="${esc(c.cle)}">${esc(c.label)}</button>`).join('')}
-    </nav>` : '';
 
   // Les cinq troncs sont là d'avance et ne descendent jamais dans la forêt :
   // on ne les plante pas, on les nourrit. Les deux premiers se répondent en
   // miroir : la psychologie dit le présent, le moi harmonieux dit vers quoi
   // il tend.
+  /* Les cinq espaces sont là d'avance : on ne les ouvre pas, on les nourrit.
+     Chacun dit qui le lit — c'est la règle de la page, et elle doit se voir
+     avant d'écrire, pas après. */
+  const qui = (t) => (t.publique ? 'lu par tous les As'
+    : t.partage === 'carre' ? 'lu par mes carrés' : 'à moi seul');
   const troncs = (data.troncs || []).map((t) => `
-    <a class="arbre-card arbre-card--tronc${t.publique ? ' arbre-card--publique' : ''}"
+    <a class="arbre-card arbre-card--tronc${t.publique ? ' arbre-card--publique' : ''}${
+      t.partage === 'moi' ? ' arbre-card--intime' : ''}"
        href="/reflexion/${t.id}" data-link>
       <h2>${esc(t.title)}</h2>
       ${t.sous ? `<p class="arbre-sous">${esc(t.sous)}</p>` : ''}
-      <span class="arbre-meta">${t.branches} pensée${t.branches > 1 ? 's' : ''}${t.publique ? ' · lu par tous' : ''}</span>
+      <span class="arbre-meta">${t.branches} pensée${t.branches > 1 ? 's' : ''}
+        <span class="arbre-qui">${esc(qui(t))}</span></span>
     </a>`).join('');
 
   /* Ce que le carré m'a répondu. C'est la contrepartie de l'ouverture : si mes
@@ -737,8 +730,6 @@ async function vueForet(kind, contexte = 'solo') {
 
   docke(def.app, 'foret', `
     <h1>${esc(def.titre)}</h1>
-    ${regards}
-    ${dansCarre ? '<p class="foret-regard-note">Ce que vous imaginez ensemble, puis ce que chaque As y tient. Ce qui est écrit ici appartient au carré.</p>' : ''}
     ${recues}
     ${troncs ? `<div class="foret foret-troncs">${troncs}</div>` : ''}
     <div class="foret-outils">
@@ -751,9 +742,6 @@ async function vueForet(kind, contexte = 'solo') {
     </div>
     <div class="foret" id="foret">${cartes()}</div>`);
 
-  app.querySelectorAll('[data-regard]').forEach((b) => {
-    b.onclick = () => vueForet(kind, b.dataset.regard);
-  });
   document.getElementById('foret-filtre').oninput = (e) => {
     filtreTexte = e.target.value.trim();
     document.getElementById('foret').innerHTML = cartes();
@@ -765,110 +753,76 @@ async function vueForet(kind, contexte = 'solo') {
 }
 
 /* ---------------------------------------------- la Vidéographie : le rythme
-   Une vidéo par semaine, une par mois, une par an. Chacune est un récap : ce
-   qu'on a vécu sur la période, du point de vue de ce qu'on a ajouté dans
-   Pense Mieux et de ce qu'on a vécu avec ses carrés. La page pose la matière
-   sous les yeux — elle ne raconte pas à la place.                          */
+   Une seule chose ici : trois vidéos à faire, une par semaine, une par mois,
+   une par an. Chacune récapitule sa période. Les trois tiennent côte à côte,
+   sans un mot de trop : on arrive, on voit ce qui reste à faire, on dépose.
+
+   Tout ce qui se pense vit dans Pense Mieux. La Vidéographie ne porte que ces
+   récaps.                                                                 */
 
 function dureeCourte(ms) {
   const jours = Math.floor(ms / 86400000);
-  if (jours >= 2) return `${jours} jours`;
+  if (jours >= 2) return `${jours} j`;
   const heures = Math.floor(ms / 3600000);
-  if (heures >= 2) return `${heures} heures`;
-  return `${Math.max(1, Math.floor(ms / 60000))} minutes`;
+  if (heures >= 2) return `${heures} h`;
+  return `${Math.max(1, Math.floor(ms / 60000))} min`;
 }
 
 async function vueRythme() {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
   let data;
-  let foret;
-  try {
-    data = await api('/api/videographie/rythme');
-    foret = await api('/api/arbres?kind=video');
-  } catch (err) {
+  try { data = await api('/api/videographie/rythme'); }
+  catch (err) {
     if (err.status === 401) {
-      docke('vg', 'foret', '<h1>Vidéographie</h1><p class="empty-note">Connecte-toi pour tenir ton rythme.</p>');
+      docke('vg', 'foret', '<h1>Vidéographie</h1><p class="empty-note">Connecte-toi.</p>');
       return;
     }
     return navigate('/57', true);
   }
   if (stale(epoch)) return;
 
-  const matiereHtml = (m) => {
-    const morceaux = [];
-    if (m.penseMieux.branches) {
-      morceaux.push(`<li><strong>${m.penseMieux.branches}</strong> pensée${m.penseMieux.branches > 1 ? 's' : ''}
-        dans Pense Mieux : ${m.penseMieux.arbres.map((a) => esc(a.title)).join(' · ')}</li>`);
-    }
-    for (const c of m.carres) {
-      const bouts = [];
-      if (c.branches) bouts.push(`${c.branches} pensée${c.branches > 1 ? 's' : ''}${c.miennes ? ` (dont ${c.miennes} de toi)` : ''}`);
-      if (c.messages) bouts.push(`${c.messages} message${c.messages > 1 ? 's' : ''}`);
-      if (c.brainstorms) bouts.push(`${c.brainstorms} brainstorm${c.brainstorms > 1 ? 's' : ''}`);
-      morceaux.push(`<li><strong>${esc(c.nom)}</strong> : ${bouts.join(', ')}</li>`);
-    }
-    if (m.echanges && (m.echanges.recues || m.echanges.donnees)) {
-      const bouts = [];
-      if (m.echanges.recues) bouts.push(`${m.echanges.recues} réponse${m.echanges.recues > 1 ? 's' : ''} reçue${m.echanges.recues > 1 ? 's' : ''}`);
-      if (m.echanges.donnees) bouts.push(`${m.echanges.donnees} donnée${m.echanges.donnees > 1 ? 's' : ''} aux autres`);
-      morceaux.push(`<li><strong>Le carré t’a répondu</strong> : ${bouts.join(', ')}</li>`);
-    }
-    if (m.signes) morceaux.push(`<li><strong>${m.signes}</strong> signe${m.signes > 1 ? 's' : ''} trouvé${m.signes > 1 ? 's' : ''} sur le 57</li>`);
-    if (!morceaux.length) return '<p class="empty-note">Rien encore sur cette période : la matière viendra de Pense Mieux et de tes carrés.</p>';
-    const extraits = m.penseMieux.extraits.length
-      ? `<div class="rythme-extraits">${m.penseMieux.extraits.map((e) => `<p>${esc(e)}</p>`).join('')}</div>`
-      : '';
-    return `<ul class="rythme-matiere">${morceaux.join('')}</ul>${extraits}`;
+  // la matière : des compteurs, pas des phrases
+  const chips = (m) => {
+    const c = [];
+    if (m.penseMieux.branches) c.push(`${m.penseMieux.branches} pensée${m.penseMieux.branches > 1 ? 's' : ''}`);
+    const carres = m.carres.reduce((n, x) => n + x.branches, 0);
+    if (carres) c.push(`${carres} en carré`);
+    const messages = m.carres.reduce((n, x) => n + x.messages, 0);
+    if (messages) c.push(`${messages} message${messages > 1 ? 's' : ''}`);
+    if (m.echanges && m.echanges.recues) c.push(`${m.echanges.recues} réponse${m.echanges.recues > 1 ? 's' : ''} reçue${m.echanges.recues > 1 ? 's' : ''}`);
+    if (m.echanges && m.echanges.donnees) c.push(`${m.echanges.donnees} donnée${m.echanges.donnees > 1 ? 's' : ''}`);
+    if (m.signes) c.push(`${m.signes} signe${m.signes > 1 ? 's' : ''}`);
+    return c.length
+      ? c.map((x) => `<span class="ry-chip">${esc(x)}</span>`).join('')
+      : '<span class="ry-chip ry-chip--vide">rien encore</span>';
   };
 
   const carte = (c) => `
-    <section class="rythme-carte${c.faite ? ' faite' : ''}" data-cadence="${c.cle}">
-      <header class="rythme-tete">
-        <h2>${esc(c.titre)}</h2>
-        <span class="rythme-periode">${esc(c.periode.libelle)}</span>
+    <section class="ry-carte${c.faite ? ' faite' : ''}" data-cadence="${c.cle}">
+      <header>
+        <h2>${esc(c.cle === 'annee' ? 'Année' : c.cle === 'mois' ? 'Mois' : 'Semaine')}</h2>
+        <span class="ry-periode">${esc(c.periode.libelle)}</span>
+        <span class="ry-reste">${c.faite ? 'déposée' : `${esc(dureeCourte(c.restant))} restants`}</span>
       </header>
-      <p class="rythme-invite">${esc(c.invite)}</p>
-      <div class="rythme-corps">
-        <h3>Ce que tu as vécu</h3>
-        ${matiereHtml(c.matiere)}
-      </div>
+      <div class="ry-matiere">${chips(c.matiere)}</div>
       ${c.faite ? `
-        <div class="rythme-faite">
-          ${videoEmbed(c.faite.url)}
-          ${c.faite.note ? `<p class="rythme-note">${esc(c.faite.note)}</p>` : ''}
-          <button type="button" class="link-btn" data-refaire="${c.cle}">Corriger l’adresse</button>
-        </div>` : `
-        <p class="rythme-reste">Il te reste ${esc(dureeCourte(c.restant))} pour la déposer.</p>`}
-      <form class="rythme-form" data-form="${c.cle}"${c.faite ? ' hidden' : ''}>
-        <input type="url" data-url placeholder="https://www.youtube.com/watch?v=…"
+        <div class="ry-faite">${videoEmbed(c.faite.url)}</div>
+        ${c.faite.note ? `<p class="ry-note">${esc(c.faite.note)}</p>` : ''}
+        <button type="button" class="link-btn" data-refaire="${c.cle}">changer</button>` : ''}
+      <form class="ry-form" data-form="${c.cle}"${c.faite ? ' hidden' : ''}>
+        <input type="url" data-url placeholder="adresse YouTube du récap"
           value="${esc(c.faite ? c.faite.url : '')}" required>
-        <textarea data-note rows="2" maxlength="1000"
-          placeholder="En un mot, ce que tu y racontes…">${esc(c.faite ? c.faite.note : '')}</textarea>
-        <button type="submit" class="primary">${c.faite ? 'Mettre à jour' : 'Déposer le récap'}</button>
+        <textarea data-note rows="1" maxlength="1000"
+          placeholder="en un mot…">${esc(c.faite ? c.faite.note : '')}</textarea>
+        <button type="submit" class="primary">${c.faite ? 'Mettre à jour' : 'Déposer'}</button>
         <p class="form-error" data-err></p>
       </form>
-      ${c.histoire.length ? `
-        <div class="rythme-histoire">
-          ${c.histoire.map((h) => `<a class="rythme-passe" href="${esc(safeUrl(h.url))}"
-             target="_blank" rel="noopener">${esc(h.periode)}</a>`).join('')}
-        </div>` : ''}
+      ${c.histoire.length ? `<div class="ry-histoire">${c.histoire.map((h) => `
+        <a href="${esc(safeUrl(h.url))}" target="_blank" rel="noopener">${esc(h.periode)}</a>`).join('')}</div>` : ''}
     </section>`;
 
-  const arbres = (foret.arbres || []).map((a) => `
-    <a class="arbre-card" href="/reflexion/${a.id}" data-link>
-      <h2>${esc(a.title)}</h2>
-      ${a.trunk ? `<p class="arbre-tronc-apercu">${esc(a.trunk)}</p>` : ''}
-      <span class="arbre-meta">${a.branches} vidéo${a.branches > 1 ? 's' : ''}</span>
-    </a>`).join('');
-
-  docke('vg', 'foret', `
-    <h1>Vidéographie</h1>
-    <p class="rythme-intro">Pense Mieux est l’outil de ta pensée. Ici, tu racontes ce que
-      tu as vécu : une vidéo par semaine, une par mois, une par an.</p>
-    <div class="rythme">${data.cadences.map(carte).join('')}</div>
-    <h2 class="rythme-foret-titre">Tes ensembles vidéo</h2>
-    <div class="foret">${arbres || '<p class="empty-note">Rien encore : cet espace range ce que tu as extériorisé en vidéo.</p>'}</div>`);
+  docke('vg', 'foret', `<div class="rythme">${data.cadences.map(carte).join('')}</div>`);
 
   app.querySelectorAll('[data-refaire]').forEach((b) => {
     b.onclick = () => {
@@ -876,7 +830,7 @@ async function vueRythme() {
       if (f) { f.hidden = false; f.querySelector('[data-url]').focus(); }
     };
   });
-  app.querySelectorAll('.rythme-form').forEach((f) => {
+  app.querySelectorAll('.ry-form').forEach((f) => {
     f.onsubmit = async (e) => {
       e.preventDefault();
       const err = f.querySelector('[data-err]');
@@ -909,7 +863,7 @@ async function vueUnivers(kind) {
   try { data = await api(`/api/univers?kind=${kind}`); }
   catch (err) {
     if (err.status === 401) {
-      docke(def.app, 'univers', '<h1>Les univers</h1><p class="empty-note">Connecte-toi.</p>');
+      docke(def.app, 'univers', '<h1>Les multivers</h1><p class="empty-note">Connecte-toi.</p>');
       return;
     }
     return navigate('/57', true);
@@ -919,22 +873,21 @@ async function vueUnivers(kind) {
   const carte = (u) => `
     <a class="arbre-card arbre-card--univers${u.mien ? ' arbre-card--mien' : ''}"
        href="/reflexion/${u.id}" data-link>
-      <h2>${esc(u.carre_nom ? `${u.carre_nom} · Nos univers` : `${u.username} · Mes univers`)}</h2>
+      <h2>${esc(u.carre_nom ? `${u.carre_nom} · Notre multivers` : `${u.username} · Son multivers`)}</h2>
       ${u.trunk ? `<p class="arbre-tronc-apercu">${esc(u.trunk)}</p>` : ''}
-      <span class="arbre-meta">${u.branches} univers${u.mien ? ' · les tiens' : ''}</span>
+      <span class="arbre-meta">${u.branches} modèle${u.branches > 1 ? 's' : ''}${u.mien ? ' · à toi' : ''}</span>
     </a>`;
 
   const peint = (liste) => liste.length
     ? liste.map(carte).join('')
-    : '<p class="empty-note">Aucun univers pour l’instant. Ouvre le tien : il sera le premier.</p>';
+    : '<p class="empty-note">Aucun multivers pour l’instant. Ouvre le tien : il sera le premier.</p>';
 
   docke(def.app, 'univers', `
-    <h1>Les univers</h1>
-    <p class="univers-intro">Les modèles d’univers de tous les As. Regarde ceux des
-      autres, puis fais-en naître de nouveaux : dans ton tronc « Mes univers », une
-      branche peut être nourrie par n’importe quelle branche d’ici.</p>
+    <h1>Les multivers</h1>
+    <p class="univers-intro">Les modèles d’univers de tous les As. Regarde ceux des autres,
+      puis fais-en naître de nouveaux en les reliant depuis le tien.</p>
     <div class="foret-outils">
-      <input id="univers-q" placeholder="Chercher dans les univers…" autocomplete="off">
+      <input id="univers-q" placeholder="Chercher…" autocomplete="off">
     </div>
     <div class="foret" id="univers-liste">${peint(data.univers)}</div>`);
 
@@ -1027,14 +980,13 @@ async function vueVideoCarre() {
   try { d = await api('/api/carre'); }
   catch (err) {
     if (err.status === 403) return navigate('/videographie', true);
-    docke('vg', 'carre', '<h1>Mon carré</h1><p class="empty-note">Connecte-toi.</p>');
+    docke('vg', 'carre', '<h1>Le carré</h1><p class="empty-note">Connecte-toi.</p>');
     return;
   }
   if (stale(epoch)) return;
 
   if (!(d.carres || []).length) {
     docke('vg', 'carre', `
-      <h1>Le carré</h1>
       <p class="empty-note">Pas encore de carré : il se fonde au <a href="/carre-d-as" data-link>Carré d’As</a>.</p>`);
     return;
   }
@@ -1051,32 +1003,26 @@ async function vueVideoCarre() {
     }
   }
   docke('vg', 'carre', `
-    <h1>Le carré</h1>
-    ${autres.length ? autres.map((m) => `
-      <section class="video-as" data-as="${m.user_id}">
+    ${autres.length ? `<div class="vg-as">${autres.map((m) => `
+      <section class="vg-as-bloc" data-as="${m.user_id}">
         <h2>${esc(m.username)}</h2>
-        <div class="video-as-arbres"><p class="empty-note">…</p></div>
-      </section>`).join('') : '<p class="empty-note">Tes carrés n’ont pas encore d’autre As.</p>'}`);
+        <div class="vg-as-recaps"><span class="ry-chip ry-chip--vide">…</span></div>
+      </section>`).join('')}</div>`
+      : '<p class="empty-note">Tes carrés n’ont pas encore d’autre As.</p>'}`);
 
   for (const m of autres) {
     try {
       const v = await api(`/api/videographie/membre/${m.user_id}`);
       if (stale(epoch)) return;
-      const zone = document.querySelector(`[data-as="${m.user_id}"] .video-as-arbres`);
+      const zone = document.querySelector(`[data-as="${m.user_id}"] .vg-as-recaps`);
       if (!zone) continue;
-      // son rythme d'abord : c'est ce qu'on vient regarder chez un As
-      const recaps = (v.recaps || []).length ? `<div class="video-as-recaps">
-        ${v.recaps.map((r) => `<a class="video-recap" href="${esc(safeUrl(r.url))}"
-           target="_blank" rel="noopener">${esc(r.periode)}
-           <span>${esc(r.note || r.cadence)}</span></a>`).join('')}</div>`
-        : '<p class="empty-note">Pas encore de récap : son rythme commence.</p>';
-      const foret = v.arbres.length ? `<div class="foret">${v.arbres.map((a) => `
-        <a class="arbre-card" href="/reflexion/${a.id}" data-link>
-          <h2>${esc(a.title)}</h2>
-          ${a.trunk ? `<p class="arbre-tronc-apercu">${esc(a.trunk)}</p>` : ''}
-          <span class="arbre-meta">${a.branches} vidéo${a.branches > 1 ? 's' : ''}</span>
-        </a>`).join('')}</div>` : '';
-      zone.innerHTML = recaps + foret;
+      zone.innerHTML = (v.recaps || []).length
+        ? v.recaps.map((r) => `<a class="vg-recap" href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener">
+            <span class="vg-recap-cadence">${esc(r.cadence === 'annee' ? 'année' : r.cadence)}</span>
+            <span class="vg-recap-periode">${esc(r.periode)}</span>
+            ${r.note ? `<span class="vg-recap-note">${esc(r.note)}</span>` : ''}
+          </a>`).join('')
+        : '<span class="ry-chip ry-chip--vide">pas encore de récap</span>';
     } catch { /* un As sans accès vidéographie : sa section reste vide */ }
   }
 }
@@ -1713,13 +1659,10 @@ async function pageArbre(id) {
     <p class="fil-retour"><a href="${retour.chemin}" data-link>← ${esc(retour.titre)}</a></p>
     <h1>${esc(titre)}</h1>
     ${arbre.sous && !etranger ? `<p class="arbre-sous">${esc(arbre.sous)}</p>` : ''}
-    ${arbre.publique ? '<p class="arbre-public">Lu par tous les As : ce que tu écris ici entre dans la galerie des univers.</p>' : ''}
-    ${!arbre.publique && !etranger && arbre.axe == null && arbre.carre_id == null ? `
-      <p class="arbre-partage">
-        <label><input type="checkbox" id="arbre-prive"${arbre.prive ? ' checked' : ''}>
-          Garder cette réflexion pour moi seul</label>
-        <span class="arbre-partage-note">Sinon, tes carrés la lisent et peuvent y répondre.</span>
-      </p>` : ''}
+    ${arbre.publique ? '<p class="arbre-public">Lu par tous les As : ce que tu écris ici entre dans la galerie des multivers.</p>' : ''}
+    ${!etranger && arbre.partage ? `<p class="arbre-partage">${esc(arbre.partage === 'carre'
+      ? 'Les As de tes carrés lisent cet espace et peuvent y répondre.'
+      : 'Cet espace est à toi seul. Personne d’autre ne le lit.')}</p>` : ''}
     ${arbre.repondable ? `<p class="arbre-invite-reponse">Tu es ici pour aider ${esc(nomPorteur)} à voir
       plus de variables : approfondis, élargis, ou oppose en proposant une issue.</p>` : ''}
     ${arbre.miroir ? `<p class="arbre-miroir">En regard : <a href="/reflexion/${arbre.miroir.id}" data-link>${esc(arbre.miroir.title)}</a></p>` : ''}
@@ -1769,7 +1712,7 @@ async function pageArbre(id) {
     </form>
     ${editable && !arbre.axe ? '<p class="arbre-suppr"><button type="button" class="link-btn danger" id="arbre-suppr">Supprimer cette réflexion</button></p>' : ''}
     ` : `<p class="empty-note">${arbre.publique && etranger
-      ? 'Les univers d’un autre As. Depuis les tiens, une pensée peut être nourrie par les siennes.'
+      ? 'Le multivers d’un autre As. Depuis le tien, une pensée peut être nourrie par les siennes.'
       : 'En lecture seule.'}</p>`}`);
 
   // le saut vers une source : pour tout le monde, lecteur compris
@@ -1887,7 +1830,7 @@ async function pageArbre(id) {
     try { g = await api(`/api/univers?kind=${kind}`); } catch { return []; }
     return (g.univers || [])
       .filter((u) => u.id !== id && !dejaVus.has(u.id))
-      .map((u) => ({ id: u.id, title: u.carre_nom ? `${u.carre_nom} · Nos univers` : `${u.username} · Mes univers` }));
+      .map((u) => ({ id: u.id, title: u.carre_nom ? `${u.carre_nom} · Notre multivers` : `${u.username} · Son multivers` }));
   };
   const chargeAutres = async () => {
     if (autresArbres != null) return;
@@ -1898,7 +1841,7 @@ async function pageArbre(id) {
       if (arbre.publique) {
         const univers = await universOptions(vus);
         total = univers.length;
-        options = groupe('Les univers', univers);
+        options = groupe('Les multivers', univers);
       } else {
         const d = await api(`/api/arbres?kind=${kind}`);
         if (collectif) {
@@ -1921,7 +1864,7 @@ async function pageArbre(id) {
         }
         const univers = await universOptions(vus);
         total += univers.length;
-        options += groupe('Les univers', univers);
+        options += groupe('Les multivers', univers);
       }
       autresArbres = total;
       selArbre.innerHTML = '<option value="">ou depuis une autre réflexion…</option>' + options;
@@ -2037,12 +1980,6 @@ async function pageArbre(id) {
     } catch (err) { document.getElementById('branche-err').textContent = err.message; }
   };
 
-  // « pour moi seul » : la réflexion sort du regard de mes carrés
-  const prive = document.getElementById('arbre-prive');
-  if (prive) prive.onchange = async () => {
-    try { await api(`/api/arbres/${id}`, { method: 'PUT', body: { title: arbre.title, trunk: arbre.trunk, prive: prive.checked } }); }
-    catch (err) { alert(err.message); prive.checked = !prive.checked; }
-  };
 
   // un tronc n'a pas ce bouton : il ne s'abat pas
   const suppr = document.getElementById('arbre-suppr');
@@ -2079,14 +2016,12 @@ async function vueMesCarres() {
     contenu = '<p class="empty-note">Connecte-toi pour fonder ou rejoindre un carré.</p>';
   } else {
     const cartes = d.carres.map((c) => {
-      const pris = new Set(c.membres.map((m) => m.domaine).filter(Boolean));
       const places = 4 - c.membres.length;
       return `
         <a class="carre-carte" href="/carre-d-as/${c.id}" data-link>
           <h2>${esc(c.nom)}</h2>
           <p class="carre-carte-membres">${c.membres.map((m) => esc(m.username)).join(' · ')}
             ${places ? `<span class="carre-carte-places">${places} place${places > 1 ? 's' : ''}</span>` : ''}</p>
-          <p class="carre-domaines">${d.domaines.map((x) => `<span class="dom${pris.has(x) ? ' couvert' : ''}">${esc(x)}</span>`).join('')}</p>
         </a>`;
     }).join('');
     contenu = `
@@ -2129,21 +2064,34 @@ async function vueMesCarres() {
   }
 }
 
-/* --------------------------------- la page d'un carré, et ses onglets ---
-   Le carré (les As, le cap, le salon, le live), les notes (l'évaluation
-   mutuelle), la conversation, le relatif (l'IA du carré).                */
+/* ------------------------------------- la page d'un carré : trois matières
+   Un carré n'existe que pour trois choses : la philosophie, le multivers et
+   la société harmonieuse. Chacune a son onglet, et chaque onglet montre ce
+   que les quatre écrivent ensemble puis ce que chacun porte de son côté sur
+   la même matière. Plus la conversation, pour tout le reste.
+
+   Rien d'autre ne s'y voit : ni la psychologie ni le moi harmonieux d'un As,
+   ni ses réflexions personnelles. Ils ne sortent pas de chez lui.        */
+
+const MATIERES = [
+  { cle: 'multivers', axe: 'univers', label: 'Multivers' },
+  { cle: 'philosophie', axe: 'philo', label: 'Philosophie' },
+  { cle: 'societe', axe: 'societe', label: 'Société harmonieuse' },
+];
 
 function carreTete(d, id, onglet) {
   const onglets = d.publique ? '' : `
     <nav class="carre-onglets">
-      ${[['carre', 'Le carré'], ['multivers', 'Multivers'], ['harmonie', 'Harmonie'],
-        ['notes', 'Notes'], ['conversation', 'Conversation'], ['relatif', 'Relatif']]
-        .map(([cle, label]) => `<a href="/carre-d-as/${id}${cle === 'carre' ? '' : `/${cle}`}" data-link
+      ${[...MATIERES.map((m) => [m.cle, m.label]), ['conversation', 'Conversation']]
+        .map(([cle, label]) => `<a href="/carre-d-as/${id}/${cle}" data-link
           class="co-tab${onglet === cle ? ' actif' : ''}">${label}</a>`).join('')}
     </nav>`;
+  const as = (d.membres || []).map((m) => authorLink(m.username)).join('<span class="carre-sep">·</span>');
   return `
     <p class="fil-retour"><a href="/carre-d-as" data-link>← Mes carrés</a></p>
     <h1>${esc(d.carre.nom)}</h1>
+    <p class="carre-as">${as}${d.places > 0
+      ? `<span class="carre-places">${d.places} place${d.places > 1 ? 's' : ''} libre${d.places > 1 ? 's' : ''}</span>` : ''}</p>
     ${onglets}`;
 }
 
@@ -2156,334 +2104,70 @@ async function pageCarre(id, onglet) {
   if (stale(epoch)) return;
 
   if (d.publique) return carreFacade(id, d);
-  if (onglet === 'multivers') return carreOngletMultivers(id, d, epoch);
-  if (onglet === 'harmonie') return carreOngletHarmonie(id, d, epoch);
-  if (onglet === 'notes') return carreOngletNotes(id, d, epoch);
   if (onglet === 'conversation') return carreOngletConversation(id, d, epoch);
-  if (onglet === 'relatif') return carreOngletRelatif(id, d, epoch);
-  return carreOngletCarre(id, d, epoch);
+  const matiere = MATIERES.find((m) => m.cle === onglet) || MATIERES[0];
+  return carreOngletMatiere(id, d, matiere, epoch);
 }
 
-// La façade d'un carré qui n'est pas le mien : les As, les places. Rien que
-// l'annuaire ne montrait déjà.
+// La façade d'un carré qui n'est pas le mien : son nom, ses As, ses places.
 function carreFacade(id, d) {
   docke('ca', 'carre', `
-    ${carreTete(d, id, 'carre')}
-    <div class="carre-membres">
-      ${d.membres.map((m) => `
-        <div class="carre-membre">
-          ${authorLink(m.username)}
-          <span class="carre-role">${esc(m.role || '')}</span>
-          <span class="carre-domaine">${esc(m.domaine || '')}</span>
-        </div>`).join('')}
-      ${Array.from({ length: d.places }, () => '<div class="carre-membre carre-vide">place libre</div>').join('')}
-    </div>
+    ${carreTete(d, id, '')}
     ${d.places > 0 && state.user ? `
       <button type="button" class="primary" id="carre-rejoint">Rejoindre ce carré</button>
-      <p class="form-error" id="carre-err"></p>` : ''}`);
+      <p class="form-error" id="carre-err"></p>`
+      : '<p class="empty-note">Ce carré est complet.</p>'}`);
 
   const b = document.getElementById('carre-rejoint');
   if (b) b.onclick = async () => {
     try {
       await api(`/api/carre/${id}/rejoindre`, { method: 'POST', body: {} });
-      pageCarre(id, 'carre');
+      pageCarre(id, 'multivers');
     } catch (err) { document.getElementById('carre-err').textContent = err.message; }
   };
 }
 
-function carreOngletCarre(id, d, epoch) {
-  const c = d.carre;
-  const pris = new Set(d.membres.map((m) => m.domaine).filter(Boolean));
-  const parRole = d.roles.map((r) => {
-    const total = d.membres.filter((m) => m.role === r).length;
-    return `${total} ${r}${total > 1 ? 's' : ''}`;
-  });
-  const complet = d.membres.length === 4;
-
-  docke('ca', 'carre', `
-    ${carreTete(d, id, 'carre')}
-    <section class="mon-carre">
-      <div class="carre-membres">
-        ${d.membres.map((m) => `
-          <div class="carre-membre${state.user && m.user_id === state.user.id ? ' moi' : ''}">
-            ${authorLink(m.username)}
-            <span class="carre-role">${esc(m.role || 'rôle à choisir')}</span>
-            <span class="carre-domaine">${esc(m.domaine || 'connaissance à choisir')}</span>
-            ${m.user_id !== (state.user && state.user.id) && state.access.videographie
-              ? '<a class="link-btn" href="/videographie/carre" data-link>sa vidéographie</a>' : ''}
-          </div>`).join('')}
-        ${Array.from({ length: d.places }, () => '<div class="carre-membre carre-vide">place libre</div>').join('')}
-      </div>
-      <div class="carre-equilibre">
-        <span>${parRole.map(esc).join(' · ')}</span>
-        <span class="carre-domaines">${d.domaines.map((x) => `<span class="dom${pris.has(x) ? ' couvert' : ''}">${esc(x)}</span>`).join('')}</span>
-      </div>
-      <form id="carre-moi" class="carre-moi">
-        <label>Ma nature
-          <select id="carre-role"><option value="">Choisir…</option>
-            ${d.roles.map((r) => `<option value="${esc(r)}"${d.moi.role === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}
-          </select></label>
-        <label>Ma connaissance
-          <select id="carre-domaine"><option value="">Choisir…</option>
-            ${d.domaines.map((x) => `<option value="${esc(x)}"${d.moi.domaine === x ? ' selected' : ''}>${esc(x)}</option>`).join('')}
-          </select></label>
-        <button type="submit">Enregistrer</button>
-        <button type="button" class="link-btn danger" id="carre-quitter">Quitter le carré</button>
-      </form>
-    </section>
-
-    <section class="carre-cap">
-      <h2>Le cap</h2>
-      <form id="cap-form">
-        <textarea id="cap-texte" maxlength="1000" rows="3"
-          placeholder="Ce que ce carré vise ensemble.">${esc(c.cap || '')}</textarea>
-        <div class="cap-ligne">
-          <input id="cap-discord" type="url" maxlength="200"
-            placeholder="Le salon Discord du carré (facultatif)" value="${esc(c.discord_url || '')}">
-          <button type="submit">Enregistrer</button>
-        </div>
-        <p class="form-error" id="cap-err"></p>
-      </form>
-      ${c.discord_url ? `<p class="carre-salon"><a href="${esc(safeUrl(c.discord_url))}" target="_blank" rel="noopener">Ouvrir le salon du carré ↗</a></p>` : ''}
-    </section>
-
-    <section class="carre-live">
-      <h2>Le live du carré</h2>
-      ${complet ? `
-      <p class="carre-live-note">L’As au meilleur matériel tient l’antenne ; les quatre se retrouvent
-        au salon, et l’hôte retransmet leurs quatre voix en direct.</p>
-      <form id="live-form" class="bs-form">
-        <input id="live-sujet" maxlength="200" placeholder="Le sujet du brainstorming" required>
-        <div class="bs-form-ligne">
-          <select id="live-hote">
-            ${d.membres.map((m) => `<option value="${m.user_id}"${state.user && m.user_id === state.user.id ? ' selected' : ''}>Hôte : ${esc(m.username)}</option>`).join('')}
-          </select>
-          <select id="live-plateforme">
-            <option value="youtube">YouTube</option><option value="twitch">Twitch</option><option value="tiktok">TikTok</option>
-          </select>
-          <input id="live-url" type="url" placeholder="Le lien du live" required>
-        </div>
-        <button type="submit" class="primary">Annoncer</button>
-        <p class="form-error" id="live-err"></p>
-      </form>` : '<p class="empty-note">Le live s’annonce à quatre : complète le carré.</p>'}
-      ${(d.brainstorms || []).length ? `
-      <ul class="vie-liste">
-        ${d.brainstorms.map((b) => `
-          <li><a href="/brainstorm/${b.id}" data-link>${esc(b.sujet)}</a>
-            <span class="vie-meta">${b.statut === 'live' ? 'en direct' : b.statut === 'annonce' ? 'annoncé' : 'terminé'}
-              ${b.hote_username ? ` · ${esc(b.hote_username)} à l’antenne` : ''}
-              ${b.retenues ? ` · ${b.retenues} retenue${b.retenues > 1 ? 's' : ''}` : ''}</span></li>`).join('')}
-      </ul>` : ''}
-    </section>`);
-
-  document.getElementById('carre-moi').onsubmit = async (e) => {
-    e.preventDefault();
-    await api(`/api/carre/${id}/moi`, {
-      method: 'PUT',
-      body: { role: document.getElementById('carre-role').value, domaine: document.getElementById('carre-domaine').value },
-    });
-    pageCarre(id, 'carre');
-  };
-  document.getElementById('carre-quitter').onclick = async () => {
-    if (!confirm('Quitter ce carré ?')) return;
-    await api(`/api/carre/${id}/quitter`, { method: 'POST', body: {} });
-    navigate('/carre-d-as');
-  };
-  document.getElementById('cap-form').onsubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await api(`/api/carre/${id}`, {
-        method: 'PUT',
-        body: { cap: document.getElementById('cap-texte').value, discord_url: document.getElementById('cap-discord').value },
-      });
-      pageCarre(id, 'carre');
-    } catch (err) { document.getElementById('cap-err').textContent = err.message; }
-  };
-  const live = document.getElementById('live-form');
-  if (live) live.onsubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const r = await api('/api/brainstorms', {
-        method: 'POST',
-        body: {
-          carre_id: id,
-          sujet: document.getElementById('live-sujet').value,
-          plateforme: document.getElementById('live-plateforme').value,
-          url: document.getElementById('live-url').value,
-          hote_user_id: +document.getElementById('live-hote').value,
-        },
-      });
-      navigate(`/brainstorm/${r.id}`);
-    } catch (err) { document.getElementById('live-err').textContent = err.message; }
-  };
-}
-
-/* Les notes : chacun note les trois autres, domaine par domaine. Le meilleur
-   du domaine vaut 10, le reste se lit par rapport à lui. Tout le carré voit
-   tout : la transparence est la discussion.                               */
-/* ------------------------------------------------------- le multivers ---
-   Un carré n'est pas seulement un lieu où l'on écrit ensemble : c'est un
-   endroit d'où l'on regarde penser les autres. Chaque As y ouvre ses cinq
-   axes et ses réflexions libres ; on y entre pour répondre, jamais pour
-   juger. Autant de perceptions qu'il y a d'As, et chacune éclaire les
-   autres.                                                                 */
-async function carreOngletMultivers(id, d, epoch) {
+/* Une matière du carré : ce que les quatre en écrivent ensemble, puis ce que
+   chacun en porte de son côté. On n'écrit pas ici : on entre. */
+async function carreOngletMatiere(id, d, matiere, epoch) {
   let m;
-  try { m = await api(`/api/carre/${id}/multivers`); }
+  try { m = await api(`/api/carre/${id}/axe/${matiere.axe}`); }
   catch { return navigate('/carre-d-as', true); }
   if (stale(epoch)) return;
 
-  const carte = (t, mien) => `
-    <a class="mv-carte${t.axe ? ' mv-carte--axe' : ''}" href="/reflexion/${t.id}" data-link>
-      <h3>${esc(t.court || t.title)}</h3>
-      ${t.trunk ? `<p class="mv-apercu">${esc(t.trunk)}</p>` : ''}
-      <span class="mv-meta">${t.pensees} pensée${t.pensees > 1 ? 's' : ''}${
-        t.reponses ? ` · ${t.reponses} réponse${t.reponses > 1 ? 's' : ''}` : ''}</span>
-    </a>`;
+  const compte = (t) => `${t.pensees} pensée${t.pensees > 1 ? 's' : ''}${
+    t.reponses ? ` · ${t.reponses} réponse${t.reponses > 1 ? 's' : ''}` : ''}`;
 
   docke('ca', 'carre', `
-    ${carreTete(d, id, 'multivers')}
-    <p class="mv-intro">Chacun pense de là où il est. Entre dans la perception des autres :
-      approfondis ce qu’ils disent, élargis leur champ, ou oppose-leur une issue. Ils font
-      de même chez toi — c’est à cela que sert un carré.</p>
-    ${m.communs.length ? `
-    <section class="mv-bloc">
-      <h2>Ce que vous pensez ensemble</h2>
-      <div class="mv-grille">${m.communs.map((t) => carte(t, false)).join('')}</div>
-    </section>` : ''}
-    ${m.as.map((as) => `
-      <section class="mv-bloc mv-as${as.moi ? ' moi' : ''}">
-        <h2>${as.moi ? 'Toi' : esc(as.username)}${as.domaine ? `<span class="mv-role">${esc(as.domaine)}</span>` : ''}</h2>
-        ${as.axes.length || as.libres.length
-          ? `<div class="mv-grille">${[...as.axes, ...as.libres].map((t) => carte(t, as.moi)).join('')}</div>`
-          : '<p class="empty-note">Rien d’ouvert encore.</p>'}
-        ${as.dansLeCarre.length ? `
-          <p class="mv-sous">Et tel que ce carré le révèle</p>
-          <div class="mv-grille">${as.dansLeCarre.map((t) => carte(t, as.moi)).join('')}</div>` : ''}
-      </section>`).join('')}`);
-}
-
-/* L'harmonie du carré : la société que les quatre imaginent ensemble, et le
-   moi harmonieux de chacun tel que ce carré le révèle. On n'écrit pas ici :
-   on entre dans l'arbre.                                                  */
-async function carreOngletHarmonie(id, d, epoch) {
-  let h;
-  try { h = await api(`/api/carre/${id}/harmonie`); }
-  catch { return navigate('/carre-d-as', true); }
-  if (stale(epoch)) return;
-
-  const compte = (n) => n
-    ? `${n} pensée${n > 1 ? 's' : ''}`
-    : 'rien encore : il attend';
-  const parAxe = (as, axe) => as.arbres.find((x) => x.axe === axe) || {};
-
-  docke('ca', 'carre', `
-    ${carreTete(d, id, 'harmonie')}
-    <section class="harmonie">
-      <h2>Ce que nous imaginons ensemble</h2>
-      <div class="harmonie-communs">
-        ${h.communs.map((c) => `
-          <a class="arbre-card arbre-card--tronc${c.publique ? ' arbre-card--publique' : ''}"
-             href="/reflexion/${c.id}" data-link>
-            <h2>${esc(c.titre)}</h2>
-            <p class="arbre-sous">${esc(c.sous)}</p>
-            <span class="arbre-meta">${compte(c.branches)}${c.publique ? ' · lu par tous' : ''}</span>
-          </a>`).join('')}
-      </div>
-      <p class="harmonie-note">Les quatre y écrivent ensemble : chacun greffe sur la
-        branche des autres, chacun ne retouche que la sienne.</p>
+    ${carreTete(d, id, matiere.cle)}
+    <section class="mat-commun">
+      ${m.commun ? `
+        <a class="mat-carte mat-carte--commun" href="/reflexion/${m.commun.id}" data-link>
+          <h2>${esc(m.titre)}</h2>
+          ${m.commun.trunk ? `<p class="mat-apercu">${esc(m.commun.trunk)}</p>` : ''}
+          <span class="mat-meta">${m.commun.pensees} pensée${m.commun.pensees > 1 ? 's' : ''} · à quatre${
+            m.publique ? ' · lu par tous les As' : ''}</span>
+        </a>` : ''}
     </section>
-    <section class="harmonie">
-      <h2>Chacun, tel que ce carré le révèle</h2>
-      <div class="harmonie-mois">
-        ${h.as.map((m) => `
-          <div class="harmonie-as">
-            ${authorLink(m.username)}
-            <div class="harmonie-paire">
-              ${h.axesPersonnels.map((a) => {
-                const t = parAxe(m, a.axe);
-                return t.id
-                  ? `<a class="arbre-card arbre-card--tronc" href="/reflexion/${t.id}" data-link>
-                       <h2>${esc(a.court)}</h2>
-                       <span class="arbre-meta">${compte(t.branches)}</span></a>`
-                  : `<span class="arbre-card arbre-card--vide">${esc(a.court)}<span
-                       class="arbre-meta">pas encore ouvert</span></span>`;
-              }).join('')}
-            </div>
-          </div>`).join('')}
+    <section class="mat-chacun">
+      <h2>Chacun de son côté</h2>
+      <div class="mat-grille">
+        ${m.membres.map((x) => (x.tree_id ? `
+          <a class="mat-carte${x.moi ? ' mat-carte--moi' : ''}" href="/reflexion/${x.tree_id}" data-link>
+            <h3>${esc(x.titre)}</h3>
+            ${x.trunk ? `<p class="mat-apercu">${esc(x.trunk)}</p>` : ''}
+            <span class="mat-meta">${compte(x)}</span>
+          </a>` : `
+          <span class="mat-carte mat-carte--vide">
+            <h3>${esc(x.titre)}</h3>
+            <span class="mat-meta">rien encore</span>
+          </span>`)).join('')}
       </div>
-      <p class="harmonie-note">La psychologie dit le présent, le moi harmonieux dit vers
-        quoi il tend. Chacun écrit les siens ; les trois autres les lisent.</p>
+      <p class="mat-note">Entre chez les autres pour leur donner des variables de plus :
+        approfondis, élargis, ou oppose en proposant une issue.</p>
     </section>`);
 }
 
-function carreOngletNotes(id, d, epoch) {
-  const autres = d.membres.filter((m) => !state.user || m.user_id !== state.user.id);
-  const maNote = (cible, domaine) => {
-    const n = d.notes.find((x) => state.user && x.rateur_id === state.user.id
-      && x.cible_id === cible && x.domaine === domaine);
-    return n ? n.note : '';
-  };
-  const moyennes = new Map();
-  for (const m of d.membres) {
-    for (const dom of d.domaines) {
-      const recues = d.notes.filter((x) => x.cible_id === m.user_id && x.domaine === dom);
-      if (recues.length) {
-        moyennes.set(`${m.user_id}:${dom}`, recues.reduce((s, x) => s + x.note, 0) / recues.length);
-      }
-    }
-  }
-
-  // ce que chacun dit de lui-même au recrutement, en regard de ce que le
-  // carré en dit : deux regards, jamais le même
-  const soi = new Map((d.autoNotes || []).map((n) => [`${n.user_id}:${n.domaine}`, n.note]));
-
-  const sections = d.domaines.map((dom) => {
-    let meilleure = 0;
-    for (const m of d.membres) meilleure = Math.max(meilleure, moyennes.get(`${m.user_id}:${dom}`) || 0);
-    const lignes = d.membres.map((m) => {
-      const moy = moyennes.get(`${m.user_id}:${dom}`);
-      const estMoi = state.user && m.user_id === state.user.id;
-      return `
-        <div class="note-ligne${moy && moy === meilleure ? ' note-meilleur' : ''}">
-          <span class="note-nom">${esc(m.username)}</span>
-          <span class="note-soi" title="ce qu’il dit de lui-même">${soi.get(`${m.user_id}:${dom}`) || '·'}</span>
-          <span class="note-moy">${moy ? moy.toFixed(1).replace('.0', '') : '·'}</span>
-          ${estMoi ? '<span class="note-saisie"></span>' : `
-          <select class="note-saisie" data-cible="${m.user_id}" data-domaine="${esc(dom)}">
-            <option value="">Noter…</option>
-            ${Array.from({ length: 10 }, (_, i) => 10 - i).map((n) =>
-              `<option value="${n}"${String(maNote(m.user_id, dom)) === String(n) ? ' selected' : ''}>${n}</option>`).join('')}
-          </select>`}
-        </div>`;
-    }).join('');
-    return `<section class="note-domaine"><h2>${esc(dom)}</h2>${lignes}</section>`;
-  }).join('');
-
-  docke('ca', 'carre', `
-    ${carreTete(d, id, 'notes')}
-    <p class="notes-regle">Le meilleur du domaine vaut 10 ; les autres notes se lisent par
-      rapport à lui. Discutez d’abord, notez ensuite, affinez toujours.</p>
-    <p class="notes-legende">Chaque ligne : ce qu’il dit de lui au
-      <a href="/carre-d-as/recrutement" data-link>recrutement</a>, puis ce que le carré en dit.</p>
-    ${d.membres.length > 1 ? `
-    <div class="notes-grille">${sections}</div>
-    <button type="button" class="primary" id="notes-envoi">Enregistrer mes notes</button>
-    <p class="form-error" id="notes-err"></p>` : '<p class="empty-note">Les notes commencent à deux.</p>'}`);
-
-  const envoi = document.getElementById('notes-envoi');
-  if (envoi) envoi.onclick = async () => {
-    const notes = [...document.querySelectorAll('.note-saisie[data-cible]')]
-      .filter((s) => s.value)
-      .map((s) => ({ cible_id: +s.dataset.cible, domaine: s.dataset.domaine, note: +s.value }));
-    try {
-      await api(`/api/carre/${id}/notes`, { method: 'PUT', body: { notes } });
-      pageCarre(id, 'notes');
-    } catch (err) { document.getElementById('notes-err').textContent = err.message; }
-  };
-}
-
-/* La conversation du carré : privée, entre ses As. */
 async function carreOngletConversation(id, d, epoch) {
   let premier;
   try { premier = await api(`/api/carre/${id}/conversation`); }
@@ -2497,7 +2181,20 @@ async function carreOngletConversation(id, d, epoch) {
       <textarea id="carre-conv-body" maxlength="2000" rows="2" placeholder="Dis-le à ton carré…"></textarea>
       <div class="conv-form-foot"><button type="submit" class="primary">Envoyer</button></div>
       <p class="form-error" id="carre-conv-err"></p>
-    </form>`);
+    </form>
+    <p class="carre-sortie">
+      <label class="carre-salon">Salon Discord
+        <input id="carre-discord" type="url" placeholder="https://discord.gg/…" value="${esc(d.carre.discord_url || '')}">
+      </label>
+      <button type="button" class="link-btn danger" id="carre-quitter">Quitter ce carré</button>
+    </p>`);
+
+  document.getElementById('carre-quitter').onclick = () => quitteCarre(id);
+  const discord = document.getElementById('carre-discord');
+  discord.onchange = async () => {
+    try { await api(`/api/carre/${id}`, { method: 'PUT', body: { discord_url: discord.value } }); }
+    catch (err) { document.getElementById('carre-conv-err').textContent = err.message; }
+  };
 
   const liste = document.getElementById('carre-conv-list');
   let derniereCle = '';
@@ -2537,93 +2234,11 @@ async function carreOngletConversation(id, d, epoch) {
   };
 }
 
-/* Le relatif : l'IA du carré, bâtie sur Pense Mieux. Il parle d'une voix :
-   celle d'un As (ses arbres offerts et ses vidéographies), ou celle du carré
-   entier (le cap, la récolte des brainstorms, les quatre voix). Chaque As
-   choisit ce qu'il offre, arbre par arbre.                                */
-async function carreOngletRelatif(id, d, epoch) {
-  const voix = state.relatifVoix && state.relatifVoix.carre === id ? state.relatifVoix.voix : 'carre';
-  let r;
-  try { r = await api(`/api/carre/${id}/relatif?voix=${encodeURIComponent(voix)}`); }
-  catch { return navigate('/carre-d-as', true); }
-  if (stale(epoch)) return;
-
-  const nomVoix = (v) => v === 'carre' ? `le carré`
-    : esc((r.membres.find((m) => String(m.user_id) === String(v)) || {}).username || '');
-  const aQui = (v) => v === 'carre' ? 'au carré' : `à ${nomVoix(v)}`;
-
-  docke('ca', 'carre', `
-    ${carreTete(d, id, 'relatif')}
-    <div class="relatif-voix">
-      ${[['carre', `Le carré`], ...r.membres.map((m) => [String(m.user_id), m.username])]
-        .map(([v, label]) => `<button type="button" class="voix-chip${String(voix) === v ? ' actif' : ''}"
-          data-voix="${esc(v)}">${esc(label)}</button>`).join('')}
-    </div>
-    ${r.eveille ? '' : `<p class="relatif-dort">Le relatif dort ici : copie le portrait de la voix
-      et porte-le à ton IA.</p>`}
-    <div class="relatif-fil" id="relatif-fil">
-      ${r.echanges.length ? r.echanges.map((e) => `
-        <article class="relatif-echange">
-          <p class="relatif-question"><span class="relatif-qui">${esc(e.username)} ${aQui(e.voix)}</span> ${esc(e.question)}</p>
-          <p class="relatif-reponse">${esc(e.reponse)}</p>
-        </article>`).join('') : '<p class="empty-note">Le relatif attend sa première question.</p>'}
-    </div>
-    <form id="relatif-form" class="relatif-form">
-      <textarea id="relatif-question" maxlength="500" rows="2"
-        placeholder="Demande ${aQui(voix)}…"></textarea>
-      <div class="relatif-actions">
-        <button type="submit" class="primary">Demander</button>
-        <button type="button" class="link-btn" id="relatif-copie">Copier le portrait</button>
-      </div>
-      <p class="form-error" id="relatif-err"></p>
-    </form>
-    <details class="relatif-nourrir">
-      <summary>Nourrir le relatif</summary>
-      <p class="relatif-note">Tes arbres de pensée offerts à ce carré. Rien d’autre de privé ne nourrit sa voix.</p>
-      ${r.mesArbres.length ? `
-      <form id="sources-form">
-        ${r.mesArbres.map((a) => `
-          <label class="source-ligne"><input type="checkbox" value="${a.id}"
-            ${r.offerts.includes(a.id) ? 'checked' : ''}> ${esc(a.title)}</label>`).join('')}
-        <button type="submit">Enregistrer</button>
-      </form>` : '<p class="empty-note">Aucun arbre de pensée encore : plante-en dans <a href="/pense-mieux" data-link>Pense Mieux</a>.</p>'}
-    </details>`);
-
-  app.querySelectorAll('[data-voix]').forEach((b) => {
-    b.onclick = () => {
-      state.relatifVoix = { carre: id, voix: b.dataset.voix };
-      pageCarre(id, 'relatif');
-    };
-  });
-  document.getElementById('relatif-copie').onclick = async () => {
-    const bouton = document.getElementById('relatif-copie');
-    try {
-      await navigator.clipboard.writeText(r.portrait || '');
-      bouton.textContent = r.portrait ? 'Portrait copié' : 'Portrait vide';
-    } catch { bouton.textContent = 'Copie impossible'; }
-    setTimeout(() => { bouton.textContent = 'Copier le portrait'; }, 1800);
-  };
-  document.getElementById('relatif-form').onsubmit = async (e) => {
-    e.preventDefault();
-    const champ = document.getElementById('relatif-question');
-    if (!champ.value.trim()) return;
-    const bouton = e.target.querySelector('button[type="submit"]');
-    bouton.disabled = true;
-    try {
-      await api(`/api/carre/${id}/relatif`, { method: 'POST', body: { voix: String(voix), question: champ.value } });
-      pageCarre(id, 'relatif');
-    } catch (err) {
-      bouton.disabled = false;
-      document.getElementById('relatif-err').textContent = err.message;
-    }
-  };
-  const sources = document.getElementById('sources-form');
-  if (sources) sources.onsubmit = async (e) => {
-    e.preventDefault();
-    const ids = [...sources.querySelectorAll('input:checked')].map((i) => +i.value);
-    await api(`/api/carre/${id}/relatif/sources`, { method: 'PUT', body: { tree_ids: ids } });
-    pageCarre(id, 'relatif');
-  };
+/* Quitter un carré : le geste vit sous la conversation, là où l'on parle. */
+async function quitteCarre(id) {
+  if (!confirm('Quitter ce carré ?')) return;
+  await api(`/api/carre/${id}/quitter`, { method: 'POST', body: {} });
+  navigate('/carre-d-as');
 }
 
 /* ------------------ le recrutement : le salon où les carrés se composent ---
@@ -2644,7 +2259,6 @@ async function vueRecrutement() {
 
   // les invitations que je reçois, et mon annonce au salon
   const a = d.monAnnonce;
-  const mesNotes = d.mesAutoNotes || {};
   const maZone = `
     ${d.invitations.length ? `
     <div class="recrut-invitations">
@@ -2660,29 +2274,8 @@ async function vueRecrutement() {
     </div>` : ''}
     <form id="annonce-form" class="annonce-form">
       <textarea id="annonce-note" maxlength="500" rows="2"
-        placeholder="Ce que tu apporterais à un carré…">${esc(a?.note || '')}</textarea>
-      <fieldset class="annonce-auto">
-        <legend>Où je suis le meilleur</legend>
-        <p class="annonce-auto-regle">Ta meilleure connaissance vaut 10 ; les trois autres
-          se lisent par rapport à elle. Ce n’est pas un classement entre As : c’est
-          l’endroit où tu es le plus fort, à toi.</p>
-        <div class="annonce-auto-lignes">
-          ${d.domaines.map((x) => `
-            <label class="annonce-auto-ligne">${esc(x)}
-              <select data-auto="${esc(x)}">
-                <option value="">·</option>
-                ${Array.from({ length: 10 }, (_, i) => 10 - i).map((n) =>
-                  `<option value="${n}"${String(mesNotes[x] || '') === String(n) ? ' selected' : ''}>${n}</option>`).join('')}
-              </select></label>`).join('')}
-        </div>
-      </fieldset>
+        placeholder="Ce que tu cherches, ce que tu apporterais…">${esc(a?.note || '')}</textarea>
       <div class="annonce-ligne">
-        <select id="annonce-role"><option value="">nature</option>
-          ${d.roles.map((r) => `<option value="${esc(r)}"${a?.role === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}
-        </select>
-        <select id="annonce-domaine"><option value="">connaissance</option>
-          ${d.domaines.map((x) => `<option value="${esc(x)}"${a?.domaine === x ? ' selected' : ''}>${esc(x)}</option>`).join('')}
-        </select>
         <button type="submit" class="primary">${a ? 'Mettre à jour' : 'Me rendre disponible'}</button>
         ${a ? '<button type="button" class="link-btn danger" id="annonce-retire">Me retirer</button>' : ''}
       </div>
@@ -2711,14 +2304,9 @@ async function vueRecrutement() {
         <div class="recrut-annonce${x.moi ? ' moi' : ''}">
           <div class="recrut-tete">
             ${authorLink(x.username)}
-            ${x.role ? `<span class="carre-role">${esc(x.role)}</span>` : ''}
-            ${x.domaine ? `<span class="carre-domaine">${esc(x.domaine)}</span>` : ''}
             ${x.carres ? `<span class="vie-meta">${x.carres} carré${x.carres > 1 ? 's' : ''}</span>` : ''}
           </div>
           ${x.note ? `<p class="recrut-note">${esc(x.note)}</p>` : ''}
-          ${x.auto ? `<div class="recrut-auto">${d.domaines.map((dom) => `
-            <span class="recrut-auto-dom${x.auto[dom] === 10 ? ' fort' : ''}">${esc(dom)}
-              <strong>${x.auto[dom] || '·'}</strong></span>`).join('')}</div>` : ''}
           ${avecPlaces.length && !x.moi ? `<button type="button" data-invite="${esc(x.username)}">Inviter</button>` : ''}
         </div>`).join('')}
     </div>` : '<p class="empty-note">Personne au salon.</p>';
@@ -2764,16 +2352,9 @@ async function vueRecrutement() {
     annonceForm.onsubmit = async (e) => {
       e.preventDefault();
       try {
-        const notes = {};
-        app.querySelectorAll('[data-auto]').forEach((s) => { notes[s.dataset.auto] = s.value; });
         await api('/api/carre/annonce', {
           method: 'PUT',
-          body: {
-            note: document.getElementById('annonce-note').value,
-            role: document.getElementById('annonce-role').value,
-            domaine: document.getElementById('annonce-domaine').value,
-            notes,
-          },
+          body: { note: document.getElementById('annonce-note').value },
         });
         vueRecrutement();
       } catch (err) { document.getElementById('annonce-err').textContent = err.message; }
