@@ -227,23 +227,74 @@ branches du même arbre : des liens qui traversent l'arborescence sans la
 déformer, affichés en chips « ⇠ » qui mènent à leur source
 (`reflection_branch_links`).
 
-**Le vocal.** Une pensée vient rarement au moment où l'on a un clavier. Sous
-le champ d'une branche, un bouton **Parler** enregistre, la transcription
-revient par **Workers AI** (Whisper), et le texte devient la branche :
-l'arborescence se fait donc à la voix, aussi vite qu'on parle. L'audio reste
-attaché à sa branche avec son **minutage mot à mot** (`branch_vocaux`, en
-base64 dans D1 comme les avatars, borné à trois minutes) : on **rejoue** la
-pensée en voyant le texte apparaître au fur et à mesure, et un bouton en fait
-une **vidéo** — le texte est dessiné sur une toile, enregistré avec le son par
-le navigateur, et le fichier se télécharge, prêt à être publié. Sans le
-binding AI, la transcription répond 503 et le clavier reste : rien ne casse.
+Le vocabulaire de la page est celui de la pensée, pas celui de l'arbre : on
+**ouvre une réflexion**, on y **dépose des pensées**, on les **prolonge**. Le
+chemin d'une réflexion est `/reflexion/:id` (l'ancien `/arbre/:id` y mène
+encore : rien de ce qui a été partagé ne casse).
 
-**Le regard.** En tête de la forêt, un sélecteur : **Mes réflexions**, puis un
-regard par carré où l'on vit. En solo, ses arbres et ses cinq troncs ; depuis
-un carré, ce que les quatre imaginent ensemble puis ce que chaque As y tient,
-chacun signé. Dans un arbre commun, un second filtre choisit la **voix** :
-tout le monde, soi, ou un As — les réflexions communes et celles propres à
-chacun se démêlent sans quitter la page.
+**Le vocal.** Une pensée vient rarement au moment où l'on a un clavier. Sous
+le champ, **Dire ma pensée** enregistre, la transcription revient par
+**Workers AI** (Whisper, en français, silences filtrés), et le texte devient
+la pensée.
+
+Le son n'est pas le signal brut du micro : il passe par une **chaîne de voix**
+avant d'être encodé — passe-haut sous la fondamentale, creux dans le
+bas-médium, cloche de présence, compresseur, gain, limiteur. Ce qui est gardé,
+ce qui part à la transcription et ce qui deviendra une vidéo sont donc le même
+son, déjà propre. La chaîne s'**accorde au timbre de chacun** : au premier
+vocal (ou par **Régler ma voix**), trois secondes suffisent pour mesurer la
+fondamentale par autocorrélation et le niveau ; coupure, présence et gain s'en
+déduisent et le réglage vit sur le compte (`users.voix`).
+
+L'audio reste attaché à sa pensée avec son **minutage mot à mot**
+(`branch_vocaux`, en base64 dans D1 comme les avatars, borné à trois minutes) :
+on la **réécoute** en voyant le texte apparaître au fur et à mesure. Et la
+**vidéo se fabrique d'elle-même**, sans qu'on la demande : dès qu'une pensée
+dite est déposée, le texte est dessiné sur une toile au rythme de la voix et
+enregistré avec le son par le navigateur, en silence et sans rien bloquer. Le
+fichier est gardé dans le navigateur (IndexedDB) — il ne pèse donc rien sur la
+base — et se télécharge, prêt à être publié en Vidéographie. Sans le binding
+AI, la transcription répond 503 et le clavier reste : rien ne casse.
+
+**Le regard.** En tête de la page, un sélecteur : **Mes réflexions**, puis un
+regard par carré où l'on vit. En solo, ses réflexions et ses cinq troncs ;
+depuis un carré, ce que les quatre imaginent ensemble puis ce que chaque As y
+tient, chacun signé. Dans une réflexion commune, un second filtre choisit la
+**voix** : tout le monde, soi, ou un As.
+
+## Penser sous le regard de son carré
+
+Un carré ne sert à rien si l'on ne voit pas les autres penser. **Ce qu'un As
+écrit dans Pense Mieux est donc lu par les As de ses carrés** — ses cinq axes
+comme ses réflexions libres. Chacun garde la main : une réflexion peut être
+marquée **« pour moi seul »** (`reflection_trees.prive`) et elle sort alors de
+tous les regards ; les cinq axes, eux, restent ouverts, car ils sont la matière
+du travail commun.
+
+Personne n'écrit à la place d'un autre. Chez quelqu'un, on ne peut que
+**répondre**, et une réponse dit toujours ce qu'elle vient faire
+(`reflection_branches.reponse`) :
+
+- **Approfondir** — ce qu'il y a dessous, et qui n'a pas encore été nommé ;
+- **Élargir** — le champ des possibles que cette réflexion ne voit pas encore ;
+- **Opposer et résoudre** — ce qui s'y oppose, *et* la solution qui prend en
+  compte plus de variables. Une opposition sans issue n'aide personne.
+
+Une réponse peut être écrite, dite (avec son vocal et sa vidéo) ou porter une
+**vidéo-réponse** YouTube. Elle reste à celui qui l'a déposée — lui seul la
+retouche — et le porteur garde le dernier mot chez lui. Ce que le carré
+apporte revient en tête de ses propres réflexions : **« Ton carré t'a
+répondu »**.
+
+**Le multivers** (un onglet du carré) rassemble tout cela : ce que les quatre
+pensent ensemble, puis, pour chaque As, ses cinq axes personnels, ses
+réflexions libres, et ce qu'il tient dans ce carré. C'est de là qu'on entre
+dans la perception d'un autre — non pour juger, mais pour lui donner des
+variables de plus, en sachant qu'il fait de même chez soi.
+
+La règle de nourriture suit cette ouverture : une réflexion **ouverte** peut
+nourrir un arbre de son carré (il la lit déjà) ; une réflexion gardée pour soi,
+jamais.
 
 La **Vidéographie** (échelon 4) ne poursuit plus la même chose que Pense
 Mieux, et c'est là toute la différence entre les deux outils : Pense Mieux est
@@ -256,7 +307,8 @@ a ajouté dans Pense Mieux et de ce qu'on a vécu avec ses carrés.
 La page pose la **matière** sous les yeux et ne raconte rien à la place : sur
 la période en cours, les branches ajoutées dans Pense Mieux et les arbres
 nourris, quelques extraits pour se rappeler, ce que chaque carré a produit
-(branches, messages, brainstorms) et les signes trouvés sur le 57. On y dépose
+(pensées, messages, brainstorms), les réponses reçues et données, et les
+signes trouvés sur le 57. On y dépose
 l'adresse de sa vidéo (`videographie_recaps`, une par cadence et par période,
 corrigeable) ; les périodes passées restent en dessous. Les As d'un carré
 voient le rythme les uns des autres : c'est ce qu'ils viennent analyser
@@ -343,13 +395,16 @@ vivre dans **plusieurs carrés** (sept au plus) : des groupes de réflexion qui
 se complètent. Chaque carré de quatre équilibre deux natures
 (**infinisseur**, **harmonisateur**) et quatre connaissances fondamentales
 (**Philosophie, IA, Religions, Univers**), choisies par carré. Sa page a
-cinq onglets :
+six onglets :
 
 - **Le carré** : les As et l'équilibre, le **cap** (ce que le carré vise :
   sa meilleure version, sa société harmonieuse, ses modèles d'univers), le
   **salon Discord** où il s'organise, et **le live du carré** : l'As au
   meilleur matériel tient l'antenne, les quatre se retrouvent au salon, et
   l'hôte retransmet leurs quatre voix en direct.
+- **Multivers** : ce que chaque As pense, décrit plus haut — ses cinq axes,
+  ses réflexions libres, et ce qu'il tient dans ce carré. On y entre pour
+  répondre.
 - **Harmonie** : les cinq troncs du carré, décrits plus haut : ce que les
   quatre imaginent ensemble (philosophie, univers, société), et la
   psychologie et le moi harmonieux de chacun.

@@ -269,3 +269,29 @@ export const CADENCES = [
 ];
 
 export const CADENCES_ORDRE = CADENCES.map((c) => c.cle);
+
+/* ------------------------------------------- les réponses du carré ------
+   Ce qu'un As dépose dans la réflexion d'un autre. Il ne commente pas : il
+   apporte des variables. Trois manières, et une seule règle — aider l'autre à
+   penser plus juste, jamais avoir raison contre lui.                      */
+
+export const REPONSES = [
+  {
+    cle: 'approfondir',
+    label: 'Approfondir',
+    aide: 'Creuse ce qui est dit : ce qu’il y a dessous, et qui n’a pas encore été nommé.',
+  },
+  {
+    cle: 'elargir',
+    label: 'Élargir',
+    aide: 'Ouvre le champ des possibles : ce que cette réflexion ne voit pas encore.',
+  },
+  {
+    cle: 'opposer',
+    label: 'Opposer et résoudre',
+    aide: 'Dis ce qui s’y oppose, puis la solution qui prend en compte plus de variables. '
+      + 'Une opposition sans issue n’aide personne.',
+  },
+];
+
+export const REPONSES_CLES = REPONSES.map((r) => r.cle);

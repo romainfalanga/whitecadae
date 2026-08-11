@@ -173,7 +173,7 @@ async function route() {
     : path === '/conversation' ? 'conversation'
     // un arbre se lit par son chemin canonique : sa nature vient du serveur,
     // qui refuse en 404 celui qu'on n'a pas le droit de voir
-    : path.startsWith('/arbre/') ? 'penseMieux'
+    : path.startsWith('/reflexion/') || path.startsWith('/arbre/') ? 'penseMieux'
     : path.startsWith('/pense-mieux') ? 'penseMieux'
     : path.startsWith('/videographie') ? 'videographie'
     : path.startsWith('/carre-d-as') ? 'carre'
@@ -201,10 +201,12 @@ async function route() {
   if (path === '/carre-d-as/annuaire') return navigate('/carre-d-as/recrutement', true);
   if (path === '/carre-d-as/conversation') return navigate('/carre-d-as', true);
   if (path === '/carre-d-as/missions') return vueMissions();
-  if ((m = path.match(/^\/carre-d-as\/(\d+)(?:\/(harmonie|notes|conversation|relatif))?$/))) {
+  if ((m = path.match(/^\/carre-d-as\/(\d+)(?:\/(multivers|harmonie|notes|conversation|relatif))?$/))) {
     return pageCarre(+m[1], m[2] || 'carre');
   }
-  if ((m = path.match(/^\/arbre\/(\d+)$/))) return pageArbre(+m[1]);
+  if ((m = path.match(/^\/reflexion\/(\d+)$/))) return pageArbre(+m[1]);
+  // l'ancien chemin mène au même endroit : rien de ce qui a été partagé ne casse
+  if ((m = path.match(/^\/arbre\/(\d+)$/))) return navigate(`/reflexion/${m[1]}`, true);
   if (path === '/brainstorm') return vueScene();
   if (path === '/brainstorm/archives') return vueArchives();
   if (path === '/brainstorm/annoncer') return vueAnnoncer();
@@ -601,15 +603,15 @@ const ARBRES_PAGES = {
     titre: 'Pense Mieux',
     chemin: '/pense-mieux',
     app: 'pm',
-    invite: 'Un sujet de réflexion devient un arbre : un tronc, des branches qui se font grandir. Une branche peut aussi être nourrie par d’autres branches qu’elle relie.',
-    vide: 'Ta forêt est vide. Plante ton premier arbre.',
+    invite: 'Un sujet devient une réflexion : un point de départ, des pensées qui la font grandir. Chaque pensée peut être nourrie par d’autres, d’ici ou d’ailleurs.',
+    vide: 'Rien encore. Ouvre ta première réflexion.',
   },
   video: {
     titre: 'Vidéographie',
     chemin: '/videographie',
     app: 'vg',
-    invite: 'Extériorise tes réflexions en vidéo, puis relie-les : chaque branche est une vidéo YouTube, publique ou privée. Chacune peut être nourrie par plusieurs autres.',
-    vide: 'Aucune vidéo pour l’instant. Plante ton premier arbre.',
+    invite: 'Extériorise tes réflexions en vidéo, puis relie-les : chaque entrée est une vidéo YouTube, publique ou privée.',
+    vide: 'Aucune vidéo pour l’instant. Ouvre ton premier ensemble.',
   },
 };
 
@@ -621,14 +623,14 @@ const ARBRES_PAGES = {
 
 const SOUS_APPS = {
   pm: [
-    { cle: 'foret', chemin: '/pense-mieux', label: 'Forêt' },
-    { cle: 'nouveau', chemin: '/pense-mieux/nouveau', label: 'Nouvel arbre' },
+    { cle: 'foret', chemin: '/pense-mieux', label: 'Mes réflexions' },
+    { cle: 'nouveau', chemin: '/pense-mieux/nouveau', label: 'Ouvrir' },
     { cle: 'univers', chemin: '/pense-mieux/univers', label: 'Univers' },
     { cle: 'recherche', chemin: '/pense-mieux/recherche', label: 'Recherche' },
   ],
   vg: [
     { cle: 'foret', chemin: '/videographie', label: 'Le rythme' },
-    { cle: 'nouveau', chemin: '/videographie/nouveau', label: 'Nouvel arbre' },
+    { cle: 'nouveau', chemin: '/videographie/nouveau', label: 'Nouvel ensemble' },
     { cle: 'carre', chemin: '/videographie/carre', label: 'Carré' },
   ],
   ca: [
@@ -664,7 +666,7 @@ async function vueForet(kind, contexte = 'solo') {
   try { data = await api(`/api/arbres?kind=${kind}&contexte=${encodeURIComponent(contexte)}`); }
   catch (err) {
     if (err.status === 401) {
-      docke(def.app, 'foret', `<h1>${esc(def.titre)}</h1><p class="empty-note">Connecte-toi pour planter tes arbres.</p>`);
+      docke(def.app, 'foret', `<h1>${esc(def.titre)}</h1><p class="empty-note">Connecte-toi pour ouvrir tes réflexions.</p>`);
       return;
     }
     if (err.status === 404 && contexte !== 'solo') return vueForet(kind, 'solo');
@@ -689,10 +691,10 @@ async function vueForet(kind, contexte = 'solo') {
       : def.vide;
     return arbres.length ? arbres.map((a) => `
       <a class="arbre-card${a.axe ? ' arbre-card--tronc' : ''}${a.mien ? ' arbre-card--mien' : ''}"
-         href="/arbre/${a.id}" data-link>
+         href="/reflexion/${a.id}" data-link>
         <h2>${esc(a.title)}</h2>
         ${a.trunk ? `<p class="arbre-tronc-apercu">${esc(a.trunk)}</p>` : ''}
-        <span class="arbre-meta">${a.branches} branche${a.branches > 1 ? 's' : ''}${a.mien ? ' · à toi' : ''}</span>
+        <span class="arbre-meta">${a.branches} pensée${a.branches > 1 ? 's' : ''}${a.mien ? ' · à toi' : ''}</span>
       </a>`).join('') : `<p class="empty-note">${esc(data.arbres.length ? 'Rien ne porte ce nom.' : vide)}</p>`;
   };
 
@@ -710,19 +712,37 @@ async function vueForet(kind, contexte = 'solo') {
   // il tend.
   const troncs = (data.troncs || []).map((t) => `
     <a class="arbre-card arbre-card--tronc${t.publique ? ' arbre-card--publique' : ''}"
-       href="/arbre/${t.id}" data-link>
+       href="/reflexion/${t.id}" data-link>
       <h2>${esc(t.title)}</h2>
       ${t.sous ? `<p class="arbre-sous">${esc(t.sous)}</p>` : ''}
-      <span class="arbre-meta">${t.branches} branche${t.branches > 1 ? 's' : ''}${t.publique ? ' · lu par tous' : ''}</span>
+      <span class="arbre-meta">${t.branches} pensée${t.branches > 1 ? 's' : ''}${t.publique ? ' · lu par tous' : ''}</span>
     </a>`).join('');
+
+  /* Ce que le carré m'a répondu. C'est la contrepartie de l'ouverture : si mes
+     réflexions sont lues, ce qu'on m'y apporte doit me revenir en premier. */
+  const libelleRep = (cle) => (data.reponses || []).find((r) => r.cle === cle);
+  const recues = (data.recues || []).length ? `
+    <section class="recues">
+      <h2>Ton carré t’a répondu</h2>
+      <div class="recues-liste">
+        ${data.recues.map((r) => `
+          <a class="recue recue--${esc(r.reponse)}" href="/reflexion/${r.tree_id}#b${r.id}" data-link>
+            <span class="recue-tag"><span class="reponse-quoi">${esc((libelleRep(r.reponse) || {}).label || r.reponse)}</span></span>
+            <span class="recue-qui">${esc(r.username)}</span>
+            <span class="recue-ou">${esc(r.tree_title)}</span>
+            <p>${esc(r.body || 'une vidéo-réponse')}</p>
+          </a>`).join('')}
+      </div>
+    </section>` : '';
 
   docke(def.app, 'foret', `
     <h1>${esc(def.titre)}</h1>
     ${regards}
     ${dansCarre ? '<p class="foret-regard-note">Ce que vous imaginez ensemble, puis ce que chaque As y tient. Ce qui est écrit ici appartient au carré.</p>' : ''}
+    ${recues}
     ${troncs ? `<div class="foret foret-troncs">${troncs}</div>` : ''}
     <div class="foret-outils">
-      <span class="foret-stats">${data.arbres.length} arbre${data.arbres.length > 1 ? 's' : ''} · ${totalBranches} branche${totalBranches > 1 ? 's' : ''}</span>
+      <span class="foret-stats">${data.arbres.length} réflexion${data.arbres.length > 1 ? 's' : ''} · ${totalBranches} pensée${totalBranches > 1 ? 's' : ''}</span>
       <input id="foret-filtre" placeholder="Filtrer…" autocomplete="off">
       <select id="foret-tri">
         <option value="recent">les plus récents</option>
@@ -778,15 +798,21 @@ async function vueRythme() {
   const matiereHtml = (m) => {
     const morceaux = [];
     if (m.penseMieux.branches) {
-      morceaux.push(`<li><strong>${m.penseMieux.branches}</strong> branche${m.penseMieux.branches > 1 ? 's' : ''}
+      morceaux.push(`<li><strong>${m.penseMieux.branches}</strong> pensée${m.penseMieux.branches > 1 ? 's' : ''}
         dans Pense Mieux : ${m.penseMieux.arbres.map((a) => esc(a.title)).join(' · ')}</li>`);
     }
     for (const c of m.carres) {
       const bouts = [];
-      if (c.branches) bouts.push(`${c.branches} branche${c.branches > 1 ? 's' : ''}${c.miennes ? ` (dont ${c.miennes} de toi)` : ''}`);
+      if (c.branches) bouts.push(`${c.branches} pensée${c.branches > 1 ? 's' : ''}${c.miennes ? ` (dont ${c.miennes} de toi)` : ''}`);
       if (c.messages) bouts.push(`${c.messages} message${c.messages > 1 ? 's' : ''}`);
       if (c.brainstorms) bouts.push(`${c.brainstorms} brainstorm${c.brainstorms > 1 ? 's' : ''}`);
       morceaux.push(`<li><strong>${esc(c.nom)}</strong> : ${bouts.join(', ')}</li>`);
+    }
+    if (m.echanges && (m.echanges.recues || m.echanges.donnees)) {
+      const bouts = [];
+      if (m.echanges.recues) bouts.push(`${m.echanges.recues} réponse${m.echanges.recues > 1 ? 's' : ''} reçue${m.echanges.recues > 1 ? 's' : ''}`);
+      if (m.echanges.donnees) bouts.push(`${m.echanges.donnees} donnée${m.echanges.donnees > 1 ? 's' : ''} aux autres`);
+      morceaux.push(`<li><strong>Le carré t’a répondu</strong> : ${bouts.join(', ')}</li>`);
     }
     if (m.signes) morceaux.push(`<li><strong>${m.signes}</strong> signe${m.signes > 1 ? 's' : ''} trouvé${m.signes > 1 ? 's' : ''} sur le 57</li>`);
     if (!morceaux.length) return '<p class="empty-note">Rien encore sur cette période : la matière viendra de Pense Mieux et de tes carrés.</p>';
@@ -830,7 +856,7 @@ async function vueRythme() {
     </section>`;
 
   const arbres = (foret.arbres || []).map((a) => `
-    <a class="arbre-card" href="/arbre/${a.id}" data-link>
+    <a class="arbre-card" href="/reflexion/${a.id}" data-link>
       <h2>${esc(a.title)}</h2>
       ${a.trunk ? `<p class="arbre-tronc-apercu">${esc(a.trunk)}</p>` : ''}
       <span class="arbre-meta">${a.branches} vidéo${a.branches > 1 ? 's' : ''}</span>
@@ -841,8 +867,8 @@ async function vueRythme() {
     <p class="rythme-intro">Pense Mieux est l’outil de ta pensée. Ici, tu racontes ce que
       tu as vécu : une vidéo par semaine, une par mois, une par an.</p>
     <div class="rythme">${data.cadences.map(carte).join('')}</div>
-    <h2 class="rythme-foret-titre">Ta forêt vidéo</h2>
-    <div class="foret">${arbres || '<p class="empty-note">Aucun arbre : la forêt range ce que tu as extériorisé en vidéo.</p>'}</div>`);
+    <h2 class="rythme-foret-titre">Tes ensembles vidéo</h2>
+    <div class="foret">${arbres || '<p class="empty-note">Rien encore : cet espace range ce que tu as extériorisé en vidéo.</p>'}</div>`);
 
   app.querySelectorAll('[data-refaire]').forEach((b) => {
     b.onclick = () => {
@@ -892,7 +918,7 @@ async function vueUnivers(kind) {
 
   const carte = (u) => `
     <a class="arbre-card arbre-card--univers${u.mien ? ' arbre-card--mien' : ''}"
-       href="/arbre/${u.id}" data-link>
+       href="/reflexion/${u.id}" data-link>
       <h2>${esc(u.carre_nom ? `${u.carre_nom} · Nos univers` : `${u.username} · Mes univers`)}</h2>
       ${u.trunk ? `<p class="arbre-tronc-apercu">${esc(u.trunk)}</p>` : ''}
       <span class="arbre-meta">${u.branches} univers${u.mien ? ' · les tiens' : ''}</span>
@@ -932,11 +958,12 @@ async function vueUnivers(kind) {
 function vueNouvelArbre(kind) {
   const def = ARBRES_PAGES[kind];
   docke(def.app, 'nouveau', `
-    <h1>Nouvel arbre</h1>
+    <h1>${kind === 'video' ? 'Nouvel ensemble' : 'Ouvrir une réflexion'}</h1>
+    <p class="empty-note">${esc(def.invite)}</p>
     <form id="arbre-form" class="arbre-form">
-      <input id="arbre-titre" maxlength="120" placeholder="Le sujet" required autofocus>
-      <textarea id="arbre-tronc" maxlength="4000" rows="3" placeholder="Le tronc : d’où tout part"></textarea>
-      <button type="submit" class="primary">Planter</button>
+      <input id="arbre-titre" maxlength="120" placeholder="Sur quoi veux-tu penser ?" required autofocus>
+      <textarea id="arbre-tronc" maxlength="4000" rows="3" placeholder="D’où tu pars : le constat, la question…"></textarea>
+      <button type="submit" class="primary">${kind === 'video' ? 'Ouvrir' : 'Commencer'}</button>
       <p class="form-error" id="arbre-err"></p>
     </form>`);
 
@@ -958,7 +985,7 @@ async function vueRecherche(kind) {
   const def = ARBRES_PAGES[kind];
   docke(def.app, 'recherche', `
     <h1>Recherche</h1>
-    <input id="rech-q" placeholder="Un mot de ta forêt…" autocomplete="off" autofocus>
+    <input id="rech-q" placeholder="Un mot de tes réflexions…" autocomplete="off" autofocus>
     <div id="rech-resultats"></div>`);
 
   const champ = document.getElementById('rech-q');
@@ -974,19 +1001,19 @@ async function vueRecherche(kind) {
       catch { return; }
       if (champ.value.trim() !== q) return; // une frappe plus récente a gagné
       const arbres = d.arbres.map((a) => `
-        <a class="arbre-card" href="/arbre/${a.id}" data-link>
+        <a class="arbre-card" href="/reflexion/${a.id}" data-link>
           <h2>${esc(a.title)}</h2>
           ${a.trunk ? `<p class="arbre-tronc-apercu">${esc(a.trunk)}</p>` : ''}
         </a>`).join('');
       const branches = d.branches.map((b) => `
-        <a class="journal-entree" href="/arbre/${b.tree_id}#b${b.id}" data-link>
+        <a class="journal-entree" href="/reflexion/${b.tree_id}#b${b.id}" data-link>
           <div class="journal-corps"><p>${esc(b.body || b.url || '')}</p></div>
           <div class="journal-meta"><span class="journal-arbre">${esc(b.tree_title)}</span></div>
         </a>`).join('');
       zone.innerHTML = (arbres || branches)
-        ? `${arbres ? `<h2>Arbres</h2><div class="foret">${arbres}</div>` : ''}
-           ${branches ? `<h2>Branches</h2><div class="journal">${branches}</div>` : ''}`
-        : '<p class="empty-note">Rien ne porte ce mot dans ta forêt.</p>';
+        ? `${arbres ? `<h2>Réflexions</h2><div class="foret">${arbres}</div>` : ''}
+           ${branches ? `<h2>Pensées</h2><div class="journal">${branches}</div>` : ''}`
+        : '<p class="empty-note">Rien ne porte ce mot dans tes réflexions.</p>';
     }, 250);
   };
 }
@@ -1044,7 +1071,7 @@ async function vueVideoCarre() {
            <span>${esc(r.note || r.cadence)}</span></a>`).join('')}</div>`
         : '<p class="empty-note">Pas encore de récap : son rythme commence.</p>';
       const foret = v.arbres.length ? `<div class="foret">${v.arbres.map((a) => `
-        <a class="arbre-card" href="/arbre/${a.id}" data-link>
+        <a class="arbre-card" href="/reflexion/${a.id}" data-link>
           <h2>${esc(a.title)}</h2>
           ${a.trunk ? `<p class="arbre-tronc-apercu">${esc(a.trunk)}</p>` : ''}
           <span class="arbre-meta">${a.branches} vidéo${a.branches > 1 ? 's' : ''}</span>
@@ -1067,40 +1094,58 @@ function brancheEtiquette(b) {
 //
 // Dans l'arbre commun d'un carré, chaque branche dit qui l'a écrite : chacun
 // greffe sur la branche de n'importe qui, personne ne touche celle d'un autre.
+/* Une pensée. Elle porte ce qu'on a écrit ou dit, d'où elle se nourrit, et
+   ce que les autres y ont répondu. Une réponse dit toujours ce qu'elle vient
+   faire — approfondir, élargir, ou opposer en résolvant : c'est ce qui la
+   distingue d'un commentaire.                                             */
 function brancheHtml(b, enfants, kind, editable, ctx) {
-  const contenu = kind === 'video'
+  const contenu = kind === 'video' || b.url
     ? `<div class="branche-video">${videoEmbed(b.url)}${b.body ? `<p>${esc(b.body)}</p>` : ''}</div>`
     : `<p class="branche-texte">${esc(b.body)}</p>`;
-  const mienne = !ctx.collectif || (b.auteur_id == null ? ctx.porteur : b.auteur_id) === ctx.moi;
+  const auteurId = b.auteur_id == null ? ctx.porteur : b.auteur_id;
+  const mienne = auteurId === ctx.moi;
+  const sienne = !ctx.collectif || mienne;
   const sources = (ctx.sourcesDe.get(b.id) || []).map((l) => {
     const ici = l.source_tree_id === ctx.arbreId;
     const etiquette = brancheEtiquette({ body: l.source_body, url: l.source_url });
     const ou = l.source_carre_nom ? `${l.source_carre_nom} · ${l.source_tree_title}` : l.source_tree_title;
     const saut = ici
       ? `<button type="button" class="nourrie-va" data-va="${l.source_id}">⇠ ${esc(etiquette)}</button>`
-      : `<a class="nourrie-va" href="/arbre/${l.source_tree_id}#b${l.source_id}" data-link>⇠ ${esc(ou)} · ${esc(etiquette)}</a>`;
-    return `<span class="nourrie-chip${ici ? '' : ' nourrie-ailleurs'}">${saut}${editable && mienne
+      : `<a class="nourrie-va" href="/reflexion/${l.source_tree_id}#b${l.source_id}" data-link>⇠ ${esc(ou)} · ${esc(etiquette)}</a>`;
+    return `<span class="nourrie-chip${ici ? '' : ' nourrie-ailleurs'}">${saut}${editable && sienne
       ? `<button type="button" class="nourrie-oublie" data-oublie="${b.id}:${l.source_id}" aria-label="Détacher">✕</button>` : ''}</span>`;
   }).join('');
-  // la pensée dite : on la rejoue, et on peut en faire une vidéo
+
   const vocal = ctx.vocaux.get(b.id);
-  const boutons = editable ? `
-    <div class="branche-actions">
-      <button type="button" class="link-btn" data-pousse="${b.id}">+ branche</button>
-      ${mienne ? `<button type="button" class="link-btn" data-nourrit="${b.id}">⇠ nourrie par…</button>
-      <button type="button" class="link-btn danger" data-coupe="${b.id}">couper</button>` : ''}
-    </div>` : '';
-  return `<div class="branche" data-branche="${b.id}"
-      data-auteur="${b.auteur_id == null ? ctx.porteur : b.auteur_id}">
+  const rep = b.reponse ? (ctx.reponses.find((r) => r.cle === b.reponse) || null) : null;
+
+  // ce qu'on peut faire ici : prolonger sa propre pensée, ou répondre à celle
+  // d'un autre pour lui donner des variables de plus
+  const actions = [];
+  if (editable) actions.push(`<button type="button" class="link-btn" data-pousse="${b.id}">prolonger</button>`);
+  if (ctx.repondable || (editable && !mienne)) {
+    actions.push(`<button type="button" class="link-btn" data-repond="${b.id}">répondre</button>`);
+  }
+  if ((editable || ctx.repondable) && mienne) {
+    if (editable) actions.push(`<button type="button" class="link-btn" data-nourrit="${b.id}">⇠ nourrie par…</button>`);
+    actions.push(`<button type="button" class="link-btn danger" data-coupe="${b.id}">retirer</button>`);
+  } else if (editable && ctx.proprietaire && b.reponse) {
+    actions.push(`<button type="button" class="link-btn danger" data-coupe="${b.id}">retirer</button>`);
+  }
+
+  return `<div class="branche${rep ? ` branche--reponse branche--${esc(b.reponse)}` : ''}"
+      data-branche="${b.id}" data-auteur="${auteurId}">
+    ${rep ? `<p class="reponse-tag"><span class="reponse-quoi">${esc(rep.label)}</span>${
+      b.auteur ? ` <span class="reponse-qui">${esc(b.auteur)}</span>` : ''}</p>` : ''}
     ${contenu}
     ${vocal ? `<div class="branche-vocal">
-      <button type="button" class="link-btn" data-joue="${b.id}">Rejouer</button>
-      <button type="button" class="link-btn" data-video="${b.id}">En faire une vidéo</button>
+      <button type="button" class="link-btn" data-joue="${b.id}">Réécouter</button>
+      <span class="branche-video-zone" data-video-zone="${b.id}"></span>
       <div class="vocal-dit" hidden></div>
     </div>` : ''}
-    ${ctx.collectif && b.auteur ? `<p class="branche-auteur">${esc(b.auteur)}</p>` : ''}
+    ${!rep && ctx.collectif && b.auteur ? `<p class="branche-auteur">${esc(b.auteur)}</p>` : ''}
     ${sources ? `<div class="branche-nourritures">${sources}</div>` : ''}
-    ${boutons}
+    ${actions.length ? `<div class="branche-actions">${actions.join('')}</div>` : ''}
     <div class="branche-enfants">${(enfants.get(b.id) || []).map((e) => brancheHtml(e, enfants, kind, editable, ctx)).join('')}</div>
   </div>`;
 }
@@ -1126,6 +1171,139 @@ function vocalDisponible() {
   return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 }
 
+/* ------------------------------------------------- la chaîne de la voix ---
+   Un micro rend un signal brut : trop de grave, pas assez de présence, un
+   niveau qui va et vient. Une voix de podcast, c'est le même signal passé
+   dans quatre gestes simples — couper ce qui gronde sous la voix, dégonfler
+   la boue, ouvrir la présence là où les consonnes se jouent, et tenir le
+   niveau. On les applique À L'ENREGISTREMENT : ce qui est gardé et ce qui
+   part à la transcription sont donc déjà propres.
+
+   Les fréquences ne sont pas les mêmes d'une voix à l'autre : le réglage
+   s'accorde à la fondamentale de la personne, mesurée une fois (voir plus
+   bas), et vit sur son compte.                                            */
+
+const VOIX_DEFAUT = { f0: 120, coupe: 85, corps: 0, presence: 3, presenceHz: 3000, gain: 4 };
+
+function reglageVoix() {
+  const v = (state.user && state.user.voix) || null;
+  return { ...VOIX_DEFAUT, ...(v || {}) };
+}
+
+// Ce que l'on demande au micro : une voix, pas une pièce. Le navigateur sait
+// annuler l'écho, réduire le souffle et tenir le gain — on le lui demande.
+const CONTRAINTES_MICRO = {
+  audio: {
+    channelCount: 1,
+    sampleRate: 48000,
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  },
+};
+
+/* La chaîne, montée sur un contexte audio et rendue sous forme de flux prêt à
+   enregistrer. Chaque étage a une raison :
+     - passe-haut : le grondement, les plosives, la table qui vibre ;
+     - creux bas-médium : la « boue » qui rend une voix sourde ;
+     - cloche de présence : l'intelligibilité, donc aussi la transcription ;
+     - compresseur : les écarts de distance au micro ;
+     - gain : remonter au niveau d'écoute ;
+     - limiteur : ne jamais saturer, quoi qu'il arrive.                    */
+function chaineVoix(ctx, source, reglage) {
+  const r = { ...VOIX_DEFAUT, ...(reglage || {}) };
+  const coupe = ctx.createBiquadFilter();
+  coupe.type = 'highpass';
+  // sous la fondamentale, il n'y a plus de voix : seulement du bruit
+  coupe.frequency.value = Math.min(180, Math.max(50, r.coupe));
+  coupe.Q.value = 0.7;
+
+  const boue = ctx.createBiquadFilter();
+  boue.type = 'peaking';
+  boue.frequency.value = Math.max(180, r.f0 * 2.2);
+  boue.Q.value = 1;
+  boue.gain.value = r.corps - 2.5;
+
+  const presence = ctx.createBiquadFilter();
+  presence.type = 'peaking';
+  presence.frequency.value = r.presenceHz;
+  presence.Q.value = 0.9;
+  presence.gain.value = r.presence;
+
+  const air = ctx.createBiquadFilter();
+  air.type = 'highshelf';
+  air.frequency.value = 7500;
+  air.gain.value = 1.5;
+
+  const compresseur = ctx.createDynamicsCompressor();
+  compresseur.threshold.value = -26;
+  compresseur.knee.value = 24;
+  compresseur.ratio.value = 3.5;
+  compresseur.attack.value = 0.006;
+  compresseur.release.value = 0.22;
+
+  const gain = ctx.createGain();
+  gain.gain.value = Math.pow(10, r.gain / 20);
+
+  const limiteur = ctx.createDynamicsCompressor();
+  limiteur.threshold.value = -2;
+  limiteur.knee.value = 0;
+  limiteur.ratio.value = 20;
+  limiteur.attack.value = 0.001;
+  limiteur.release.value = 0.06;
+
+  source.connect(coupe).connect(boue).connect(presence).connect(air)
+    .connect(compresseur).connect(gain).connect(limiteur);
+  return limiteur;
+}
+
+/* Mesurer une voix. On écoute trois secondes, on cherche la fondamentale par
+   autocorrélation (la période qui se ressemble le plus d'un instant à
+   l'autre) et le centre de gravité du spectre. De là se déduisent la coupure,
+   la cloche de présence et le gain qui conviennent à CETTE voix.          */
+function mesureVoix(buffer) {
+  const données = buffer.getChannelData(0);
+  const sr = buffer.sampleRate;
+  const fenetre = Math.min(2048, données.length);
+  const minP = Math.floor(sr / 400);   // 400 Hz
+  const maxP = Math.floor(sr / 60);    // 60 Hz
+  const f0s = [];
+  let sommeCarres = 0;
+  // on parcourt le milieu de l'échantillon, là où la voix est installée
+  for (let debut = Math.floor(données.length * 0.15);
+    debut + fenetre + maxP < données.length;
+    debut += fenetre) {
+    let energie = 0;
+    for (let i = 0; i < fenetre; i++) energie += données[debut + i] * données[debut + i];
+    energie = Math.sqrt(energie / fenetre);
+    sommeCarres += energie;
+    if (energie < 0.012) continue;     // du silence : rien à mesurer
+    let meilleur = 0;
+    let meilleurP = 0;
+    for (let p = minP; p <= maxP; p++) {
+      let somme = 0;
+      for (let i = 0; i < fenetre; i++) somme += données[debut + i] * données[debut + i + p];
+      if (somme > meilleur) { meilleur = somme; meilleurP = p; }
+    }
+    if (meilleurP) f0s.push(sr / meilleurP);
+  }
+  if (!f0s.length) return null;
+  f0s.sort((a, b) => a - b);
+  const f0 = f0s[Math.floor(f0s.length / 2)];
+  const niveau = sommeCarres / Math.max(1, Math.floor(données.length / fenetre));
+
+  // une voix grave veut une coupure basse et une présence plus haute ; une
+  // voix claire, l'inverse. Et un enregistrement faible veut plus de gain.
+  return {
+    f0: Math.round(f0),
+    coupe: Math.round(Math.min(160, Math.max(55, f0 * 0.72))),
+    corps: f0 < 110 ? -1 : 1,
+    presence: f0 < 110 ? 4 : 2.5,
+    presenceHz: Math.round(f0 < 110 ? 2600 : 3400),
+    gain: Math.round(Math.min(12, Math.max(0, 20 * Math.log10(0.06 / Math.max(0.004, niveau))))),
+  };
+}
+
 function blobEnDataUrl(blob) {
   return new Promise((ok, ko) => {
     const l = new FileReader();
@@ -1135,19 +1313,24 @@ function blobEnDataUrl(blob) {
   });
 }
 
-// L'enregistreur : il tient un seul vocal à la fois, celui du formulaire.
+/* L'enregistreur du formulaire. Il tient un seul vocal à la fois : celui
+   qu'on vient de dire. Le signal passe par la chaîne de voix AVANT d'être
+   encodé — ce qui est gardé, ce qui est transcrit et ce qui deviendra une
+   vidéo sont donc le même son, déjà propre.                               */
 function faitEnregistreur(zone, surTexte) {
   let rec = null;
   let flux = null;
+  let ctxAudio = null;
   let debut = 0;
   let minuterie = null;
-  let dernier = null;   // { data, mime, duree, mots }
+  let dernier = null;   // { data, duree, mots }
 
   const dis = (html) => { zone.innerHTML = html; };
   const etatRepos = () => dis(`
-    <button type="button" class="link-btn" data-vocal-start>Parler</button>
-    ${dernier ? '<span class="vocal-pret">vocal prêt · il partira avec la branche</span>'
-      + '<button type="button" class="link-btn danger" data-vocal-oublie>oublier</button>' : ''}`);
+    <button type="button" class="bouton-doux" data-vocal-start>Dire ma pensée</button>
+    ${dernier ? '<span class="vocal-pret">vocal prêt · il part avec la pensée</span>'
+      + '<button type="button" class="link-btn danger" data-vocal-oublie>oublier</button>' : ''}
+    <button type="button" class="link-btn" data-vocal-regle>Régler ma voix</button>`);
 
   const arrete = () => {
     clearInterval(minuterie);
@@ -1156,22 +1339,57 @@ function faitEnregistreur(zone, surTexte) {
     flux = null;
   };
 
-  zone.addEventListener('click', async (e) => {
-    if (e.target.closest('[data-vocal-oublie]')) { dernier = null; etatRepos(); return; }
-    if (e.target.closest('[data-vocal-stop]')) { arrete(); return; }
-    if (!e.target.closest('[data-vocal-start]')) return;
+  // Mesurer sa voix et garder le réglage sur son compte : les prochains
+  // enregistrements s'y accordent.
+  const regle = async (blob, discret) => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const buffer = await ctx.decodeAudioData(await blob.arrayBuffer());
+      const mesure = mesureVoix(buffer);
+      ctx.close();
+      if (!mesure) return null;
+      const r = await api('/api/voix', { method: 'PUT', body: mesure });
+      if (state.user) state.user.voix = r.voix;
+      if (!discret) {
+        dis(`<span class="vocal-pret">Voix réglée : fondamentale ${r.voix.f0} Hz.
+          Les prochains enregistrements en profiteront.</span>`);
+        setTimeout(etatRepos, 3200);
+      }
+      return r.voix;
+    } catch { return null; }
+  };
 
-    try { flux = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-    catch { dis('<span class="vocal-err">Le micro est refusé. Écris ta pensée, le vocal peut attendre.</span>'); return; }
+  const enregistre = async (calibration) => {
+    try { flux = await navigator.mediaDevices.getUserMedia(CONTRAINTES_MICRO); }
+    catch {
+      dis('<span class="vocal-err">Le micro est refusé. Écris ta pensée, le vocal peut attendre.</span>');
+      return;
+    }
+    ctxAudio = new (window.AudioContext || window.webkitAudioContext)();
+    const source = ctxAudio.createMediaStreamSource(flux);
+    const sortie = ctxAudio.createMediaStreamDestination();
+    chaineVoix(ctxAudio, source, reglageVoix()).connect(sortie);
 
     const morceaux = [];
-    rec = new MediaRecorder(flux);
+    // un débit confortable : la voix passe, le poids reste tenable
+    let options = {};
+    try {
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        options = { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 64000 };
+      }
+    } catch { options = {}; }
+    rec = new MediaRecorder(sortie.stream, options);
     rec.ondataavailable = (ev) => { if (ev.data.size) morceaux.push(ev.data); };
     rec.onstop = async () => {
       const duree = (Date.now() - debut) / 1000;
       const blob = new Blob(morceaux, { type: rec.mimeType || 'audio/webm' });
+      if (ctxAudio) { ctxAudio.close(); ctxAudio = null; }
+      if (calibration) { await regle(blob, false); return; }
+
       dis('<span class="vocal-attente">Transcription…</span>');
       const data = await blobEnDataUrl(blob);
+      // première fois : on mesure la voix au passage, sans rien demander
+      if (!(state.user && state.user.voix)) await regle(blob, true);
       try {
         const r = await api('/api/vocal/transcription', { method: 'POST', body: { data, duree } });
         dernier = { data, duree, mots: r.mots || [] };
@@ -1187,14 +1405,22 @@ function faitEnregistreur(zone, surTexte) {
     };
     debut = Date.now();
     rec.start();
-    dis(`<button type="button" class="link-btn danger" data-vocal-stop>Arrêter</button>
-         <span class="vocal-compte" id="vocal-compte">0:00</span>`);
+    dis(`<button type="button" class="bouton-doux danger" data-vocal-stop>Arrêter</button>
+         <span class="vocal-compte" id="vocal-compte">0:00</span>
+         ${calibration ? '<span class="vocal-attente">parle normalement, trois secondes suffisent</span>' : ''}`);
     minuterie = setInterval(() => {
       const s = Math.floor((Date.now() - debut) / 1000);
       const el = document.getElementById('vocal-compte');
       if (el) el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-      if (s >= VOCAL_MAX_S) arrete();
+      if (s >= (calibration ? 6 : VOCAL_MAX_S)) arrete();
     }, 500);
+  };
+
+  zone.addEventListener('click', (e) => {
+    if (e.target.closest('[data-vocal-oublie]')) { dernier = null; etatRepos(); return; }
+    if (e.target.closest('[data-vocal-stop]')) { arrete(); return; }
+    if (e.target.closest('[data-vocal-regle]')) { enregistre(true); return; }
+    if (e.target.closest('[data-vocal-start]')) enregistre(false);
   });
 
   etatRepos();
@@ -1223,10 +1449,15 @@ function joueVocal(brancheId, mots, zone, bouton) {
   return audio;
 }
 
-/* La vidéo : le même texte qui apparaît au fur et à mesure, mais dessiné sur
-   une toile et enregistré avec le son. Le fichier se télécharge, prêt à être
-   publié — et c'est par là qu'une pensée de Pense Mieux peut rejoindre la
-   Vidéographie.                                                           */
+/* ------------------------------------------------------------ la vidéo ---
+   Le même texte qui apparaît au fur et à mesure, mais dessiné sur une toile
+   et enregistré avec le son. Elle ne se demande plus : elle se fabrique
+   d'elle-même dès qu'une pensée dite est déposée, sans bruit (le son ne passe
+   pas par les haut-parleurs pendant la fabrication) et sans rien bloquer.
+
+   Le fichier est gardé dans le navigateur : il ne pèse donc rien sur la base,
+   et il est là quand on revient.                                          */
+
 function mimeVideo() {
   for (const m of ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']) {
     if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
@@ -1234,84 +1465,178 @@ function mimeVideo() {
   return '';
 }
 
-async function faitLaVideo(brancheId, mots, bouton) {
-  const type = mimeVideo();
-  if (!type || !HTMLCanvasElement.prototype.captureStream) {
-    alert('Ce navigateur ne sait pas fabriquer la vidéo. Chrome ou Firefox le font.');
-    return;
-  }
-  const initial = bouton.textContent;
-  bouton.disabled = true;
-  bouton.textContent = 'Enregistrement…';
+function videoPossible() {
+  return !!(mimeVideo() && HTMLCanvasElement.prototype.captureStream && window.indexedDB);
+}
+
+function ouvreStock() {
+  return new Promise((ok, ko) => {
+    const r = indexedDB.open('whitecadae-videos', 1);
+    r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('v')) r.result.createObjectStore('v'); };
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => ko(r.error);
+  });
+}
+
+async function rangeVideo(id, blob) {
   try {
-    const audio = new Audio(`/api/branches/${brancheId}/vocal`);
-    await new Promise((ok, ko) => { audio.oncanplaythrough = ok; audio.onerror = ko; audio.load(); });
-    const ctxA = new (window.AudioContext || window.webkitAudioContext)();
-    const source = ctxA.createMediaElementSource(audio);
-    const sortie = ctxA.createMediaStreamDestination();
-    source.connect(sortie);
-    source.connect(ctxA.destination);
+    const db = await ouvreStock();
+    await new Promise((ok, ko) => {
+      const t = db.transaction('v', 'readwrite');
+      t.objectStore('v').put(blob, String(id));
+      t.oncomplete = ok; t.onerror = () => ko(t.error);
+    });
+    db.close();
+  } catch { /* le navigateur refuse de garder : la vidéo se refera */ }
+}
 
-    const toile = document.createElement('canvas');
-    toile.width = 1280; toile.height = 720;
-    const g = toile.getContext('2d');
-    const flux = toile.captureStream(30);
-    for (const piste of sortie.stream.getAudioTracks()) flux.addTrack(piste);
+async function prendVideo(id) {
+  try {
+    const db = await ouvreStock();
+    const blob = await new Promise((ok, ko) => {
+      const t = db.transaction('v', 'readonly');
+      const q = t.objectStore('v').get(String(id));
+      q.onsuccess = () => ok(q.result || null);
+      q.onerror = () => ko(q.error);
+    });
+    db.close();
+    return blob;
+  } catch { return null; }
+}
 
-    const rec = new MediaRecorder(flux, { mimeType: type });
-    const bouts = [];
-    rec.ondataavailable = (e) => { if (e.data.size) bouts.push(e.data); };
-    const fini = new Promise((r) => { rec.onstop = r; });
+// Le rendu d'une image : le texte dit jusqu'ici, le mot en cours détaché.
+function dessineVideo(g, mots, t, contexte) {
+  g.fillStyle = '#101014';
+  g.fillRect(0, 0, 1280, 720);
 
-    let court = true;
-    const dessine = () => {
-      const t = audio.currentTime;
-      g.fillStyle = '#101014';
-      g.fillRect(0, 0, 1280, 720);
-      g.font = '36px Georgia, serif';
-      g.fillStyle = '#e8e6e0';
-      // le texte se replie en lignes, et l'on garde les dernières à l'écran
-      const dits = mots.filter((w) => w.d <= t).map((w) => w.m);
-      const lignes = [];
-      let ligne = '';
-      for (const mot of dits) {
-        const essai = ligne ? `${ligne} ${mot}` : mot;
-        if (g.measureText(essai).width > 1100) { lignes.push(ligne); ligne = mot; }
-        else ligne = essai;
-      }
-      if (ligne) lignes.push(ligne);
-      const visibles = lignes.slice(-11);
-      visibles.forEach((l, i) => g.fillText(l, 90, 140 + i * 52));
-      g.fillStyle = '#d8c07a';
-      g.font = '22px Georgia, serif';
-      g.fillText('White Cadae · Pense Mieux', 90, 660);
-      if (court) requestAnimationFrame(dessine);
-    };
+  g.font = 'italic 26px Georgia, serif';
+  g.fillStyle = '#8a8a94';
+  g.fillText(contexte.sous || '', 90, 78);
+  g.font = '30px Georgia, serif';
+  g.fillStyle = '#d8c07a';
+  g.fillText(contexte.titre || '', 90, 118);
 
-    rec.start();
-    await audio.play();
-    requestAnimationFrame(dessine);
-    await new Promise((r) => { audio.onended = r; });
-    court = false;
-    setTimeout(() => rec.stop(), 400);
-    await fini;
+  g.font = '38px Georgia, serif';
+  const lignes = [];
+  let ligne = [];
+  for (const mot of mots) {
+    if (mot.d > t) break;
+    const essai = [...ligne, mot];
+    if (g.measureText(essai.map((m) => m.m).join(' ')).width > 1090) { lignes.push(ligne); ligne = [mot]; }
+    else ligne = essai;
+  }
+  if (ligne.length) lignes.push(ligne);
+  const visibles = lignes.slice(-9);
+  visibles.forEach((l, i) => {
+    let x = 90;
+    const y = 210 + i * 54;
+    for (const mot of l) {
+      const encours = mot.d <= t && mot.f > t;
+      g.fillStyle = encours ? '#f4ecd6' : '#d5d2cb';
+      g.fillText(mot.m, x, y);
+      x += g.measureText(mot.m + ' ').width;
+    }
+  });
 
-    const url = URL.createObjectURL(new Blob(bouts, { type: 'video/webm' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `pensee-${brancheId}.webm`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  // la barre du temps, et la signature
+  const total = mots.length ? mots[mots.length - 1].f : 1;
+  g.fillStyle = '#26262e';
+  g.fillRect(90, 640, 1100, 4);
+  g.fillStyle = '#d8c07a';
+  g.fillRect(90, 640, 1100 * Math.min(1, t / Math.max(0.001, total)), 4);
+  g.font = '20px Georgia, serif';
+  g.fillStyle = '#6f6f79';
+  g.fillText(`White Cadae · ${contexte.auteur || ''}`, 90, 682);
+}
+
+/* La fabrication. Elle dure le temps de la pensée : c'est le prix d'un
+   enregistrement fait par le navigateur lui-même. Elle est donc silencieuse
+   et rendue en fond, pendant qu'on continue à écrire.                     */
+async function fabriqueVideo(brancheId, mots, contexte, surEtat) {
+  const type = mimeVideo();
+  if (!type || !HTMLCanvasElement.prototype.captureStream) throw new Error('navigateur');
+  const audio = new Audio(`/api/branches/${brancheId}/vocal`);
+  audio.preload = 'auto';
+  await new Promise((ok, ko) => { audio.oncanplaythrough = ok; audio.onerror = ko; audio.load(); });
+
+  const ctxA = new (window.AudioContext || window.webkitAudioContext)();
+  const source = ctxA.createMediaElementSource(audio);
+  const sortie = ctxA.createMediaStreamDestination();
+  // on ne branche PAS les haut-parleurs : la fabrication est muette
+  source.connect(sortie);
+
+  const toile = document.createElement('canvas');
+  toile.width = 1280; toile.height = 720;
+  const g = toile.getContext('2d');
+  const flux = toile.captureStream(30);
+  for (const piste of sortie.stream.getAudioTracks()) flux.addTrack(piste);
+
+  const rec = new MediaRecorder(flux, { mimeType: type });
+  const bouts = [];
+  rec.ondataavailable = (e) => { if (e.data.size) bouts.push(e.data); };
+  const fini = new Promise((r) => { rec.onstop = r; });
+
+  let court = true;
+  const total = mots.length ? mots[mots.length - 1].f : (audio.duration || 1);
+  const peint = () => {
+    dessineVideo(g, mots, audio.currentTime, contexte);
+    if (surEtat) surEtat(Math.min(1, audio.currentTime / Math.max(0.001, total)));
+    if (court) requestAnimationFrame(peint);
+  };
+
+  rec.start();
+  await audio.play();
+  requestAnimationFrame(peint);
+  await new Promise((r) => { audio.onended = r; });
+  court = false;
+  dessineVideo(g, mots, total + 1, contexte);
+  await new Promise((r) => setTimeout(r, 400));
+  rec.stop();
+  await fini;
+  ctxA.close();
+  return new Blob(bouts, { type: 'video/webm' });
+}
+
+// La fabrication automatique : lancée dès qu'une pensée dite est déposée, et
+// silencieuse. Si le navigateur refuse, on n'insiste pas.
+async function videoAutomatique(brancheId, mots, contexte, zone) {
+  if (!videoPossible() || !mots.length) return;
+  if (await prendVideo(brancheId)) { montreVideo(brancheId, zone); return; }
+  if (zone) zone.innerHTML = '<span class="video-etat">vidéo en préparation…</span>';
+  try {
+    const blob = await fabriqueVideo(brancheId, mots, contexte, (p) => {
+      if (zone) zone.innerHTML = `<span class="video-etat">vidéo en préparation… ${Math.round(p * 100)} %</span>`;
+    });
+    await rangeVideo(brancheId, blob);
+    montreVideo(brancheId, zone);
   } catch {
-    alert('La vidéo n’a pas pu être fabriquée.');
-  } finally {
-    bouton.disabled = false;
-    bouton.textContent = initial;
+    if (zone) zone.innerHTML = '<button type="button" class="link-btn" data-video="' + brancheId + '">Faire la vidéo</button>';
   }
 }
 
-// Un arbre se lit par le même chemin où qu'il vive : /arbre/:id. Son
-// contexte lui vient du serveur, pas de l'URL : sa nature, son axe, son carré.
+async function montreVideo(brancheId, zone) {
+  if (!zone) return;
+  const blob = await prendVideo(brancheId);
+  zone.innerHTML = blob
+    ? `<button type="button" class="link-btn" data-telecharge="${brancheId}">Télécharger la vidéo</button>
+       <button type="button" class="link-btn" data-video="${brancheId}">refaire</button>`
+    : `<button type="button" class="link-btn" data-video="${brancheId}">Faire la vidéo</button>`;
+}
+
+async function telechargeVideo(brancheId) {
+  const blob = await prendVideo(brancheId);
+  if (!blob) return;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pensee-${brancheId}.webm`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+// Une réflexion se lit par le même chemin où qu'elle vive : /reflexion/:id.
+// Son contexte lui vient du serveur, pas de l'URL : sa nature, son axe, son
+// carré, et ce que le lecteur a le droit d'y faire.
 async function pageArbre(id) {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
@@ -1344,6 +1669,8 @@ async function pageArbre(id) {
   const ctx = {
     parId, sourcesDe, vocaux, arbreId: arbre.id,
     collectif, moi: arbre.moi, porteur: arbre.user_id,
+    reponses: arbre.reponses || [], repondable: !!arbre.repondable,
+    proprietaire: !!arbre.proprietaire,
   };
 
   // le retour et le dock suivent l'arbre : celui d'un carré ne s'affiche pas
@@ -1359,7 +1686,7 @@ async function pageArbre(id) {
   // le champ des possibles : le même axe, ailleurs. Une ligne, pas une page.
   const ailleurs = (arbre.ailleurs || []).map((a) => {
     const nom = a.carre_nom || (a.kind === 'video' ? 'Vidéographie' : 'Pense Mieux');
-    return `<a href="/arbre/${a.id}" data-link>${esc(nom)}</a>`;
+    return `<a href="/reflexion/${a.id}" data-link>${esc(nom)}</a>`;
   }).join(' · ');
 
   // les voix de l'arbre : dans un arbre commun, on veut pouvoir ne lire que
@@ -1380,17 +1707,27 @@ async function pageArbre(id) {
     ? `${arbre.carre_nom || arbre.porteur} · ${arbre.title}`
     : arbre.title;
 
+  const nomPorteur = etranger ? (arbre.carre_nom || arbre.porteur || '') : '';
+
   docke(retour.app, retour.onglet, `
     <p class="fil-retour"><a href="${retour.chemin}" data-link>← ${esc(retour.titre)}</a></p>
     <h1>${esc(titre)}</h1>
     ${arbre.sous && !etranger ? `<p class="arbre-sous">${esc(arbre.sous)}</p>` : ''}
     ${arbre.publique ? '<p class="arbre-public">Lu par tous les As : ce que tu écris ici entre dans la galerie des univers.</p>' : ''}
-    ${arbre.miroir ? `<p class="arbre-miroir">En regard : <a href="/arbre/${arbre.miroir.id}" data-link>${esc(arbre.miroir.title)}</a></p>` : ''}
+    ${!arbre.publique && !etranger && arbre.axe == null && arbre.carre_id == null ? `
+      <p class="arbre-partage">
+        <label><input type="checkbox" id="arbre-prive"${arbre.prive ? ' checked' : ''}>
+          Garder cette réflexion pour moi seul</label>
+        <span class="arbre-partage-note">Sinon, tes carrés la lisent et peuvent y répondre.</span>
+      </p>` : ''}
+    ${arbre.repondable ? `<p class="arbre-invite-reponse">Tu es ici pour aider ${esc(nomPorteur)} à voir
+      plus de variables : approfondis, élargis, ou oppose en proposant une issue.</p>` : ''}
+    ${arbre.miroir ? `<p class="arbre-miroir">En regard : <a href="/reflexion/${arbre.miroir.id}" data-link>${esc(arbre.miroir.title)}</a></p>` : ''}
     ${arbre.trunk ? `<p class="tronc">${esc(arbre.trunk)}</p>` : ''}
     ${ailleurs ? `<p class="arbre-ailleurs">Le même ailleurs : ${ailleurs}</p>` : ''}
     <div class="liaison-bandeau" id="liaison-bandeau" hidden>
-      <span>Touche la branche <strong>qui nourrit</strong> celle-ci</span>
-      <select id="liaison-arbre"><option value="">ou depuis un autre arbre…</option></select>
+      <span>Touche la pensée <strong>qui nourrit</strong> celle-ci</span>
+      <select id="liaison-arbre"><option value="">ou depuis une autre réflexion…</option></select>
       <button type="button" class="link-btn" id="liaison-annule">Annuler</button>
       <div id="liaison-sources" hidden></div>
     </div>
@@ -1401,26 +1738,39 @@ async function pageArbre(id) {
     </nav>` : ''}
     <div class="arbre" id="arbre">
       ${(enfants.get(0) || []).map((b) => brancheHtml(b, enfants, kind, editable, ctx)).join('')
-        || '<p class="empty-note">Le tronc attend ses premières branches.</p>'}
+        || `<p class="empty-note">${editable ? 'Rien encore. Dis ou écris ta première pensée.'
+             : 'Rien encore ici.'}</p>`}
     </div>
-    ${editable ? `
+    ${editable || arbre.repondable ? `
     <form id="branche-form" class="branche-form">
       <input type="hidden" id="branche-parent" value="">
-      <p class="branche-ou" id="branche-ou">Nouvelle branche sur le tronc</p>
-      ${kind === 'video' ? '<input id="branche-url" type="url" placeholder="https://www.youtube.com/watch?v=…" required>' : ''}
+      <input type="hidden" id="branche-reponse" value="">
+      <p class="branche-ou" id="branche-ou">${editable ? 'Une pensée de plus' : 'Ta réponse'}</p>
+      ${arbre.repondable ? `
+      <div class="reponse-choix" id="reponse-choix">
+        ${(arbre.reponses || []).map((r, i) => `
+          <label class="reponse-type">
+            <input type="radio" name="reponse-type" value="${esc(r.cle)}"${i === 0 ? ' checked' : ''}>
+            <span class="reponse-label">${esc(r.label)}</span>
+            <span class="reponse-aide">${esc(r.aide)}</span>
+          </label>`).join('')}
+      </div>` : ''}
+      ${kind === 'video' && editable ? '<input id="branche-url" type="url" placeholder="https://www.youtube.com/watch?v=…" required>' : ''}
+      ${arbre.repondable ? '<input id="branche-url" type="url" placeholder="Une vidéo-réponse ? colle son adresse YouTube (facultatif)">' : ''}
       <textarea id="branche-body" maxlength="2000" rows="2"
-        placeholder="${kind === 'video' ? 'Quelques mots sur cette vidéo (facultatif)…' : 'Ce que cette branche ajoute…'}"></textarea>
+        placeholder="${kind === 'video' && editable ? 'Quelques mots sur cette vidéo (facultatif)…'
+          : arbre.repondable ? 'Ce que tu apportes…' : 'Ce qui te vient…'}"></textarea>
       ${kind === 'pensee' && vocalDisponible() ? '<div class="vocal-barre" id="vocal-barre"></div>' : ''}
       <div class="conv-form-foot">
-        <button type="button" class="link-btn" id="branche-annule" hidden>Revenir au tronc</button>
-        <button type="submit" class="primary">Faire pousser</button>
+        <button type="button" class="link-btn" id="branche-annule" hidden>Repartir du début</button>
+        <button type="submit" class="primary">${arbre.repondable ? 'Déposer ma réponse' : 'Déposer'}</button>
       </div>
       <p class="form-error" id="branche-err"></p>
     </form>
-    ${arbre.axe ? '' : '<p class="arbre-suppr"><button type="button" class="link-btn danger" id="arbre-suppr">Abattre cet arbre</button></p>'}
+    ${editable && !arbre.axe ? '<p class="arbre-suppr"><button type="button" class="link-btn danger" id="arbre-suppr">Supprimer cette réflexion</button></p>' : ''}
     ` : `<p class="empty-note">${arbre.publique && etranger
-      ? 'L’univers d’un autre As (lecture seule). Depuis le tien, une branche peut être nourrie par les siennes.'
-      : 'L’arbre d’un As de ton carré (lecture seule).'}</p>`}`);
+      ? 'Les univers d’un autre As. Depuis les tiens, une pensée peut être nourrie par les siennes.'
+      : 'En lecture seule.'}</p>`}`);
 
   // le saut vers une source : pour tout le monde, lecteur compris
   const vaVers = (cible) => {
@@ -1441,14 +1791,34 @@ async function pageArbre(id) {
     const joue = e.target.closest('button[data-joue]');
     if (joue) {
       if (enCours) { enCours.pause(); enCours = null; }
-      if (joue.textContent === 'Arrêter') { joue.textContent = 'Rejouer'; return; }
+      if (joue.textContent === 'Arrêter') { joue.textContent = 'Réécouter'; return; }
       const bid = +joue.dataset.joue;
       const zone = joue.closest('.branche-vocal').querySelector('.vocal-dit');
       enCours = joueVocal(bid, (vocaux.get(bid) || {}).mots || [], zone, joue);
     }
-    const video = e.target.closest('button[data-video]');
-    if (video) faitLaVideo(+video.dataset.video, (vocaux.get(+video.dataset.video) || {}).mots || [], video);
+    const tele = e.target.closest('button[data-telecharge]');
+    if (tele) telechargeVideo(+tele.dataset.telecharge);
+    const refaire = e.target.closest('button[data-video]');
+    if (refaire) {
+      const bid = +refaire.dataset.video;
+      videoAutomatique(bid, (vocaux.get(bid) || {}).mots || [], contexteVideo,
+        app.querySelector(`[data-video-zone="${bid}"]`));
+    }
+    // répondre à une pensée : le formulaire vient se poser dessous
+    const repond = e.target.closest('button[data-repond]');
+    if (repond) viseParent(+repond.dataset.repond, true);
   });
+
+  // ce qui habille la vidéo : de quoi on parle, et qui parle
+  const contexteVideo = {
+    titre: arbre.title,
+    sous: arbre.carre_nom || (kind === 'video' ? 'Vidéographie' : 'Pense Mieux'),
+    auteur: arbre.porteur || '',
+  };
+  // les vidéos déjà fabriquées reviennent d'elles-mêmes
+  for (const v of arbre.vocaux || []) {
+    montreVideo(v.branch_id, app.querySelector(`[data-video-zone="${v.branch_id}"]`));
+  }
   // arrivée par une chip d'un autre arbre : la branche visée s'illumine
   if (/^#b\d+$/.test(location.hash)) setTimeout(() => vaVers(+location.hash.slice(2)), 150);
 
@@ -1472,11 +1842,25 @@ async function pageArbre(id) {
     };
   });
 
-  if (!editable) return;
+  if (!editable && !arbre.repondable) return;
 
   const parentField = document.getElementById('branche-parent');
   const ou = document.getElementById('branche-ou');
   const annule = document.getElementById('branche-annule');
+  const formulaire = document.getElementById('branche-form');
+
+  /* Poser le formulaire sur une pensée : pour la prolonger quand elle est à
+     soi, pour y répondre quand elle est à un autre. */
+  function viseParent(cible, reponse) {
+    parentField.value = cible == null ? '' : String(cible);
+    ou.textContent = cible == null
+      ? (editable ? 'Une pensée de plus' : 'Ta réponse')
+      : (reponse ? 'Ta réponse à cette pensée' : 'Une pensée qui prolonge celle-ci');
+    annule.hidden = cible == null;
+    formulaire.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const champ = document.getElementById(kind === 'video' && editable ? 'branche-url' : 'branche-body');
+    if (champ) champ.focus();
+  }
   // la liaison : « nourrie par… » puis un toucher sur la branche source :
   // dans cet arbre, ou dans un autre choisi au sélecteur
   let liaisonDepuis = null;
@@ -1527,7 +1911,7 @@ async function pageArbre(id) {
           const mienne = [...(d.troncs || []), ...(d.arbres || [])].filter((a) => a.id !== id);
           for (const a of mienne) vus.add(a.id);
           total = mienne.length;
-          options = groupe('Ma forêt', mienne);
+          options = groupe('Mes réflexions', mienne);
           for (const c of d.carres || []) {
             const arbres = c.arbres.filter((a) => a.id !== id);
             for (const a of arbres) vus.add(a.id);
@@ -1540,7 +1924,7 @@ async function pageArbre(id) {
         options += groupe('Les univers', univers);
       }
       autresArbres = total;
-      selArbre.innerHTML = '<option value="">ou depuis un autre arbre…</option>' + options;
+      selArbre.innerHTML = '<option value="">ou depuis une autre réflexion…</option>' + options;
       selArbre.hidden = total === 0;
     } catch { selArbre.hidden = true; }
   };
@@ -1553,7 +1937,7 @@ async function pageArbre(id) {
       zoneSources.innerHTML = d.arbre.branches.length
         ? d.arbre.branches.map((b) => `<button type="button" class="liaison-source" data-source="${b.id}">
             ${esc(brancheEtiquette(b))}</button>`).join('')
-        : '<p class="empty-note">Cet arbre n’a pas de branche.</p>';
+        : '<p class="empty-note">Cette réflexion est encore vide.</p>';
       zoneSources.hidden = false;
     } catch { /* l'arbre a pu disparaître : le sélecteur reste */ }
   };
@@ -1598,16 +1982,13 @@ async function pageArbre(id) {
       await api(`/api/branches/${bId}/liens/${sId}`, { method: 'DELETE' });
       pageArbre(id);
     } else if (pousse) {
-      parentField.value = pousse.dataset.pousse;
-      ou.textContent = 'Nouvelle branche sur la branche choisie';
-      annule.hidden = false;
-      document.getElementById(kind === 'video' ? 'branche-url' : 'branche-body').focus();
-    } else if (coupe && confirm('Couper cette branche et tout ce qui pousse dessus ?')) {
+      viseParent(+pousse.dataset.pousse, false);
+    } else if (coupe && confirm('Retirer cette pensée et tout ce qui s’y rattache ?')) {
       await api(`/api/branches/${coupe.dataset.coupe}`, { method: 'DELETE' });
       pageArbre(id);
     }
   });
-  annule.onclick = () => { parentField.value = ''; ou.textContent = 'Nouvelle branche sur le tronc'; annule.hidden = true; };
+  annule.onclick = () => viseParent(null, false);
 
   // l'enregistreur du formulaire : il remplit le texte, et son audio part
   // avec la branche
@@ -1617,35 +1998,56 @@ async function pageArbre(id) {
     champ.value = champ.value ? `${champ.value} ${texte}` : texte;
   }) : null;
 
-  document.getElementById('branche-form').onsubmit = async (e) => {
+  formulaire.onsubmit = async (e) => {
     e.preventDefault();
     try {
+      const champUrl = document.getElementById('branche-url');
+      const typeReponse = app.querySelector('input[name="reponse-type"]:checked');
       const r = await api(`/api/arbres/${id}/branches`, {
         method: 'POST',
         body: {
           parent_id: parentField.value ? +parentField.value : null,
           body: document.getElementById('branche-body').value,
-          url: kind === 'video' ? document.getElementById('branche-url').value : '',
+          url: champUrl ? champUrl.value : '',
+          reponse: typeReponse ? typeReponse.value : '',
         },
       });
       const vocal = enregistreur ? enregistreur.prend() : null;
       if (vocal && r.id) {
-        // la branche existe déjà : si le vocal échoue, le texte reste
+        // la pensée existe déjà : si le vocal échoue, le texte reste
         try {
           await api(`/api/branches/${r.id}/vocal`, {
             method: 'POST',
             body: { data: vocal.data, duree: vocal.duree, mots: vocal.mots },
           });
+          /* La vidéo se fabrique d'elle-même : on ne la demande plus. Elle
+             dure le temps de la pensée, en silence, pendant qu'on continue.
+             On repeint la page d'abord, pour que la zone d'accueil existe. */
+          await pageArbre(id);
+          const zone = app.querySelector(`[data-video-zone="${r.id}"]`);
+          videoAutomatique(r.id, vocal.mots || [], {
+            titre: arbre.title,
+            sous: arbre.carre_nom || (kind === 'video' ? 'Vidéographie' : 'Pense Mieux'),
+            auteur: (state.user && state.user.username) || '',
+          }, zone);
+          return;
         } catch { /* la pensée est écrite, c'est l'essentiel */ }
       }
       pageArbre(id);
     } catch (err) { document.getElementById('branche-err').textContent = err.message; }
   };
 
+  // « pour moi seul » : la réflexion sort du regard de mes carrés
+  const prive = document.getElementById('arbre-prive');
+  if (prive) prive.onchange = async () => {
+    try { await api(`/api/arbres/${id}`, { method: 'PUT', body: { title: arbre.title, trunk: arbre.trunk, prive: prive.checked } }); }
+    catch (err) { alert(err.message); prive.checked = !prive.checked; }
+  };
+
   // un tronc n'a pas ce bouton : il ne s'abat pas
   const suppr = document.getElementById('arbre-suppr');
   if (suppr) suppr.onclick = async () => {
-    if (!confirm('Abattre cet arbre, tronc et branches ?')) return;
+    if (!confirm('Supprimer cette réflexion et tout ce qu’elle contient ?')) return;
     await api(`/api/arbres/${id}`, { method: 'DELETE' });
     navigate(retour.chemin);
   };
@@ -1734,8 +2136,8 @@ async function vueMesCarres() {
 function carreTete(d, id, onglet) {
   const onglets = d.publique ? '' : `
     <nav class="carre-onglets">
-      ${[['carre', 'Le carré'], ['harmonie', 'Harmonie'], ['notes', 'Notes'],
-        ['conversation', 'Conversation'], ['relatif', 'Relatif']]
+      ${[['carre', 'Le carré'], ['multivers', 'Multivers'], ['harmonie', 'Harmonie'],
+        ['notes', 'Notes'], ['conversation', 'Conversation'], ['relatif', 'Relatif']]
         .map(([cle, label]) => `<a href="/carre-d-as/${id}${cle === 'carre' ? '' : `/${cle}`}" data-link
           class="co-tab${onglet === cle ? ' actif' : ''}">${label}</a>`).join('')}
     </nav>`;
@@ -1754,6 +2156,7 @@ async function pageCarre(id, onglet) {
   if (stale(epoch)) return;
 
   if (d.publique) return carreFacade(id, d);
+  if (onglet === 'multivers') return carreOngletMultivers(id, d, epoch);
   if (onglet === 'harmonie') return carreOngletHarmonie(id, d, epoch);
   if (onglet === 'notes') return carreOngletNotes(id, d, epoch);
   if (onglet === 'conversation') return carreOngletConversation(id, d, epoch);
@@ -1918,6 +2321,48 @@ function carreOngletCarre(id, d, epoch) {
 /* Les notes : chacun note les trois autres, domaine par domaine. Le meilleur
    du domaine vaut 10, le reste se lit par rapport à lui. Tout le carré voit
    tout : la transparence est la discussion.                               */
+/* ------------------------------------------------------- le multivers ---
+   Un carré n'est pas seulement un lieu où l'on écrit ensemble : c'est un
+   endroit d'où l'on regarde penser les autres. Chaque As y ouvre ses cinq
+   axes et ses réflexions libres ; on y entre pour répondre, jamais pour
+   juger. Autant de perceptions qu'il y a d'As, et chacune éclaire les
+   autres.                                                                 */
+async function carreOngletMultivers(id, d, epoch) {
+  let m;
+  try { m = await api(`/api/carre/${id}/multivers`); }
+  catch { return navigate('/carre-d-as', true); }
+  if (stale(epoch)) return;
+
+  const carte = (t, mien) => `
+    <a class="mv-carte${t.axe ? ' mv-carte--axe' : ''}" href="/reflexion/${t.id}" data-link>
+      <h3>${esc(t.court || t.title)}</h3>
+      ${t.trunk ? `<p class="mv-apercu">${esc(t.trunk)}</p>` : ''}
+      <span class="mv-meta">${t.pensees} pensée${t.pensees > 1 ? 's' : ''}${
+        t.reponses ? ` · ${t.reponses} réponse${t.reponses > 1 ? 's' : ''}` : ''}</span>
+    </a>`;
+
+  docke('ca', 'carre', `
+    ${carreTete(d, id, 'multivers')}
+    <p class="mv-intro">Chacun pense de là où il est. Entre dans la perception des autres :
+      approfondis ce qu’ils disent, élargis leur champ, ou oppose-leur une issue. Ils font
+      de même chez toi — c’est à cela que sert un carré.</p>
+    ${m.communs.length ? `
+    <section class="mv-bloc">
+      <h2>Ce que vous pensez ensemble</h2>
+      <div class="mv-grille">${m.communs.map((t) => carte(t, false)).join('')}</div>
+    </section>` : ''}
+    ${m.as.map((as) => `
+      <section class="mv-bloc mv-as${as.moi ? ' moi' : ''}">
+        <h2>${as.moi ? 'Toi' : esc(as.username)}${as.domaine ? `<span class="mv-role">${esc(as.domaine)}</span>` : ''}</h2>
+        ${as.axes.length || as.libres.length
+          ? `<div class="mv-grille">${[...as.axes, ...as.libres].map((t) => carte(t, as.moi)).join('')}</div>`
+          : '<p class="empty-note">Rien d’ouvert encore.</p>'}
+        ${as.dansLeCarre.length ? `
+          <p class="mv-sous">Et tel que ce carré le révèle</p>
+          <div class="mv-grille">${as.dansLeCarre.map((t) => carte(t, as.moi)).join('')}</div>` : ''}
+      </section>`).join('')}`);
+}
+
 /* L'harmonie du carré : la société que les quatre imaginent ensemble, et le
    moi harmonieux de chacun tel que ce carré le révèle. On n'écrit pas ici :
    on entre dans l'arbre.                                                  */
@@ -1928,8 +2373,8 @@ async function carreOngletHarmonie(id, d, epoch) {
   if (stale(epoch)) return;
 
   const compte = (n) => n
-    ? `${n} branche${n > 1 ? 's' : ''}`
-    : 'le tronc attend ses premières branches';
+    ? `${n} pensée${n > 1 ? 's' : ''}`
+    : 'rien encore : il attend';
   const parAxe = (as, axe) => as.arbres.find((x) => x.axe === axe) || {};
 
   docke('ca', 'carre', `
@@ -1939,7 +2384,7 @@ async function carreOngletHarmonie(id, d, epoch) {
       <div class="harmonie-communs">
         ${h.communs.map((c) => `
           <a class="arbre-card arbre-card--tronc${c.publique ? ' arbre-card--publique' : ''}"
-             href="/arbre/${c.id}" data-link>
+             href="/reflexion/${c.id}" data-link>
             <h2>${esc(c.titre)}</h2>
             <p class="arbre-sous">${esc(c.sous)}</p>
             <span class="arbre-meta">${compte(c.branches)}${c.publique ? ' · lu par tous' : ''}</span>
@@ -1958,7 +2403,7 @@ async function carreOngletHarmonie(id, d, epoch) {
               ${h.axesPersonnels.map((a) => {
                 const t = parAxe(m, a.axe);
                 return t.id
-                  ? `<a class="arbre-card arbre-card--tronc" href="/arbre/${t.id}" data-link>
+                  ? `<a class="arbre-card arbre-card--tronc" href="/reflexion/${t.id}" data-link>
                        <h2>${esc(a.court)}</h2>
                        <span class="arbre-meta">${compte(t.branches)}</span></a>`
                   : `<span class="arbre-card arbre-card--vide">${esc(a.court)}<span

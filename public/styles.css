@@ -2140,3 +2140,112 @@ body.avec-dock main { padding-bottom: 7rem; }
 }
 .voix-filtre.actif { border-color: var(--accent); color: var(--accent); }
 .branche--autre { opacity: 0.42; }
+
+/* ------------------------------------------ Pense Mieux : la réflexion ---
+   Plus d'arbre, plus de tronc : une réflexion, des pensées, et ce que les
+   autres y apportent. Les boutons se tiennent, l'espace respire. */
+.bouton-doux {
+  background: var(--accent-soft);
+  border: 1px solid rgba(216, 192, 122, 0.4);
+  border-radius: 99px;
+  color: var(--accent);
+  padding: 0.3rem 1rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+  width: auto;
+}
+.bouton-doux:hover { border-color: var(--accent); }
+.bouton-doux.danger { color: #d98d8d; border-color: rgba(217, 141, 141, 0.5); background: none; }
+.arbre-partage {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin: 0.4rem 0 0.8rem;
+}
+.arbre-partage label { display: flex; align-items: center; gap: 0.4rem; }
+.arbre-partage input { width: auto; }
+.arbre-partage-note { opacity: 0.75; }
+.arbre-invite-reponse {
+  border-left: 2px solid var(--accent);
+  padding-left: 0.8rem;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin: 0.4rem 0 1rem;
+}
+
+/* les trois manières de répondre */
+.reponse-choix { display: grid; gap: 0.4rem; margin-bottom: 0.5rem; }
+.reponse-type {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.5rem;
+  align-items: baseline;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+}
+.reponse-type input { width: auto; grid-row: span 2; }
+.reponse-type:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.reponse-label { font-size: 0.92rem; }
+.reponse-aide { grid-column: 2; color: var(--text-dim); font-size: 0.8rem; }
+.reponse-tag { font-size: 0.78rem; color: var(--accent); margin: 0 0 0.2rem; }
+/* la majuscule est pour l'intention, jamais pour le nom de quelqu'un */
+.reponse-quoi { text-transform: uppercase; letter-spacing: 0.04em; }
+.reponse-qui { color: var(--text-dim); }
+.reponse-qui::before { content: '· '; }
+.branche--reponse { border-left-color: rgba(216, 192, 122, 0.55); }
+.branche--elargir { border-left-color: #7fa6c9; }
+.branche--elargir .reponse-tag { color: #7fa6c9; }
+.branche--opposer { border-left-color: #d99f6c; }
+.branche--opposer .reponse-tag { color: #d99f6c; }
+
+/* ce que le carré m'a répondu, en tête de mes réflexions */
+.recues { margin-bottom: 1.6rem; }
+.recues h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+.recues-liste { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.recue {
+  display: block;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  text-decoration: none;
+}
+.recue--elargir { border-left-color: #7fa6c9; }
+.recue--opposer { border-left-color: #d99f6c; }
+.recue-tag { font-size: 0.74rem; color: var(--accent); }
+.recue--elargir .recue-tag { color: #7fa6c9; }
+.recue--opposer .recue-tag { color: #d99f6c; }
+.recue-qui { font-size: 0.8rem; color: var(--text); margin-left: 0.4rem; }
+.recue-ou { display: block; font-size: 0.78rem; color: var(--text-dim); }
+.recue p { margin: 0.25rem 0 0; font-size: 0.88rem; color: var(--text-dim); }
+
+/* le multivers d'un carré */
+.mv-intro { color: var(--text-dim); max-width: 46rem; margin-bottom: 1.4rem; }
+.mv-bloc { margin-bottom: 1.6rem; }
+.mv-bloc h2 { font-size: 1rem; display: flex; align-items: baseline; gap: 0.6rem; }
+.mv-role { font-size: 0.78rem; color: var(--text-dim); }
+.mv-as.moi h2 { color: var(--accent); }
+.mv-grille { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.mv-carte {
+  display: block;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  text-decoration: none;
+}
+.mv-carte--axe { border-left: 2px solid var(--accent); }
+.mv-carte h3 { font-size: 0.92rem; margin: 0; font-family: var(--serif); font-weight: normal; }
+.mv-apercu { color: var(--text-dim); font-size: 0.82rem; margin: 0.25rem 0 0; }
+.mv-meta { display: block; color: var(--text-dim); font-size: 0.78rem; margin-top: 0.3rem; }
+.mv-sous { color: var(--text-dim); font-size: 0.82rem; margin: 0.8rem 0 0.4rem; }
+
+/* la vidéo qui se fabrique toute seule */
+.branche-video-zone { display: inline-flex; gap: 0.5rem; align-items: center; }
+.video-etat { color: var(--text-dim); font-size: 0.82rem; }
