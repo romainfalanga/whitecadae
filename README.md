@@ -187,8 +187,8 @@ suit l'utilisateur dans toutes ses vues. Le dock est purement typographique
 l'interface se comprend en la touchant. Pense Mieux : **Forêt** (filtre, tri,
 statistiques), **Nouvel arbre** (la création est un geste du menu), **Univers**
 (la galerie, voir plus bas) et **Recherche** (plein texte dans sujets, troncs et
-branches). Vidéographie : **Forêt**, **Nouvel arbre**, **Univers**, **Carré**
-(les forêts vidéo de ses As). Carré
+branches). Vidéographie : **Le rythme**, **Nouvel arbre**, **Carré** (le rythme
+et les forêts vidéo de ses As). Carré
 d'As : **Mon carré**, **Conversation**, **Recrutement**, **Missions**.
 Brainstorm : **La scène** (le direct et l'annoncé), **Archives** (les
 brainstorms passés et leur récolte : rien ne s'évapore), **Annoncer**.
@@ -219,23 +219,57 @@ client : le serveur a déjà envoyé tout ce qui est lisible, filtrer ne coûte
 aucune requête. La page se relit toutes les 20 secondes quand l'onglet est
 visible, et ne se redessine que si quelque chose a changé.
 
-**Pense Mieux** (échelon 3) est l'outil de réflexion : un sujet devient un
+**Pense Mieux** (échelon 3) est l'outil de la pensée : un sujet devient un
 **arbre** (un tronc, des branches emboîtées qui se font grandir) et
 l'ensemble de ses arbres, une forêt. Et parce que **chaque présent est le
 futur de plusieurs passés**, une branche peut être **nourrie** par d'autres
 branches du même arbre : des liens qui traversent l'arborescence sans la
 déformer, affichés en chips « ⇠ » qui mènent à leur source
-(`reflection_branch_links`). La **Vidéographie** (échelon 4) est le même
-moteur, liens compris, mais chaque branche est une **vidéo YouTube** (publique
-ou privée) : on y organise ce qu'on a extériorisé en vidéo. Les arbres de
-pensée restent à leur auteur ; les vidéographies se partagent **en lecture au
-sein de son carré**, puisque les As doivent les analyser mutuellement.
+(`reflection_branch_links`).
+
+**Le vocal.** Une pensée vient rarement au moment où l'on a un clavier. Sous
+le champ d'une branche, un bouton **Parler** enregistre, la transcription
+revient par **Workers AI** (Whisper), et le texte devient la branche :
+l'arborescence se fait donc à la voix, aussi vite qu'on parle. L'audio reste
+attaché à sa branche avec son **minutage mot à mot** (`branch_vocaux`, en
+base64 dans D1 comme les avatars, borné à trois minutes) : on **rejoue** la
+pensée en voyant le texte apparaître au fur et à mesure, et un bouton en fait
+une **vidéo** — le texte est dessiné sur une toile, enregistré avec le son par
+le navigateur, et le fichier se télécharge, prêt à être publié. Sans le
+binding AI, la transcription répond 503 et le clavier reste : rien ne casse.
+
+**Le regard.** En tête de la forêt, un sélecteur : **Mes réflexions**, puis un
+regard par carré où l'on vit. En solo, ses arbres et ses cinq troncs ; depuis
+un carré, ce que les quatre imaginent ensemble puis ce que chaque As y tient,
+chacun signé. Dans un arbre commun, un second filtre choisit la **voix** :
+tout le monde, soi, ou un As — les réflexions communes et celles propres à
+chacun se démêlent sans quitter la page.
+
+La **Vidéographie** (échelon 4) ne poursuit plus la même chose que Pense
+Mieux, et c'est là toute la différence entre les deux outils : Pense Mieux est
+la pensée au moment où elle vient ; la Vidéographie est le regard en arrière,
+à intervalle fixe, sur ce que cette pensée a produit et sur ce qu'on en a
+vécu. Elle a donc un **rythme** : **une vidéo par semaine, une par mois, une
+par an**. Chacune est un **récap** de sa période, du point de vue de ce qu'on
+a ajouté dans Pense Mieux et de ce qu'on a vécu avec ses carrés.
+
+La page pose la **matière** sous les yeux et ne raconte rien à la place : sur
+la période en cours, les branches ajoutées dans Pense Mieux et les arbres
+nourris, quelques extraits pour se rappeler, ce que chaque carré a produit
+(branches, messages, brainstorms) et les signes trouvés sur le 57. On y dépose
+l'adresse de sa vidéo (`videographie_recaps`, une par cadence et par période,
+corrigeable) ; les périodes passées restent en dessous. Les As d'un carré
+voient le rythme les uns des autres : c'est ce qu'ils viennent analyser
+mutuellement. La forêt vidéo demeure sous le rythme, pour ranger ce qu'on a
+extériorisé en vidéo — chaque branche y est une **vidéo YouTube**. Les arbres
+de pensée restent à leur auteur ; les vidéographies se partagent **en lecture
+au sein de son carré**.
 
 ## Les cinq troncs
 
 Chacun poursuit la même chose sous cinq angles, et chaque angle est un arbre
-qui existe d'avance. En tête de la forêt de **Pense Mieux** et de celle de la
-**Vidéographie**, cinq troncs épinglés, dans cet ordre :
+qui existe d'avance. En tête de la forêt de **Pense Mieux**, cinq troncs
+épinglés, dans cet ordre :
 
 | axe | personnel | dans un carré |
 |---|---|---|
@@ -252,9 +286,9 @@ travail : chaque page porte une ligne « En regard » qui mène à l'autre.
 
 Les troncs se créent au premier regard, ne se plantent pas, ne s'abattent pas
 et ne se renomment pas : on ne fait que les nourrir, branche après branche,
-avec le même éditeur que tout le reste. En Pense Mieux ils sont à leur seul
-porteur ; en Vidéographie ils suivent la règle de l'outil et se lisent au sein
-du carré.
+avec le même éditeur que tout le reste. Ils sont à leur seul porteur. La
+Vidéographie n'en a pas : elle a un rythme, et c'est ce qui sépare les deux
+outils.
 
 Dans un **carré**, l'onglet **Harmonie** porte les cinq axes. Les trois
 derniers sont **communs aux quatre** : chacun y écrit, chacun greffe sur la
@@ -266,8 +300,7 @@ révèle.
 
 **Les univers sont publics.** C'est le seul axe ainsi, et c'est l'axe qui le
 décide, jamais celui qui écrit : un modèle d'univers ne vaut que confronté aux
-autres. L'onglet **Univers** de Pense Mieux et de la Vidéographie est la
-**galerie** : tous les troncs d'univers de la plateforme, personnels comme
+autres. L'onglet **Univers** de Pense Mieux est la **galerie** : tous les troncs d'univers de la plateforme, personnels comme
 collectifs, avec le nom de leur porteur ou de leur carré, cherchables en plein
 texte. Un tronc vide n'y paraît pas (ils existent d'avance pour chacun) : un
 univers entre dans la galerie au moment où quelqu'un y écrit. On regarde ceux

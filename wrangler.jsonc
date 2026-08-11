@@ -10,7 +10,12 @@
   // Le relatif des carrés parle par Workers AI. Sans ce binding (ou en local
   // sans accès), l'API répond 503 et le portrait reste copiable : rien ne casse.
   "ai": {
-    "binding": "AI"
+    "binding": "AI",
+    // l'IA n'a pas de version locale : le binding vise toujours la ressource
+    // distante. En développement local elle reste hors d'atteinte, et tout ce
+    // qui l'appelle (le relatif, la transcription des vocaux) répond alors
+    // 503 sans rien casser.
+    "remote": true
   },
   "d1_databases": [
     {

@@ -2025,6 +2025,9 @@ body.avec-dock main { padding-bottom: 7rem; }
 
 /* -- la liaison inter-arbres -- */
 .liaison-bandeau { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+/* la classe pose un display : sans cette ligne l'attribut `hidden` ne cache
+   plus rien, et le bandeau reste ouvert sur tous les arbres */
+.liaison-bandeau[hidden] { display: none; }
 .liaison-bandeau select { width: auto; font-size: 0.85rem; }
 #liaison-sources { width: 100%; display: flex; flex-wrap: wrap; gap: 0.4rem; }
 #liaison-sources[hidden] { display: none; }
@@ -2039,3 +2042,101 @@ body.avec-dock main { padding-bottom: 7rem; }
 .nourrie-chip.nourrie-ailleurs { border-style: solid; border-color: rgba(216, 192, 122, 0.6); }
 .nourrie-chip a.nourrie-va { display: inline-block; padding: 0.1rem 0.6rem; font-size: 0.78rem; }
 .nourrie-chip a.nourrie-va:hover { text-decoration: underline; }
+
+/* ---------------------------------------- la Vidéographie : le rythme ---
+   Une vidéo par semaine, par mois, par an : trois cartes, la matière du
+   récap sous les yeux, et le dépôt en bas de chacune. */
+.rythme-intro { color: var(--text-dim); max-width: 44rem; margin-bottom: 1.2rem; }
+.rythme { display: grid; gap: 1rem; margin-bottom: 2rem; }
+.rythme-carte {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+}
+.rythme-carte.faite { border-left-color: #79c98d; }
+.rythme-tete { display: flex; align-items: baseline; gap: 0.7rem; flex-wrap: wrap; }
+.rythme-tete h2 { font-size: 1.05rem; margin: 0; }
+.rythme-periode { color: var(--text-dim); font-size: 0.85rem; }
+.rythme-invite { color: var(--text-dim); font-size: 0.9rem; margin: 0.3rem 0 0.8rem; }
+.rythme-corps h3 { font-size: 0.85rem; color: var(--text-dim); font-weight: normal; margin: 0 0 0.3rem; }
+.rythme-matiere { margin: 0 0 0.6rem; padding-left: 1.1rem; font-size: 0.9rem; }
+.rythme-matiere li { margin: 0.15rem 0; }
+.rythme-extraits { border-left: 2px solid var(--border); padding-left: 0.8rem; margin-bottom: 0.8rem; }
+.rythme-extraits p { color: var(--text-dim); font-size: 0.85rem; margin: 0.2rem 0; }
+.rythme-reste { color: var(--accent); font-size: 0.85rem; margin: 0.2rem 0 0.6rem; }
+.rythme-note { color: var(--text-dim); font-size: 0.88rem; }
+.rythme-faite { margin: 0.6rem 0; }
+/* le lecteur ne mange pas la page : trois cadences doivent tenir sous l'œil */
+.rythme-faite .cover-embed { max-width: 22rem; }
+.rythme-form { display: grid; gap: 0.5rem; }
+.rythme-form[hidden] { display: none; }
+.rythme-form button { justify-self: start; }
+.rythme-histoire { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.7rem; }
+.rythme-passe {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 0.1rem 0.6rem;
+  text-decoration: none;
+}
+.rythme-foret-titre { font-size: 1.05rem; margin-bottom: 0.6rem; }
+.video-as-recaps { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.video-recap {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+  text-decoration: none;
+  color: var(--accent);
+}
+.video-recap span { display: block; color: var(--text-dim); font-size: 0.78rem; }
+
+/* --------------------------------------------------------- le vocal ---
+   La pensée dite : la barre d'enregistrement sous le champ, et la relecture
+   qui fait apparaître le texte au fur et à mesure. */
+.vocal-barre { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.vocal-compte { font-variant-numeric: tabular-nums; color: var(--accent); font-size: 0.85rem; }
+.vocal-pret { color: #79c98d; font-size: 0.82rem; }
+.vocal-attente { color: var(--text-dim); font-size: 0.82rem; }
+.vocal-err { color: #d98d8d; font-size: 0.82rem; }
+.branche-vocal { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.2rem; }
+.vocal-dit {
+  flex-basis: 100%;
+  border-left: 2px solid var(--accent);
+  padding-left: 0.8rem;
+  margin-top: 0.3rem;
+  line-height: 1.7;
+}
+.vocal-dit span { color: var(--text-dim); opacity: 0.35; transition: opacity 0.15s, color 0.15s; }
+.vocal-dit span.dit { color: var(--text); opacity: 1; }
+
+/* ------------------------------------- les regards : solo, ou un carré --- */
+.foret-regards { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+.regard {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 0.2rem 0.8rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+  width: auto;
+}
+.regard.actif { border-color: var(--accent); color: var(--accent); }
+.foret-regard-note { color: var(--text-dim); font-size: 0.85rem; margin: 0 0 0.9rem; }
+.arbre-voix { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.6rem 0 1rem; }
+.voix-filtre {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 0.15rem 0.7rem;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  cursor: pointer;
+  width: auto;
+}
+.voix-filtre.actif { border-color: var(--accent); color: var(--accent); }
+.branche--autre { opacity: 0.42; }

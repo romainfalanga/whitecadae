@@ -5,9 +5,12 @@
 // public/ reviendrait à les offrir à quiconque lit le JavaScript.
 
 /* ---------------------------------------------------------- les cinq axes ---
-   Cinq troncs existent d'avance pour chacun, dans Pense Mieux, dans la
-   Vidéographie et dans chaque carré. Ils ne se plantent pas, ne s'abattent
-   pas : on les nourrit.
+   Cinq troncs existent d'avance pour chacun, dans Pense Mieux et dans chaque
+   carré. Ils ne se plantent pas, ne s'abattent pas : on les nourrit.
+
+   Ils ne sont plus dans la Vidéographie : les deux outils ne poursuivent pas
+   la même chose. Pense Mieux est l'outil de la pensée ; la Vidéographie est
+   le témoignage rythmé de ce qu'on a vécu (voir plus bas).
 
    Deux d'entre eux se répondent en miroir. La psychologie dit le présent :
    comment on fonctionne, ce qu'on constate de soi. Le moi harmonieux dit vers
@@ -228,3 +231,41 @@ export const MECANISMES_GMO = {
     },
   ],
 };
+
+/* ------------------------------------- la Vidéographie : le rythme (4) ---
+   Pense Mieux et la Vidéographie ne poursuivent plus la même chose. Pense
+   Mieux est l'outil de la pensée : on y écrit, on y parle, on y range ses
+   réflexions en arbres, seul ou avec ses carrés. La Vidéographie est le
+   témoignage de ce qu'on a vécu, et elle a un rythme : une vidéo par semaine,
+   une par mois, une par an.
+
+   Chaque vidéo est un récap : ce qu'on a vécu sur la période, du point de vue
+   de ce qu'on a ajouté dans Pense Mieux et de ce qu'on a vécu avec ses carrés
+   d'as. La plateforme prépare la matière — elle sait ce qui a été écrit, dit
+   et décidé pendant la période — et c'est à la personne de la raconter.   */
+
+export const CADENCES = [
+  {
+    cle: 'semaine',
+    titre: 'La vidéo de la semaine',
+    invite:
+      'Raconte ta semaine : ce que tu as ajouté dans Pense Mieux, ce que tu as '
+      + 'vécu avec tes carrés, et ce que la semaine a changé pour toi.',
+  },
+  {
+    cle: 'mois',
+    titre: 'La vidéo du mois',
+    invite:
+      'Prends de la hauteur sur le mois : les trajectoires qui se dessinent, '
+      + 'ce qui revient, ce que tes carrés t’ont fait voir.',
+  },
+  {
+    cle: 'annee',
+    titre: 'La vidéo de l’année',
+    invite:
+      'L’année entière : d’où tu es parti, où tu en es, ce que ta psychologie '
+      + 'et ton moi harmonieux se sont dit pendant douze mois.',
+  },
+];
+
+export const CADENCES_ORDRE = CADENCES.map((c) => c.cle);

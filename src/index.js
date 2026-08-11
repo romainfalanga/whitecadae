@@ -8,6 +8,7 @@ import {
 } from './enigmas57.js';
 import {
   MISSIONS_CARRE, ROLES_CARRE, DOMAINES_CARRE, MECANISMES_GMO, AXES, AXES_ORDRE,
+  CADENCES, CADENCES_ORDRE,
 } from './contenus.js';
 
 const SESSION_COOKIE = 'wc_session';
@@ -51,6 +52,8 @@ const CSP = [
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
+  // le vocal : l'audio vient du site, ou du blob qu'on vient d'enregistrer
+  "media-src 'self' blob:",
   "font-src 'self'",
   "connect-src 'self'",
   "worker-src 'self'",
@@ -67,7 +70,9 @@ const SECURITE = {
   // sans quoi un fichier déposé par un membre pourrait être deviné exécutable
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'Permissions-Policy': 'geolocation=(), microphone=(), camera=(), payment=(), usb=()',
+  // le micro est ouvert au site lui-même : Pense Mieux s'écrit à la voix.
+  // Tout le reste reste fermé, la caméra comprise.
+  'Permissions-Policy': 'geolocation=(), microphone=(self), camera=(), payment=(), usb=()',
   // le navigateur garde le site en HTTPS pendant deux ans, sous-domaines compris
   'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
 };
@@ -137,9 +142,18 @@ async function handleApi(request, env, url) {
   if ((p = route('DELETE', '/api/branches/:id'))) return branchesDelete(request, env, +p[0]);
   if ((p = route('POST', '/api/branches/:id/liens'))) return lienCreate(request, env, +p[0]);
   if ((p = route('DELETE', '/api/branches/:id/liens/:source'))) return lienDelete(request, env, +p[0], +p[1]);
+  // les littéraux avant :id, qui avalerait « rythme » et « recap »
+  if (route('GET', '/api/videographie/rythme')) return videographieRythme(request, env);
+  if (route('PUT', '/api/videographie/recap')) return videographieRecap(request, env);
+  if ((p = route('DELETE', '/api/videographie/recap/:id'))) return videographieRecapDelete(request, env, +p[0]);
   if ((p = route('GET', '/api/videographie/membre/:id'))) return videographieDuMembre(request, env, +p[0]);
   // la galerie des univers : le seul endroit où les arbres de tous se lisent
   if (route('GET', '/api/univers')) return universGalerie(request, env, url);
+  // le vocal : la pensée dite, transcrite, rejouée
+  if (route('POST', '/api/vocal/transcription')) return vocalTranscription(request, env);
+  if ((p = route('POST', '/api/branches/:id/vocal'))) return vocalAttache(request, env, +p[0]);
+  if ((p = route('GET', '/api/branches/:id/vocal'))) return vocalSert(request, env, +p[0]);
+  if ((p = route('DELETE', '/api/branches/:id/vocal'))) return vocalDetache(request, env, +p[0]);
 
   // les littéraux d'abord, la page d'un carré (:id) ensuite
   if (route('GET', '/api/carre')) return carreGet(request, env);
@@ -2230,6 +2244,37 @@ async function ensureHautesTables(env) {
          PRIMARY KEY (user_id, domaine)
        )`
     ),
+    // le rythme de la Vidéographie : une vidéo par semaine, par mois, par an.
+    // `periode` est la clé de la période récapitulée (2026-W33, 2026-08,
+    // 2026) : une seule vidéo par période, qu'on peut corriger.
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS videographie_recaps (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         cadence TEXT NOT NULL,
+         periode TEXT NOT NULL,
+         url TEXT NOT NULL,
+         note TEXT NOT NULL DEFAULT '',
+         created_at TEXT NOT NULL DEFAULT (datetime('now')),
+         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+         UNIQUE (user_id, cadence, periode)
+       )`
+    ),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_recaps_user ON videographie_recaps(user_id, cadence, periode)'),
+    // le vocal d'une branche : l'audio (en base64, comme l'avatar), sa
+    // transcription minutée mot à mot, et sa durée. C'est de quoi rejouer la
+    // pensée en faisant apparaître le texte au fur et à mesure.
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS branch_vocaux (
+         branch_id INTEGER PRIMARY KEY REFERENCES reflection_branches(id) ON DELETE CASCADE,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         mime TEXT NOT NULL,
+         audio TEXT NOT NULL,
+         mots TEXT NOT NULL DEFAULT '[]',
+         duree REAL NOT NULL DEFAULT 0,
+         created_at TEXT NOT NULL DEFAULT (datetime('now'))
+       )`
+    ),
   ]);
   // `retenue` est arrivée après la création de la table sur les bases déjà
   // en service : on regarde avant d'ajouter, ALTER n'est pas idempotent.
@@ -2324,6 +2369,15 @@ async function ensureHautesTables(env) {
   ]) {
     await env.DB.prepare(sql).run();
   }
+
+  /* La Vidéographie n'a plus d'axes : elle a un rythme. Les troncs qu'elle
+     portait redescendent dans sa forêt — rien de ce qui y était écrit n'est
+     perdu, mais ils redeviennent des arbres ordinaires, qu'on peut abattre.
+     Idempotent : au second passage il n'y en a plus. */
+  await env.DB.prepare(
+    `UPDATE reflection_trees SET axe = NULL
+      WHERE kind = 'video' AND axe IS NOT NULL AND carre_id IS NULL`
+  ).run();
 
   hautesTablesReady = true;
 }
@@ -2474,10 +2528,12 @@ async function assureTronc(env, { userId, kind, axe, carreId = null, nomCarre = 
   return lit();
 }
 
-// Les cinq troncs d'une personne dans un outil, dans l'ordre. On les lit d'un
-// coup : au régime de croisière ils sont tous là, et la création ne concerne
-// que ceux qui manquent encore.
+// Les cinq troncs d'une personne dans Pense Mieux, dans l'ordre. On les lit
+// d'un coup : au régime de croisière ils sont tous là, et la création ne
+// concerne que ceux qui manquent encore. La Vidéographie n'en a pas : elle
+// n'a pas d'axes, elle a un rythme.
 async function troncsDe(env, userId, kind) {
+  if (kind !== 'pensee') return [];
   const { results } = await env.DB.prepare(
     `SELECT id, user_id, kind, title, trunk, axe, carre_id, created_at, updated_at
        FROM reflection_trees
@@ -2549,11 +2605,27 @@ function peutToucherBranche(row, droits, moi) {
   return auteurBranche(row) === moi;
 }
 
+/* La forêt, vue depuis un contexte. En solo, mes arbres et mes troncs : mes
+   réflexions à moi. Depuis un carré, les arbres de ce carré : ce que les
+   quatre écrivent ensemble et ce que chacun y tient. C'est le même moteur et
+   la même page — seul le regard change, et il y a autant de regards que de
+   carrés où l'on vit.                                                      */
 async function arbresList(request, env, url) {
   const kind = kindDe(url.searchParams.get('kind'));
   if (!kind) return json({ error: 'Nature d’arbre inconnue.' }, 400);
   const { vu, refus } = await gateArbre(request, env, kind);
   if (refus) return refus;
+
+  // les regards possibles : moi, puis chacun de mes carrés
+  const mesC = vu.access.carre ? await mesCarres(env, vu.user.id) : [];
+  const contextes = [{ cle: 'solo', label: 'Mes réflexions' }]
+    .concat(mesC.map((c) => ({ cle: `carre:${c.id}`, label: c.nom })));
+
+  const demande = String(url.searchParams.get('contexte') || 'solo');
+  const choisi = contextes.some((c) => c.cle === demande) ? demande : 'solo';
+  if (choisi !== 'solo') {
+    return arbresDuCarre(env, vu, kind, +choisi.slice(6), contextes, choisi);
+  }
 
   const compte = async (t) => ({
     ...t,
@@ -2596,7 +2668,44 @@ async function arbresList(request, env, url) {
     carres = [...parCarre.values()];
   }
 
-  return json({ troncs, arbres: results || [], carres });
+  return json({ troncs, arbres: results || [], carres, contextes, contexte: 'solo' });
+}
+
+/* La forêt d'un carré, lue depuis Pense Mieux. Les arbres communs d'abord,
+   puis ce que chaque As y tient : c'est là qu'on voit les réflexions des
+   autres, et qu'on distingue ce qui est commun de ce qui est propre à
+   chacun. L'appartenance a déjà été vérifiée par la liste des contextes ;
+   on la revérifie, car un droit ne se déduit jamais d'un autre.           */
+async function arbresDuCarre(env, vu, kind, carreId, contextes, contexte) {
+  if (!vu.access.carre || !(await monAppartenance(env, carreId, vu.user.id))) {
+    return json({ error: 'Carré introuvable.' }, 404);
+  }
+  const membres = await membresDe(env, carreId);
+  const noms = new Map(membres.map((m) => [m.user_id, m.username]));
+  const { results } = await env.DB.prepare(
+    `SELECT t.id, t.title, t.trunk, t.axe, t.user_id, t.created_at, t.updated_at,
+            (SELECT COUNT(*) FROM reflection_branches b WHERE b.tree_id = t.id) AS branches
+       FROM reflection_trees t
+      WHERE t.carre_id = ?1 AND t.kind = ?2 AND t.axe IS NOT NULL`
+  ).bind(carreId, kind).all();
+
+  const rang = (t) => AXES_ORDRE.indexOf(t.axe);
+  const arbres = (results || []).sort((a, b) => rang(a) - rang(b))
+    .map((t) => ({
+      ...t,
+      sous: AXES[t.axe] ? (AXES[t.axe].sousCarre || AXES[t.axe].sous) : null,
+      publique: axePublic(t.axe),
+      commun: !!(AXES[t.axe] && AXES[t.axe].commun),
+      porteur: AXES[t.axe] && AXES[t.axe].commun ? null : (noms.get(t.user_id) || null),
+      mien: t.user_id === vu.user.id,
+    }));
+
+  return json({
+    troncs: arbres.filter((t) => t.commun),
+    arbres: arbres.filter((t) => !t.commun),
+    carres: [], contextes, contexte,
+    membres: membres.map((m) => ({ user_id: m.user_id, username: m.username })),
+  });
 }
 
 async function arbresCreate(request, env) {
@@ -2642,6 +2751,13 @@ async function chargeArbre(env, id) {
   ).bind(id).all();
   // les nourritures : une branche peut naître de plusieurs passés, y compris
   // d'un autre arbre. La chip a donc besoin de connaître sa source.
+  // les vocaux : leur minutage seulement. L'audio se demande branche par
+  // branche, il n'alourdit pas la page.
+  const { results: vocaux } = await env.DB.prepare(
+    `SELECT v.branch_id, v.mots, v.duree FROM branch_vocaux v
+       JOIN reflection_branches b ON b.id = v.branch_id
+      WHERE b.tree_id = ?1`
+  ).bind(id).all();
   const { results: liens } = await env.DB.prepare(
     `SELECT l.branch_id, l.source_id, sb.body AS source_body, sb.url AS source_url,
             st.id AS source_tree_id, st.title AS source_tree_title,
@@ -2653,7 +2769,15 @@ async function chargeArbre(env, id) {
        LEFT JOIN carres sc ON sc.id = st.carre_id
       WHERE b.tree_id = ?1`
   ).bind(id).all();
-  return { ...tree, branches: results || [], liens: liens || [] };
+  return {
+    ...tree,
+    branches: results || [],
+    liens: liens || [],
+    vocaux: (vocaux || []).map((v) => ({
+      branch_id: v.branch_id, duree: v.duree,
+      mots: (() => { try { return JSON.parse(v.mots); } catch { return []; } })(),
+    })),
+  };
 }
 
 /* Le champ des possibles : le même axe, ailleurs. Depuis mon moi personnel je
@@ -2986,6 +3110,163 @@ async function lienDelete(request, env, brancheId, sourceId) {
   return json({ ok: true });
 }
 
+/* ------------------------------------------- le vocal d'une branche -------
+   Pense Mieux se parle autant qu'il s'écrit. Une pensée vient rarement au
+   moment où l'on a un clavier : on l'enregistre, elle est transcrite, et le
+   texte devient la branche — l'arborescence se fait donc à la voix.
+
+   L'audio reste attaché à sa branche avec le minutage mot à mot : c'est ce
+   qui permet de la rejouer en faisant apparaître le texte au fur et à mesure,
+   et d'en tirer une vidéo.
+
+   L'audio vit en base64 dans D1, comme l'avatar. Il est donc borné : une
+   pensée jetée est courte, et une ligne de D1 ne dépasse pas deux mégaoctets.
+                                                                          */
+
+const VOCAL_MAX_BASE64 = 1_400_000;   // environ trois minutes d'opus
+const VOCAL_MODELES = ['@cf/openai/whisper-large-v3-turbo', '@cf/openai/whisper'];
+
+// Le corps d'un vocal : une data-url audio, sa durée. Rien d'autre n'entre.
+function litVocal(body) {
+  const dataUrl = String((body && body.data) || '');
+  const m = dataUrl.match(/^data:(audio\/[a-z0-9.+-]+)(?:;codecs=[^;,]+)?;base64,([a-zA-Z0-9+/=]+)$/i);
+  if (!m) return { erreur: 'Enregistrement invalide.' };
+  if (m[2].length > VOCAL_MAX_BASE64) return { erreur: 'Vocal trop long : trois minutes au plus.' };
+  const duree = Number(body?.duree);
+  return { mime: m[1], base64: m[2], duree: Number.isFinite(duree) && duree > 0 ? duree : 0 };
+}
+
+/* La transcription. Deux modèles : le rapide d'abord, l'ancien en secours ;
+   ils ne parlent pas la même langue d'entrée ni de sortie, on normalise. Sans
+   binding AI, on répond 503 et l'écriture au clavier reste : rien ne casse. */
+async function vocalTranscription(request, env) {
+  const { vu, refus } = await gateArbre(request, env, 'pensee');
+  if (refus) return refus;
+  if (!env.AI) return json({ error: 'La transcription n’est pas disponible ici.' }, 503);
+
+  const { mime, base64, duree, erreur } = litVocal(await readJson(request));
+  if (erreur) return json({ error: erreur }, 400);
+  const octets = fromBase64(base64);
+
+  // le rapide d'abord, l'ancien en secours : ils n'attendent pas la même
+  // forme d'entrée, et l'un peut être indisponible quand l'autre répond
+  let sortie = null;
+  for (const modele of VOCAL_MODELES) {
+    try {
+      sortie = await env.AI.run(modele, modele.endsWith('turbo')
+        ? { audio: base64 }
+        : { audio: [...octets] });
+      if (sortie) break;
+    } catch { sortie = null; }
+  }
+  if (!sortie) {
+    return json({ error: 'La transcription n’a pas abouti. Écris ta pensée, le vocal peut attendre.' }, 503);
+  }
+
+  const texte = String(sortie.text || sortie.transcription || '').trim();
+  return json({ texte, mots: motsMinutes(sortie, texte, duree), mime });
+}
+
+/* Le minutage mot à mot, quelle que soit la forme rendue par le modèle : des
+   mots datés, des segments datés, ou rien du tout. Dans ce dernier cas on
+   répartit les mots sur la durée : la lecture reste juste à l'œil, ce qui
+   est tout ce qu'on lui demande.                                          */
+function motsMinutes(sortie, texte, duree) {
+  const mots = [];
+  if (Array.isArray(sortie.words) && sortie.words.length) {
+    for (const w of sortie.words) {
+      const m = String(w.word ?? w.text ?? '').trim();
+      if (m) mots.push({ m, d: Number(w.start) || 0, f: Number(w.end) || 0 });
+    }
+    if (mots.length) return mots;
+  }
+  if (Array.isArray(sortie.segments) && sortie.segments.length) {
+    for (const s of sortie.segments) {
+      if (Array.isArray(s.words) && s.words.length) {
+        for (const w of s.words) {
+          const m = String(w.word ?? w.text ?? '').trim();
+          if (m) mots.push({ m, d: Number(w.start) || 0, f: Number(w.end) || 0 });
+        }
+      } else {
+        const bruts = String(s.text || '').trim().split(/\s+/).filter(Boolean);
+        const d0 = Number(s.start) || 0;
+        const pas = ((Number(s.end) || d0) - d0) / Math.max(1, bruts.length);
+        bruts.forEach((m, i) => mots.push({ m, d: d0 + i * pas, f: d0 + (i + 1) * pas }));
+      }
+    }
+    if (mots.length) return mots;
+  }
+  const bruts = texte.split(/\s+/).filter(Boolean);
+  const total = duree > 0 ? duree : bruts.length * 0.4;
+  const pas = total / Math.max(1, bruts.length);
+  return bruts.map((m, i) => ({ m, d: i * pas, f: (i + 1) * pas }));
+}
+
+// La branche à qui l'on attache un vocal : la sienne, dans un arbre où l'on
+// écrit. Les mêmes droits que pour la retoucher, jamais d'autres.
+async function brancheOuVocal(request, env, brancheId) {
+  const row = await brancheEtArbre(env, brancheId);
+  if (!row) return { refus: json({ error: 'Branche introuvable.' }, 404) };
+  const { vu, refus } = await gateArbre(request, env, row.kind);
+  if (refus) return { refus: json({ error: 'Branche introuvable.' }, 404) };
+  const droits = await droitsArbre(env, vu, row);
+  return { vu, row, droits };
+}
+
+async function vocalAttache(request, env, brancheId) {
+  await ensureHautesTables(env);
+  const { vu, row, droits, refus } = await brancheOuVocal(request, env, brancheId);
+  if (refus) return refus;
+  if (row.kind !== 'pensee') return json({ error: 'Le vocal est l’outil de Pense Mieux.' }, 400);
+  if (!peutToucherBranche(row, droits, vu.user.id)) return json({ error: 'Branche introuvable.' }, 404);
+
+  const body = await readJson(request);
+  const { mime, base64, duree, erreur } = litVocal(body);
+  if (erreur) return json({ error: erreur }, 400);
+  let mots = [];
+  try {
+    const brut = Array.isArray(body?.mots) ? body.mots : [];
+    mots = brut.slice(0, 4000).map((w) => ({
+      m: String(w.m || '').slice(0, 60), d: Number(w.d) || 0, f: Number(w.f) || 0,
+    })).filter((w) => w.m);
+  } catch { mots = []; }
+
+  await env.DB.prepare(
+    `INSERT INTO branch_vocaux (branch_id, user_id, mime, audio, mots, duree)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+     ON CONFLICT(branch_id) DO UPDATE SET mime = ?3, audio = ?4, mots = ?5, duree = ?6`
+  ).bind(brancheId, vu.user.id, mime, base64, JSON.stringify(mots), duree).run();
+  return json({ ok: true, mots, duree }, 201);
+}
+
+async function vocalSert(request, env, brancheId) {
+  await ensureHautesTables(env);
+  const { row, droits, refus } = await brancheOuVocal(request, env, brancheId);
+  if (refus) return new Response('', { status: 404 });
+  if (!droits.lire) return new Response('', { status: 404 });
+  const v = await env.DB.prepare(
+    'SELECT mime, audio FROM branch_vocaux WHERE branch_id = ?1'
+  ).bind(brancheId).first();
+  if (!v) return new Response('', { status: 404 });
+  return new Response(fromBase64(v.audio), {
+    headers: {
+      'Content-Type': v.mime || 'audio/webm',
+      // il ne change jamais : une branche a un vocal, ou elle n'en a pas
+      'Cache-Control': 'private, max-age=3600',
+      'Content-Disposition': `inline; filename="vocal-${row.id}.webm"`,
+    },
+  });
+}
+
+async function vocalDetache(request, env, brancheId) {
+  await ensureHautesTables(env);
+  const { vu, row, droits, refus } = await brancheOuVocal(request, env, brancheId);
+  if (refus) return refus;
+  if (!peutToucherBranche(row, droits, vu.user.id)) return json({ error: 'Branche introuvable.' }, 404);
+  await env.DB.prepare('DELETE FROM branch_vocaux WHERE branch_id = ?1').bind(brancheId).run();
+  return json({ ok: true });
+}
+
 // La recherche plein texte dans sa forêt : troncs, sujets et branches, plus
 // ce qui s'écrit dans les arbres de ses carrés. La clause des carrés n'est
 // posée QUE si l'échelon du carré est réellement atteint : la recherche est
@@ -3035,10 +3316,184 @@ async function videographieDuMembre(request, env, membreId) {
       WHERE t.user_id = ?1 AND t.kind = 'video' AND t.carre_id IS NULL
       ORDER BY t.updated_at DESC`
   ).bind(membreId).all();
-  // les troncs d'abord, dans l'ordre des axes ; la forêt plantée ensuite
-  const rang = (t) => (t.axe ? AXES_ORDRE.indexOf(t.axe) : AXES_ORDRE.length);
-  const arbres = (results || []).sort((a, b) => rang(a) - rang(b));
-  return json({ membre: membre?.username || '', arbres });
+  // le rythme d'abord : c'est ce qu'un As vient regarder chez un autre
+  const { results: recaps } = await env.DB.prepare(
+    `SELECT cadence, periode, url, note, updated_at FROM videographie_recaps
+      WHERE user_id = ?1 ORDER BY updated_at DESC LIMIT 12`
+  ).bind(membreId).all();
+  return json({ membre: membre?.username || '', arbres: results || [], recaps: recaps || [] });
+}
+
+/* --------------------------------------- la Vidéographie : le rythme ------
+   Une vidéo par semaine, une par mois, une par an : le récap de ce qu'on a
+   vécu sur la période, du point de vue de ce qu'on a ajouté dans Pense Mieux
+   et de ce qu'on a vécu avec ses carrés. La plateforme n'écrit pas le récap :
+   elle pose la matière sous les yeux — ce qui a été écrit, dit et décidé
+   pendant la période — et c'est à la personne de le raconter.
+
+   C'est ce qui sépare les deux outils. Pense Mieux est la pensée, au moment
+   où elle vient. La Vidéographie est le regard en arrière, à intervalle fixe,
+   sur ce que cette pensée a produit et sur ce qu'on en a vécu.            */
+
+const MOIS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet',
+  'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+
+// SQLite écrit ses dates ainsi : on compare du texte à du texte.
+function horodate(d) {
+  return d.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+function jourFr(d) {
+  return `${d.getUTCDate()} ${MOIS_FR[d.getUTCMonth()]}`;
+}
+
+// La période courante d'une cadence : sa clé, son libellé, ses deux bornes.
+// La semaine est celle de la norme ISO : elle commence le lundi, et l'année
+// d'une semaine est celle de son jeudi.
+function periodeDe(cadence, maintenant) {
+  const d = new Date(maintenant);
+  if (cadence === 'annee') {
+    const an = d.getUTCFullYear();
+    return {
+      cle: String(an), libelle: String(an),
+      debut: horodate(new Date(Date.UTC(an, 0, 1))),
+      fin: horodate(new Date(Date.UTC(an + 1, 0, 1))),
+    };
+  }
+  if (cadence === 'mois') {
+    const an = d.getUTCFullYear();
+    const m = d.getUTCMonth();
+    return {
+      cle: `${an}-${String(m + 1).padStart(2, '0')}`,
+      libelle: `${MOIS_FR[m]} ${an}`,
+      debut: horodate(new Date(Date.UTC(an, m, 1))),
+      fin: horodate(new Date(Date.UTC(an, m + 1, 1))),
+    };
+  }
+  const lundi = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  lundi.setUTCDate(lundi.getUTCDate() - ((lundi.getUTCDay() + 6) % 7));
+  const jeudi = new Date(lundi);
+  jeudi.setUTCDate(jeudi.getUTCDate() + 3);
+  const an = jeudi.getUTCFullYear();
+  const premier = new Date(Date.UTC(an, 0, 4));
+  premier.setUTCDate(premier.getUTCDate() - ((premier.getUTCDay() + 6) % 7));
+  const numero = 1 + Math.round((jeudi - premier) / (7 * 86400000));
+  const dimanche = new Date(lundi);
+  dimanche.setUTCDate(dimanche.getUTCDate() + 6);
+  const fin = new Date(lundi);
+  fin.setUTCDate(fin.getUTCDate() + 7);
+  return {
+    cle: `${an}-S${String(numero).padStart(2, '0')}`,
+    libelle: `du ${jourFr(lundi)} au ${jourFr(dimanche)} ${dimanche.getUTCFullYear()}`,
+    debut: horodate(lundi), fin: horodate(fin),
+  };
+}
+
+/* La matière du récap : ce que la période a produit. Rien n'est inventé, tout
+   est daté — c'est le carnet qu'on relit avant de parler. */
+async function matiereDe(env, userId, debut, fin) {
+  const { results: arbres } = await env.DB.prepare(
+    `SELECT t.title, t.axe, COUNT(b.id) AS branches
+       FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
+      WHERE t.user_id = ?1 AND t.kind = 'pensee' AND t.carre_id IS NULL
+        AND b.created_at >= ?2 AND b.created_at < ?3
+      GROUP BY t.id ORDER BY branches DESC LIMIT 12`
+  ).bind(userId, debut, fin).all();
+
+  const { results: extraits } = await env.DB.prepare(
+    `SELECT b.body FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
+      WHERE t.user_id = ?1 AND t.kind = 'pensee' AND t.carre_id IS NULL
+        AND b.body <> '' AND b.created_at >= ?2 AND b.created_at < ?3
+      ORDER BY b.id DESC LIMIT 5`
+  ).bind(userId, debut, fin).all();
+
+  const { results: carres } = await env.DB.prepare(
+    `SELECT c.id, c.nom,
+            (SELECT COUNT(*) FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
+              WHERE t.carre_id = c.id AND b.created_at >= ?2 AND b.created_at < ?3) AS branches,
+            (SELECT COUNT(*) FROM reflection_branches b JOIN reflection_trees t ON t.id = b.tree_id
+              WHERE t.carre_id = c.id AND b.user_id = ?1
+                AND b.created_at >= ?2 AND b.created_at < ?3) AS miennes,
+            (SELECT COUNT(*) FROM carre_messages m
+              WHERE m.carre_id = c.id AND m.created_at >= ?2 AND m.created_at < ?3) AS messages,
+            (SELECT COUNT(*) FROM brainstorms bs
+              WHERE bs.carre_id = c.id AND bs.created_at >= ?2 AND bs.created_at < ?3) AS brainstorms
+       FROM carres c JOIN carre_membres m ON m.carre_id = c.id AND m.user_id = ?1
+      ORDER BY c.nom`
+  ).bind(userId, debut, fin).all();
+
+  const signes = (await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM riddle_progress
+      WHERE user_id = ?1 AND solved_at IS NOT NULL AND solved_at >= ?2 AND solved_at < ?3`
+  ).bind(userId, debut, fin).first())?.n || 0;
+
+  const branches = (arbres || []).reduce((s, a) => s + a.branches, 0);
+  return {
+    penseMieux: { branches, arbres: arbres || [], extraits: (extraits || []).map((e) => e.body) },
+    carres: (carres || []).filter((c) => c.branches || c.messages || c.brainstorms),
+    signes,
+  };
+}
+
+async function videographieRythme(request, env) {
+  const { vu, refus } = await gateArbre(request, env, 'video');
+  if (refus) return refus;
+  const maintenant = Date.now();
+
+  const cadences = [];
+  for (const def of CADENCES) {
+    const periode = periodeDe(def.cle, maintenant);
+    const faite = await env.DB.prepare(
+      `SELECT id, url, note, updated_at FROM videographie_recaps
+        WHERE user_id = ?1 AND cadence = ?2 AND periode = ?3`
+    ).bind(vu.user.id, def.cle, periode.cle).first();
+    const { results: histoire } = await env.DB.prepare(
+      `SELECT id, periode, url, note, updated_at FROM videographie_recaps
+        WHERE user_id = ?1 AND cadence = ?2 AND periode <> ?3
+        ORDER BY periode DESC LIMIT 6`
+    ).bind(vu.user.id, def.cle, periode.cle).all();
+    cadences.push({
+      ...def,
+      periode,
+      faite: faite || null,
+      // ce qu'il reste avant que la période se ferme
+      restant: Math.max(0, Date.parse(periode.fin.replace(' ', 'T') + 'Z') - maintenant),
+      matiere: await matiereDe(env, vu.user.id, periode.debut, periode.fin),
+      histoire: histoire || [],
+    });
+  }
+  return json({ cadences });
+}
+
+async function videographieRecap(request, env) {
+  const { vu, refus } = await gateArbre(request, env, 'video');
+  if (refus) return refus;
+  const body = await readJson(request);
+  const cadence = String(body?.cadence || '');
+  if (!CADENCES_ORDRE.includes(cadence)) return json({ error: 'Cadence inconnue.' }, 400);
+  const url = String(body?.url || '').trim();
+  const note = String(body?.note || '').trim();
+  if (!urlYoutubeValide(url)) return json({ error: 'Le récap est une vidéo YouTube.' }, 400);
+  if (note.length > 1000) return json({ error: 'La note tient en 1000 caractères.' }, 400);
+
+  // on ne dépose que sur la période en cours : le récap se fait dans son
+  // temps, pas après coup. Corriger l'adresse, en revanche, reste possible.
+  const periode = periodeDe(cadence, Date.now());
+  await env.DB.prepare(
+    `INSERT INTO videographie_recaps (user_id, cadence, periode, url, note)
+     VALUES (?1, ?2, ?3, ?4, ?5)
+     ON CONFLICT(user_id, cadence, periode) DO UPDATE
+       SET url = ?4, note = ?5, updated_at = datetime('now')`
+  ).bind(vu.user.id, cadence, periode.cle, url, note).run();
+  return json({ ok: true, periode: periode.cle });
+}
+
+async function videographieRecapDelete(request, env, id) {
+  const { vu, refus } = await gateArbre(request, env, 'video');
+  if (refus) return refus;
+  await env.DB.prepare('DELETE FROM videographie_recaps WHERE id = ?1 AND user_id = ?2')
+    .bind(id, vu.user.id).run();
+  return json({ ok: true });
 }
 
 /* --------------------------------------------- le carré d'as (échelon 5)
