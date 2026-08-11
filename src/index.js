@@ -1,7 +1,7 @@
 // WhiteCadae : Cloudflare Worker (API + service du site statique)
 
 import {
-  getNode, isLocked, matchAnswer, buildState, currentAnswerId, echelonOf, accessOf,
+  getNode, isLocked, matchNode, buildState, currentAnswerId, echelonOf, accessOf,
   delaiEssaiMs, enigmesTrouvees, progresOf,
   ECHELON_CONVERSATION, ECHELON_PENSE_MIEUX, ECHELON_VIDEOGRAPHIE,
   ECHELON_CARRE, ECHELON_BRAINSTORM, ECHELON_GMO,
@@ -1816,17 +1816,27 @@ async function signsGuess(request, env) {
     return json({ error: 'Trop tôt.', attenteMs: await attenteRestante(env, user.id, echelon) }, 429);
   }
 
-  const hit = matchAnswer(node, answer, solved, parties);
-  if (!hit) return json({ ok: false, id: node.id, attenteMs: delaiEssaiMs(echelon) });
+  // `echo` rend la proposition mot pour mot : ce qui était juste, ce qui ne
+  // l'était pas. Ce qui est juste est gardé même quand le reste est faux.
+  const prise = matchNode(node, answer, solved, parties);
+  if (!prise || !prise.prises.length) {
+    return json({
+      ok: false, id: node.id,
+      echo: prise ? prise.echo : null,
+      attenteMs: delaiEssaiMs(echelon),
+    });
+  }
 
-  // La prise s'écrit partie par partie (lignes `id.pN`) ; la réponse entière
+  // Une prise s'écrit partie par partie (lignes `id.pN`) ; la réponse entière
   // s'écrit aussi sous son propre identifiant dès qu'elle est complète.
   const lignes = [];
-  const reponse = node.answers.find((a) => a.id === hit.id);
-  for (let i = 0; i < reponse.parties.length; i++) {
-    if (hit.masque & (1 << i)) lignes.push(`${hit.id}.p${i}`);
+  for (const p of prise.prises) {
+    const reponse = node.answers.find((a) => a.id === p.id);
+    for (let i = 0; i < reponse.parties.length; i++) {
+      if (p.masque & (1 << i)) lignes.push(`${p.id}.p${i}`);
+    }
+    if (p.complet) lignes.push(p.id);
   }
-  if (hit.complet) lignes.push(hit.id);
   const upsert = env.DB.prepare(
     `INSERT INTO riddle_progress (user_id, riddle_id, solved_at)
      VALUES (?1, ?2, datetime('now'))
@@ -1836,7 +1846,9 @@ async function signsGuess(request, env) {
   await env.DB.batch(lignes.map((id) => upsert.bind(user.id, id)));
 
   return json({
-    ok: true, id: node.id, partiel: !hit.complet,
+    ok: true, id: node.id,
+    partiel: prise.prises.some((p) => !p.complet),
+    echo: prise.echo,
     state: await riddleState(env, user.id),
   });
 }

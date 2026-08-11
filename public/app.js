@@ -4665,6 +4665,21 @@ function enigmeWrong(el, input) {
   if (navigator.vibrate) navigator.vibrate(40);
 }
 
+// L'essai qu'on vient de faire, rendu mot pour mot : en vert ce qui était
+// juste, en rouge ce qui ne l'était pas. « 10 mains » garde donc son 10 en
+// vert, et dit que « mains » ne vaut rien : la carte, elle, garde « 10 ? ».
+// La carte a pu être redessinée entre-temps : on la retrouve par son
+// identifiant.
+function montreEssai(nodeId, echo) {
+  if (!echo || !echo.length) return;
+  const carte = document.getElementById('e-' + nodeId);
+  const zone = carte && carte.querySelector('.enigme-msg');
+  if (!zone) return;
+  zone.innerHTML = echo
+    .map((m) => `<span class="${m.ok ? 'essai-ok' : 'essai-faux'}">${esc(m.t)}</span>`)
+    .join(' ');
+}
+
 function bindEnigmeCard(el, n) {
   const form = el.querySelector('.enigme-form');
   if (form) {
@@ -4675,6 +4690,8 @@ function bindEnigmeCard(el, n) {
       const answer = input.value.trim();
       if (!answer) return;
       el.classList.remove('enigme--wrong');
+      const msgAvant = el.querySelector('.enigme-msg');
+      if (msgAvant) msgAvant.innerHTML = '';
       btn.disabled = true;
       try {
         const res = await api('/api/57/guess', { method: 'POST', body: { id: n.id, answer } });
@@ -4687,6 +4704,7 @@ function bindEnigmeCard(el, n) {
           armeAttente(res.attenteMs || 0);
           enigmeWrong(el, input);
         }
+        montreEssai(n.id, res.echo);
       } catch (err) {
         // Un essai trop tôt : le serveur dit combien de temps il reste.
         if (err.data && err.data.attenteMs) {

@@ -412,26 +412,95 @@ export function isLocked(node, solved) {
   return node.requires.some((id) => !solved.has(id));
 }
 
-// Confronte une proposition aux réponses restantes du nœud. Renvoie la
-// meilleure prise : { id, masque (les parties qui viennent d'être gagnées),
-// complet }, ou null. Une réponse entière l'emporte sur une partie ;
-// re-proposer une partie déjà verte ne vaut rien.
-export function matchAnswer(node, answer, solved, parties = new Map()) {
-  const n = normalize(answer);
-  if (!n) return null;
-  const collee = n.replace(/ /g, '');
-  let meilleur = null;
-  for (const a of node.answers) {
-    if (solved.has(a.id)) continue;
-    const brut = a.moteur.exactes.get(n) ?? a.moteur.collees.get(collee) ?? 0;
-    const deja = [...(parties.get(a.id) || [])].reduce((acc, i) => acc | (1 << i), 0);
-    const neuf = brut & ~deja;
-    if (!neuf) continue;
-    const complet = (brut | deja) === a.moteur.plein;
-    const score = (complet ? 100 : 0) + bits(neuf);
-    if (!meilleur || score > meilleur.score) meilleur = { id: a.id, masque: neuf, complet, score };
+/* Confronte une proposition aux réponses du nœud, mot à mot. Ce qui est juste
+   est gardé même si le reste est faux : « 10 mains » garde le 10 et rend
+   « mains ». Renvoie { prises, echo } :
+
+   prises : [{ id, masque (les parties gagnées), complet }]
+   echo   : la proposition rendue mot pour mot, chacun marqué juste ou faux.
+
+   L'ordre des parties compte : « anges 12 » ne rend pas le 12.
+
+   Un seul mot de bruit est toléré à côté de ce qui est reconnu. C'est ce qui
+   empêche de pêcher : jeter dix mots pour voir lesquels verdissent ne rend
+   rien du tout, ni terrain gagné ni réponse. Quand RIEN n'est reconnu, la
+   proposition entière repart en rouge : elle n'apprend rien à personne.   */
+
+const MAX_BRUIT = 1;
+const MAX_MOTS = 12;
+const MAX_FENETRE = 4;
+
+const basBit = (m) => 31 - Math.clz32(m & -m);
+const hautBit = (m) => 31 - Math.clz32(m);
+
+// Les mots de la proposition, deux fois : nettoyés pour comparer, tels qu'ils
+// ont été tapés pour les rendre à l'écran.
+function motsDe(value) {
+  const nets = normalize(value).split(' ').filter(Boolean);
+  const bruts = String(value ?? '').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return { nets, bruts: bruts.length === nets.length ? bruts : nets };
+}
+
+export function matchNode(node, answer, solved, parties = new Map()) {
+  const { nets, bruts } = motsDe(answer);
+  if (!nets.length || nets.length > MAX_MOTS) return null;
+
+  // l'état de chaque réponse du nœud : ce qui est déjà tenu, ce qui vient
+  // d'être gagné, et la première partie encore recevable (l'ordre compte)
+  const etats = node.answers.map((a) => ({
+    a,
+    deja: solved.has(a.id)
+      ? a.moteur.plein
+      : [...(parties.get(a.id) || [])].reduce((m, i) => m | (1 << i), 0),
+    gagne: 0,
+    suivante: 0,
+  }));
+
+  const echo = [];
+  let bruit = 0;
+  let reconnus = 0;
+  let i = 0;
+  while (i < nets.length) {
+    let pris = 0;
+    // la plus longue lecture d'abord : « 12 arc anges » avant « 12 »
+    for (let len = Math.min(MAX_FENETRE, nets.length - i); len >= 1 && !pris; len--) {
+      const avecEspaces = nets.slice(i, i + len).join(' ');
+      const collee = avecEspaces.replace(/ /g, '');
+      // d'abord ce qui fait gagner du terrain, ensuite ce qui est déjà vert
+      for (const passe of [0, 1]) {
+        for (const e of etats) {
+          const masque = e.a.moteur.exactes.get(avecEspaces) ?? e.a.moteur.collees.get(collee) ?? 0;
+          if (!masque || basBit(masque) < e.suivante) continue;
+          const neuf = masque & ~(e.deja | e.gagne);
+          if (passe === 0 ? !neuf : neuf) continue;
+          if (passe === 0) e.gagne |= neuf;
+          e.suivante = hautBit(masque) + 1;
+          pris = len;
+          break;
+        }
+        if (pris) break;
+      }
+    }
+    if (pris) {
+      for (let k = 0; k < pris; k++) echo.push({ t: bruts[i + k], ok: true });
+      reconnus += pris;
+      i += pris;
+    } else {
+      echo.push({ t: bruts[i], ok: false });
+      bruit += 1;
+      i += 1;
+    }
   }
-  return meilleur;
+
+  if (!reconnus) return { prises: [], echo };
+  if (bruit > MAX_BRUIT) return null;
+
+  const prises = etats.filter((e) => e.gagne).map((e) => ({
+    id: e.a.id,
+    masque: e.gagne,
+    complet: (e.deja | e.gagne) === e.a.moteur.plein,
+  }));
+  return { prises, echo };
 }
 
 // Le libellé d'un nœud tel qu'on a le droit de l'afficher.

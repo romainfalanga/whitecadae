@@ -1203,6 +1203,11 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .enigme-msg { color: var(--danger); font-size: 0.85rem; }
 .enigme-msg:empty { display: none; }
 
+/* L'essai qu'on vient de faire, rendu mot pour mot : ce qui était juste, ce
+   qui ne l'était pas. Même vert que les parties gardées par la carte. */
+.enigme-msg .essai-ok { color: #79c98d; }
+.enigme-msg .essai-faux { color: var(--danger); text-decoration: line-through; }
+
 /* L'attente : proposer un mot de passe ferme les champs pour une heure. Le
    décompte prend la place du bouton : rien n'est écrit, rien n'est expliqué.
    La largeur est figée pour que la carte ne tressaille pas à chaque seconde. */

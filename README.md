@@ -100,13 +100,26 @@ dit rien : la carte tressaille, rougit et vibre.
 « 12 », « arc », « anges »). Proposer une partie seule la fait apparaître
 **en vert, à sa place**, avec un « ? » pour chaque trou : `33 ?`, `? ans`,
 `12 ? anges`. Le serveur n'envoie jamais le texte d'une partie manquante, ni
-leur nombre : un trou contigu ne vaut qu'un seul « ? ». Les écritures
-admises sont strictes : la bonne façon d'écrire le signe, ses chiffres en
-lettres, son singulier ou son pluriel quand les deux se disent, et rien
-d'autre : ni article, ni mot en trop. Une partie déjà verte re-proposée
-compte comme un essai faux. Chaque partie vit sur sa propre ligne de
-`riddle_progress` (`n-e-2.p0`) ; la réponse entière garde la sienne, et
-l'échelon ne compte que les réponses entières.
+leur nombre : un trou contigu ne vaut qu'un seul « ? ». Chaque partie vit
+sur sa propre ligne de `riddle_progress` (`n-e-2.p0`) ; la réponse entière
+garde la sienne, et l'échelon ne compte que les réponses entières.
+
+**Ce qui est juste est gardé même quand le reste est faux.** La proposition
+est lue **mot à mot** : « 10 mains » garde le 10 et rend « mains ». L'essai
+est alors rendu sous le champ, chaque mot marqué : **vert** ce qui était
+juste, **rouge barré** ce qui ne l'était pas, et la carte garde `10 ?`. Les
+écritures admises restent strictes (la bonne façon d'écrire le signe, ses
+chiffres en lettres, son singulier ou son pluriel quand les deux se disent) :
+un article ou un mot en trop n'est pas accepté, il est **rendu en rouge** à
+côté de ce qui a été gardé. L'ordre des parties compte : « anges 12 » ne
+garde que les anges. Une partie déjà verte re-proposée ne gagne rien, mais
+n'est pas appelée fausse pour autant.
+
+**On ne pêche pas.** Un seul mot de bruit est toléré à côté de ce qui est
+reconnu : jeter dix mots pour voir lesquels verdissent ne rend rien du tout,
+ni terrain gagné ni écho, et coûte l'essai comme les autres. Quand **rien**
+n'est reconnu, la proposition entière repart en rouge : elle n'apprend rien
+à personne.
 
 Le tout premier bloc est **muet** (`silent`) : pas de libellé, et le serveur
 ne dit pas non plus combien de signes il cache : il envoie seulement
