@@ -3408,7 +3408,8 @@ function horodate(d) {
 }
 
 function jourFr(d) {
-  return `${d.getUTCDate()} ${MOIS_FR[d.getUTCMonth()]}`;
+  const j = d.getUTCDate();
+  return `${j === 1 ? '1er' : j} ${MOIS_FR[d.getUTCMonth()]}`;
 }
 
 // La période courante d'une cadence : sa clé, son libellé, ses deux bornes.
