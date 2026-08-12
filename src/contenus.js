@@ -4,8 +4,8 @@
 // sont servis qu'à ceux dont l'échelon y donne droit. Les mettre dans
 // public/ reviendrait à les offrir à quiconque lit le JavaScript.
 
-/* ---------------------------------------------------------- les cinq axes ---
-   Cinq espaces existent d'avance pour chacun dans Pense Mieux. Ils ne
+/* -------------------------------------------------------- les quatre axes ---
+   Quatre espaces existent d'avance pour chacun dans Pense Mieux. Ils ne
    s'ouvrent pas, ne se referment pas : on les nourrit.
 
    Deux d'entre eux se répondent en miroir. La psychologie dit le présent :
@@ -13,12 +13,9 @@
    quoi l'on tend. L'un décrit, l'autre vise, et la distance entre les deux est
    le travail.
 
-   Il n'y a plus de privé ni de public entre une personne et son carré : les
-   CINQ espaces sont lus par les trois As qu'elle a choisis, et ils sont là
-   pour l'aider à les harmoniser. Ce qu'elle range dedans — catégories et
-   réflexions — se lit de la même façon : c'est l'espace racine qui décide.
-
-   Hors de son carré, rien ne sort.                                        */
+   Les quatre sont à soi, et à personne d'autre : Pense Mieux est le lieu où
+   l'on se regarde penser, pas celui où l'on est regardé. Ce qu'on imagine à
+   plusieurs vit ailleurs — dans les sociétés harmonieuses des carrés.      */
 
 export const AXES = {
   psy: {
@@ -33,11 +30,6 @@ export const AXES = {
     sous: 'Ce vers quoi tu tends : ta version la plus harmonieuse.',
     miroir: 'psy',
   },
-  univers: {
-    titre: 'Mon multivers',
-    court: 'Multivers',
-    sous: 'Tes modèles d’univers, et ce qu’ils se répondent.',
-  },
   philo: {
     titre: 'Ma philosophie',
     court: 'Philosophie',
@@ -51,22 +43,42 @@ export const AXES = {
 };
 
 // L'ordre de lecture : le miroir d'abord (le présent, puis ce vers quoi il
-// tend), puis le multivers, la philosophie et la société harmonieuse.
-export const AXES_ORDRE = ['psy', 'moi', 'univers', 'philo', 'societe'];
+// tend), puis la philosophie et la société harmonieuse.
+export const AXES_ORDRE = ['psy', 'moi', 'philo', 'societe'];
 
 /* --------------------------------------------- Carré d'As (échelon 5) ---
-   Un carré est celui d'UNE personne. Elle le fonde, et elle y cherche trois
-   As qui vont l'aider à harmoniser ses cinq branches de réflexion. Le carré
-   n'écrit rien en commun : il entre chez son porteur, et lui donne des
-   variables de plus.
+   Un carré, c'est quatre As qui imaginent ENSEMBLE des sociétés
+   harmonieuses. Chaque société qu'ils conçoivent a un nom, et se pense sur
+   deux volets : ce qui lui permet d'être, et comment les humains s'y
+   comporteraient. Le carré ne regarde pas l'intérieur des personnes : il
+   construit des modèles, à quatre.
 
-   Chacun a donc son propre carré — et se retrouve dans celui des autres,
-   pour les aider à leur tour.                                             */
+   On fonde autant de carrés qu'on veut, on entre dans autant qu'on veut :
+   chaque carré est un atelier de plus.                                    */
 
 export const CHARTE_CARRE =
-  'Ton carré, c’est trois As qui acceptent de penser avec toi, sur tes cinq '
-  + 'branches. Cherche des esprits qui ne voient pas comme toi : un carré où '
-  + 'tout le monde pense pareil n’apprend rien à personne.';
+  'Un carré, c’est quatre As qui imaginent ensemble des sociétés '
+  + 'harmonieuses : ce qui permet à chacune d’être, et comment on y vivrait. '
+  + 'Cherche des esprits qui ne voient pas comme toi : un carré où tout le '
+  + 'monde pense pareil n’imagine qu’une seule société.';
+
+/* Les deux volets d'une société harmonieuse. `etre` : ses fondations, ce qui
+   la rend possible et la fait tenir. `vivre` : les comportements des
+   individus qui l'habitent — ce qu'ils feraient, mécaniquement, en y vivant. */
+export const VOLETS_SOCIETE = [
+  {
+    cle: 'etre',
+    titre: 'Ce qui lui permet d’être',
+    aide: 'Ses fondations : ce qui rend cette société possible, et ce qui la fait tenir.',
+  },
+  {
+    cle: 'vivre',
+    titre: 'Comment on y vit',
+    aide: 'Les comportements des individus : ce qu’ils feraient, mécaniquement, en vivant dedans.',
+  },
+];
+
+export const VOLETS_CLES = VOLETS_SOCIETE.map((v) => v.cle);
 
 /* --------------------------------- Game Master Orange (échelon 7) ------- */
 
@@ -135,14 +147,14 @@ export const MECANISMES_GMO = {
     },
     {
       numero: 6,
-      titre: 'Ton carré d’as',
+      titre: 'Tes carrés d’as',
       etapes: [
-        'Ton carré d’as est né à l’échelon 5 : trois As qui pensent avec toi, sur tes cinq branches.',
-        'Entre à ton tour dans les carrés des autres : c’est là que tu leur donnes des variables de plus.',
-        'Fais de ton carré la preuve vivante de ce que le jeu promet.',
+        'Un carré d’as, c’est quatre esprits qui imaginent ensemble des sociétés harmonieuses.',
+        'Pour chacune, cherchez ce qui lui permet d’être, et comment les humains s’y comporteraient.',
+        'Fais de vos modèles la preuve vivante de ce que le jeu promet.',
       ],
       page: '/carre-d-as',
-      pageLabel: 'Ton carré d’as',
+      pageLabel: 'Tes carrés d’as',
     },
     {
       numero: 7,
@@ -150,21 +162,21 @@ export const MECANISMES_GMO = {
       etapes: [
         'Propage les symboles de l’Escape Game Orange de sorte à le faire grandir.',
         'Tu n’es plus un simple joueur : tu es un créateur de nouvelles grilles de lecture.',
-        'Imagine tes modèles d’univers et fais-les se répondre dans ton multivers.',
+        'Imagine des modèles de société avec tes carrés, et fais-en naître de nouveaux en les confrontant.',
         'Utilise les IA pour réduire le temps et les ressources nécessaires à la concrétisation de tes idées.',
       ],
-      page: '/pense-mieux',
-      pageLabel: 'Ton multivers',
+      page: '/carre-d-as',
+      pageLabel: 'Tes carrés d’as',
     },
   ],
 };
 
 /* ------------------------------------- la Vidéographie : le rythme (4) ---
    Pense Mieux et la Vidéographie ne poursuivent plus la même chose. Pense
-   Mieux est l'outil de la pensée : on y écrit, on y parle, on y range ses
-   réflexions en branches, aidé par son carré. La Vidéographie est le
-   témoignage de ce qu'on a vécu, et elle a un rythme : une vidéo par semaine,
-   une par mois, une par an.
+   Mieux est l'outil de la pensée : on y parle, ses pensées deviennent des
+   vidéos, on les range en branches. La Vidéographie est le témoignage de ce
+   qu'on a vécu, et elle a un rythme : une vidéo par semaine, une par mois,
+   une par an.
 
    Chaque vidéo est un récap : ce qu'on a vécu sur la période, du point de vue
    de ce qu'on a ajouté dans Pense Mieux et de ce qu'on a vécu avec ses carrés
@@ -197,10 +209,12 @@ export const CADENCES = [
 
 export const CADENCES_ORDRE = CADENCES.map((c) => c.cle);
 
-/* ------------------------------------------- les réponses du carré ------
-   Ce qu'un As dépose dans la réflexion d'un autre. Il ne commente pas : il
-   apporte des variables. Trois manières, et une seule règle — aider l'autre à
-   penser plus juste, jamais avoir raison contre lui.                      */
+/* ------------------------------------------- les réponses d'autrefois ---
+   Du temps où un carré lisait les branches de son porteur, un As pouvait y
+   déposer une réponse : approfondir, élargir, opposer en résolvant. Le carré
+   ne lit plus l'intérieur de personne — mais les réponses déjà déposées
+   restent chez leur destinataire, et ces libellés servent encore à les
+   afficher.                                                               */
 
 export const REPONSES = [
   {

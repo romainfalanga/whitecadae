@@ -186,7 +186,7 @@ bloc titré.
 ### Les pièces hautes
 
 Pense Mieux, la Vidéographie et le Carré d'As sont chacun **UNE page**, sans
-sous-menu : la cartographie, les cinq espaces et la recherche pour Pense
+sous-menu : la cartographie, les quatre espaces et la recherche pour Pense
 Mieux ; le rythme et son historique pour la Vidéographie ; mes carrés, le
 salon de recrutement, les carrés à compléter et la fondation pour le Carré
 d'As. Les vues ne s'expliquent pas : on est dans un escape game, l'interface
@@ -257,14 +257,20 @@ L'audio reste attaché à sa pensée avec son **minutage mot à mot**
 minutes). Et la **vidéo se fabrique d'elle-même**, sans qu'on la demande :
 dès qu'une pensée dite est déposée, le texte est dessiné sur une toile au
 rythme de la voix et enregistré avec le son par le navigateur, en silence et
-sans rien bloquer. Elle **se regarde en place**, dans la pensée même — un
-lecteur, pas un téléchargement : revenir dans ses pensées, c'est revoir le
-fil conducteur, le texte apparaissant au moment où on le dit. Le fichier vit
-dans le navigateur (IndexedDB) — il ne pèse rien sur la base — et les vidéos
-manquantes (autre navigateur, cache vidé) **se refont d'elles-mêmes** à
-l'ouverture de la page, une à la fois ; si le navigateur exige un geste avant
-de jouer un son, la fabrication repart au premier toucher. Sans le binding
-AI, la transcription répond 503 et le clavier reste : rien ne casse.
+sans rien bloquer. **La vidéo EST le contenu final de la pensée** : elle se
+regarde en place, dans la pensée même — un lecteur, pas un téléchargement.
+L'arborescence se parcourt **de vidéo en vidéo** : quand une vidéo se
+termine, la pensée dite suivante (dans l'ordre de l'arbre) se propose d'un
+bouton. Et sous chaque vidéo, repliée, son **émergence** : l'audio d'origine
+(le texte s'y écrit au moment où on le dit) et le **texte de la vidéo,
+modifiable** — corriger ce texte réaligne le minutage (même nombre de mots :
+chacun garde le sien ; sinon au prorata de la longueur, sur la même durée),
+oublie la vidéo d'avant et la refabrique. Le fichier vit dans le navigateur
+(IndexedDB) — il ne pèse rien sur la base — et les vidéos manquantes (autre
+navigateur, cache vidé) **se refont d'elles-mêmes** à l'ouverture de la page,
+une à la fois ; si le navigateur exige un geste avant de jouer un son, la
+fabrication repart au premier toucher. Sans le binding AI, la transcription
+répond 503 et le clavier reste : rien ne casse.
 
 **La cartographie.** La page d'accueil de Pense Mieux dessine **toutes les
 réflexions de la personne sur une seule carte** : un disque par réflexion,
@@ -285,16 +291,15 @@ janvier** (elle raconte l'année écoulée). Hors fenêtre, pas de formulaire :
 la carte dit la date, et le serveur refuse en 403 ce que l'interface ne
 propose pas. Le reste du temps, on vit ; le jour venu, on raconte.
 
-## Les cinq branches, et qui les lit
+## Les quatre branches, à soi seul
 
-Chacun porte cinq branches de réflexion dans Pense Mieux. Elles existent
+Chacun porte quatre branches de réflexion dans Pense Mieux. Elles existent
 d'avance, ne s'ouvrent pas, ne se referment pas : on les nourrit.
 
 | axe | branche |
 |---|---|
 | `psy` | Ma psychologie |
 | `moi` | Le moi harmonieux |
-| `univers` | Mon multivers |
 | `philo` | Ma philosophie |
 | `societe` | Ma société harmonieuse |
 
@@ -302,70 +307,70 @@ Les deux premières **se répondent en miroir** : la psychologie dit le présent
 (comment on fonctionne, ce qu'on constate de soi), le moi harmonieux dit vers
 quoi l'on tend. Chaque page porte une ligne « En regard » qui mène à l'autre.
 
-**Il n'y a plus de privé ni de public entre une personne et son carré.** Les
-trois As de son carré lisent les **cinq** branches — et tout ce qu'elle y
-range — et peuvent y **répondre**. Hors de ce carré, rien ne sort : ni pour
-un autre membre de la plateforme, ni pour un visiteur, ni pour les carrés où
-elle aide les autres.
+**Tout Pense Mieux est à soi, et à personne d'autre.** Le carré n'y entre
+plus : il imagine des sociétés de son côté (voir plus bas). Ni un autre
+membre, ni un visiteur, ni les As de ses carrés ne lisent quoi que ce soit —
+`droitsArbre` dit propriétaire seul, partout. Les **réponses** que des As
+avaient déposées du temps où un carré lisait les branches restent chez leur
+destinataire, avec leur libellé (approfondir, élargir, opposer et résoudre) ;
+il ne s'en dépose plus.
+
+Le multivers a quitté Pense Mieux : le tronc « Mon multivers » vide s'est
+effacé (une coquille créée d'avance), celui qui portait quelque chose est
+devenu une **catégorie sans attache** — rien de ce qui y a été écrit n'est
+perdu.
 
 **Tout se range dans une branche.** Une réflexion ne naît pas hors-sol : elle
-s'ouvre DANS une des cinq branches, ou dans une **catégorie** qu'on y a créée
-(`reflection_trees.parent_id`, `genre`). Et tout ce qui est rangé **se lit
-comme sa branche racine**. Chaque branche a en outre **sa propre
-cartographie** : ses catégories, ses réflexions et les nourritures qui les
-relient, pour voir la trajectoire de ses pensées dans cette branche-là.
+s'ouvre DANS une des quatre branches, ou dans une **catégorie** qu'on y a
+créée (`reflection_trees.parent_id`, `genre`). Chaque branche a en outre **sa
+propre cartographie** : ses catégories, ses réflexions et les nourritures qui
+les relient, pour voir la trajectoire de ses pensées dans cette branche-là.
 
 Techniquement, une branche **est une réflexion** : `reflection_trees` porte
-`axe` (`psy` | `moi` | `univers` | `philo` | `societe`), et des index uniques
-partiels garantissent l'unicité de chacune. Elles héritent donc, sans une
-ligne de moteur nouveau, des pensées emboîtées, des liens de nourriture, du
-vocal, du rendu et de la recherche. Une réflexion se lit par un chemin
-unique, `/reflexion/<id>`, et c'est le serveur qui dit ce que le lecteur a le
-droit d'y faire.
+`axe` (`psy` | `moi` | `philo` | `societe`), et des index uniques partiels
+garantissent l'unicité de chacune. Elles héritent donc, sans une ligne de
+moteur nouveau, des pensées emboîtées, des liens de nourriture, du vocal, du
+rendu et de la recherche. Une réflexion se lit par un chemin unique,
+`/reflexion/<id>`, et c'est le serveur qui dit ce que le lecteur a le droit
+d'y faire.
 
-## Le carré d'As : trois personnes qui pensent avec toi
+## Le carré d'As : quatre As qui imaginent des sociétés harmonieuses
 
-**Un carré est celui d'UNE personne.** Elle le fonde — un seul, le sien — et
-elle y cherche **trois As qui vont l'aider** à harmoniser ses cinq branches.
-Le carré n'écrit rien « en commun » à côté : il entre chez son porteur.
+**Un carré est un atelier.** Quatre As y imaginent **ensemble** des
+**sociétés harmonieuses** : le carré ne regarde plus l'intérieur des
+personnes, il construit des modèles. On **fonde autant de carrés qu'on
+veut**, on entre dans autant qu'on veut : chaque carré est un atelier de
+plus, avec d'autres esprits. Le fondateur n'a aucun privilège : il peut
+partir comme les autres, l'atelier continue — et un carré vidé de son dernier
+As s'efface avec tout ce qui était à lui.
 
-Chacun a donc son propre carré, et se retrouve dans celui des autres pour les
-aider à leur tour. C'est **à sens unique** : entrer dans le carré de
-quelqu'un ne lui ouvre rien de chez soi.
+Chaque **société** a un **nom** (`carre_societes`) — un carré peut en porter
+plusieurs — et se pense sur **deux volets** (`societe_idees.volet`) :
 
-Personne n'écrit à la place du porteur. Chez lui, on ne peut que
-**répondre**, et une réponse dit toujours ce qu'elle vient faire
-(`reflection_branches.reponse`) :
+- **Ce qui lui permet d'être** (`etre`) — ses fondations : ce qui rend cette
+  société possible, et ce qui la fait tenir ;
+- **Comment on y vit** (`vivre`) — les comportements des individus : ce
+  qu'ils feraient, mécaniquement, en vivant dedans.
 
-- **Approfondir** — ce qu'il y a dessous, et qui n'a pas encore été nommé ;
-- **Élargir** — le champ des possibles que cette réflexion ne voit pas encore ;
-- **Opposer et résoudre** — ce qui s'y oppose, *et* la solution qui prend en
-  compte plus de variables. Une opposition sans issue n'aide personne.
+Chacun des quatre dépose dans l'un ou l'autre volet ; chacun retire ce qu'il
+a déposé, et rien d'autre. Le nom se retravaille par n'importe quel As ; une
+société **vide** se referme, une société **pensée** reste : elle appartient
+au carré. Membres seulement, lecture comme écriture : la façade d'un carré
+n'en montre que le compte.
 
-Une réponse peut être écrite, dite (avec son vocal et sa vidéo) ou porter une
-**vidéo-réponse** YouTube. Elle reste à celui qui l'a déposée — lui seul la
-retouche — et le porteur garde le dernier mot chez lui. Ce qu'on lui a
-répondu reste chez lui même si l'As qui l'a écrit s'en va.
+La page principale du Carré d'As centralise **mes carrés**, la **fondation**,
+le **salon de recrutement** (les As s'annoncent d'un mot ; un membre d'un
+carré incomplet invite ; on n'entre que voulu des deux côtés), et les
+**carrés à compléter** (cherchables au clavier). La page d'un carré montre
+ses As et ses sociétés ; la page d'une société, ses deux volets côte à côte.
 
-La nourriture d'une pensée par une autre reste, elle, **entièrement chez
-soi** : on ne tire jamais dans ses propres branches un extrait de ce qu'on
-lit chez quelqu'un d'autre.
-
-La page principale du Carré d'As centralise **mon carré**, **les carrés où
-j'aide**, le **salon de recrutement** (les As s'annoncent d'un mot ; le
-porteur d'un carré incomplet invite ; on n'entre que voulu des deux côtés),
-les **carrés à compléter** (cherchables au clavier) et la **fondation**. La
-page d'un carré montre son porteur, ses As, et ses **cinq branches** : on y
-entre pour lui donner des variables de plus. Un carré qui n'est pas le sien
-ne montre que sa façade. Le porteur ne quitte pas son propre carré ; les As
-qui l'aident s'en vont quand ils veulent.
-
-Le **Brainstorm** (échelon 6) est la place des lives : **le porteur d'un
-carré complet** annonce un brainstorming sur YouTube, Twitch ou TikTok — sur
-le sujet qu'il choisit, celui sur lequel il veut que son carré l'aide à
-réfléchir. C'est lui qui tient l'antenne, et ses trois As pensent avec lui. Les As du carré voient sur la page du live le
-lien de leur **salon Discord** ; les autres ne le voient pas. La salle
-propose des **réflexions** et **vote** ; le carré voit monter les plus
+Le **Brainstorm** (échelon 6) a le même objectif que les carrés : imaginer.
+**N'importe quel As d'un carré complet** annonce un brainstorming sur
+YouTube, Twitch ou TikTok, et le live porte sur une **société du carré** —
+une déjà en chantier, ou une **qui naît à l'annonce** (on la nomme, elle est
+créée). L'annonceur tient l'antenne. Les As du carré voient sur la page du
+live le lien de leur **salon Discord** ; les autres ne le voient pas. La
+salle propose des **réflexions** et **vote** ; le carré voit monter les plus
 soutenues du moment. Le classement pondère chaque vote par son âge (dernière
 minute ×8, cinq dernières ×4, dix dernières ×2, sinon ×1) et se recalcule à
 la lecture : une seule requête SQL, rien qui tourne en fond. Pendant le live,

@@ -176,7 +176,7 @@ async function route() {
     : path.startsWith('/reflexion/') || path.startsWith('/arbre/') ? 'penseMieux'
     : path.startsWith('/pense-mieux') ? 'penseMieux'
     : path.startsWith('/videographie') ? 'videographie'
-    : path.startsWith('/carre-d-as') ? 'carre'
+    : path.startsWith('/carre-d-as') || path.startsWith('/societe/') ? 'carre'
     : path.startsWith('/brainstorm') ? 'brainstorm'
     : path === '/game-master-orange' ? 'gmo'
     : 'interpretations';
@@ -203,6 +203,8 @@ async function route() {
     return navigate('/carre-d-as', true);
   }
   if ((m = path.match(/^\/carre-d-as\/(\d+)(?:\/[a-z]+)?$/))) return pageCarre(+m[1]);
+  // chaque société harmonieuse d'un carré a sa page : ses deux volets
+  if ((m = path.match(/^\/societe\/(\d+)$/))) return pageSociete(+m[1]);
   if ((m = path.match(/^\/reflexion\/(\d+)$/))) return pageArbre(+m[1]);
   // l'ancien chemin mène au même endroit : rien de ce qui a été partagé ne casse
   if ((m = path.match(/^\/arbre\/(\d+)$/))) return navigate(`/reflexion/${m[1]}`, true);
@@ -718,7 +720,7 @@ function carteSvg(noeuds, liens) {
     </figure>`;
 }
 
-// La carte de l'accueil : les cinq espaces et tout ce qu'ils rangent.
+// La carte de l'accueil : les espaces et tout ce qu'ils rangent.
 function dessineCarte(data) {
   const noeuds = [
     ...(data.troncs || []).map((t) => ({
@@ -740,12 +742,11 @@ function dessineCarte(data) {
 }
 
 /* ------------------------------------- Pense Mieux : une seule page -------
-   La cartographie de toutes ses pensées, puis les cinq espaces en deux
-   blocs : les trois qui ne sortent jamais (psychologie, moi harmonieux,
-   multivers), les deux que les carrés lisent (philosophie, société
-   harmonieuse). En bas, la recherche plein texte. Tout le reste — créer une
-   catégorie, ouvrir une réflexion, dire une pensée — se fait DANS l'espace
-   concerné, sur sa propre page.                                           */
+   La cartographie de toutes ses pensées, puis les quatre espaces —
+   psychologie, moi harmonieux, philosophie, société harmonieuse — tous à
+   soi, et à personne d'autre. En bas, la recherche plein texte. Tout le
+   reste — créer une catégorie, ouvrir une réflexion, dire une pensée — se
+   fait DANS l'espace concerné, sur sa propre page.                        */
 
 async function vueForet(kind) {
   const def = ARBRES_PAGES[kind];
@@ -792,8 +793,9 @@ async function vueForet(kind) {
 
   app.innerHTML = `
     <h1>${esc(def.titre)}</h1>
-    <p class="subtitle">Tes cinq branches. Les trois As de ton carré les lisent
-      toutes et t’aident à les harmoniser — personne d’autre.</p>
+    <p class="subtitle">Tes quatre branches, et la carte de ce qu’elles
+      rangent. Tout ici est à toi, et à personne d’autre : dis une pensée,
+      elle devient une vidéo, et la carte s’en souvient.</p>
     ${dessineCarte(data)}
     <div class="foret foret-troncs">${(data.troncs || []).map(carteEspace).join('')}</div>
     ${libres.length ? `
@@ -959,61 +961,66 @@ function brancheEtiquette(b) {
 
 // Les branches s'emboîtent : on dessine l'arbre en profondeur. Les
 // nourritures (les autres passés d'une branche) s'affichent en chips qui
-// mènent à leur source : dans cet arbre, ou ailleurs : la chip porte alors le
-// nom de l'arbre, celui de son carré s'il y en a un, et y navigue.
-//
-// Dans l'arbre commun d'un carré, chaque branche dit qui l'a écrite : chacun
-// greffe sur la branche de n'importe qui, personne ne touche celle d'un autre.
-/* Une pensée. Elle porte ce qu'on a écrit ou dit, d'où elle se nourrit, et
-   ce que les autres y ont répondu. Une réponse dit toujours ce qu'elle vient
-   faire — approfondir, élargir, ou opposer en résolvant : c'est ce qui la
-   distingue d'un commentaire.                                             */
+// mènent à leur source : dans cet arbre, ou dans une autre réflexion.
+/* Une pensée. Quand elle a été dite, sa VIDÉO est son contenu : le texte qui
+   s'écrit au moment où on le dit. Dessous, repliée, son émergence : l'audio
+   d'origine, et le texte que la vidéo dessine — corriger ce texte, c'est
+   refaire la vidéo. Une pensée écrite au clavier reste un paragraphe.
+
+   Les réponses que des As avaient déposées du temps où un carré lisait les
+   branches restent affichées, avec leur libellé et leur auteur.           */
 function brancheHtml(b, enfants, kind, editable, ctx) {
-  const contenu = kind === 'video' || b.url
-    ? `<div class="branche-video">${videoEmbed(b.url)}${b.body ? `<p>${esc(b.body)}</p>` : ''}</div>`
-    : `<p class="branche-texte">${esc(b.body)}</p>`;
+  const vocal = ctx.vocaux.get(b.id);
   const auteurId = b.auteur_id == null ? ctx.porteur : b.auteur_id;
   const mienne = auteurId === ctx.moi;
-  const sienne = !ctx.collectif || mienne;
+  const rep = b.reponse ? (ctx.reponses.find((r) => r.cle === b.reponse) || null) : null;
+
+  let contenu;
+  if (kind === 'video' || b.url) {
+    contenu = `<div class="branche-video">${videoEmbed(b.url)}${b.body ? `<p>${esc(b.body)}</p>` : ''}</div>`;
+  } else if (vocal) {
+    contenu = `
+    <div class="pensee-scene"><span class="branche-video-zone" data-video-zone="${b.id}"></span></div>
+    <details class="emergence">
+      <summary>L’émergence — l’audio, et le texte de la vidéo</summary>
+      <div class="emergence-corps">
+        <button type="button" class="link-btn" data-joue="${b.id}">Réécouter l’audio</button>
+        <div class="vocal-dit" hidden></div>
+        ${editable && mienne ? `
+        <textarea class="emergence-texte" data-texte="${b.id}" maxlength="2000" rows="3">${esc(b.body)}</textarea>
+        <div class="emergence-pied">
+          <button type="button" class="link-btn" data-remonte="${b.id}">Corriger le texte, refaire la vidéo</button>
+          <span class="form-error" data-etat="${b.id}"></span>
+        </div>` : `<p class="branche-texte">${esc(b.body)}</p>`}
+      </div>
+    </details>`;
+  } else {
+    contenu = `<p class="branche-texte">${esc(b.body)}</p>`;
+  }
+
   const sources = (ctx.sourcesDe.get(b.id) || []).map((l) => {
     const ici = l.source_tree_id === ctx.arbreId;
     const etiquette = brancheEtiquette({ body: l.source_body, url: l.source_url });
-    const ou = l.source_carre_nom ? `${l.source_carre_nom} · ${l.source_tree_title}` : l.source_tree_title;
     const saut = ici
       ? `<button type="button" class="nourrie-va" data-va="${l.source_id}">⇠ ${esc(etiquette)}</button>`
-      : `<a class="nourrie-va" href="/reflexion/${l.source_tree_id}#b${l.source_id}" data-link>⇠ ${esc(ou)} · ${esc(etiquette)}</a>`;
-    return `<span class="nourrie-chip${ici ? '' : ' nourrie-ailleurs'}">${saut}${editable && sienne
+      : `<a class="nourrie-va" href="/reflexion/${l.source_tree_id}#b${l.source_id}" data-link>⇠ ${esc(l.source_tree_title)} · ${esc(etiquette)}</a>`;
+    return `<span class="nourrie-chip${ici ? '' : ' nourrie-ailleurs'}">${saut}${editable && mienne
       ? `<button type="button" class="nourrie-oublie" data-oublie="${b.id}:${l.source_id}" aria-label="Détacher">✕</button>` : ''}</span>`;
   }).join('');
 
-  const vocal = ctx.vocaux.get(b.id);
-  const rep = b.reponse ? (ctx.reponses.find((r) => r.cle === b.reponse) || null) : null;
-
-  // ce qu'on peut faire ici : prolonger sa propre pensée, ou répondre à celle
-  // d'un autre pour lui donner des variables de plus
+  // ce qu'on peut faire ici : prolonger sa pensée, la nourrir, la retirer
   const actions = [];
-  if (editable) actions.push(`<button type="button" class="link-btn" data-pousse="${b.id}">prolonger</button>`);
-  if (ctx.repondable || (editable && !mienne)) {
-    actions.push(`<button type="button" class="link-btn" data-repond="${b.id}">répondre</button>`);
-  }
-  if ((editable || ctx.repondable) && mienne) {
-    if (editable) actions.push(`<button type="button" class="link-btn" data-nourrit="${b.id}">⇠ nourrie par…</button>`);
-    actions.push(`<button type="button" class="link-btn danger" data-coupe="${b.id}">retirer</button>`);
-  } else if (editable && ctx.proprietaire && b.reponse) {
+  if (editable) {
+    actions.push(`<button type="button" class="link-btn" data-pousse="${b.id}">prolonger</button>`);
+    if (mienne) actions.push(`<button type="button" class="link-btn" data-nourrit="${b.id}">⇠ nourrie par…</button>`);
     actions.push(`<button type="button" class="link-btn danger" data-coupe="${b.id}">retirer</button>`);
   }
 
-  return `<div class="branche${rep ? ` branche--reponse branche--${esc(b.reponse)}` : ''}"
+  return `<div class="branche${rep ? ` branche--reponse branche--${esc(b.reponse)}` : ''}${vocal ? ' branche--video' : ''}"
       data-branche="${b.id}" data-auteur="${auteurId}">
     ${rep ? `<p class="reponse-tag"><span class="reponse-quoi">${esc(rep.label)}</span>${
       b.auteur ? ` <span class="reponse-qui">${esc(b.auteur)}</span>` : ''}</p>` : ''}
     ${contenu}
-    ${vocal ? `<div class="branche-vocal">
-      <span class="branche-video-zone" data-video-zone="${b.id}"></span>
-      ${videoPossible() ? '' : `<button type="button" class="link-btn" data-joue="${b.id}">Réécouter</button>`}
-      <div class="vocal-dit" hidden></div>
-    </div>` : ''}
-    ${!rep && ctx.collectif && b.auteur ? `<p class="branche-auteur">${esc(b.auteur)}</p>` : ''}
     ${sources ? `<div class="branche-nourritures">${sources}</div>` : ''}
     ${actions.length ? `<div class="branche-actions">${actions.join('')}</div>` : ''}
     <div class="branche-enfants">${(enfants.get(b.id) || []).map((e) => brancheHtml(e, enfants, kind, editable, ctx)).join('')}</div>
@@ -1378,6 +1385,40 @@ async function prendVideo(id) {
   } catch { return null; }
 }
 
+// Oublier une vidéo fabriquée : quand son texte change, elle se refait.
+async function oublieVideo(id) {
+  try {
+    const db = await ouvreStock();
+    await new Promise((ok, ko) => {
+      const t = db.transaction('v', 'readwrite');
+      t.objectStore('v').delete(String(id));
+      t.oncomplete = ok; t.onerror = () => ko(t.error);
+    });
+    db.close();
+  } catch { /* rien en stock : rien à oublier */ }
+}
+
+/* Réaligner un texte corrigé sur le minutage d'origine. Même nombre de mots :
+   chacun garde exactement le sien. Sinon, la durée totale ne bouge pas et
+   chaque mot nouveau reçoit sa part du temps, au prorata de sa longueur —
+   la vidéo reste synchrone avec l'audio, à peu de chose près.             */
+function remapMots(texte, anciens, duree) {
+  const mots = texte.split(/\s+/).filter(Boolean);
+  if (!mots.length) return [];
+  if (anciens.length === mots.length) {
+    return mots.map((m, i) => ({ m, d: anciens[i].d, f: anciens[i].f }));
+  }
+  const total = anciens.length ? (anciens[anciens.length - 1].f || duree || 1) : (duree || 1);
+  const poids = mots.map((m) => m.length + 1);
+  const somme = poids.reduce((a, b) => a + b, 0);
+  let cumul = 0;
+  return mots.map((m, i) => {
+    const d = (total * cumul) / somme;
+    cumul += poids[i];
+    return { m, d: +d.toFixed(3), f: +((total * cumul) / somme).toFixed(3) };
+  });
+}
+
 // Le rendu d'une image : le texte dit jusqu'ici, le mot en cours détaché.
 function dessineVideo(g, mots, t, contexte) {
   g.fillStyle = '#101014';
@@ -1510,13 +1551,36 @@ async function videoAutomatique(brancheId, mots, contexte, zone) {
 
 /* La vidéo se regarde EN PLACE : revenir dans ses pensées, c'est revoir le
    fil conducteur — le texte qui apparaît au moment où on le dit. Pas de
-   téléchargement, pas de bouton : un lecteur, dans la pensée même. */
+   téléchargement, pas de bouton : un lecteur, dans la pensée même.
+
+   Et l'arborescence se parcourt de vidéo en vidéo : quand une vidéo se
+   termine, la pensée dite suivante (dans l'ordre de l'arbre) se propose. */
+const videoSuite = new Map(); // pensée -> la pensée dite qui la suit
+
 async function montreVideo(brancheId, zone) {
   if (!zone) return;
   const blob = await prendVideo(brancheId);
   if (!blob) { zone.innerHTML = ''; return; }
   const url = URL.createObjectURL(blob);
   zone.innerHTML = `<video class="pensee-video" controls preload="metadata" src="${url}"></video>`;
+  const suite = videoSuite.get(+brancheId);
+  if (suite == null) return;
+  zone.querySelector('video').onended = () => {
+    if (zone.querySelector('.video-suite')) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'video-suite';
+    b.textContent = '▸ la pensée suivante';
+    b.onclick = () => {
+      b.remove();
+      const el = document.querySelector(`[data-branche="${suite}"]`);
+      if (!el) return;
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const v = el.querySelector(`[data-video-zone="${suite}"] video`);
+      if (v) v.play().catch(() => {});
+    };
+    zone.appendChild(b);
+  };
 }
 
 // Une réflexion se lit par le même chemin où qu'elle vive : /reflexion/:id.
@@ -1533,7 +1597,6 @@ async function pageArbre(id) {
   const kind = arbre.kind;
   const def = ARBRES_PAGES[kind];
   const editable = arbre.editable;
-  const collectif = arbre.carre_id != null;
 
   const enfants = new Map();
   const parId = new Map();
@@ -1553,31 +1616,37 @@ async function pageArbre(id) {
   const vocaux = new Map((arbre.vocaux || []).map((v) => [v.branch_id, v]));
   const ctx = {
     parId, sourcesDe, vocaux, arbreId: arbre.id,
-    collectif, moi: arbre.moi, porteur: arbre.user_id,
-    reponses: arbre.reponses || [], repondable: !!arbre.repondable,
+    moi: arbre.moi, porteur: arbre.user_id,
+    reponses: arbre.reponses || [],
     proprietaire: !!arbre.proprietaire,
   };
 
+  /* De vidéo en vidéo : l'ordre de lecture des pensées dites, en profondeur
+     — une pensée, puis ce qu'elle a fait naître. Quand une vidéo finit, la
+     suivante de ce fil se propose. */
+  videoSuite.clear();
+  {
+    const fil = [];
+    const descend = (liste) => {
+      for (const b of liste || []) {
+        if (vocaux.has(b.id)) fil.push(b.id);
+        descend(enfants.get(b.id));
+      }
+    };
+    descend(enfants.get(0));
+    for (let i = 0; i < fil.length - 1; i++) videoSuite.set(fil[i], fil[i + 1]);
+  }
+
   // le fil d'ariane : la plateforme, puis l'espace et les catégories d'où
-  // l'on descend. Un arbre de carré remonte à la page de son carré.
-  const etranger = !arbre.proprietaire && !(collectif && arbre.membre);
-  const retour = collectif && arbre.membre
-    ? { chemin: `/carre-d-as/${arbre.carre_id}`, titre: arbre.carre_nom || 'Le carré' }
-    : { chemin: def.chemin, titre: def.titre };
+  // l'on descend
+  const retour = { chemin: def.chemin, titre: def.titre };
   const ariane = [
     `<a href="${retour.chemin}" data-link>${esc(retour.titre)}</a>`,
     ...(arbre.chemin || []).map((c) => `<a href="/reflexion/${c.id}" data-link>${esc(c.title)}</a>`),
   ].join('<span class="fil-sep">›</span>');
 
-  // le champ des possibles : le même axe, ailleurs. Une ligne, pas une page.
-  const ailleurs = (arbre.ailleurs || []).map((a) => {
-    const nom = a.carre_nom || (a.kind === 'video' ? 'Vidéographie' : 'Pense Mieux');
-    return `<a href="/reflexion/${a.id}" data-link>${esc(nom)}</a>`;
-  }).join(' · ');
-
-  // les voix de l'arbre : dans un arbre commun, on veut pouvoir ne lire que
-  // les siennes, ou celles d'un seul As. Les réflexions communes et celles
-  // propres à chacun se démêlent ainsi sans quitter la page.
+  // les voix de l'arbre : du temps des réponses d'As, un arbre pouvait
+  // porter plusieurs voix. On les démêle encore, tant qu'il y en a.
   const auteurs = [];
   const vusAuteurs = new Set();
   for (const b of arbre.branches) {
@@ -1587,18 +1656,12 @@ async function pageArbre(id) {
     auteurs.push({ id, nom: id === arbre.moi ? 'Moi' : (b.auteur || 'un As') });
   }
 
-  // chez un autre, l'arbre porte son nom : « Mes univers » n'aurait aucun
-  // sens sur la page de quelqu'un d'autre
-  const titre = etranger && (arbre.carre_nom || arbre.porteur)
-    ? `${arbre.carre_nom || arbre.porteur} · ${arbre.title}`
-    : arbre.title;
-
-  const nomPorteur = etranger ? (arbre.carre_nom || arbre.porteur || '') : '';
+  const titre = arbre.title;
 
   /* Ce que l'arbre range : ses catégories et ses réflexions, et de quoi en
      créer sur place — dans l'espace même, ou dans n'importe laquelle de ses
      catégories. C'est le seul endroit où une réflexion naît. */
-  const estDossier = !collectif && (arbre.axe || arbre.genre === 'categorie');
+  const estDossier = arbre.axe || arbre.genre === 'categorie';
   const dedans = arbre.dedans || [];
   const rangees = estDossier ? `
     <section class="dedans">
@@ -1629,7 +1692,7 @@ async function pageArbre(id) {
      réflexions, et les nourritures qui les relient. On y voit la trajectoire
      de ses pensées dans CETTE branche. */
   let carteEspace = '';
-  if (!collectif && arbre.axe && arbre.proprietaire) {
+  if (arbre.axe && arbre.proprietaire) {
     try {
       const tout = await api(`/api/arbres?kind=${kind}`);
       const parents = new Map((tout.arbres || []).map((a) => [a.id, a.parent_id]));
@@ -1662,14 +1725,10 @@ async function pageArbre(id) {
   app.innerHTML = `
     <p class="fil-retour">${ariane}</p>
     <h1>${esc(titre)}</h1>
-    ${arbre.sous && !etranger ? `<p class="arbre-sous">${esc(arbre.sous)}</p>` : ''}
-    ${!etranger && arbre.proprietaire ? `<p class="arbre-partage">Les trois As de
-      ton carré lisent ceci et peuvent y répondre. Personne d’autre.</p>` : ''}
-    ${arbre.repondable ? `<p class="arbre-invite-reponse">Tu es ici pour aider ${esc(nomPorteur)} à voir
-      plus de variables : approfondis, élargis, ou oppose en proposant une issue.</p>` : ''}
+    ${arbre.sous ? `<p class="arbre-sous">${esc(arbre.sous)}</p>` : ''}
+    ${arbre.proprietaire && kind === 'pensee' ? '<p class="arbre-partage">À toi, et à personne d’autre.</p>' : ''}
     ${arbre.miroir ? `<p class="arbre-miroir">En regard : <a href="/reflexion/${arbre.miroir.id}" data-link>${esc(arbre.miroir.title)}</a></p>` : ''}
     ${arbre.trunk ? `<p class="tronc">${esc(arbre.trunk)}</p>` : ''}
-    ${ailleurs ? `<p class="arbre-ailleurs">Le même ailleurs : ${ailleurs}</p>` : ''}
     ${carteEspace}
     ${rangees}
     <div class="liaison-bandeau" id="liaison-bandeau" hidden>
@@ -1688,36 +1747,23 @@ async function pageArbre(id) {
         || `<p class="empty-note">${editable ? 'Rien encore. Dis ou écris ta première pensée.'
              : 'Rien encore ici.'}</p>`}
     </div>
-    ${editable || arbre.repondable ? `
+    ${editable ? `
     <form id="branche-form" class="branche-form">
       <input type="hidden" id="branche-parent" value="">
-      <input type="hidden" id="branche-reponse" value="">
-      <p class="branche-ou" id="branche-ou">${editable ? 'Une pensée de plus' : 'Ta réponse'}</p>
-      ${arbre.repondable ? `
-      <div class="reponse-choix" id="reponse-choix">
-        ${(arbre.reponses || []).map((r, i) => `
-          <label class="reponse-type">
-            <input type="radio" name="reponse-type" value="${esc(r.cle)}"${i === 0 ? ' checked' : ''}>
-            <span class="reponse-label">${esc(r.label)}</span>
-            <span class="reponse-aide">${esc(r.aide)}</span>
-          </label>`).join('')}
-      </div>` : ''}
-      ${kind === 'video' && editable ? '<input id="branche-url" type="url" placeholder="https://www.youtube.com/watch?v=…" required>' : ''}
-      ${arbre.repondable ? '<input id="branche-url" type="url" placeholder="Une vidéo-réponse ? colle son adresse YouTube (facultatif)">' : ''}
+      <p class="branche-ou" id="branche-ou">Une pensée de plus</p>
+      ${kind === 'video' ? '<input id="branche-url" type="url" placeholder="https://www.youtube.com/watch?v=…" required>' : ''}
       ${vocalDAbord ? '<div class="vocal-barre" id="vocal-barre"></div>' : ''}
       <textarea id="branche-body" maxlength="2000" rows="3"${vocalDAbord ? ' hidden' : ''}
         placeholder="${vocalDAbord ? 'Ta pensée, transcrite : corrige-la avant de déposer.'
-          : kind === 'video' && editable ? 'Quelques mots sur cette vidéo (facultatif)…'
-          : arbre.repondable ? 'Ce que tu apportes…' : 'Ce qui te vient…'}"></textarea>
+          : kind === 'video' ? 'Quelques mots sur cette vidéo (facultatif)…' : 'Ce qui te vient…'}"></textarea>
       <div class="conv-form-foot">
         <button type="button" class="link-btn" id="branche-annule" hidden>Repartir du début</button>
-        <button type="submit" class="primary" id="branche-depose"${vocalDAbord ? ' hidden' : ''}>${
-          arbre.repondable ? 'Déposer ma réponse' : 'Déposer'}</button>
+        <button type="submit" class="primary" id="branche-depose"${vocalDAbord ? ' hidden' : ''}>Déposer</button>
       </div>
       <p class="form-error" id="branche-err"></p>
     </form>
-    ${editable && !arbre.axe && !dedans.length ? '<p class="arbre-suppr"><button type="button" class="link-btn danger" id="arbre-suppr">Supprimer cette réflexion</button></p>' : ''}
-    ` : '<p class="empty-note">En lecture seule.</p>'}`;
+    ${!arbre.axe && !dedans.length ? '<p class="arbre-suppr"><button type="button" class="link-btn danger" id="arbre-suppr">Supprimer cette réflexion</button></p>' : ''}
+    ` : ''}`;
 
   // le saut vers une source : pour tout le monde, lecteur compris
   const vaVers = (cible) => {
@@ -1738,20 +1784,17 @@ async function pageArbre(id) {
     const joue = e.target.closest('button[data-joue]');
     if (joue) {
       if (enCours) { enCours.pause(); enCours = null; }
-      if (joue.textContent === 'Arrêter') { joue.textContent = 'Réécouter'; return; }
+      if (joue.textContent === 'Arrêter') { joue.textContent = 'Réécouter l’audio'; return; }
       const bid = +joue.dataset.joue;
-      const zone = joue.closest('.branche-vocal').querySelector('.vocal-dit');
+      const zone = joue.closest('.emergence-corps, .branche-vocal').querySelector('.vocal-dit');
       enCours = joueVocal(bid, (vocaux.get(bid) || {}).mots || [], zone, joue);
     }
-    // répondre à une pensée : le formulaire vient se poser dessous
-    const repond = e.target.closest('button[data-repond]');
-    if (repond) viseParent(+repond.dataset.repond, true);
   });
 
   // ce qui habille la vidéo : de quoi on parle, et qui parle
   const contexteVideo = {
     titre: arbre.title,
-    sous: arbre.carre_nom || (kind === 'video' ? 'Vidéographie' : 'Pense Mieux'),
+    sous: kind === 'video' ? 'Vidéographie' : 'Pense Mieux',
     auteur: arbre.porteur || '',
   };
   // les vidéos déjà fabriquées reviennent ; les manquantes se refont
@@ -1783,23 +1826,20 @@ async function pageArbre(id) {
     };
   });
 
-  if (!editable && !arbre.repondable) return;
+  if (!editable) return;
 
   const parentField = document.getElementById('branche-parent');
   const ou = document.getElementById('branche-ou');
   const annule = document.getElementById('branche-annule');
   const formulaire = document.getElementById('branche-form');
 
-  /* Poser le formulaire sur une pensée : pour la prolonger quand elle est à
-     soi, pour y répondre quand elle est à un autre. */
-  function viseParent(cible, reponse) {
+  // Poser le formulaire sur une pensée, pour la prolonger.
+  function viseParent(cible) {
     parentField.value = cible == null ? '' : String(cible);
-    ou.textContent = cible == null
-      ? (editable ? 'Une pensée de plus' : 'Ta réponse')
-      : (reponse ? 'Ta réponse à cette pensée' : 'Une pensée qui prolonge celle-ci');
+    ou.textContent = cible == null ? 'Une pensée de plus' : 'Une pensée qui prolonge celle-ci';
     annule.hidden = cible == null;
     formulaire.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    const champ = document.getElementById(kind === 'video' && editable ? 'branche-url' : 'branche-body');
+    const champ = document.getElementById(kind === 'video' ? 'branche-url' : 'branche-body');
     if (champ) champ.focus();
   }
   // la liaison : « nourrie par… » puis un toucher sur la branche source :
@@ -1814,9 +1854,9 @@ async function pageArbre(id) {
   };
   document.getElementById('liaison-annule').onclick = fermeLiaison;
 
-  /* Les autres arbres où puiser, chargés à la première liaison. On ne propose
-     que ce que le serveur accepterait : dans un arbre de carré, ce carré ;
-     chez soi, ses propres réflexions — toutes, d'où qu'elles soient rangées. */
+  /* Les autres arbres où puiser, chargés à la première liaison : ses propres
+     réflexions — toutes, d'où qu'elles soient rangées. Rien d'autre : Pense
+     Mieux est à soi. */
   let autresArbres = null;
   const groupe = (label, arbres) => arbres.length
     ? `<optgroup label="${esc(label)}">${arbres.map((a) => `<option value="${a.id}">${esc(a.title)}</option>`).join('')}</optgroup>`
@@ -1824,22 +1864,12 @@ async function pageArbre(id) {
   const chargeAutres = async () => {
     if (autresArbres != null) return;
     try {
-      let options = '';
-      let total = 0;
       const d = await api(`/api/arbres?kind=${kind}`);
-      if (collectif) {
-        const c = (d.carres || []).find((x) => x.carre_id === arbre.carre_id);
-        const arbres = (c ? c.arbres : []).filter((a) => a.id !== id);
-        total = arbres.length;
-        options = groupe(c ? c.carre_nom : 'Le carré', arbres);
-      } else {
-        const mienne = [...(d.troncs || []), ...(d.arbres || [])].filter((a) => a.id !== id);
-        total = mienne.length;
-        options = groupe('Mes réflexions', mienne);
-      }
-      autresArbres = total;
-      selArbre.innerHTML = '<option value="">ou depuis une autre réflexion…</option>' + options;
-      selArbre.hidden = total === 0;
+      const mienne = [...(d.troncs || []), ...(d.arbres || [])].filter((a) => a.id !== id);
+      autresArbres = mienne.length;
+      selArbre.innerHTML = '<option value="">ou depuis une autre réflexion…</option>'
+        + groupe('Mes réflexions', mienne);
+      selArbre.hidden = mienne.length === 0;
     } catch { selArbre.hidden = true; }
   };
 
@@ -1872,6 +1902,7 @@ async function pageArbre(id) {
     const coupe = e.target.closest('[data-coupe]');
     const nourrit = e.target.closest('[data-nourrit]');
     const oublie = e.target.closest('[data-oublie]');
+    const remonte = e.target.closest('[data-remonte]');
     if (liaisonDepuis != null) {
       // en mode liaison, tout toucher de branche désigne la source
       const cible = e.target.closest('[data-branche]');
@@ -1895,14 +1926,32 @@ async function pageArbre(id) {
       const [bId, sId] = oublie.dataset.oublie.split(':');
       await api(`/api/branches/${bId}/liens/${sId}`, { method: 'DELETE' });
       pageArbre(id);
+    } else if (remonte) {
+      /* L'émergence : corriger le texte d'une pensée dite, c'est corriger sa
+         vidéo. Le texte réaligné part sur le compte, la vidéo d'avant
+         s'oublie, et la file la refabrique en repeignant la page. */
+      const bid = +remonte.dataset.remonte;
+      const champ = app.querySelector(`[data-texte="${bid}"]`);
+      const etat = app.querySelector(`[data-etat="${bid}"]`);
+      const texte = (champ ? champ.value : '').trim();
+      if (!texte) { if (etat) etat.textContent = 'Le texte ne peut pas rester vide.'; return; }
+      const v = vocaux.get(bid) || {};
+      try {
+        await api(`/api/branches/${bid}`, {
+          method: 'PUT',
+          body: { body: texte, mots: remapMots(texte, v.mots || [], v.duree || 0) },
+        });
+        await oublieVideo(bid);
+        pageArbre(id);
+      } catch (err) { if (etat) etat.textContent = err.message; }
     } else if (pousse) {
-      viseParent(+pousse.dataset.pousse, false);
+      viseParent(+pousse.dataset.pousse);
     } else if (coupe && confirm('Retirer cette pensée et tout ce qui s’y rattache ?')) {
       await api(`/api/branches/${coupe.dataset.coupe}`, { method: 'DELETE' });
       pageArbre(id);
     }
   });
-  annule.onclick = () => viseParent(null, false);
+  annule.onclick = () => viseParent(null);
 
   /* L'enregistreur du formulaire : LE geste de Pense Mieux. On dit sa
      pensée ; la transcription remplit le champ, qui s'ouvre pour être
@@ -1921,14 +1970,12 @@ async function pageArbre(id) {
     e.preventDefault();
     try {
       const champUrl = document.getElementById('branche-url');
-      const typeReponse = app.querySelector('input[name="reponse-type"]:checked');
       const r = await api(`/api/arbres/${id}/branches`, {
         method: 'POST',
         body: {
           parent_id: parentField.value ? +parentField.value : null,
           body: document.getElementById('branche-body').value,
           url: champUrl ? champUrl.value : '',
-          reponse: typeReponse ? typeReponse.value : '',
         },
       });
       const vocal = enregistreur ? enregistreur.prend() : null;
@@ -1989,19 +2036,15 @@ async function pageArbre(id) {
 }
 
 /* --------------------------------------------- le carré d'as (échelon 5)
-   Le réseau des carrés : mes carrés, la galerie des multivers, le salon de
-   recrutement, les missions. La page d'un carré est UNE page.            */
+   Un carré, c'est quatre As qui imaginent ENSEMBLE des sociétés
+   harmonieuses. La page principale rassemble tout : mes carrés, la
+   fondation, le salon, les carrés à compléter. Chaque carré a sa page (ses
+   As, ses sociétés), et chaque société la sienne (ses deux volets).      */
 
 // L'état du carré, partagé par les vues qui en ont besoin.
 async function chargeCarre() {
   return api('/api/carre');
 }
-
-/* ------------------------- le Carré d'As : une seule page ----------------
-   Mes carrés, les invitations, le salon où les As s'annoncent et où les
-   carrés incomplets invitent, les carrés à compléter (cherchables) et la
-   fondation d'un nouveau carré : tout est là, sans sous-menu. Chaque carré a
-   ensuite sa propre page.                                                 */
 
 async function vueCarreDAs() {
   const epoch = newEpoch();
@@ -2019,19 +2062,18 @@ async function vueCarreDAs() {
   try { r = await api('/api/carre/recrutement'); } catch { r = null; }
   if (stale(epoch)) return;
 
-  // mon carré d'un côté, ceux où j'aide de l'autre : ce ne sont pas la même
-  // chose, et c'est toute la règle de la page
+  const societesTxt = (n) => (n ? `${n} société${n > 1 ? 's' : ''}` : 'aucune société encore');
   const carte = (c) => {
     const places = 4 - c.membres.length;
     return `
-      <a class="carre-carte${c.mien ? ' carre-carte--mien' : ''}" href="/carre-d-as/${c.id}" data-link>
+      <a class="carre-carte" href="/carre-d-as/${c.id}" data-link>
         <h2>${esc(c.nom)}</h2>
         <p class="carre-carte-membres">${c.membres.map((m) => esc(m.username)).join(' · ')}
           ${places ? `<span class="carre-carte-places">${places} place${places > 1 ? 's' : ''}</span>` : ''}</p>
+        <span class="carre-carte-societes">${societesTxt(c.societes)}</span>
       </a>`;
   };
-  const mien = d.carres.filter((c) => c.mien).map(carte).join('');
-  const ailleurs = d.carres.filter((c) => !c.mien).map(carte).join('');
+  const miens = d.carres.map(carte).join('');
 
   // les invitations que je reçois, et mon annonce au salon
   const a = r ? r.monAnnonce : null;
@@ -2048,9 +2090,13 @@ async function vueCarreDAs() {
         </div>`).join('')}
     </div>` : '';
 
-  // on n'invite que dans SON carré, et seulement s'il y reste une place
+  // on invite dans un de ses carrés où il reste une place
   const avecPlaces = r ? r.mesCarres.filter((c) => c.places > 0) : [];
-  const choixCarre = '';
+  const choixCarre = avecPlaces.length > 1 ? `
+    <label class="invite-choix">Inviter dans
+      <select id="invite-carre">${avecPlaces.map((c) => `
+        <option value="${c.id}">${esc(c.nom)}</option>`).join('')}</select>
+    </label>` : '';
   const envoyees = r && r.envoyees.length ? `
     <div class="recrut-envoyees">
       ${r.envoyees.map((i) => `<span class="recrut-attente">${esc(i.carre_nom)} : ${esc(i.username)} (invité)
@@ -2072,30 +2118,26 @@ async function vueCarreDAs() {
   // les carrés où il reste une place, filtrables au clavier
   const peintOuverts = (liste) => liste.length ? liste.map((o) => `
     <li><a href="/carre-d-as/${o.id}" data-link>${esc(o.nom)}</a>
-      <span>${o.createur ? `de ${esc(o.createur)} · ` : ''}${o.membres}/4</span>
-      <button type="button" data-rejoint="${o.id}">Aider</button></li>`).join('')
+      <span>${o.membres}/4 · ${societesTxt(o.societes)}</span>
+      <button type="button" data-rejoint="${o.id}">Rejoindre</button></li>`).join('')
     : '<li class="empty-note">Aucun carré à compléter.</li>';
 
   app.innerHTML = `
     <h1>Carré d’As</h1>
-    <p class="subtitle">Ton carré, c’est trois As qui pensent avec toi sur tes
-      cinq branches. Et tu entres dans le leur, pour les aider à leur tour.</p>
+    <p class="subtitle">Un carré, c’est quatre As qui imaginent ensemble des
+      sociétés harmonieuses : ce qui permet à chacune d’être, et comment on y
+      vivrait. Fondes-en autant que tu veux, entre dans autant que tu veux.</p>
     ${invitations}
     <section class="ca-bloc">
-      <h2>Mon carré</h2>
-      ${mien ? `<div class="carres-liste">${mien}</div>` : `
-        <p class="empty-note">Tu n’as pas encore ton carré : fonde-le, puis trouve trois As au salon.</p>
-        <form id="carre-cree" class="carre-cree">
-          <input id="carre-nom" maxlength="60" placeholder="Le nom de ton carré" required>
-          <button type="submit" class="primary">Fonder mon carré</button>
-          <p class="form-error" id="carre-err"></p>
-        </form>`}
+      <h2>Mes carrés</h2>
+      ${miens ? `<div class="carres-liste">${miens}</div>`
+        : '<p class="empty-note">Aucun carré encore : fonde le premier, ou rejoins-en un plus bas.</p>'}
+      <form id="carre-cree" class="carre-cree">
+        <input id="carre-nom" maxlength="60" placeholder="Le nom d’un nouveau carré" required>
+        <button type="submit" class="primary">Fonder ce carré</button>
+        <p class="form-error" id="carre-err"></p>
+      </form>
     </section>
-    ${ailleurs ? `
-    <section class="ca-bloc">
-      <h2>Les carrés où j’aide</h2>
-      <div class="carres-liste">${ailleurs}</div>
-    </section>` : ''}
     <section class="ca-bloc">
       <h2>Le salon</h2>
       ${r ? `<p class="recrut-charte">${esc(r.charte)}</p>` : ''}
@@ -2114,7 +2156,7 @@ async function vueCarreDAs() {
     </section>
     <section class="ca-bloc">
       <h2>Carrés à compléter</h2>
-      <p class="pm-bloc-sous">Ceux qui cherchent encore des As pour les aider.</p>
+      <p class="pm-bloc-sous">Ceux qui cherchent encore des As pour imaginer avec eux.</p>
       <input id="carre-cherche" placeholder="Chercher un carré…" autocomplete="off">
       <ul class="carres-ouverts" id="carres-ouverts">${peintOuverts(d.ouverts)}</ul>
     </section>`;
@@ -2140,8 +2182,7 @@ async function vueCarreDAs() {
   cherche.oninput = () => {
     const q = cherche.value.trim().toLowerCase();
     document.getElementById('carres-ouverts').innerHTML = peintOuverts(
-      d.ouverts.filter((o) => !q || o.nom.toLowerCase().includes(q)
-        || (o.createur || '').toLowerCase().includes(q)));
+      d.ouverts.filter((o) => !q || o.nom.toLowerCase().includes(q)));
     brancheRejoint();
   };
   app.querySelectorAll('[data-accepte]').forEach((b) => {
@@ -2160,11 +2201,13 @@ async function vueCarreDAs() {
   });
   app.querySelectorAll('[data-invite]').forEach((b) => {
     b.onclick = async () => {
+      const sel = document.getElementById('invite-carre');
+      const carreId = sel ? +sel.value : (avecPlaces[0] && avecPlaces[0].id);
       const note = prompt(`Un mot pour ${b.dataset.invite} ? (facultatif)`) ?? '';
       try {
         await api('/api/carre/invitations', {
           method: 'POST',
-          body: { username: b.dataset.invite, note },
+          body: { username: b.dataset.invite, note, carre_id: carreId },
         });
         vueCarreDAs();
       } catch (err) { alert(err.message); }
@@ -2182,30 +2225,30 @@ async function vueCarreDAs() {
   if (retire) retire.onclick = async () => { await api('/api/carre/annonce', { method: 'DELETE' }); vueCarreDAs(); };
 }
 
-/* ------------------------- la page d'un carré : celui d'une personne -------
-   Un carré est celui de son porteur. Ses trois As lisent ses cinq branches
-   et y répondent : c'est tout ce que la page montre — lui, ses branches, et
-   ceux qui l'aident. On entre dans une branche pour lui donner des variables
-   de plus.                                                                */
+/* ------------------------- la page d'un carré : l'atelier -----------------
+   Ses quatre As, et les sociétés harmonieuses qu'ils imaginent ensemble.
+   On en fonde une nouvelle ici ; chacune s'ouvre sur sa page, avec ses deux
+   volets.                                                                 */
 
 function carreTete(d) {
-  const as = (d.membres || []).map((m) => (m.createur
-    ? `<strong>${authorLink(m.username)}</strong>`
-    : authorLink(m.username))).join('<span class="carre-sep">·</span>');
+  const as = (d.membres || []).map((m) => authorLink(m.username)).join('<span class="carre-sep">·</span>');
   return `
     <p class="fil-retour"><a href="/carre-d-as" data-link>← Mes carrés</a></p>
     <h1>${esc(d.carre.nom)}</h1>
-    <p class="carre-porteur">Le carré de ${esc(d.carre.createur || '?')}</p>
     <p class="carre-as">${as}${d.places > 0
       ? `<span class="carre-places">${d.places} place${d.places > 1 ? 's' : ''} libre${d.places > 1 ? 's' : ''}</span>` : ''}</p>`;
 }
 
-// La façade d'un carré où je ne suis pas : son porteur, ses As, ses places.
+// La façade d'un carré où je ne suis pas : ses As, ses places, et combien de
+// sociétés s'y imaginent — rien de leur contenu.
 function carreFacade(id, d) {
   app.innerHTML = `
     ${carreTete(d)}
+    <p class="carre-facade-societes">${d.societes
+      ? `${d.societes} société${d.societes > 1 ? 's' : ''} harmonieuse${d.societes > 1 ? 's' : ''} en chantier.`
+      : 'Aucune société encore : tout est à imaginer.'}</p>
     ${d.places > 0 && state.user ? `
-      <button type="button" class="primary" id="carre-rejoint">Aider dans ce carré</button>
+      <button type="button" class="primary" id="carre-rejoint">Rejoindre ce carré</button>
       <p class="form-error" id="carre-err"></p>`
       : '<p class="empty-note">Ce carré est complet.</p>'}`;
 
@@ -2227,39 +2270,50 @@ async function pageCarre(id) {
   if (stale(epoch)) return;
   if (d.publique) return carreFacade(id, d);
 
-  const branches = (d.branches || []).map((b) => `
-    <a class="mat-carte" href="/reflexion/${b.id}" data-link>
-      <h3>${esc(d.mien ? b.titre : `${b.court} de ${d.carre.createur}`)}</h3>
-      ${b.trunk ? `<p class="mat-apercu">${esc(b.trunk)}</p>` : `<p class="mat-apercu">${esc(b.sous)}</p>`}
-      <span class="mat-meta">${b.pensees} pensée${b.pensees > 1 ? 's' : ''}${
-        b.dedans ? ` · ${b.dedans} réflexion${b.dedans > 1 ? 's' : ''}` : ''}${
-        b.reponses ? ` · ${b.reponses} réponse${b.reponses > 1 ? 's' : ''}` : ''}</span>
+  const volets = new Map((d.volets || []).map((v) => [v.cle, v]));
+  const societes = (d.societes || []).map((s) => `
+    <a class="societe-carte" href="/societe/${s.id}" data-link>
+      <h3>${esc(s.nom)}</h3>
+      <span class="societe-meta">${(volets.get('etre') || {}).titre || ''} : ${s.etre} ·
+        ${(volets.get('vivre') || {}).titre || ''} : ${s.vivre}</span>
     </a>`).join('');
 
   app.innerHTML = `
     ${carreTete(d)}
-    <section class="carre-branches">
-      <h2>${d.mien ? 'Mes cinq branches' : `Les cinq branches de ${esc(d.carre.createur)}`}</h2>
-      <p class="pm-bloc-sous">${d.mien
-        ? 'Tes trois As les lisent toutes et peuvent y répondre.'
-        : 'Entre, et donne-lui des variables de plus : approfondis, élargis, ou oppose en proposant une issue.'}</p>
-      <div class="carre-bloc-cartes">${branches}</div>
+    <section class="carre-societes">
+      <h2>Vos sociétés harmonieuses</h2>
+      <p class="pm-bloc-sous">Ce que ce carré imagine ensemble : chaque société
+        a un nom, ce qui lui permet d’être, et la vie qu’on y mènerait.</p>
+      ${societes ? `<div class="carre-bloc-cartes">${societes}</div>`
+        : '<p class="empty-note">Aucune société encore. Nommez la première : le reste s’imagine ensuite.</p>'}
+      <form id="societe-cree" class="carre-cree">
+        <input id="societe-nom" maxlength="80" placeholder="Le nom d’une société à imaginer" required>
+        <button type="submit" class="primary">Créer cette société</button>
+        <p class="form-error" id="societe-err"></p>
+      </form>
     </section>
-    ${d.places > 0 && d.mien ? `<p class="empty-note">Il te manque ${d.places} As :
+    ${d.places > 0 ? `<p class="empty-note">Il manque ${d.places} As à ce carré :
       le salon est sur <a href="/carre-d-as" data-link>la page des carrés</a>.</p>` : ''}
     <p class="carre-sortie">
-      ${d.mien ? `<label class="carre-salon">Salon Discord
+      <label class="carre-salon">Salon Discord
         <input id="carre-discord" type="url" placeholder="https://discord.gg/…" value="${esc(d.carre.discord_url || '')}">
-      </label>` : `${d.carre.discord_url ? `<a href="${esc(safeUrl(d.carre.discord_url))}"
-        target="_blank" rel="noopener">Le salon Discord du carré</a>` : ''}
-      <button type="button" class="link-btn danger" id="carre-quitter">Quitter ce carré</button>`}
+      </label>
+      <button type="button" class="link-btn danger" id="carre-quitter">Quitter ce carré</button>
       <span class="form-error" id="carre-sortie-err"></span>
     </p>`;
 
-  const quitter = document.getElementById('carre-quitter');
-  if (quitter) quitter.onclick = () => quitteCarre(id);
+  document.getElementById('societe-cree').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const x = await api(`/api/carre/${id}/societes`, {
+        method: 'POST', body: { nom: document.getElementById('societe-nom').value },
+      });
+      navigate(`/societe/${x.id}`);
+    } catch (err) { document.getElementById('societe-err').textContent = err.message; }
+  };
+  document.getElementById('carre-quitter').onclick = () => quitteCarre(id);
   const discord = document.getElementById('carre-discord');
-  if (discord) discord.onchange = async () => {
+  discord.onchange = async () => {
     try { await api(`/api/carre/${id}`, { method: 'PUT', body: { discord_url: discord.value } }); }
     catch (err) { document.getElementById('carre-sortie-err').textContent = err.message; }
   };
@@ -2269,6 +2323,94 @@ async function quitteCarre(id) {
   if (!confirm('Quitter ce carré ?')) return;
   await api(`/api/carre/${id}/quitter`, { method: 'POST', body: {} });
   navigate('/carre-d-as');
+}
+
+/* ------------------------- la page d'une société harmonieuse --------------
+   Les deux volets, côte à côte : ce qui lui permet d'être, et comment on y
+   vit. Chacun des quatre dépose dans l'un ou l'autre ; chacun retire ce
+   qu'il a déposé.                                                         */
+
+async function pageSociete(id) {
+  const epoch = newEpoch();
+  app.innerHTML = '<div class="loading">Chargement…</div>';
+  let d;
+  try { d = await api(`/api/societes/${id}`); }
+  catch { return navigate('/carre-d-as', true); }
+  if (stale(epoch)) return;
+
+  const parVolet = new Map();
+  for (const i of d.idees || []) {
+    if (!parVolet.has(i.volet)) parVolet.set(i.volet, []);
+    parVolet.get(i.volet).push(i);
+  }
+  const colonne = (v) => {
+    const idees = parVolet.get(v.cle) || [];
+    return `
+    <section class="volet" data-volet="${esc(v.cle)}">
+      <h2>${esc(v.titre)}</h2>
+      <p class="volet-aide">${esc(v.aide)}</p>
+      <div class="volet-idees">${idees.map((i) => `
+        <article class="volet-idee">
+          <p>${esc(i.body)}</p>
+          <div class="volet-idee-pied">${authorLink(i.username)}
+            ${i.user_id === d.moi ? `<button type="button" class="link-btn danger" data-idee-retire="${i.id}">retirer</button>` : ''}
+          </div>
+        </article>`).join('')
+        || '<p class="empty-note">Rien encore : à vous d’imaginer.</p>'}</div>
+      <form class="volet-form" data-volet-form="${esc(v.cle)}">
+        <textarea maxlength="2000" rows="2" placeholder="${esc(v.cle === 'etre'
+          ? 'Ce qui rendrait cette société possible…' : 'Ce qu’on y ferait, mécaniquement…')}"></textarea>
+        <button type="submit" class="primary">Déposer</button>
+        <p class="form-error" data-volet-err></p>
+      </form>
+    </section>`;
+  };
+
+  app.innerHTML = `
+    <p class="fil-retour"><a href="/carre-d-as/${d.societe.carre_id}" data-link>← ${esc(d.societe.carre_nom)}</a></p>
+    <h1 class="societe-titre">${esc(d.societe.nom)}</h1>
+    <p class="carre-as">${(d.membres || []).map((m) => authorLink(m.username)).join('<span class="carre-sep">·</span>')}
+      <button type="button" class="link-btn" id="societe-renomme">renommer</button></p>
+    <div class="volets">${(d.volets || []).map(colonne).join('')}</div>
+    ${(d.idees || []).length ? '' : `<p class="arbre-suppr">
+      <button type="button" class="link-btn danger" id="societe-suppr">Supprimer cette société</button></p>`}`;
+
+  document.getElementById('societe-renomme').onclick = async () => {
+    const nom = prompt('Le nouveau nom de cette société :', d.societe.nom);
+    if (!nom || !nom.trim()) return;
+    try {
+      await api(`/api/societes/${id}`, { method: 'PUT', body: { nom } });
+      pageSociete(id);
+    } catch (err) { alert(err.message); }
+  };
+  app.querySelectorAll('[data-volet-form]').forEach((f) => {
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const champ = f.querySelector('textarea');
+      if (!champ.value.trim()) return;
+      try {
+        await api(`/api/societes/${id}/idees`, {
+          method: 'POST', body: { volet: f.dataset.voletForm, body: champ.value },
+        });
+        pageSociete(id);
+      } catch (err) { f.querySelector('[data-volet-err]').textContent = err.message; }
+    };
+  });
+  app.querySelectorAll('[data-idee-retire]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('Retirer cette idée ?')) return;
+      await api(`/api/societes/${id}/idees/${b.dataset.ideeRetire}`, { method: 'DELETE' });
+      pageSociete(id);
+    };
+  });
+  const suppr = document.getElementById('societe-suppr');
+  if (suppr) suppr.onclick = async () => {
+    if (!confirm('Supprimer cette société vide ?')) return;
+    try {
+      await api(`/api/societes/${id}`, { method: 'DELETE' });
+      navigate(`/carre-d-as/${d.societe.carre_id}`);
+    } catch (err) { alert(err.message); }
+  };
 }
 
 /* ---------------------------------------------- le brainstorm (échelon 6)
@@ -2283,6 +2425,7 @@ function bsCarte(b) {
   return `
     <a class="bs-card bs-${esc(b.statut)}" href="/brainstorm/${b.id}" data-link>
       <div class="bs-statut">${b.statut === 'live' ? '● EN DIRECT' : b.statut === 'annonce' ? 'Annoncé' : 'Terminé'}</div>
+      ${b.societe_nom ? `<div class="bs-societe">${esc(b.societe_nom)}</div>` : ''}
       <h2>${esc(b.sujet)}</h2>
       <div class="bs-meta">${esc(b.carre_nom)} · ${esc(PLATEFORME_LABELS[b.plateforme] || b.plateforme)}
         · ${b.idees} réflexion${b.idees > 1 ? 's' : ''}${b.retenues ? ` · ★ ${b.retenues}` : ''}</div>
@@ -2329,7 +2472,8 @@ async function vueArchives() {
 }
 
 // Annoncer : la parole d'un carré complet. On choisit lequel de ses carrés
-// porte le live, et lequel de ses As tient l'antenne.
+// porte le live, et la société harmonieuse qu'il va imaginer — une déjà en
+// chantier, ou une qui naît pour l'occasion.
 async function vueAnnoncer() {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
@@ -2338,26 +2482,30 @@ async function vueAnnoncer() {
   catch { return navigate('/57', true); }
   if (stale(epoch)) return;
 
-  /* Un brainstorm, c'est MON carré qui pense avec moi devant du monde : c'est
-     donc le mien qui le porte, et c'est moi qui tiens l'antenne. */
-  const mien = (d.carres || []).find((c) => c.mien);
-  if (!mien || mien.membres.length < 4) {
+  const complets = (d.carres || []).filter((c) => c.membres.length >= 4);
+  if (!complets.length) {
     docke('bs', 'annoncer', `
       <h1>Annoncer un brainstorm</h1>
-      <p class="empty-note">${mien
-        ? 'Ton carré n’est pas complet : il te faut trois As pour penser avec toi.'
-        : 'Fonde d’abord ton carré : c’est lui qui porte le live.'}
+      <p class="empty-note">Il faut un carré complet — quatre As — pour
+        imaginer une société en direct.
         Tout se joue au <a href="/carre-d-as" data-link>Carré d’As</a>.</p>`);
     return;
   }
 
   docke('bs', 'annoncer', `
     <h1>Annoncer un brainstorm</h1>
-    <p class="subtitle">Le sujet sur lequel ton carré va t’aider à réfléchir,
-      en direct. Tu tiens l’antenne, ${esc(mien.membres.filter((m) => !state.user
-        || m.user_id !== state.user.id).map((m) => m.username).join(', '))} pensent avec toi.</p>
+    <p class="subtitle">Un carré, une société harmonieuse à concevoir ou à
+      améliorer, et la salle qui pense avec vous, en direct.</p>
     <form id="bs-form" class="bs-form">
-      <input id="bs-sujet" maxlength="200" placeholder="Sur quoi veux-tu qu’on t’aide à réfléchir ?" required>
+      ${complets.length > 1 ? `
+      <label class="bs-choix">Le carré
+        <select id="bs-carre">${complets.map((c) => `<option value="${c.id}">${esc(c.nom)}</option>`).join('')}</select>
+      </label>` : `<input type="hidden" id="bs-carre" value="${complets[0].id}">`}
+      <label class="bs-choix">La société
+        <select id="bs-societe"><option value="">— une nouvelle société —</option></select>
+      </label>
+      <input id="bs-societe-nom" maxlength="80" placeholder="Le nom de la société qui naît">
+      <input id="bs-sujet" maxlength="200" placeholder="Ce que le live va imaginer d’elle" required>
       <div class="bs-form-ligne">
         <select id="bs-plateforme">
           <option value="youtube">YouTube</option><option value="twitch">Twitch</option><option value="tiktok">TikTok</option>
@@ -2368,12 +2516,33 @@ async function vueAnnoncer() {
       <p class="form-error" id="bs-err"></p>
     </form>`);
 
+  // les sociétés du carré choisi : on annonce sur l'une d'elles, ou sur une
+  // nouvelle qu'on nomme à l'instant
+  const selCarre = document.getElementById('bs-carre');
+  const selSociete = document.getElementById('bs-societe');
+  const champNom = document.getElementById('bs-societe-nom');
+  const chargeSocietes = async () => {
+    try {
+      const c = await api(`/api/carre/${selCarre.value}`);
+      selSociete.innerHTML = '<option value="">— une nouvelle société —</option>'
+        + (c.societes || []).map((s) => `<option value="${s.id}">${esc(s.nom)}</option>`).join('');
+    } catch { selSociete.innerHTML = '<option value="">— une nouvelle société —</option>'; }
+    champNom.hidden = !!selSociete.value;
+  };
+  selSociete.onchange = () => { champNom.hidden = !!selSociete.value; };
+  if (selCarre.tagName === 'SELECT') selCarre.onchange = chargeSocietes;
+  await chargeSocietes();
+  if (stale(epoch)) return;
+
   document.getElementById('bs-form').onsubmit = async (e) => {
     e.preventDefault();
     try {
       const r = await api('/api/brainstorms', {
         method: 'POST',
         body: {
+          carre_id: +selCarre.value,
+          societe_id: selSociete.value ? +selSociete.value : null,
+          societe_nom: champNom.value,
           sujet: document.getElementById('bs-sujet').value,
           plateforme: document.getElementById('bs-plateforme').value,
           url: document.getElementById('bs-url').value,
@@ -2420,6 +2589,7 @@ async function pageBrainstorm(id) {
       <p class="fil-retour"><a href="/brainstorm" data-link>← Brainstorm</a></p>
       <div class="bs-tete bs-${esc(b.statut)}">
         <div class="bs-statut">${b.statut === 'live' ? '● EN DIRECT' : b.statut === 'annonce' ? 'Annoncé' : 'Terminé'}</div>
+        ${b.societe_nom ? `<div class="bs-societe">La société « ${esc(b.societe_nom)} »</div>` : ''}
         <h1>${esc(b.sujet)}</h1>
         <div class="bs-meta">${esc(b.carre_nom)}${b.hote_username ? ` · ${esc(b.hote_username)} à l’antenne` : ''} ·
           <a href="${esc(safeUrl(b.url))}" target="_blank" rel="noopener">rejoindre le live sur ${esc(PLATEFORME_LABELS[b.plateforme] || b.plateforme)} ↗</a>
