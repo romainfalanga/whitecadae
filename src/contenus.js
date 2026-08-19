@@ -235,4 +235,3 @@ export const REPONSES = [
   },
 ];
 
-export const REPONSES_CLES = REPONSES.map((r) => r.cle);

@@ -351,7 +351,6 @@ for (const node of NODES) {
   }
 }
 
-export const TOTAL_ANSWERS = NODES.reduce((sum, n) => sum + n.answers.length, 0);
 
 export function getNode(id) {
   return NODE_BY_ID.get(id) || null;
@@ -528,10 +527,9 @@ export function echelonOf(solved) {
 }
 
 // Ce que chaque échelon ouvre. La page 57 est toujours là : c'est par elle
-// qu'on entre. Les interprétations et les reprises sont ouvertes dès le sol,
-// même sans compte, et chaque cran suivant découvre une pièce de plus.
+// qu'on entre. Les interprétations sont ouvertes dès le sol, même sans
+// compte, et chaque cran suivant découvre une pièce de plus.
 export const ECHELON_INTERPRETATIONS = 1;
-export const ECHELON_REPRISES = 1;
 export const ECHELON_CONVERSATION = 2;
 export const ECHELON_PENSE_MIEUX = 3;
 export const ECHELON_VIDEOGRAPHIE = 4;
@@ -579,7 +577,6 @@ export function delaiEssaiMs(echelon) {
 export function accessOf(echelon) {
   return {
     interpretations: echelon >= ECHELON_INTERPRETATIONS,
-    reprises: echelon >= ECHELON_REPRISES,
     conversation: echelon >= ECHELON_CONVERSATION,
     penseMieux: echelon >= ECHELON_PENSE_MIEUX,
     videographie: echelon >= ECHELON_VIDEOGRAPHIE,

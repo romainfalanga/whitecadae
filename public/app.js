@@ -6,18 +6,16 @@ const nav = document.getElementById('nav');
 const state = {
   user: null,
   // ce que l'échelon atteint sur la page 57 a ouvert du reste du site
-  access: { interpretations: false, reprises: false },
+  access: { interpretations: false },
   echelon: 1, // l'échelon du visiteur, tenu par le serveur
   song: null, // données de la page chanson en cours
   sel: null, // sélection : {type:'line'|'word'|'title'|'duration', lineId?, start?, end?}
-  openComments: new Set(), // espaces commentaires ouverts, clés "kind:id"
   corpus: null, // {songs, lines} : toutes les phrases de tous les morceaux
   corpusDf: null, // fréquence documentaire des mots (moteur d'échos)
   builder: null, // constructeur d'interprétation d'ensemble en cours
   sheetOpen: false, // feuille du bas ouverte (mobile)
   songModalOpen: false, // fenêtre « l'ensemble du morceau » ouverte
   feed: null, // fil des interprétations récentes
-  coverFeed: null, // fil des reprises récentes
   enigmes: null, // état des énigmes de la page /57
 };
 
@@ -169,8 +167,7 @@ async function route() {
   // 57, sans un mot. Chaque pièce haute a sa clé d'accès ; le serveur revérifie
   // de toute façon à chaque appel.
   const cle =
-    (path === '/reprises' || path === '/reprises/fil' || /^\/chanson\/[^/]+\/reprises$/.test(path)) ? 'reprises'
-    : path === '/conversation' ? 'conversation'
+    path === '/conversation' ? 'conversation'
     // un arbre se lit par son chemin canonique : sa nature vient du serveur,
     // qui refuse en 404 celui qu'on n'a pas le droit de voir
     : path.startsWith('/reflexion/') || path.startsWith('/arbre/') ? 'penseMieux'
@@ -213,10 +210,7 @@ async function route() {
   if (path === '/brainstorm/annoncer') return vueAnnoncer();
   if ((m = path.match(/^\/brainstorm\/(\d+)$/))) return pageBrainstorm(+m[1]);
   if (path === '/game-master-orange') return pageGmo();
-  if (path === '/reprises/fil') return pageCoverFeed();
-  if (path === '/reprises') return pageCovers();
   if (path === '/fil') return navigate('/interpretations', true);
-  if ((m = path.match(/^\/chanson\/([^/]+)\/reprises$/))) return pageSongCovers(decodeURIComponent(m[1]));
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
   app.innerHTML = '<h1>Page introuvable</h1><p><a href="/interpretations" data-link>Retour aux interprétations</a></p>';
 }
@@ -426,8 +420,8 @@ function openSettings() {
   document.getElementById('settings-logout').onclick = async () => {
     await api('/api/logout', { method: 'POST' });
     state.user = null;
-    // sans compte on garde le sol : interprétations et reprises restent là
-    state.access = { interpretations: true, reprises: true };
+    // sans compte on garde le sol : les interprétations restent là
+    state.access = { interpretations: true };
     state.echelon = 1;
     oublieAttente();
     closeSettings();
@@ -442,7 +436,6 @@ function renderNav() {
   const a = state.access;
   const liens = ['<a href="/57" data-link>57</a>'];
   if (a.interpretations) liens.push('<a href="/interpretations" data-link>Interprétations</a>');
-  if (a.reprises) liens.push('<a href="/reprises" data-link>Reprises</a>');
   if (a.conversation) liens.push('<a href="/conversation" data-link>Conversation</a>');
   if (a.penseMieux) liens.push('<a href="/pense-mieux" data-link>Pense Mieux</a>');
   if (a.videographie) liens.push('<a href="/videographie" data-link>Vidéographie</a>');
@@ -1030,7 +1023,7 @@ function brancheHtml(b, enfants, kind, editable, ctx) {
 function videoEmbed(url) {
   const id = youtubeEmbedId(url || '');
   if (!id) return `<a href="${esc(safeUrl(url))}" target="_blank" rel="noopener">${esc(url)}</a>`;
-  return `<div class="cover-embed"><iframe src="https://www.youtube.com/embed/${esc(id)}"
+  return `<div class="video-embed"><iframe src="https://www.youtube.com/embed/${esc(id)}"
     title="Vidéo" loading="lazy" allowfullscreen
     allow="accelerometer; encrypted-media; picture-in-picture"></iframe></div>`;
 }
@@ -2713,7 +2706,7 @@ async function pageGmo() {
 /* -------------------------------------------------------- interprétations */
 
 // L'API sert les albums du plus ancien au plus récent (colonne `position`).
-// L'accueil et les reprises les présentent dans l'autre sens : la dernière
+// La page des interprétations les présente dans l'autre sens : la dernière
 // sortie en premier. L'ordre des morceaux à l'intérieur d'un album ne change
 // pas : il suit toujours le numéro de piste.
 function newestFirst(albums) {
@@ -2776,13 +2769,13 @@ async function refreshSession() {
   try {
     const data = await api('/api/me');
     state.user = data.user;
-    state.access = data.access || { interpretations: true, reprises: true };
+    state.access = data.access || { interpretations: true };
     state.echelon = data.echelon || 1;
     state.attenteMs = data.attenteMs || 0;
   } catch {
     // même injoignable, le serveur n'aurait pas refusé le sol
     state.user = null;
-    state.access = { interpretations: true, reprises: true };
+    state.access = { interpretations: true };
     state.echelon = 1;
     state.attenteMs = 0;
   }
@@ -2858,7 +2851,6 @@ async function pageSong(slug, keepSelection = false) {
   if (!keepSelection) {
     app.innerHTML = '<div class="loading">Chargement…</div>';
     state.sel = null;
-    state.openComments = new Set();
     state.builder = null;
     state.sheetOpen = false;
     document.body.classList.remove('sheet-open');
@@ -3354,9 +3346,6 @@ function renderSongPage() {
         Interpréter le titre${countFor('title') ? ` · ${countFor('title')}` : ''}
       </button>
       ${song.youtube_url ? `<a class="target-chip" href="${esc(safeUrl(song.youtube_url))}" target="_blank" rel="noopener">▶ Écouter</a>` : ''}
-      ${state.access.reprises ? `<a class="target-chip" href="/chanson/${encodeURIComponent(song.slug)}/reprises" data-link>
-        Reprises${state.song.coverCount ? ` · ${state.song.coverCount}` : ''}
-      </a>` : ''}
     </div>
     <div class="song-layout">
       <div>
@@ -3448,7 +3437,6 @@ function renderSongModal() {
     `Que raconte « ${song.title} » ?`, 'Interpréter ce morceau', nextGridFor(anns));
   bindRefDeletes(modal);
   bindAnnotationActions(modal);
-  bindSocial(modal);
 }
 
 /* ------------------------- grilles de lecture venues d'autres morceaux ---
@@ -3517,11 +3505,8 @@ function renderInbound() {
           ${authorLink(r.username)}
           <span>${esc(formatDate(r.created_at))}${r.updated_at ? ' (modifié)' : ''}</span>
         </div>
-        ${socialFooter('annotation', r)}
       </div>`).join('')}
     ${refsHtml}`;
-
-  bindSocial(container);
 }
 
 /* ----------------------------------- interprétations d'ensemble (essais) */
@@ -3607,7 +3592,6 @@ function essayCard(e) {
       ${e.links.map((l) => essayLinkHtml(
         l.from_text, l.from_word_start, l.from_word_end, l.from_song_title,
         l.to_text, l.to_word_start, l.to_word_end, l.to_song_title, l.note)).join('')}` : ''}
-    ${socialFooter('essay', e)}
   </div>`;
 }
 
@@ -3763,7 +3747,6 @@ function bindEssays(container) {
     };
   });
 
-  bindSocial(container);
   if (!state.builder) return;
 
   // --- constructeur
@@ -3865,106 +3848,6 @@ function bindEssays(container) {
 
   const cancel = document.getElementById('eb-cancel');
   if (cancel) cancel.onclick = () => { state.builder = null; renderEssays(); };
-}
-
-/* ------------------------------------ favoris & commentaires (partagé) --- */
-
-function socialFooter(kind, item) {
-  /* Une interprétation ne se commente pas et ne se compte pas : c'est la
-     mémoire de son auteur, personne d'autre ne la lit. Seules les reprises,
-     que les membres se montrent, gardent leurs favoris et leurs mots. */
-  if (kind !== 'cover') return '';
-  const key = `${kind}:${item.id}`;
-  const open = state.openComments.has(key);
-  const nComments = item.comments ? item.comments.length : 0;
-  return `<div class="social-footer">
-    <button class="social-btn fav-btn ${item.my_favorite ? 'active' : ''}" data-fav="${kind}:${item.id}"
-            title="${item.my_favorite ? 'Retirer des favoris' : 'Mettre en favori'}">
-      ${item.my_favorite ? '♥' : '♡'} ${item.favorite_count || 0}
-    </button>
-    <button class="social-btn ${open ? 'active' : ''}" data-comments-toggle="${key}">
-      &#128172; ${nComments} commentaire${nComments > 1 ? 's' : ''}
-    </button>
-  </div>
-  <div class="comments-block" ${open ? '' : 'hidden'} data-comments-block="${key}">
-    ${(item.comments || []).map((c) => `
-      <div class="comment">
-        <div class="comment-head">
-          ${authorLink(c.username)}
-          <span>${esc(formatDate(c.created_at))}</span>
-          ${state.user && (state.user.id === c.user_id || state.user.is_admin)
-            ? `<button class="link-btn" data-del-comment="${c.id}">supprimer</button>` : ''}
-        </div>
-        <div class="comment-body">${esc(c.content)}</div>
-      </div>`).join('')}
-    ${state.user
-      ? `<form class="comment-form" data-comment-form="${key}">
-          <textarea placeholder="Répondre à cette interprétation…" required maxlength="2000" rows="2"></textarea>
-          <div class="error-msg"></div>
-          <button type="submit">Commenter</button>
-        </form>`
-      : `<p class="empty-note"><a href="/connexion" data-link>Connectez-vous</a> pour commenter.</p>`}
-  </div>`;
-}
-
-// `opts.reload` (recharge les données depuis le serveur après une mutation)
-// et `opts.render` (réaffiche depuis l'état local, ex. ouvrir un fil de
-// commentaires) valent par défaut le comportement de la page chanson : les
-// autres pages qui réutilisent le bloc social (ex. la page des reprises)
-// passent leurs propres callbacks.
-function bindSocial(container, opts = {}) {
-  const reload = opts.reload || (() => pageSong(state.song.song.slug, true));
-  const render = opts.render || renderSongPage;
-
-  container.querySelectorAll('[data-fav]').forEach((btn) => {
-    btn.onclick = async () => {
-      if (!state.user) { navigate('/connexion'); return; }
-      const [kind, id] = btn.dataset.fav.split(':');
-      try {
-        await api('/api/favorites', {
-          method: 'POST',
-          body: { target_kind: kind, target_id: Number(id) },
-        });
-        await reload();
-      } catch (err) { alert(err.message); }
-    };
-  });
-  container.querySelectorAll('[data-comments-toggle]').forEach((btn) => {
-    btn.onclick = () => {
-      const key = btn.dataset.commentsToggle;
-      if (state.openComments.has(key)) state.openComments.delete(key);
-      else state.openComments.add(key);
-      render();
-    };
-  });
-  container.querySelectorAll('[data-comment-form]').forEach((form) => {
-    form.onsubmit = async (e) => {
-      e.preventDefault();
-      const [kind, id] = form.dataset.commentForm.split(':');
-      try {
-        await api('/api/comments', {
-          method: 'POST',
-          body: {
-            target_kind: kind,
-            target_id: Number(id),
-            content: form.querySelector('textarea').value,
-          },
-        });
-        await reload();
-      } catch (err) {
-        form.querySelector('.error-msg').textContent = err.message;
-      }
-    };
-  });
-  container.querySelectorAll('[data-del-comment]').forEach((btn) => {
-    btn.onclick = async () => {
-      if (!confirm('Supprimer ce commentaire ?')) return;
-      try {
-        await api(`/api/comments/${btn.dataset.delComment}`, { method: 'DELETE' });
-        await reload();
-      } catch (err) { alert(err.message); }
-    };
-  });
 }
 
 /* --------- panneau latéral : interprétations de la sélection en cours ---- */
@@ -4324,7 +4207,6 @@ function annotationCard(a, targetQuote) {
     ${targetQuote ? `<div class="annotation-target-quote">${targetQuote}</div>` : ''}
     <div class="annotation-body">${esc(a.content)}</div>
     ${referencesList(a)}
-    ${socialFooter('annotation', a)}
   </div>`;
 }
 
@@ -4636,87 +4518,13 @@ function renderPanel() {
   const clear = document.getElementById('clear-sel');
   if (clear) clear.onclick = clearSelection;
   bindAnnotationActions(panel);
-  bindSocial(panel);
 }
 
-/* ------------------------------------------------------------- connexions */
+/* -------------------------------------------------- vidéos YouTube ---
+   Identifiant YouTube d'une URL (watch, youtu.be, shorts, déjà en embed…),
+   ou null si le lien ne pointe pas vers YouTube : dans ce cas la vidéo
+   s'affiche comme un simple lien plutôt qu'un lecteur intégré.        */
 
-function renderConnections() {
-  const container = document.getElementById('connections');
-  if (!container) return;
-  const { song, connections, allSongs } = state.song;
-  const u = state.user;
-
-  const list = connections.map((c) => {
-    const own = u && (u.id === c.user_id || u.is_admin);
-    const isA = c.song_a_id === song.id;
-    const otherTitle = isA ? c.song_b_title : c.song_a_title;
-    const otherSlug = isA ? c.song_b_slug : c.song_a_slug;
-    return `<div class="connection">
-      <div class="connection-songs">${esc(song.title)}
-        <span class="arrow">⟷</span>
-        <a href="/chanson/${encodeURIComponent(otherSlug)}" data-link>${esc(otherTitle)}</a>
-      </div>
-      <div class="connection-body">${esc(c.explanation)}</div>
-      <div class="connection-meta">par ${authorLink(c.username)}, ${esc(formatDate(c.created_at))}
-        ${own ? `<button class="link-btn" data-del-conn="${c.id}">supprimer</button>` : ''}
-      </div>
-      ${socialFooter('connection', c)}
-    </div>`;
-  }).join('');
-
-  const others = allSongs.filter((s) => s.id !== song.id);
-  const form = u
-    ? `<form class="panel-card" id="conn-form">
-        <h3>Relier « ${esc(song.title)} » à une autre chanson</h3>
-        <select id="conn-target" required>
-          <option value="">Choisir une chanson…</option>
-          ${others.map((s) => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}
-        </select>
-        <textarea id="conn-text" placeholder="En quoi ces deux chansons sont-elles reliées ?" required maxlength="5000"></textarea>
-        <div class="error-msg"></div>
-        <button type="submit" class="primary">Créer la connexion</button>
-      </form>`
-    : `<p class="empty-note"><a href="/connexion" data-link>Connectez-vous</a> pour relier cette chanson à une autre.</p>`;
-
-  container.innerHTML = (list || '<p class="empty-note">Aucune connexion pour l’instant.</p>') + form;
-
-  container.querySelectorAll('[data-del-conn]').forEach((btn) => {
-    btn.onclick = async () => {
-      if (!confirm('Supprimer cette connexion ?')) return;
-      try {
-        await api(`/api/connections/${btn.dataset.delConn}`, { method: 'DELETE' });
-        await pageSong(song.slug, true);
-      } catch (err) { alert(err.message); }
-    };
-  });
-
-  const connForm = document.getElementById('conn-form');
-  if (connForm) connForm.onsubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await api('/api/connections', {
-        method: 'POST',
-        body: {
-          song_a_id: song.id,
-          song_b_id: Number(document.getElementById('conn-target').value),
-          explanation: document.getElementById('conn-text').value,
-        },
-      });
-      await pageSong(song.slug, true);
-    } catch (err) {
-      connForm.querySelector('.error-msg').textContent = err.message;
-    }
-  };
-
-  bindSocial(container);
-}
-
-/* ------------------------------------------------------------------ reprises */
-
-// Identifiant YouTube d'une URL (watch, youtu.be, shorts, déjà en embed…),
-// ou null si le lien ne pointe pas vers YouTube : dans ce cas la reprise
-// s'affiche comme une simple carte-lien plutôt qu'un lecteur intégré.
 function youtubeEmbedId(url) {
   try {
     const u = new URL(url);
@@ -4731,118 +4539,11 @@ function youtubeEmbedId(url) {
   return null;
 }
 
-// `opts.solo` : la reprise est déjà présentée par ce qui l'entoure (le fil
-// d'un profil, par exemple), qui porte l'auteur et la date : on ne les répète
-// pas ici, mais le bouton de suppression reste à sa place.
-function coverCard(c, opts = {}) {
-  const u = state.user;
-  const own = u && (u.id === c.user_id || u.is_admin);
-  const ytId = youtubeEmbedId(c.url);
-  return `<div class="cover-card" data-cover="${c.id}">
-    ${ytId
-      ? `<div class="cover-embed"><iframe src="https://www.youtube.com/embed/${esc(ytId)}"
-          title="${esc(c.title)}" loading="lazy" allowfullscreen></iframe></div>`
-      : `<a class="cover-link" href="${esc(safeUrl(c.url))}" target="_blank" rel="noopener noreferrer">▶ Voir la reprise</a>`}
-    <div class="cover-head">
-      <h4>${esc(c.title)}</h4>
-      ${c.song_slug && !opts.solo ? `<a class="cover-song-tag" href="/chanson/${encodeURIComponent(c.song_slug)}/reprises" data-link>${esc(c.song_title)}</a>` : ''}
-      <div class="annotation-head">
-        ${opts.solo ? '' : `${authorLink(c.username)}<span>${esc(formatDate(c.created_at))}</span>`}
-        ${own ? `<button class="link-btn" data-cover-del="${c.id}">supprimer</button>` : ''}
-      </div>
-    </div>
-    ${c.description ? `<div class="cover-desc">${esc(c.description)}</div>` : ''}
-    ${socialFooter('cover', c)}
-  </div>`;
-}
-
-function bindCoverDeletes(container, reload) {
-  container.querySelectorAll('[data-cover-del]').forEach((btn) => {
-    btn.onclick = async () => {
-      if (!confirm('Supprimer cette reprise ?')) return;
-      try {
-        await api(`/api/covers/${btn.dataset.coverDel}`, { method: 'DELETE' });
-        await reload();
-      } catch (err) { alert(err.message); }
-    };
-  });
-}
-
-// Page dédiée aux reprises d'un morceau : distincte de la page
-// d'interprétation (paroles, annotations, essais, connexions) : ici il n'y a
-// que les réalisations de la communauté pour ce morceau, et rien d'autre.
-async function pageSongCovers(slug) {
-  const epoch = newEpoch();
-  app.innerHTML = '<div class="loading">Chargement…</div>';
-  let data;
-  try {
-    data = await api(`/api/songs/${encodeURIComponent(slug)}/covers`);
-  } catch {
-    if (!stale(epoch)) app.innerHTML = '<h1>Chanson introuvable</h1><p><a href="/interpretations" data-link>Retour aux interprétations</a></p>';
-    return;
-  }
-  if (stale(epoch)) return;
-  state.songCovers = data;
-  renderSongCoversPage();
-}
-
-function renderSongCoversPage() {
-  const { song, covers } = state.songCovers;
-  const u = state.user;
-
-  const list = covers.length
-    ? `<div class="covers-grid">${covers.map(coverCard).join('')}</div>`
-    : '';
-
-  const form = u
-    ? `<form class="panel-card" id="cover-form">
-        <h3>Publier une reprise de « ${esc(song.title)} »</h3>
-        <label for="cover-title">Titre</label>
-        <input id="cover-title" required maxlength="200" placeholder="Ma reprise acoustique…">
-        <label for="cover-url">Lien (YouTube, etc.)</label>
-        <input id="cover-url" type="url" required maxlength="600" placeholder="https://…">
-        <label for="cover-desc">Description (optionnel)</label>
-        <textarea id="cover-desc" maxlength="2000" placeholder="Quelques mots sur ta version…"></textarea>
-        <div class="error-msg"></div>
-        <button type="submit" class="primary">Publier la reprise</button>
-      </form>`
-    : `<p class="empty-note"><a href="/connexion" data-link>Connectez-vous</a> pour publier une reprise de ce morceau.</p>`;
-
-  app.innerHTML = `
-    <div class="breadcrumb"><a href="/interpretations" data-link>Interprétations</a> › ${esc(song.album_title || 'Sans album')} ›
-      <a href="/chanson/${encodeURIComponent(song.slug)}" data-link>${esc(song.title)}</a> › Reprises</div>
-    <h1>Reprises de « ${esc(song.title)} »</h1>
-    ${list}
-    ${form}`;
-
-  bindSocial(app, { reload: () => pageSongCovers(song.slug), render: () => renderSongCoversPage() });
-  bindCoverDeletes(app, () => pageSongCovers(song.slug));
-
-  const coverForm = document.getElementById('cover-form');
-  if (coverForm) coverForm.onsubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await api('/api/covers', {
-        method: 'POST',
-        body: {
-          song_id: song.id,
-          title: document.getElementById('cover-title').value,
-          url: document.getElementById('cover-url').value,
-          description: document.getElementById('cover-desc').value,
-        },
-      });
-      await pageSongCovers(song.slug);
-    } catch (err) {
-      coverForm.querySelector('.error-msg').textContent = err.message;
-    }
-  };
-}
-
 /* ------------------------------------------------------ profil = timeline
 
    La page de profil EST le fil de ce qu'un membre a fait ici, du plus récent
    au plus ancien : interprétations, interprétations d'ensemble, références,
-   connexions, reprises, et les publications qui ont rendu tout cela visible.
+   connexions, et les publications qui ont rendu tout cela visible.
    Un seul fil, daté de bout en bout : ni sections, ni compteurs, ni
    présentation.                                                          */
 
@@ -4851,8 +4552,6 @@ const TIMELINE_KIND = {
   ensemble: 'Interprétation d’ensemble',
   reference: 'Référence',
   connexion: 'Connexion',
-  reprise: 'Reprise',
-  publication: 'Publication',
 };
 
 // La coquille commune à toutes les entrées : la date d'abord, puisque c'est
@@ -4929,7 +4628,7 @@ async function pageProfile(username) {
   }
   if (stale(epoch)) return;
 
-  const { user, jeu, stats, annotations, essays, passageRefs, connections, covers } = data;
+  const { user, jeu, stats, annotations, essays, passageRefs, connections } = data;
   const isMe = state.user && state.user.username === user.username;
 
   // Tout ce qu'a fait ce membre devient une entrée datée, puis le fil se
@@ -4970,18 +4669,6 @@ async function pageProfile(username) {
       body: `<div class="annotation-body">${esc(c.explanation)}</div>`,
     }));
   }
-  // Les reprises n'entrent dans le fil qu'une fois leur page ouverte : tant
-  // qu'on n'y a pas accès, le profil s'en tient aux interprétations.
-  for (const c of (state.access.reprises ? covers : [])) {
-    add(c.created_at, timelineEntry('reprise', c.created_at, {
-      // depuis une reprise, on va vers les reprises du morceau
-      where: c.song_slug
-        ? `<a href="/chanson/${encodeURIComponent(c.song_slug)}/reprises" data-link>${esc(c.song_title)}</a>`
-        : '',
-      // l'auteur et la date sont déjà dans l'entête de l'entrée
-      body: coverCard(c, { solo: true }),
-    }));
-  }
   entries.sort((x, y) => (x.at < y.at ? 1 : x.at > y.at ? -1 : 0));
 
   app.innerHTML = `
@@ -4998,88 +4685,6 @@ async function pageProfile(username) {
   if (isMe) {
     document.getElementById('settings-btn').onclick = () => openSettings();
   }
-  if (covers.length && state.access.reprises) {
-    bindSocial(app, { reload: () => pageProfile(username), render: () => pageProfile(username) });
-    bindCoverDeletes(app, () => pageProfile(username));
-  }
-}
-
-/* ------------------------------------------------------------------ reprises */
-
-// Arborescence de toutes les reprises publiées : album (ordre de sortie) →
-// morceau (ordre de piste) → reprises, de la plus récente à la plus ancienne.
-// Même mise en page que l'accueil (albums → morceaux) : c'est en ouvrant un
-// morceau qu'on retrouve toutes ses reprises, sur sa page dédiée.
-// Le fil des reprises, sur le même modèle que celui des interprétations.
-async function pageCoverFeed() {
-  const epoch = newEpoch();
-  app.innerHTML = '<div class="loading">Chargement…</div>';
-  const data = await api('/api/covers/feed?limit=12');
-  if (stale(epoch)) return;
-  state.coverFeed = { items: data.items, more: data.more };
-  renderCoverFeedPage();
-}
-
-function renderCoverFeedPage() {
-  const { items, more } = state.coverFeed;
-  app.innerHTML = `
-    <div class="breadcrumb"><a href="/reprises" data-link>Reprises</a></div>
-    <h1>Le fil des reprises</h1>
-    <p class="subtitle">Toutes les reprises des membres, de la plus récente à la plus ancienne.</p>
-    <div class="covers-grid" id="cover-feed">${items.map(coverCard).join('')
-      || '<p class="empty-note">Aucune reprise pour l’instant.</p>'}</div>
-    ${more ? '<p class="feed-more"><button type="button" class="btn" id="cover-more">Voir les précédentes</button></p>' : ''}`;
-  const list = document.getElementById('cover-feed');
-  bindSocial(list);
-  bindCoverDeletes(list, pageCoverFeed);
-  const btn = document.getElementById('cover-more');
-  if (btn) btn.onclick = async () => {
-    btn.disabled = true;
-    const data = await api(`/api/covers/feed?limit=12&offset=${state.coverFeed.items.length}`);
-    state.coverFeed.items = state.coverFeed.items.concat(data.items);
-    state.coverFeed.more = data.more;
-    renderCoverFeedPage();
-  };
-}
-
-async function pageCovers() {
-  const epoch = newEpoch();
-  app.innerHTML = '<div class="loading">Chargement…</div>';
-  const data = await api('/api/covers');
-  if (stale(epoch)) return;
-
-  const songRow = (s) => `
-    <li>
-      <span class="song-num">${s.track_number ?? ''}</span>
-      <a href="/chanson/${encodeURIComponent(s.slug)}/reprises" data-link>${esc(s.title)}</a>
-      <span class="song-meta">${s.covers.length ? `${s.covers.length} reprise${s.covers.length > 1 ? 's' : ''}` : ''}</span>
-    </li>`;
-
-  const albums = newestFirst(data.albums).map((al) => `
-    <section class="album-card">
-      <div class="album-head">
-        <h2>${esc(al.title)}</h2>
-      </div>
-      <ol class="song-list">${al.songs.map(songRow).join('')}</ol>
-    </section>`).join('');
-
-  let recent = { items: [] };
-  try { recent = await api('/api/covers/feed?limit=3'); } catch { /* le fil n'est pas vital */ }
-  if (stale(epoch)) return;
-
-  const feedBlock = `<section class="feed-block">
-    <div class="feed-block-head">
-      <h2>Les dernières reprises</h2>
-      <a class="btn" href="/reprises/fil" data-link>Voir le fil →</a>
-    </div>
-    <div class="covers-grid" id="recent-covers">${recent.items.map(coverCard).join('')
-      || '<p class="empty-note">Aucune reprise pour l’instant.</p>'}</div>
-  </section>`;
-
-  app.innerHTML = `<h1>Reprises</h1>${feedBlock}<h2 class="albums-title">Les morceaux</h2>${albums}`;
-  const list = document.getElementById('recent-covers');
-  bindSocial(list);
-  bindCoverDeletes(list, pageCovers);
 }
 
 /* --------------------------------------------------- les énigmes (/57) */

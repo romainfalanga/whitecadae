@@ -6,17 +6,13 @@ Plateforme communautaire d'explications des textes de **White Cadae**
 **On arrive par le 57.** La racine `/` ouvre l'escape game (voir plus bas) :
 c'est lui qui commande l'accès au reste, échelon par échelon. Il se lit sans
 compte, à pleine encre : seul le bouton Valider y est éteint. Dès le sol
-(échelon 1, compte ou pas), les **Interprétations** et les **Reprises** sont
-ouvertes ; chaque cran gravi découvre ensuite une pièce de plus, jusqu'au
-sommet (échelon 7).
+(échelon 1, compte ou pas), les **Interprétations** sont ouvertes ; chaque
+cran gravi découvre ensuite une pièce de plus, jusqu'au sommet (échelon 7).
 
 La page **Interprétations** (`/interpretations`) ouvre sur les dernières
 lectures publiées par les membres : le passage visé, puis ce qu’on en dit :
 avec un lien vers le **fil** (`/fil`), qui les déroule toutes de la plus
 récente à la plus ancienne.
-
-La page **Reprises** fonctionne pareil : les dernières reprises des membres
-en tête, et le fil complet sur `/reprises/fil`.
 
 Les utilisateurs créent un compte, lisent les paroles et interprètent ce
 qu'ils veulent du texte. **Une sélection est toujours un passage** : un mot,
@@ -46,9 +42,6 @@ s'ouvre directement, sans choix préalable. Les interprétations d'ensemble
 et les connexions ne sont plus proposées à l'écriture ; celles qui existent
 restent en base et s'affichent dans le fil des profils.
 
-La pastille **Reprises** n'apparaît sur une page de chanson qu'une fois cette
-page-là ouverte par l'échelon.
-
 La **page de profil est publique** pour ce qui est du jeu : n'importe qui,
 même sans compte, y lit l'échelon d'un membre et les énigmes qu'il a percées : le nom de l'élément et
 le nombre de signes trouvés, **jamais les réponses**. Un élément dont
@@ -56,11 +49,10 @@ le libellé est lui-même la réponse d'un autre y reste masqué tant que *celui
 qui regarde* ne l'a pas ouvert de son côté, sans quoi un profil deviendrait
 une antisèche.
 
-En dessous, un **fil** que **seul son propriétaire voit** (les reprises
-exceptées, qui restent publiques) : tout ce qu'il a fait ici, du plus récent
-au plus ancien, daté entrée par entrée :
+En dessous, un **fil** que **seul son propriétaire voit** : tout ce qu'il a
+fait ici, du plus récent au plus ancien, daté entrée par entrée :
 interprétations (jusqu'au passage), interprétations d'ensemble, références,
-connexions, reprises, et les publications qui ont rendu tout cela visible.
+connexions, et les publications qui ont rendu tout cela visible.
 Ni compteurs, ni présentation, ni sections. Ce fil-là suit l'accès de celui
 qui regarde : sans les interprétations ouvertes, on ne voit que l'échelon et
 les énigmes. Il n'y a plus rien à publier : ce qu'il écrit est à lui dès la première
@@ -72,9 +64,6 @@ accès. Il n'y a donc ni fil public, ni favoris, ni commentaires, ni étape de
 publication — ce qu'on écrit est à soi, tout de suite. Les compteurs de la
 page des morceaux disent ce que **j'ai** écrit, et la densité d'un passage
 compte **mes** lectures.
-
-Les **reprises**, elles, restent ce qu'elles ont toujours été : les membres
-se les montrent, avec leurs **favoris (♥)** et leurs **commentaires**.
 
 ## La page « 57 »
 
@@ -169,7 +158,7 @@ L'échelon **commande l'accès au site**, et pas seulement l'affichage des liens
 
 | Échelon | Ce qui s'ouvre |
 | --- | --- |
-| 1 | le 57, les Interprétations et les Reprises : même sans compte |
+| 1 | le 57 et les Interprétations : même sans compte |
 | 2 | la **Conversation** |
 | 3 | **Pense Mieux** |
 | 4 | la **Vidéographie** |
@@ -437,7 +426,7 @@ scripts : `script-src 'self'`, aucun script en ligne nulle part : c'est
 pourquoi le repli d'avatar, jadis dans un attribut `onerror`, est aujourd'hui
 un écouteur d'`error` posé à la capture. Les styles gardent `'unsafe-inline'`
 (trois barres de progression posent leur largeur en attribut). Seule origine
-extérieure autorisée : le lecteur YouTube des reprises, en `frame-src`.
+extérieure autorisée : le lecteur YouTube des vidéos, en `frame-src`.
 S'y ajoutent `nosniff`, `frame-ancestors 'none'`, `Referrer-Policy`,
 `Permissions-Policy` et un `Strict-Transport-Security` de deux ans qui garde le
 site en HTTPS. Les liens externes fournis par un membre (YouTube, Twitch,
