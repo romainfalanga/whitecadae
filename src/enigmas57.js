@@ -535,7 +535,8 @@ export const ECHELON_PENSE_MIEUX = 3;
 export const ECHELON_VIDEOGRAPHIE = 4;
 export const ECHELON_CARRE = 5;
 export const ECHELON_BRAINSTORM = 6;
-export const ECHELON_GMO = 7;
+// L'échelon 7 ouvre le 114 : la suite du 57, encore fermée.
+export const ECHELON_114 = 7;
 
 /* Ce qu'un membre a trouvé, tel qu'un autre a le droit de le voir : le nom de
    l'élément, jamais la réponse. Un nœud dont le libellé est lui-même la
@@ -582,7 +583,7 @@ export function accessOf(echelon) {
     videographie: echelon >= ECHELON_VIDEOGRAPHIE,
     carre: echelon >= ECHELON_CARRE,
     brainstorm: echelon >= ECHELON_BRAINSTORM,
-    gmo: echelon >= ECHELON_GMO,
+    cent14: echelon >= ECHELON_114,
   };
 }
 

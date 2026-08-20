@@ -175,7 +175,7 @@ async function route() {
     : path.startsWith('/videographie') ? 'videographie'
     : path.startsWith('/carre-d-as') || path.startsWith('/societe/') ? 'carre'
     : path.startsWith('/brainstorm') ? 'brainstorm'
-    : path === '/game-master-orange' ? 'gmo'
+    : path === '/114' ? 'cent14'
     : 'interpretations';
   if (!state.access[cle]) return navigate('/57', true);
 
@@ -209,7 +209,9 @@ async function route() {
   if (path === '/brainstorm/archives') return vueArchives();
   if (path === '/brainstorm/annoncer') return vueAnnoncer();
   if ((m = path.match(/^\/brainstorm\/(\d+)$/))) return pageBrainstorm(+m[1]);
-  if (path === '/game-master-orange') return pageGmo();
+  if (path === '/114') return page114();
+  // l'ancien chemin du sommet mène à ce qui l'a remplacé
+  if (path === '/game-master-orange') return navigate('/114', true);
   if (path === '/fil') return navigate('/interpretations', true);
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
   app.innerHTML = '<h1>Page introuvable</h1><p><a href="/interpretations" data-link>Retour aux interprétations</a></p>';
@@ -441,7 +443,7 @@ function renderNav() {
   if (a.videographie) liens.push('<a href="/videographie" data-link>Vidéographie</a>');
   if (a.carre) liens.push('<a href="/carre-d-as" data-link>Carré d’As</a>');
   if (a.brainstorm) liens.push('<a href="/brainstorm" data-link>Brainstorm</a>');
-  if (a.gmo) liens.push('<a href="/game-master-orange" data-link>Game Master Orange</a>');
+  if (a.cent14) liens.push('<a href="/114" data-link>114</a>');
   // La déconnexion se fait depuis les paramètres du compte (page profil) :
   // pas besoin de la dupliquer dans le menu.
   if (u) {
@@ -2676,30 +2678,42 @@ async function pageBrainstorm(id) {
   }, 12000);
 }
 
-/* ------------------------------------ Game Master Orange (échelon 7) --- */
+/* -------------------------------------------------- le 114 (échelon 7) ---
 
-async function pageGmo() {
+   La suite du 57, dans les mêmes habits : le grand bloc du sommet, mais
+   fermé. Rien n'y est à chercher pour l'instant, et la page le dit. Son
+   texte vient du Worker, comme celui des autres pièces hautes : il ne
+   s'atteint pas avant l'échelon qui l'ouvre.                            */
+
+async function page114() {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement…</div>';
   let data;
-  try { data = await api('/api/gmo'); }
+  try { data = await api('/api/114'); }
   catch { return navigate('/57', true); }
   if (stale(epoch)) return;
 
-  const m = data.mecanismes;
+  const { page, ouvert } = data;
+  const attente = page.attente;
   app.innerHTML = `
-    <h1>Game Master Orange</h1>
-    <p class="page-invite">${esc(m.intro)}</p>
-    <div class="gmo-liste">
-      ${m.mecanismes.map((x) => `
-        <article class="gmo-mecanisme">
-          <div class="gmo-numero">${x.numero}</div>
-          <div class="gmo-corps">
-            <h2>${esc(x.titre)}</h2>
-            <ol class="gmo-etapes">${x.etapes.map((e) => `<li>${esc(e)}</li>`).join('')}</ol>
-            ${x.page ? `<a class="btn gmo-outil" href="${esc(x.page)}" data-link>${esc(x.pageLabel)} →</a>` : ''}
-          </div>
-        </article>`).join('')}
+    <h1>${esc(page.titre)}</h1>
+    <p class="page-invite">${esc(page.intro)}</p>
+    <div class="enigmes-grid">
+      <article class="enigme enigme--graal enigme--bientot">
+        <div class="enigme-head">
+          <span class="enigme-source">${esc(attente.titre)}</span>
+        </div>
+        <div class="enigme-body">
+          ${attente.lignes.map((l) => `<p class="cent14-ligne">${esc(l)}</p>`).join('')}
+          ${ouvert ? '' : `
+            <form class="enigme-form" aria-hidden="true">
+              <input class="enigme-input" type="text" placeholder="bientôt" disabled aria-label="Signe à venir">
+              <button type="submit" class="primary" disabled aria-label="Valider">
+                <span class="enigme-go">→</span><span class="enigme-go-text">Valider</span>
+              </button>
+            </form>`}
+        </div>
+      </article>
     </div>`;
 }
 

@@ -164,7 +164,7 @@ L'échelon **commande l'accès au site**, et pas seulement l'affichage des liens
 | 4 | la **Vidéographie** |
 | 5 | le **Carré d'As** |
 | 6 | le **Brainstorm** |
-| 7 | **Game Master Orange** |
+| 7 | le **114** : la suite du 57 |
 
 Le tout premier bloc **occupe toute la largeur** et s'entoure d'un halo doré
 (`.enigme--graal`, posé sur les blocs dont le serveur ne donne pas le total) :
@@ -369,12 +369,14 @@ vie du carré. Le direct fonctionne par **relecture périodique** (12 s, onglet
 visible) : pas de serveur temps réel, pas de connexion tenue ouverte, un
 brainstorm à mille personnes coûte des requêtes ordinaires.
 
-**Game Master Orange** (échelon 7) expose les **7 mécanismes orange** : ce
-qu'on attend d'un joueur arrivé au sommet : avec, quand un mécanisme a son
-outil sur la plateforme (la vidéographie, le carré), le lien qui y mène. Les
-textes des missions et des mécanismes vivent dans `src/contenus.js`, côté
-Worker, servis uniquement à l'échelon requis : les lire dans le code source
-du navigateur est impossible.
+Le **114** (échelon 7) est la **suite du 57** : d'autres signes, d'autres
+cadenas. Elle n'est pas encore écrite : celui qui arrive au sommet y lit qu'il
+a terminé la première partie et que la seconde arrivera. La page reprend les
+habits du 57 — le grand bloc du sommet, son champ — mais éteints. Le texte
+vit dans `src/contenus.js` (`PAGE_114`), côté Worker, servi au seul échelon 7 :
+le lire dans le code source du navigateur est impossible. Le jour où la
+seconde partie s'écrira, c'est à `/api/114` que son état viendra se brancher,
+comme `/api/57` pour la première.
 
 Le **minuteur est commun** à tous les signes du site, et le barrage d'échelon
 est appliqué dans le routeur du Worker, pas seulement dans l'interface :

@@ -1210,7 +1210,7 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 
 /* ------------------------------------------------ les pièces hautes ------
    Conversation (2), Pense Mieux (3), Vidéographie (4), Carré d'As (5),
-   Brainstorm (6), Game Master Orange (7). */
+   Brainstorm (6), le 114 (7). */
 
 .page-invite { color: var(--text-dim); max-width: 46rem; margin-bottom: 1.6rem; }
 .fil-retour { margin-bottom: 0.8rem; font-size: 0.9rem; }
@@ -1396,27 +1396,28 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .idee-corps p { white-space: pre-wrap; }
 .idee-meta { color: var(--text-dim); font-size: 0.78rem; margin-top: 0.2rem; }
 
-/* -- game master orange -- */
-.gmo-liste { max-width: 46rem; display: grid; gap: 1rem; }
-.gmo-mecanisme {
-  display: flex;
-  gap: 1.1rem;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 1.1rem 1.3rem;
+/* -- le 114 : la suite du 57, encore fermée -- */
+
+/* Le grand bloc du sommet, mais en attente : le halo doré s'éteint, le
+   champ reste là, éteint lui aussi. On voit ce qui viendra sans pouvoir
+   y toucher. */
+.enigme--bientot {
+  border-color: rgba(216, 192, 122, 0.22);
+  box-shadow: none;
 }
-.gmo-numero {
-  font-family: var(--serif);
-  font-size: 2rem;
-  color: #e0876a;
-  line-height: 1;
-  min-width: 2rem;
+.enigme--bientot::before { opacity: 0.4; }
+/* `.enigme-source` prend toute la largeur (flex: 1) : c'est lui qu'on
+   centre, pas la boîte. */
+.enigme--bientot .enigme-source { text-align: center; }
+.enigme--bientot .enigme-input,
+.enigme--bientot .enigme-form button { opacity: 0.45; cursor: not-allowed; }
+.cent14-ligne {
   text-align: center;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
 }
-.gmo-corps h2 { margin: 0 0 0.4rem; font-size: 1.2rem; }
-.gmo-etapes { margin-left: 1.1rem; display: grid; gap: 0.3rem; }
-.gmo-outil { display: inline-block; margin-top: 0.7rem; font-size: 0.88rem; }
+.cent14-ligne:last-of-type { margin-bottom: 1.2rem; }
 
 /* -- le filtre de la conversation -- */
 .conv-filtre { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.8rem; flex-wrap: wrap; }

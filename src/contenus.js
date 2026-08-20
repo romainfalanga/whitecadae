@@ -80,95 +80,26 @@ export const VOLETS_SOCIETE = [
 
 export const VOLETS_CLES = VOLETS_SOCIETE.map((v) => v.cle);
 
-/* --------------------------------- Game Master Orange (échelon 7) ------- */
+/* ------------------------------------------------ le 114 (échelon 7) ----
 
-// Le mécanisme 6 est adapté à la plateforme : le carré d'as se fonde à
-// l'échelon 5, sur sa propre page : arrivé ici, le joueur a déjà le sien. Le
-// mécanisme parle donc de ce qu'on en fait, une fois qu'on l'a.
+   Le 57 a une suite : le 114. Elle n'est pas encore écrite. Ce que voit
+   celui qui arrive au sommet, c'est donc la fin de la première partie et
+   la promesse de la seconde : rien d'autre, et surtout aucun signe à
+   chercher pour l'instant. Le texte vit ici, côté Worker, servi au seul
+   échelon 7 : le lire dans le code source du navigateur est impossible. */
 
-export const MECANISMES_GMO = {
-  titre: 'Les 7 mécanismes orange',
-  intro:
-    'Tu es au sommet de l’échelle. Ce qui suit n’est plus une énigme : c’est '
-    + 'ce qu’on attend de toi.',
-  mecanismes: [
-    {
-      numero: 1,
-      titre: 'Devenir Game Master Orange',
-      etapes: [
-        'Trouve les personnes les plus harmonieuses dans ton entourage.',
-        'Montre-leur le début de l’Escape Game Orange.',
-        'Deviens un Game Master Orange.',
-      ],
-    },
-    {
-      numero: 2,
-      titre: 'Ta société harmonieuse',
-      etapes: [
-        'Imagine une société harmonieuse.',
-        'Trouve les expansions harmonieuses qui permettront d’y arriver.',
-        'Montre-leur le chemin du réel.',
-      ],
-      // le tronc qui porte ce mécanisme, dans les trois outils
-      page: '/pense-mieux',
-      pageLabel: 'Ma société harmonieuse',
-    },
-    {
-      numero: 3,
-      titre: 'Ta version harmonieuse',
-      etapes: [
-        'Imagine ta version harmonieuse.',
-        'Trouve les expansions harmonieuses qui te permettront d’y arriver.',
-        'Montre-leur le chemin du réel.',
-      ],
-      page: '/pense-mieux',
-      pageLabel: 'Le moi harmonieux',
-    },
-    {
-      numero: 4,
-      titre: 'Extérioriser et organiser',
-      etapes: [
-        'Extériorise tes réflexions et idées en vidéo.',
-        'Organise-les pour visualiser tes trajectoires et choisir celles que tu veux voir grandir.',
-        'Partage tes expansions harmonieuses sur les réseaux sociaux et parles-en aux Game Masters Orange.',
-      ],
-      // le mécanisme a ses outils sur la plateforme même
-      page: '/videographie',
-      pageLabel: 'Ta vidéographie',
-    },
-    {
-      numero: 5,
-      titre: 'Propager l’esprit orange',
-      etapes: [
-        'Propage l’esprit orange en commentaires sur les réseaux sociaux.',
-        'Crée les commentaires les plus courts possible qui engendrent le plus d’expansions harmonieuses.',
-        'Termine tes commentaires avec un cœur orange 🧡.',
-      ],
-    },
-    {
-      numero: 6,
-      titre: 'Tes carrés d’as',
-      etapes: [
-        'Un carré d’as, c’est quatre esprits qui imaginent ensemble des sociétés harmonieuses.',
-        'Pour chacune, cherchez ce qui lui permet d’être, et comment les humains s’y comporteraient.',
-        'Fais de vos modèles la preuve vivante de ce que le jeu promet.',
-      ],
-      page: '/carre-d-as',
-      pageLabel: 'Tes carrés d’as',
-    },
-    {
-      numero: 7,
-      titre: 'Devenir créateur',
-      etapes: [
-        'Propage les symboles de l’Escape Game Orange de sorte à le faire grandir.',
-        'Tu n’es plus un simple joueur : tu es un créateur de nouvelles grilles de lecture.',
-        'Imagine des modèles de société avec tes carrés, et fais-en naître de nouveaux en les confrontant.',
-        'Utilise les IA pour réduire le temps et les ressources nécessaires à la concrétisation de tes idées.',
-      ],
-      page: '/carre-d-as',
-      pageLabel: 'Tes carrés d’as',
-    },
-  ],
+export const PAGE_114 = {
+  titre: '114',
+  // ce qui s'affiche sous le titre, quand la page s'ouvre enfin
+  intro: 'Tu es arrivé au bout de la première partie de l’escape game.',
+  attente: {
+    titre: 'La suite arrive',
+    lignes: [
+      'Le 114 est la suite du 57 : d’autres signes, d’autres cadenas.',
+      'Elle n’est pas encore ouverte.',
+      'Reviens : la seconde partie de l’escape game arrivera prochainement.',
+    ],
+  },
 };
 
 /* ------------------------------------- la Vidéographie : le rythme (4) ---

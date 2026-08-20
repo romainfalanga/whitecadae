@@ -4,10 +4,10 @@ import {
   getNode, isLocked, matchNode, buildState, currentAnswerId, echelonOf, accessOf,
   delaiEssaiMs, enigmesTrouvees, progresOf,
   ECHELON_CONVERSATION, ECHELON_PENSE_MIEUX, ECHELON_VIDEOGRAPHIE,
-  ECHELON_CARRE, ECHELON_BRAINSTORM, ECHELON_GMO,
+  ECHELON_CARRE, ECHELON_BRAINSTORM, ECHELON_114,
 } from './enigmas57.js';
 import {
-  CHARTE_CARRE, MECANISMES_GMO, AXES, AXES_ORDRE,
+  CHARTE_CARRE, PAGE_114, AXES, AXES_ORDRE,
   CADENCES, CADENCES_ORDRE, REPONSES,
   VOLETS_SOCIETE, VOLETS_CLES,
 } from './contenus.js';
@@ -187,7 +187,7 @@ async function handleApi(request, env, url) {
   if ((p = route('POST', '/api/brainstorms/:id/votes'))) return brainstormVote(request, env, +p[0]);
   if ((p = route('POST', '/api/brainstorms/:id/retenues'))) return brainstormRetenue(request, env, +p[0]);
 
-  if (route('GET', '/api/gmo')) return gmoGet(request, env);
+  if (route('GET', '/api/114')) return cent14Get(request, env);
 
   // --- le tronc commun : les interprétations. Ouvert dès l'échelon 1, donc à
   //     tout le monde, visiteur compris : le barrage ne ferme plus que ce qui
@@ -689,7 +689,7 @@ async function me(request, env) {
   return json({
     user: user ? { ...user, is_admin: !!user.is_admin, voix } : null,
     access,
-    echelon: Number.isFinite(echelon) ? echelon : ECHELON_GMO,
+    echelon: Number.isFinite(echelon) ? echelon : ECHELON_114,
     attenteMs: user && Number.isFinite(echelon) ? await attenteRestante(env, user.id, echelon) : 0,
   });
 }
@@ -2192,7 +2192,7 @@ async function conversationList(request, env) {
   const { vu, refus } = await requireEchelon(request, env, ECHELON_CONVERSATION, 'conversation');
   if (refus) return refus;
   await ensureHautesTables(env);
-  const plafond = Number.isFinite(vu.echelon) ? vu.echelon : ECHELON_GMO;
+  const plafond = Number.isFinite(vu.echelon) ? vu.echelon : ECHELON_114;
   const { results } = await env.DB.prepare(
     `SELECT m.id, m.body, m.min_echelon, m.created_at, u.username
        FROM conversation_messages m JOIN users u ON u.id = m.user_id
@@ -2215,7 +2215,7 @@ async function conversationPost(request, env) {
 
   // L'auteur choisit qui peut lire : jamais en dessous de la porte de la
   // page, jamais au-dessus de son propre échelon.
-  const plafond = Number.isFinite(vu.echelon) ? vu.echelon : ECHELON_GMO;
+  const plafond = Number.isFinite(vu.echelon) ? vu.echelon : ECHELON_114;
   const demande = Number(body?.min_echelon) || ECHELON_CONVERSATION;
   const minEchelon = Math.max(ECHELON_CONVERSATION, Math.min(demande, plafond));
 
@@ -4046,12 +4046,16 @@ async function brainstormVote(request, env, id) {
   return json({ ok: true, vote: true });
 }
 
-/* ------------------------------------ Game Master Orange (échelon 7) --- */
+/* ------------------------------------------------- le 114 (échelon 7) ---
 
-async function gmoGet(request, env) {
-  const { refus } = await requireEchelon(request, env, ECHELON_GMO, 'gmo');
+   La suite du 57. Elle n'a pas encore ses signes : la page dit où l'on en
+   est, et rien de plus. Le jour où la seconde partie s'écrira, c'est ici
+   que son état viendra se brancher, comme /api/57 pour la première.     */
+
+async function cent14Get(request, env) {
+  const { refus } = await requireEchelon(request, env, ECHELON_114, 'cent14');
   if (refus) return refus;
-  return json({ mecanismes: MECANISMES_GMO });
+  return json({ page: PAGE_114, ouvert: false });
 }
 
 /* ---------------------------------------------------------------- admin */
