@@ -2694,17 +2694,14 @@ async function page114() {
   if (stale(epoch)) return;
 
   const { page, ouvert } = data;
-  const attente = page.attente;
   app.innerHTML = `
     <h1>${esc(page.titre)}</h1>
-    <p class="page-invite">${esc(page.intro)}</p>
     <div class="enigmes-grid">
       <article class="enigme enigme--graal enigme--bientot">
         <div class="enigme-head">
-          <span class="enigme-source">${esc(attente.titre)}</span>
+          <span class="enigme-source">${esc(page.attente)}</span>
         </div>
         <div class="enigme-body">
-          ${attente.lignes.map((l) => `<p class="cent14-ligne">${esc(l)}</p>`).join('')}
           ${ouvert ? '' : `
             <form class="enigme-form" aria-hidden="true">
               <input class="enigme-input" type="text" placeholder="bientôt" disabled aria-label="Signe à venir">

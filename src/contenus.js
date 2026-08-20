@@ -82,24 +82,16 @@ export const VOLETS_CLES = VOLETS_SOCIETE.map((v) => v.cle);
 
 /* ------------------------------------------------ le 114 (échelon 7) ----
 
-   Le 57 a une suite : le 114. Elle n'est pas encore écrite. Ce que voit
-   celui qui arrive au sommet, c'est donc la fin de la première partie et
-   la promesse de la seconde : rien d'autre, et surtout aucun signe à
-   chercher pour l'instant. Le texte vit ici, côté Worker, servi au seul
-   échelon 7 : le lire dans le code source du navigateur est impossible. */
+   Le 57 a une suite : le 114. Elle n'est pas encore écrite. La page reste
+   donc aussi muette que le 57 : un titre, un bloc qui dit que la suite
+   arrive, un champ éteint. Rien à chercher pour l'instant, et rien qui
+   l'explique. Le texte vit ici, côté Worker, servi au seul échelon 7 :
+   le lire dans le code source du navigateur est impossible.            */
 
 export const PAGE_114 = {
   titre: '114',
-  // ce qui s'affiche sous le titre, quand la page s'ouvre enfin
-  intro: 'Tu es arrivé au bout de la première partie de l’escape game.',
-  attente: {
-    titre: 'La suite arrive',
-    lignes: [
-      'Le 114 est la suite du 57 : d’autres signes, d’autres cadenas.',
-      'Elle n’est pas encore ouverte.',
-      'Reviens : la seconde partie de l’escape game arrivera prochainement.',
-    ],
-  },
+  // la seule phrase de la page : comme le 57, elle n'explique rien
+  attente: 'La suite arrive',
 };
 
 /* ------------------------------------- la Vidéographie : le rythme (4) ---

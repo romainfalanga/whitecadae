@@ -369,14 +369,14 @@ vie du carré. Le direct fonctionne par **relecture périodique** (12 s, onglet
 visible) : pas de serveur temps réel, pas de connexion tenue ouverte, un
 brainstorm à mille personnes coûte des requêtes ordinaires.
 
-Le **114** (échelon 7) est la **suite du 57** : d'autres signes, d'autres
-cadenas. Elle n'est pas encore écrite : celui qui arrive au sommet y lit qu'il
-a terminé la première partie et que la seconde arrivera. La page reprend les
-habits du 57 — le grand bloc du sommet, son champ — mais éteints. Le texte
-vit dans `src/contenus.js` (`PAGE_114`), côté Worker, servi au seul échelon 7 :
-le lire dans le code source du navigateur est impossible. Le jour où la
-seconde partie s'écrira, c'est à `/api/114` que son état viendra se brancher,
-comme `/api/57` pour la première.
+Le **114** (échelon 7) est la **suite du 57**. Elle n'est pas encore écrite,
+et la page reste aussi muette que le 57 : son titre, un bloc qui dit que la
+suite arrive, un champ éteint. Elle reprend les habits du sommet — le grand
+bloc doré, son champ, son bouton — mais tous éteints. Le texte vit dans
+`src/contenus.js` (`PAGE_114`), côté Worker, servi au seul échelon 7 : le lire
+dans le code source du navigateur est impossible. Le jour où la seconde partie
+s'écrira, c'est à `/api/114` que son état viendra se brancher, comme `/api/57`
+pour la première.
 
 Le **minuteur est commun** à tous les signes du site, et le barrage d'échelon
 est appliqué dans le routeur du Worker, pas seulement dans l'interface :

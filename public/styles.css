@@ -1411,13 +1411,6 @@ label { display: block; margin: 0.9rem 0 0.3rem; color: var(--text-dim); font-si
 .enigme--bientot .enigme-source { text-align: center; }
 .enigme--bientot .enigme-input,
 .enigme--bientot .enigme-form button { opacity: 0.45; cursor: not-allowed; }
-.cent14-ligne {
-  text-align: center;
-  color: var(--text-dim);
-  margin-bottom: 0.5rem;
-  line-height: 1.6;
-}
-.cent14-ligne:last-of-type { margin-bottom: 1.2rem; }
 
 /* -- le filtre de la conversation -- */
 .conv-filtre { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.8rem; flex-wrap: wrap; }
