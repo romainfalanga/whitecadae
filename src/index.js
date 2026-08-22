@@ -8,6 +8,7 @@ import {
 } from './enigmas57.js';
 import {
   CHARTE_CARRE, PAGE_114, AXES, AXES_ORDRE,
+  QUETES_LISTE, queteDe,
   CADENCES, CADENCES_ORDRE, REPONSES,
   VOLETS_SOCIETE, VOLETS_CLES,
 } from './contenus.js';
@@ -2165,6 +2166,60 @@ async function ensureHautesTables(env) {
   await ajouteColonne(env, 'brainstorms', 'societe_id',
     'ALTER TABLE brainstorms ADD COLUMN societe_id INTEGER');
 
+  /* Une réflexion creuse dans UN sens : ou bien vers la cause (« Pourquoi ? »),
+     ou bien vers le remède (« Comment faire mieux ? »). `quete` le dit. Nul
+     pour une catégorie, pour un espace, et pour les réflexions d'avant les
+     quêtes : on ne leur en invente pas une. */
+  await ajouteColonne(env, 'reflection_trees', 'quete',
+    'ALTER TABLE reflection_trees ADD COLUMN quete TEXT');
+
+  /* Trois branches remplacent les quatre. « Ma psychologie » devient « Mon
+     fonctionnement » (c'est le même regard, mieux nommé) et « Ma société
+     harmonieuse » devient « Société harmonieuse » ; « La société » — ce qui
+     est là, tel que c'est — naît vide au premier regard, comme tout espace
+     qui manque.
+
+     Le miroir a changé de place : il ne va plus de la psychologie au moi
+     harmonieux, mais de la société à la société harmonieuse. Ce que le moi
+     harmonieux portait — ce vers quoi l'on tend — se dit désormais dans la
+     quête « Comment faire mieux ? », dans n'importe quelle branche.
+
+     Idempotent : au second passage, plus aucune ligne ne porte ces axes. Les
+     nouvelles clés ne peuvent pas être reprises par ce renommage, car aucune
+     ancienne clé ne porte leur nom. */
+  await env.DB.prepare(
+    `UPDATE reflection_trees SET axe = 'fonctionnement', title = 'Mon fonctionnement'
+      WHERE axe = 'psy'`
+  ).run();
+  await env.DB.prepare(
+    `UPDATE reflection_trees SET axe = 'societe_harmonieuse', title = 'Société harmonieuse'
+      WHERE axe = 'societe'`
+  ).run();
+
+  /* « Le moi harmonieux » et « Ma philosophie » ne sont plus des branches.
+     Celui qui n'a jamais rien porté s'efface (c'était une coquille créée
+     d'avance, sans un mot dedans) ; celui qui porte des pensées ou range des
+     réflexions devient une catégorie DE « Mon fonctionnement » — rien de ce
+     qui y a été écrit n'est perdu, et tout reste à sa place, un cran plus
+     bas. Sans branche « Mon fonctionnement » (base d'avant tout ça), la
+     catégorie reste sans attache : elle se lit toujours. */
+  await env.DB.prepare(
+    `DELETE FROM reflection_trees
+      WHERE axe IN ('moi', 'philo') AND trunk = ''
+        AND id NOT IN (SELECT tree_id FROM reflection_branches)
+        AND id NOT IN (SELECT parent_id FROM reflection_trees WHERE parent_id IS NOT NULL)`
+  ).run();
+  await env.DB.prepare(
+    `UPDATE reflection_trees
+        SET axe = NULL,
+            genre = 'categorie',
+            parent_id = (SELECT f.id FROM reflection_trees f
+                          WHERE f.user_id = reflection_trees.user_id
+                            AND f.kind = reflection_trees.kind
+                            AND f.axe = 'fonctionnement' AND f.carre_id IS NULL)
+      WHERE axe IN ('moi', 'philo')`
+  ).run();
+
   hautesTablesReady = true;
 }
 
@@ -2259,11 +2314,12 @@ function urlYoutubeValide(url) {
   } catch { return false; }
 }
 
-/* ----------------------------------------------------- les quatre troncs ---
-   Quatre arbres existent d'avance pour chacun dans Pense Mieux : la
-   psychologie et le moi harmonieux, qui se répondent en miroir (le présent,
-   et ce vers quoi il tend), puis la philosophie et la société harmonieuse.
-   Ils ne se plantent pas et ne s'abattent pas, on ne fait que les nourrir. */
+/* ----------------------------------------------------- les trois troncs ---
+   Trois arbres existent d'avance pour chacun dans Pense Mieux : mon
+   fonctionnement, la société, et la société harmonieuse — ces deux dernières
+   se répondant en miroir (ce qui est là, et ce vers quoi cela pourrait
+   tendre). Ils ne se plantent pas et ne s'abattent pas, on ne fait que les
+   nourrir. */
 
 // Une branche porte le nom de son axe : il ne lui appartient pas.
 function titreAxe(axe) {
@@ -2288,7 +2344,7 @@ async function assureTronc(env, { userId, kind, axe }) {
   return lit();
 }
 
-// Les quatre troncs d'une personne dans Pense Mieux, dans l'ordre. On les lit
+// Les trois troncs d'une personne dans Pense Mieux, dans l'ordre. On les lit
 // d'un coup : au régime de croisière ils sont tous là, et la création ne
 // concerne que ceux qui manquent encore. La Vidéographie n'en a pas : elle
 // n'a pas d'axes, elle a un rythme.
@@ -2308,9 +2364,9 @@ async function troncsDe(env, userId, kind) {
   return troncs;
 }
 
-/* Le miroir : la psychologie dit le présent, le moi harmonieux dit vers quoi
-   il tend. Depuis l'un on passe à l'autre, dans le même contexte : même
-   outil, même carré, même personne.                                        */
+/* Le miroir : la société dit ce qui est là, la société harmonieuse dit vers
+   quoi cela pourrait tendre. Depuis l'une on passe à l'autre, dans le même
+   contexte : même outil, même carré, même personne.                        */
 async function troncMiroir(env, arbre) {
   const autre = arbre.axe && AXES[arbre.axe] ? AXES[arbre.axe].miroir : null;
   if (!autre) return null;
@@ -2338,7 +2394,7 @@ function peutToucherBranche(row, droits) {
   return droits.ecrire;
 }
 
-/* Ce que je porte : mes quatre espaces, puis les réflexions que j'ai
+/* Ce que je porte : mes trois espaces, puis les réflexions que j'ai
    ouvertes. Tout est à moi seul.                                          */
 async function arbresList(request, env, url) {
   const kind = kindDe(url.searchParams.get('kind'));
@@ -2349,8 +2405,9 @@ async function arbresList(request, env, url) {
 
   const compte = async (t) => ({
     ...t,
-    // ce que porte l'axe : sa phrase d'invite
+    // ce que porte l'axe : sa phrase d'invite, et l'axe qui lui répond
     sous: AXES[t.axe] ? AXES[t.axe].sous : null,
+    miroir_axe: AXES[t.axe] ? AXES[t.axe].miroir || null : null,
     branches: (await env.DB.prepare(
       'SELECT COUNT(*) AS n FROM reflection_branches WHERE tree_id = ?1'
     ).bind(t.id).first())?.n || 0,
@@ -2362,7 +2419,7 @@ async function arbresList(request, env, url) {
   // se lit comme lui. Les plus anciennes, d'avant le rangement, n'ont pas de
   // parent : elles restent visibles, à part.
   const { results } = await env.DB.prepare(
-    `SELECT t.id, t.title, t.trunk, t.parent_id, t.genre, t.created_at, t.updated_at,
+    `SELECT t.id, t.title, t.trunk, t.parent_id, t.genre, t.quete, t.created_at, t.updated_at,
             (SELECT COUNT(*) FROM reflection_branches b WHERE b.tree_id = t.id) AS branches
        FROM reflection_trees t
       WHERE t.user_id = ?1 AND t.kind = ?2 AND t.axe IS NULL AND t.carre_id IS NULL
@@ -2385,7 +2442,10 @@ async function arbresList(request, env, url) {
       GROUP BY ts.id, tc.id`
   ).bind(vu.user.id, kind).all();
 
-  return json({ troncs, arbres: results || [], reponses: REPONSES, carte: carte || [] });
+  return json({
+    troncs, arbres: results || [], reponses: REPONSES, carte: carte || [],
+    quetes: QUETES_LISTE,
+  });
 }
 
 async function arbresCreate(request, env) {
@@ -2411,6 +2471,10 @@ async function arbresCreate(request, env) {
      réflexion, et jamais un arbre de carré. On ne lit toujours NI axe NI
      carre_id : aucun chemin ne fabrique un espace ni ne s'invite ailleurs. */
   const genre = body?.genre === 'categorie' ? 'categorie' : 'reflexion';
+  /* Ce que la réflexion va creuser : la cause, ou le remède. Une catégorie
+     n'a pas de quête — elle range, elle ne creuse pas — et une réflexion
+     ouverte sans quête n'en porte pas : rien ne s'invente ici. */
+  const quete = genre === 'categorie' ? null : queteDe(body?.quete);
   const parentId = Number(body?.parent_id);
   if (!Number.isFinite(parentId)) return json({ error: 'Une réflexion naît dans un de tes espaces.' }, 400);
   const parent = await env.DB.prepare(
@@ -2422,16 +2486,17 @@ async function arbresCreate(request, env) {
   }
 
   const r = await env.DB.prepare(
-    'INSERT INTO reflection_trees (user_id, kind, title, trunk, parent_id, genre) VALUES (?1, ?2, ?3, ?4, ?5, ?6)'
-  ).bind(vu.user.id, kind, title, trunk, parentId, genre).run();
-  return json({ ok: true, id: r.meta.last_row_id, genre }, 201);
+    `INSERT INTO reflection_trees (user_id, kind, title, trunk, parent_id, genre, quete)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
+  ).bind(vu.user.id, kind, title, trunk, parentId, genre, quete).run();
+  return json({ ok: true, id: r.meta.last_row_id, genre, quete }, 201);
 }
 
 // L'arbre entier, branches et liens compris.
 async function chargeArbre(env, id) {
   const tree = await env.DB.prepare(
     `SELECT t.id, t.user_id, t.kind, t.title, t.trunk, t.axe, t.carre_id, t.prive,
-            t.parent_id, t.genre,
+            t.parent_id, t.genre, t.quete,
             t.created_at, t.updated_at, c.nom AS carre_nom, u.username AS porteur
        FROM reflection_trees t
        LEFT JOIN carres c ON c.id = t.carre_id
@@ -2492,8 +2557,8 @@ async function arbresGet(request, env, id) {
   const droits = droitsArbre(vu, arbre);
   if (!droits.lire) return json({ error: 'Réflexion introuvable.' }, 404);
 
-  // le miroir : de la psychologie au moi harmonieux, et retour. Chez soi, on
-  // le crée s'il manque ; ailleurs on se contente de celui qui existe.
+  // le miroir : de la société à la société harmonieuse, et retour. Chez soi,
+  // on le crée s'il manque ; ailleurs on se contente de celui qui existe.
   if (droits.proprietaire && arbre.carre_id == null && AXES[arbre.axe] && AXES[arbre.axe].miroir) {
     await assureTronc(env, { userId: vu.user.id, kind: arbre.kind, axe: AXES[arbre.axe].miroir });
   }
@@ -2503,7 +2568,7 @@ async function arbresGet(request, env, id) {
   let dedans = [];
   if (arbre.carre_id == null && (arbre.axe || arbre.genre === 'categorie')) {
     const { results } = await env.DB.prepare(
-      `SELECT t.id, t.title, t.trunk, t.genre, t.updated_at,
+      `SELECT t.id, t.title, t.trunk, t.genre, t.quete, t.updated_at,
               (SELECT COUNT(*) FROM reflection_branches b WHERE b.tree_id = t.id) AS branches,
               (SELECT COUNT(*) FROM reflection_trees e WHERE e.parent_id = t.id) AS contenus
          FROM reflection_trees t WHERE t.parent_id = ?1
@@ -2531,6 +2596,7 @@ async function arbresGet(request, env, id) {
       // afficher celles qui ont été déposées avant que le carré se referme
       reponses: REPONSES,
       sous: AXES[arbre.axe] ? AXES[arbre.axe].sous : null,
+      quetes: QUETES_LISTE,
       miroir: await troncMiroir(env, arbre),
       moi: vu.user.id,
       dedans,
@@ -2540,11 +2606,13 @@ async function arbresGet(request, env, id) {
 }
 
 // Le sujet d'un tronc ne lui appartient pas : il porte le nom de son axe, et
-// seul son texte se nourrit.
+// seul son texte se nourrit. Ce que le corps ne dit pas ne change pas : on
+// peut ne changer QUE la quête d'une réflexion sans toucher au reste.
 async function arbresUpdate(request, env, id) {
   await ensureHautesTables(env);
   const tree = await env.DB.prepare(
-    'SELECT id, user_id, kind, axe, genre, parent_id, carre_id, prive FROM reflection_trees WHERE id = ?1'
+    `SELECT id, user_id, kind, title, trunk, axe, genre, quete, parent_id, carre_id, prive
+       FROM reflection_trees WHERE id = ?1`
   ).bind(id).first();
   if (!tree) return json({ error: 'Réflexion introuvable.' }, 404);
   const { vu, refus } = await gateArbre(request, env, tree.kind);
@@ -2553,18 +2621,29 @@ async function arbresUpdate(request, env, id) {
   if (!droits.ecrire) return json({ error: 'Réflexion introuvable.' }, 404);
 
   const body = await readJson(request);
-  const trunk = String(body?.trunk || '').trim();
+  const trunk = body?.trunk === undefined ? tree.trunk : String(body.trunk).trim();
   if (trunk.length > 4000) return json({ error: 'Point de départ trop long.' }, 400);
-  let title = String(body?.title || '').trim();
+  let title = body?.title === undefined ? tree.title : String(body.title).trim();
   if (tree.axe) {
     title = titreAxe(tree.axe);
   } else if (!title || title.length > 120) {
     return json({ error: 'Sujet invalide.' }, 400);
   }
+  /* La quête se choisit à l'ouverture, et se corrige après coup : une
+     réflexion peut avoir été ouverte du mauvais côté. Un espace et une
+     catégorie n'en portent pas : ils rangent, ils ne creusent pas. */
+  let quete = tree.quete;
+  if (body?.quete !== undefined) {
+    if (tree.axe || tree.genre === 'categorie') {
+      return json({ error: 'Une branche ni une catégorie ne creusent : seules les réflexions ont une quête.' }, 400);
+    }
+    quete = queteDe(body.quete);
+  }
   await env.DB.prepare(
-    `UPDATE reflection_trees SET title = ?1, trunk = ?2, updated_at = datetime('now') WHERE id = ?3`
-  ).bind(title, trunk, id).run();
-  return json({ ok: true });
+    `UPDATE reflection_trees SET title = ?1, trunk = ?2, quete = ?3, updated_at = datetime('now')
+      WHERE id = ?4`
+  ).bind(title, trunk, quete, id).run();
+  return json({ ok: true, quete });
 }
 
 async function arbresDelete(request, env, id) {
@@ -2942,7 +3021,7 @@ async function arbresRecherche(request, env, url) {
   const mien = 't.user_id = ?1 AND t.carre_id IS NULL';
 
   const arbres = (await env.DB.prepare(
-    `SELECT t.id, t.title, t.trunk, t.carre_id FROM reflection_trees t
+    `SELECT t.id, t.title, t.trunk, t.genre, t.quete, t.carre_id FROM reflection_trees t
       WHERE ${mien} AND t.kind = ?2 AND (t.title LIKE ?3 OR t.trunk LIKE ?3)
       ORDER BY t.updated_at DESC LIMIT 20`
   ).bind(vu.user.id, kind, motif).all()).results || [];

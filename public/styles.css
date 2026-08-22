@@ -9,6 +9,11 @@
   --text-dim: #9b9ba8;
   --accent: #d8c07a;
   --accent-soft: rgba(216, 192, 122, 0.14);
+  /* les deux quêtes : descendre vers la cause, monter vers le remède */
+  --pourquoi: #8ab0d6;
+  --pourquoi-soft: rgba(138, 176, 214, 0.15);
+  --mieux: #7fc7a5;
+  --mieux-soft: rgba(127, 199, 165, 0.15);
   --danger: #e07a7a;
   --radius: 10px;
   --serif: Georgia, 'Times New Roman', serif;
@@ -1701,7 +1706,39 @@ body.avec-dock main { padding-bottom: 7rem; }
 .carte-noeud--espace circle { fill: rgba(216, 192, 122, 0.28); }
 .carte-noeud--intime circle { stroke: #8a8a94; fill: rgba(138, 138, 148, 0.18); }
 .carte-noeud--categorie circle { stroke-dasharray: 4 3; }
+.carte-noeud--pourquoi circle { stroke: var(--pourquoi); fill: var(--pourquoi-soft); }
+.carte-noeud--mieux circle { stroke: var(--mieux); fill: var(--mieux-soft); }
 .carte-noeud:hover circle { fill: rgba(216, 192, 122, 0.45); }
+.carte-noeud--pourquoi:hover circle { fill: rgba(138, 176, 214, 0.4); }
+.carte-noeud--mieux:hover circle { fill: rgba(127, 199, 165, 0.4); }
+
+/* La légende : ce que la carte porte, dit en trois mots. Elle ne montre que
+   ce qui est réellement dessiné. */
+.carte-legende {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding: 0.35rem 0.5rem 0.15rem;
+}
+.carte-cle { font-size: 0.72rem; color: var(--text-dim); display: inline-flex; align-items: center; gap: 0.3rem; }
+.carte-cle::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.4px solid rgba(216, 192, 122, 0.6);
+  background: rgba(216, 192, 122, 0.16);
+}
+.carte-cle--espace::before { background: rgba(216, 192, 122, 0.28); }
+.carte-cle--categorie::before { border-style: dashed; }
+.carte-cle--pourquoi::before { border-color: var(--pourquoi); background: var(--pourquoi-soft); }
+.carte-cle--mieux::before { border-color: var(--mieux); background: var(--mieux-soft); }
+
+/* Debout sur un téléphone : la carte se lit en descendant. Elle a le droit
+   d'être haute — c'est le seul sens où toutes les réflexions tiennent sans
+   s'écraser les unes sur les autres. */
+.carte-pensees--debout { padding: 0.3rem 0.2rem; }
+.carte-pensees--debout .carte-noeud text { font-size: 22px; }
 .carte-noeud text {
   fill: var(--text-dim);
   font-size: 15px;
@@ -1784,8 +1821,111 @@ body.avec-dock main { padding-bottom: 7rem; }
 .arbre-card--categorie { border-style: dashed; }
 .dedans { margin: 1rem 0 1.4rem; }
 .dedans-liste { margin-bottom: 0.6rem; }
-.dedans-crees { display: flex; gap: 1rem; flex-wrap: wrap; }
-#cree-form { margin-top: 0.6rem; }
+
+/* ---------------------------------------------- créer ici : deux gestes ---
+   Ouvrir une réflexion et créer une catégorie ne sont pas le même geste. Les
+   deux onglets se touchent comme des interrupteurs : celui qui est allumé
+   dit où l'on est, et le formulaire qui s'ouvre dessous le redit — son titre,
+   son aide, et le nom du bouton qui termine. */
+.cree { margin-top: 0.8rem; }
+.dedans-crees { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.cree-onglet {
+  flex: 1 1 auto;
+  min-width: 12rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.cree-onglet:hover { border-color: var(--accent); color: var(--text); }
+.cree-onglet.actif {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px rgba(216, 192, 122, 0.35);
+}
+.cree-form {
+  margin-top: 0.7rem;
+  max-width: 34rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+}
+.cree-form[hidden] { display: none; }
+.cree-ou { color: var(--text-dim); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.cree-ou strong { color: var(--text); font-weight: 600; letter-spacing: normal; text-transform: none; }
+.cree-quoi { font-size: 1.05rem; margin: 0.1rem 0 0.15rem; color: var(--accent); }
+.cree-aide { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 0.2rem; }
+.cree-foot { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.cree-foot button { justify-self: start; }
+
+/* ------------------------------------------------- ce qu'une réflexion creuse
+   Deux sens, deux couleurs : descendre vers la cause, ou monter vers le
+   remède. Le bouton choisi est allumé — on ne peut pas se tromper sur ce
+   qu'on est en train d'ouvrir. */
+.quete-choix { display: grid; gap: 0.35rem; margin: 0.2rem 0 0.3rem; }
+.quete-choix[hidden] { display: none; }
+.quete-legende { color: var(--text-dim); font-size: 0.82rem; }
+.quete-boutons { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.quete-btn {
+  flex: 1 1 13rem;
+  display: grid;
+  gap: 0.1rem;
+  text-align: left;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.5rem 0.75rem;
+  color: var(--text-dim);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.quete-btn-titre { font-size: 0.95rem; color: var(--text); }
+.quete-btn-sous { font-size: 0.78rem; line-height: 1.35; }
+.quete-btn:hover { border-color: var(--text-dim); }
+.quete-btn[data-quete="pourquoi"].actif,
+.quete-btn[data-quete-page="pourquoi"].actif {
+  border-color: var(--pourquoi);
+  background: var(--pourquoi-soft);
+  box-shadow: 0 0 0 1px rgba(138, 176, 214, 0.35);
+}
+.quete-btn[data-quete="pourquoi"].actif .quete-btn-titre,
+.quete-btn[data-quete-page="pourquoi"].actif .quete-btn-titre { color: var(--pourquoi); }
+.quete-btn[data-quete="mieux"].actif,
+.quete-btn[data-quete-page="mieux"].actif {
+  border-color: var(--mieux);
+  background: var(--mieux-soft);
+  box-shadow: 0 0 0 1px rgba(127, 199, 165, 0.35);
+}
+.quete-btn[data-quete="mieux"].actif .quete-btn-titre,
+.quete-btn[data-quete-page="mieux"].actif .quete-btn-titre { color: var(--mieux); }
+.quete-choix--page { margin: 0.5rem 0 1rem; max-width: 34rem; }
+.quete-etat { color: var(--text-dim); font-size: 0.78rem; min-height: 1em; }
+
+/* la pastille : ce qu'une réflexion creuse, sur sa carte et dans les listes */
+.quete-chip {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.05rem 0.55rem;
+  color: var(--text-dim);
+}
+.quete-chip--pourquoi { border-color: var(--pourquoi); color: var(--pourquoi); background: var(--pourquoi-soft); }
+.quete-chip--mieux { border-color: var(--mieux); color: var(--mieux); background: var(--mieux-soft); }
+.quete-comptes { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.quete-bandeau { margin: 0.3rem 0 0.8rem; }
 
 /* la pensée dite EST sa vidéo ; dessous, repliée, son émergence */
 .pensee-video { display: block; width: min(100%, 560px); border-radius: 10px; margin: 0.4rem 0; }

@@ -4,47 +4,78 @@
 // sont servis qu'à ceux dont l'échelon y donne droit. Les mettre dans
 // public/ reviendrait à les offrir à quiconque lit le JavaScript.
 
-/* -------------------------------------------------------- les quatre axes ---
-   Quatre espaces existent d'avance pour chacun dans Pense Mieux. Ils ne
+/* -------------------------------------------------------- les trois axes ---
+   Trois espaces existent d'avance pour chacun dans Pense Mieux. Ils ne
    s'ouvrent pas, ne se referment pas : on les nourrit.
 
-   Deux d'entre eux se répondent en miroir. La psychologie dit le présent :
-   comment on fonctionne, ce qu'on constate de soi. Le moi harmonieux dit vers
-   quoi l'on tend. L'un décrit, l'autre vise, et la distance entre les deux est
-   le travail.
+   Mon fonctionnement regarde vers l'intérieur : comment je marche, et ce qui
+   me ferait marcher mieux. La société regarde ce qui est là, dehors, tel que
+   c'est. La société harmonieuse regarde ce vers quoi cela pourrait tendre.
+   Ces deux-là se répondent en miroir : l'une constate, l'autre vise, et la
+   distance entre les deux est le travail.
 
-   Les quatre sont à soi, et à personne d'autre : Pense Mieux est le lieu où
+   Les trois sont à soi, et à personne d'autre : Pense Mieux est le lieu où
    l'on se regarde penser, pas celui où l'on est regardé. Ce qu'on imagine à
-   plusieurs vit ailleurs — dans les sociétés harmonieuses des carrés.      */
+   plusieurs vit ailleurs — dans les sociétés harmonieuses des carrés.     */
 
 export const AXES = {
-  psy: {
-    titre: 'Ma psychologie',
-    court: 'Psychologie',
-    sous: 'Le présent : comment tu fonctionnes, ce que tu constates de toi.',
-    miroir: 'moi',
+  fonctionnement: {
+    titre: 'Mon fonctionnement',
+    court: 'Mon fonctionnement',
+    sous: 'Comment tu fonctionnes : ce que tu constates de toi, et ce qui te ferait fonctionner mieux.',
   },
-  moi: {
-    titre: 'Le moi harmonieux',
-    court: 'Moi harmonieux',
-    sous: 'Ce vers quoi tu tends : ta version la plus harmonieuse.',
-    miroir: 'psy',
+  societe_actuelle: {
+    titre: 'La société',
+    court: 'La société',
+    sous: 'La société telle qu’elle est : ce que tu y observes, et pourquoi elle marche ainsi.',
+    miroir: 'societe_harmonieuse',
   },
-  philo: {
-    titre: 'Ma philosophie',
-    court: 'Philosophie',
-    sous: 'Tes questions, tes constats, et ce qu’ils font de ta façon de penser.',
-  },
-  societe: {
-    titre: 'Ma société harmonieuse',
+  societe_harmonieuse: {
+    titre: 'Société harmonieuse',
     court: 'Société harmonieuse',
     sous: 'La société la plus harmonieuse que tu imagines, et son chemin du réel.',
+    miroir: 'societe_actuelle',
   },
 };
 
-// L'ordre de lecture : le miroir d'abord (le présent, puis ce vers quoi il
-// tend), puis la philosophie et la société harmonieuse.
-export const AXES_ORDRE = ['psy', 'moi', 'philo', 'societe'];
+// L'ordre de lecture : soi d'abord, puis ce qui est là, puis ce vers quoi
+// cela pourrait tendre.
+export const AXES_ORDRE = ['fonctionnement', 'societe_actuelle', 'societe_harmonieuse'];
+
+/* --------------------------------------------------------- les deux quêtes ---
+   Une réflexion ne creuse pas dans tous les sens : elle creuse dans UN sens,
+   et le dire au moment de l'ouvrir change ce qu'on y dépose. Ou bien elle
+   descend vers la cause — pourquoi c'est ainsi — ou bien elle monte vers le
+   remède — comment faire mieux. Les deux se répondent, mais elles ne se
+   mènent pas de la même façon : mélangées dans une même réflexion, elles
+   s'annulent.
+
+   Une catégorie n'a pas de quête : elle range, elle ne creuse pas.        */
+
+export const QUETES = {
+  pourquoi: {
+    titre: 'Pourquoi ?',
+    court: 'Pourquoi',
+    sous: 'Descendre vers la cause : pourquoi c’est ainsi, et d’où ça vient.',
+  },
+  mieux: {
+    titre: 'Comment faire mieux ?',
+    court: 'Faire mieux',
+    sous: 'Monter vers le remède : ce qui ferait mieux, et par quel chemin.',
+  },
+};
+
+export const QUETES_ORDRE = ['pourquoi', 'mieux'];
+
+// Ce que le navigateur reçoit : les deux quêtes dans l'ordre, libellés
+// compris. L'interface ne réécrit jamais ces mots de son côté.
+export const QUETES_LISTE = QUETES_ORDRE.map((cle) => ({ cle, ...QUETES[cle] }));
+
+// Une quête reçue du navigateur : 'pourquoi', 'mieux', ou rien du tout — une
+// réflexion d'avant les quêtes n'en porte pas, et ne s'en invente pas une.
+export function queteDe(valeur) {
+  return QUETES[valeur] ? valeur : null;
+}
 
 /* --------------------------------------------- Carré d'As (échelon 5) ---
    Un carré, c'est quatre As qui imaginent ENSEMBLE des sociétés

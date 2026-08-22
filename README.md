@@ -175,7 +175,7 @@ bloc titré.
 ### Les pièces hautes
 
 Pense Mieux, la Vidéographie et le Carré d'As sont chacun **UNE page**, sans
-sous-menu : la cartographie, les quatre espaces et la recherche pour Pense
+sous-menu : la cartographie, les trois branches et la recherche pour Pense
 Mieux ; le rythme et son historique pour la Vidéographie ; mes carrés, le
 salon de recrutement, les carrés à compléter et la fondation pour le Carré
 d'As. Les vues ne s'expliquent pas : on est dans un escape game, l'interface
@@ -264,10 +264,19 @@ répond 503 et le clavier reste : rien ne casse.
 **La cartographie.** La page d'accueil de Pense Mieux dessine **toutes les
 réflexions de la personne sur une seule carte** : un disque par réflexion,
 gros comme ce qu'elle porte, un trait par nourriture qui passe de l'une à
-l'autre, le miroir psychologie ↔ moi harmonieux en pointillé. On s'y voit
-penser — ce qui grossit, ce qui se relie, ce qui reste seul — et chaque disque
-s'ouvre d'un toucher. La disposition est déterministe (spirale d'angle d'or
-puis détente de ressorts) : la carte est la même à chaque visite.
+l'autre, le miroir société ↔ société harmonieuse en pointillé. La **couleur
+dit la quête** : ce qui creuse le pourquoi, ce qui cherche à faire mieux — et
+une légende sous la carte ne montre que ce qui y est réellement dessiné. On
+s'y voit penser — ce qui grossit, ce qui se relie, ce qui reste seul — et
+chaque disque s'ouvre d'un toucher. La disposition est déterministe (spirale
+d'angle d'or puis détente de ressorts, puis un étirement jusqu'aux bords) : la
+carte est la même à chaque visite.
+
+Sur un écran large la carte est **couchée** ; **sur un téléphone elle se
+dresse debout** (seuil : 700 px, le même que la feuille de style) et se lit en
+descendant. Un téléphone est haut, pas large : couchée, la carte s'y écrasait
+jusqu'à ne plus rien montrer. Elle se redessine seule quand la place change —
+rotation, fenêtre redimensionnée — sans relire le serveur.
 
 **La Vidéographie** (échelon 4) ne porte que des **récaps de période** — une
 vidéo par semaine, par mois, par an, où l'on raconte ce qu'on a vécu du point
@@ -280,21 +289,48 @@ janvier** (elle raconte l'année écoulée). Hors fenêtre, pas de formulaire :
 la carte dit la date, et le serveur refuse en 403 ce que l'interface ne
 propose pas. Le reste du temps, on vit ; le jour venu, on raconte.
 
-## Les quatre branches, à soi seul
+## Les trois branches, à soi seul
 
-Chacun porte quatre branches de réflexion dans Pense Mieux. Elles existent
+Chacun porte trois branches de réflexion dans Pense Mieux. Elles existent
 d'avance, ne s'ouvrent pas, ne se referment pas : on les nourrit.
 
 | axe | branche |
 |---|---|
-| `psy` | Ma psychologie |
-| `moi` | Le moi harmonieux |
-| `philo` | Ma philosophie |
-| `societe` | Ma société harmonieuse |
+| `fonctionnement` | Mon fonctionnement |
+| `societe_actuelle` | La société |
+| `societe_harmonieuse` | Société harmonieuse |
 
-Les deux premières **se répondent en miroir** : la psychologie dit le présent
-(comment on fonctionne, ce qu'on constate de soi), le moi harmonieux dit vers
-quoi l'on tend. Chaque page porte une ligne « En regard » qui mène à l'autre.
+La première regarde vers l'intérieur : comment je marche, et ce qui me ferait
+marcher mieux. Les deux autres **se répondent en miroir** : la société dit ce
+qui est là, tel que c'est ; la société harmonieuse dit vers quoi cela pourrait
+tendre. Chacune des deux porte une ligne « En regard » qui mène à l'autre.
+
+Les quatre branches d'avant sont devenues ces trois-là sans rien perdre :
+« Ma psychologie » est « Mon fonctionnement » (le même regard, mieux nommé),
+« Ma société harmonieuse » est « Société harmonieuse », et « La société »
+naît vide. « Le moi harmonieux » et « Ma philosophie » ne sont plus des
+branches : vides, elles s'effacent (des coquilles créées d'avance) ; pleines,
+elles deviennent des **catégories de « Mon fonctionnement »** — tout ce qui y
+a été écrit reste lisible, un cran plus bas. Ce que le moi harmonieux portait
+— ce vers quoi l'on tend — se dit désormais dans la quête « Comment faire
+mieux ? », dans n'importe quelle branche.
+
+### Deux quêtes : « Pourquoi ? » et « Comment faire mieux ? »
+
+Une réflexion ne creuse pas dans tous les sens : elle creuse dans **un** sens,
+et le dire au moment de l'ouvrir change ce qu'on y dépose. Ou bien elle
+descend vers la **cause** (`pourquoi`), ou bien elle monte vers le **remède**
+(`mieux`) — `reflection_trees.quete`. Le choix est **demandé à l'ouverture**
+(sans lui, rien ne part) et se **corrige d'un toucher** en tête de la
+réflexion : on peut l'avoir ouverte du mauvais côté. Un second toucher sur la
+quête allumée la retire.
+
+Une **catégorie n'a pas de quête** : elle range, elle ne creuse pas. Une
+branche non plus. Les réflexions d'avant les quêtes n'en portent pas : on ne
+leur en invente pas une, elles attendent qu'on le dise. La quête se voit
+partout où une réflexion se montre — sa pastille sur les cartes et dans la
+recherche, sa couleur sur la cartographie, ses comptes sur la carte de chaque
+branche.
 
 **Tout Pense Mieux est à soi, et à personne d'autre.** Le carré n'y entre
 plus : il imagine des sociétés de son côté (voir plus bas). Ni un autre
@@ -310,13 +346,22 @@ devenu une **catégorie sans attache** — rien de ce qui y a été écrit n'est
 perdu.
 
 **Tout se range dans une branche.** Une réflexion ne naît pas hors-sol : elle
-s'ouvre DANS une des quatre branches, ou dans une **catégorie** qu'on y a
+s'ouvre DANS une des trois branches, ou dans une **catégorie** qu'on y a
 créée (`reflection_trees.parent_id`, `genre`). Chaque branche a en outre **sa
 propre cartographie** : ses catégories, ses réflexions et les nourritures qui
 les relient, pour voir la trajectoire de ses pensées dans cette branche-là.
 
+**Ouvrir une réflexion et créer une catégorie ne sont pas le même geste**, et
+l'interface ne laisse plus le doute : deux onglets qui s'allument (celui qui
+est choisi reste allumé, en doré), et sous eux un panneau qui redit où l'on
+est — « Dans <la branche> », le nom du geste, ce qu'il fait, et un bouton qui
+porte ce nom (« Ouvrir la réflexion », « Créer la catégorie »). Toucher
+l'onglet allumé referme : on n'est alors plus nulle part, et cela se voit
+aussi.
+
 Techniquement, une branche **est une réflexion** : `reflection_trees` porte
-`axe` (`psy` | `moi` | `philo` | `societe`), et des index uniques partiels
+`axe` (`fonctionnement` | `societe_actuelle` | `societe_harmonieuse`), et des
+index uniques partiels
 garantissent l'unicité de chacune. Elles héritent donc, sans une ligne de
 moteur nouveau, des pensées emboîtées, des liens de nourriture, du vocal, du
 rendu et de la recherche. Une réflexion se lit par un chemin unique,

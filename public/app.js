@@ -77,8 +77,17 @@ async function api(path, options = {}) {
 // Jeton de navigation : un rendu asynchrone lancé avant un changement de page
 // est abandonné à son réveil au lieu d'écraser la page courante.
 let renderEpoch = 0;
-function newEpoch() { return ++renderEpoch; }
+function newEpoch() { carteAJour = null; return ++renderEpoch; }
 function stale(epoch) { return epoch !== renderEpoch; }
+
+/* La carte des pensées se dessine autrement selon la place : couchée sur un
+   écran large, DEBOUT sur un téléphone — un téléphone est haut, pas large, et
+   une carte couchée s'y écrase jusqu'à ne plus rien montrer. Le seuil est le
+   même que celui de la feuille de style, et la carte de la page courante se
+   redessine quand on le franchit (rotation, fenêtre redimensionnée).       */
+const CARTE_DEBOUT = window.matchMedia('(max-width: 700px)');
+let carteAJour = null;
+CARTE_DEBOUT.addEventListener('change', () => { if (carteAJour) carteAJour(); });
 
 // `remplace` : pas de trace dans l'historique. Utile quand on
 // renvoie quelqu'un d'une page qui ne lui est pas encore ouverte, pour que le
@@ -594,6 +603,27 @@ async function pageConversation() {
    La forêt, c'est l'ensemble de ses arbres. En Vidéographie chaque branche
    est une vidéo YouTube : on y organise ce qu'on a extériorisé en vidéo.  */
 
+/* --------------------------------------------------------- les deux quêtes ---
+   Une réflexion creuse dans UN sens : vers la cause (« Pourquoi ? ») ou vers
+   le remède (« Comment faire mieux ? »). Les libellés viennent du serveur
+   avec chaque page de Pense Mieux ; ceux d'ici ne servent qu'au premier
+   dessin, avant que la réponse arrive. */
+let QUETES = [
+  { cle: 'pourquoi', titre: 'Pourquoi ?', court: 'Pourquoi',
+    sous: 'Descendre vers la cause : pourquoi c’est ainsi, et d’où ça vient.' },
+  { cle: 'mieux', titre: 'Comment faire mieux ?', court: 'Faire mieux',
+    sous: 'Monter vers le remède : ce qui ferait mieux, et par quel chemin.' },
+];
+function retientQuetes(data) {
+  if (data && Array.isArray(data.quetes) && data.quetes.length) QUETES = data.quetes;
+}
+function quete(cle) { return QUETES.find((q) => q.cle === cle) || null; }
+// La pastille d'une réflexion : ce qu'elle creuse, dit en un mot.
+function queteChip(cle) {
+  const q = quete(cle);
+  return q ? `<span class="quete-chip quete-chip--${cle}">${esc(q.titre)}</span>` : '';
+}
+
 const ARBRES_PAGES = {
   pensee: {
     titre: 'Pense Mieux',
@@ -643,14 +673,20 @@ function docke(appCle, actif, contenu) {
    Des réflexions sur une carte : un disque par réflexion, gros comme ce
    qu'elle porte ; un trait plein par nourriture qui passe de l'une à
    l'autre ; un trait discret pour le rangement (une réflexion tient à son
-   espace, une sous-branche à sa catégorie) ; le miroir psychologie ↔ moi
-   harmonieux en pointillé. On s'y voit penser : ce qui grossit, ce qui se
-   relie, ce qui reste seul.
+   espace, une sous-branche à sa catégorie) ; le miroir société ↔ société
+   harmonieuse en pointillé. La couleur dit la quête : ce qui creuse le
+   pourquoi, ce qui cherche à faire mieux. On s'y voit penser : ce qui
+   grossit, ce qui se relie, ce qui reste seul.
 
-   `noeuds` : { id, titre, n, espace?, intime?, categorie? }.
+   Sur un écran large la carte est couchée ; sur un téléphone elle se dresse
+   DEBOUT et se lit en descendant — c'est le sens où un téléphone a de la
+   place, et le seul où toutes les réflexions tiennent sans s'écraser.
+
+   `noeuds` : { id, titre, n, espace?, intime?, categorie?, quete? }.
    `liens`  : { de, vers, n?, type: 'lien' | 'range' | 'miroir' }.        */
 function carteSvg(noeuds, liens) {
   if (!noeuds.length) return '';
+  const debout = CARTE_DEBOUT.matches;
   const rang = new Map(noeuds.map((x, i) => [x.id, i]));
   const aretes = (liens || [])
     .filter((l) => rang.has(l.de) && rang.has(l.vers))
@@ -659,15 +695,29 @@ function carteSvg(noeuds, liens) {
   /* La disposition : chaque réflexion part sur une spirale (l'angle d'or fait
      que deux départs ne se superposent jamais), puis quelques tours de
      détente — les liens attirent, toute paire se repousse, le centre
-     retient. C'est déterministe : la carte est la même à chaque visite. */
-  const L = 1000;
-  const H = Math.max(340, Math.min(640, 220 + noeuds.length * 42));
+     retient. La spirale est aplatie dans le sens où la place manque : en
+     largeur quand la carte est debout, en hauteur quand elle est couchée.
+     C'est déterministe : la carte est la même à chaque visite. */
+  const L = debout ? 620 : 1000;
+  const H = debout
+    ? Math.max(620, Math.min(1500, 360 + noeuds.length * 88))
+    : Math.max(340, Math.min(640, 220 + noeuds.length * 42));
+  const ecrase = 0.62;
   const P = noeuds.map((_, i) => {
     const a = i * 2.399963;
-    const r = 55 + 145 * Math.sqrt(i);
-    return { x: L / 2 + r * Math.cos(a), y: H / 2 + r * Math.sin(a) * 0.62, vx: 0, vy: 0 };
+    const r = (debout ? 62 : 55) + (debout ? 118 : 145) * Math.sqrt(i);
+    return {
+      x: L / 2 + r * Math.cos(a) * (debout ? ecrase : 1),
+      y: H / 2 + r * Math.sin(a) * (debout ? 1 : ecrase),
+      vx: 0, vy: 0,
+    };
   });
   const K = { lien: 0.02, range: 0.016, miroir: 0.012 };
+  const centreX = debout ? 0.004 : 0.002;
+  const centreY = debout ? 0.002 : 0.004;
+  const margeX = debout ? 92 : 110;
+  const hautMarge = 46;
+  const basMarge = 58; // le nom d'une réflexion s'écrit SOUS son disque
   for (let t = 0; t < 140; t++) {
     for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) {
       let dx = P[j].x - P[i].x, dy = P[j].y - P[i].y;
@@ -684,10 +734,29 @@ function carteSvg(noeuds, liens) {
       P[r.b].vx -= dx * k; P[r.b].vy -= dy * k;
     }
     for (const p of P) {
-      p.vx += (L / 2 - p.x) * 0.002; p.vy += (H / 2 - p.y) * 0.004;
+      p.vx += (L / 2 - p.x) * centreX; p.vy += (H / 2 - p.y) * centreY;
       p.x += p.vx * 0.6; p.y += p.vy * 0.6; p.vx *= 0.5; p.vy *= 0.5;
-      p.x = Math.min(L - 110, Math.max(110, p.x));
-      p.y = Math.min(H - 56, Math.max(50, p.y));
+      p.x = Math.min(L - margeX, Math.max(margeX, p.x));
+      p.y = Math.min(H - basMarge, Math.max(hautMarge, p.y));
+    }
+  }
+
+  /* La détente ramasse tout vers le centre : on rouvre. Le nuage est étiré
+     jusqu'aux bords de la place disponible, chaque sens indépendamment — une
+     carte est un schéma, elle dit qui touche qui, pas à quelle distance. On
+     ne fait que grandir (jamais rétrécir : deux disques ne doivent pas se
+     rejoindre), et pas au-delà de deux fois et demie. */
+  {
+    const xs = P.map((p) => p.x), ys = P.map((p) => p.y);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs);
+    const y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const tient = (place, etendue) => Math.min(2.5, Math.max(1, place / Math.max(1, etendue)));
+    const kx = tient(L - 2 * margeX, x1 - x0);
+    const ky = tient(H - hautMarge - basMarge, y1 - y0);
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    for (const p of P) {
+      p.x = Math.min(L - margeX, Math.max(margeX, L / 2 + (p.x - cx) * kx));
+      p.y = Math.min(H - basMarge, Math.max(hautMarge, H / 2 + (p.y - cy) * ky));
     }
   }
 
@@ -696,22 +765,37 @@ function carteSvg(noeuds, liens) {
           x2="${P[r.b].x.toFixed(1)}" y2="${P[r.b].y.toFixed(1)}"
           class="carte-lien${r.type !== 'lien' ? ` carte-lien--${r.type}` : ''}"
           stroke-width="${(r.type === 'range' ? 1 : Math.min(4, 1 + r.n)).toFixed(1)}"/>`).join('');
+  const coupe = debout ? 18 : 24;
   const disques = noeuds.map((x, i) => {
     const p = P[i];
     const r = 9 + Math.min(20, 4 * Math.sqrt(x.n || 0));
-    const nom = x.titre.length > 24 ? x.titre.slice(0, 23) + '…' : x.titre;
+    const nom = x.titre.length > coupe ? x.titre.slice(0, coupe - 1) + '…' : x.titre;
     return `
     <a href="/reflexion/${x.id}" data-link
-       class="carte-noeud${x.espace ? ' carte-noeud--espace' : ''}${x.intime ? ' carte-noeud--intime' : ''}${x.categorie ? ' carte-noeud--categorie' : ''}">
+       class="carte-noeud${x.espace ? ' carte-noeud--espace' : ''}${x.intime ? ' carte-noeud--intime' : ''}${
+         x.categorie ? ' carte-noeud--categorie' : ''}${x.quete ? ` carte-noeud--${x.quete}` : ''}">
       <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}"/>
       <text x="${p.x.toFixed(1)}" y="${(p.y + r + 16).toFixed(1)}">${esc(nom)}</text>
     </a>`;
   }).join('');
 
+  /* La légende : la carte ne s'explique pas en paragraphe, mais on doit
+     pouvoir dire d'un regard ce que chaque disque est. Elle ne montre que ce
+     que la carte porte vraiment. */
+  const aQuete = (q) => noeuds.some((x) => x.quete === q);
+  const cles = [
+    noeuds.some((x) => x.espace) ? ['espace', 'une branche'] : null,
+    noeuds.some((x) => x.categorie) ? ['categorie', 'une catégorie'] : null,
+    aQuete('pourquoi') ? ['pourquoi', 'Pourquoi ?'] : null,
+    aQuete('mieux') ? ['mieux', 'Comment faire mieux ?'] : null,
+  ].filter(Boolean);
+
   return `
-    <figure class="carte-pensees">
+    <figure class="carte-pensees${debout ? ' carte-pensees--debout' : ''}">
       <svg viewBox="0 0 ${L} ${H}" role="img" aria-label="La carte des réflexions"
            preserveAspectRatio="xMidYMid meet">${traits}${disques}</svg>
+      ${cles.length ? `<figcaption class="carte-legende">${cles.map(([c, mot]) =>
+        `<span class="carte-cle carte-cle--${c}">${esc(mot)}</span>`).join('')}</figcaption>` : ''}
     </figure>`;
 }
 
@@ -722,7 +806,8 @@ function dessineCarte(data) {
       id: t.id, titre: t.title, n: t.branches, espace: true,
     })),
     ...(data.arbres || []).map((a) => ({
-      id: a.id, titre: a.title, n: a.branches, categorie: a.genre === 'categorie',
+      id: a.id, titre: a.title, n: a.branches,
+      categorie: a.genre === 'categorie', quete: a.quete || null,
     })),
   ];
   const liens = [
@@ -730,18 +815,27 @@ function dessineCarte(data) {
     ...(data.arbres || []).filter((a) => a.parent_id)
       .map((a) => ({ de: a.parent_id, vers: a.id, type: 'range' })),
   ];
-  const psy = (data.troncs || []).find((t) => t.axe === 'psy');
-  const moi = (data.troncs || []).find((t) => t.axe === 'moi');
-  if (psy && moi) liens.push({ de: psy.id, vers: moi.id, type: 'miroir' });
+  /* Le miroir, dessiné en pointillé : c'est le serveur qui dit quelle branche
+     répond à quelle autre. Une seule ligne par couple. */
+  const parAxe = new Map((data.troncs || []).map((t) => [t.axe, t]));
+  const vus = new Set();
+  for (const t of data.troncs || []) {
+    const autre = t.miroir_axe ? parAxe.get(t.miroir_axe) : null;
+    if (!autre) continue;
+    const cle = [t.id, autre.id].sort((a, b) => a - b).join(':');
+    if (vus.has(cle)) continue;
+    vus.add(cle);
+    liens.push({ de: t.id, vers: autre.id, type: 'miroir' });
+  }
   return carteSvg(noeuds, liens);
 }
 
 /* ------------------------------------- Pense Mieux : une seule page -------
-   La cartographie de toutes ses pensées, puis les quatre espaces —
-   psychologie, moi harmonieux, philosophie, société harmonieuse — tous à
-   soi, et à personne d'autre. En bas, la recherche plein texte. Tout le
-   reste — créer une catégorie, ouvrir une réflexion, dire une pensée — se
-   fait DANS l'espace concerné, sur sa propre page.                        */
+   La cartographie de toutes ses pensées, puis les trois branches — mon
+   fonctionnement, la société, la société harmonieuse — toutes à soi, et à
+   personne d'autre. En bas, la recherche plein texte. Tout le reste — créer
+   une catégorie, ouvrir une réflexion, dire une pensée — se fait DANS la
+   branche concernée, sur sa propre page.                                  */
 
 async function vueForet(kind) {
   const def = ARBRES_PAGES[kind];
@@ -757,6 +851,7 @@ async function vueForet(kind) {
     return navigate('/57', true);
   }
   if (stale(epoch)) return;
+  retientQuetes(data);
 
   // ce que chaque espace range : on remonte chaque réflexion à sa racine
   const parents = new Map((data.arbres || []).map((a) => [a.id, a.parent_id]));
@@ -767,19 +862,33 @@ async function vueForet(kind) {
     return espaces.has(cur) ? cur : null;
   };
   const rangees = new Map();
+  const quetees = new Map(); // par branche : ce qu'on y creuse, quête par quête
   for (const a of data.arbres || []) {
     const r = a.parent_id ? racineDe(a.id) : null;
-    if (r) rangees.set(r, (rangees.get(r) || 0) + (a.genre === 'categorie' ? 0 : 1));
+    if (!r) continue;
+    if (a.genre !== 'categorie') {
+      rangees.set(r, (rangees.get(r) || 0) + 1);
+      if (a.quete) {
+        const c = quetees.get(r) || {};
+        c[a.quete] = (c[a.quete] || 0) + 1;
+        quetees.set(r, c);
+      }
+    }
   }
 
   const carteEspace = (t) => {
     const n = rangees.get(t.id) || 0;
+    const c = quetees.get(t.id) || {};
     return `
     <a class="arbre-card arbre-card--tronc" href="/reflexion/${t.id}" data-link>
       <h2>${esc(t.title)}</h2>
       ${t.sous ? `<p class="arbre-sous">${esc(t.sous)}</p>` : ''}
       <span class="arbre-meta">${t.branches} pensée${t.branches > 1 ? 's' : ''}${
         n ? ` · ${n} réflexion${n > 1 ? 's' : ''}` : ''}</span>
+      ${QUETES.some((q) => c[q.cle]) ? `<span class="quete-comptes">${QUETES
+        .filter((q) => c[q.cle])
+        .map((q) => `<span class="quete-chip quete-chip--${q.cle}">${c[q.cle]} · ${esc(q.titre)}</span>`)
+        .join('')}</span>` : ''}
     </a>`;
   };
 
@@ -788,9 +897,11 @@ async function vueForet(kind) {
 
   app.innerHTML = `
     <h1>${esc(def.titre)}</h1>
-    <p class="subtitle">Tes quatre branches, et la carte de ce qu’elles
-      rangent. Tout ici est à toi, et à personne d’autre : dis une pensée,
-      elle devient une vidéo, et la carte s’en souvient.</p>
+    <p class="subtitle">Tes trois branches, et la carte de ce qu’elles
+      rangent. Chaque réflexion y creuse dans un sens — <em>Pourquoi ?</em> ou
+      <em>Comment faire mieux ?</em> Tout ici est à toi, et à personne
+      d’autre : dis une pensée, elle devient une vidéo, et la carte s’en
+      souvient.</p>
     ${dessineCarte(data)}
     <div class="foret foret-troncs">${(data.troncs || []).map(carteEspace).join('')}</div>
     ${libres.length ? `
@@ -798,16 +909,25 @@ async function vueForet(kind) {
       <h2>Sans attache</h2>
       <p class="pm-bloc-sous">Des réflexions d’avant le rangement.</p>
       <div class="foret">${libres.map((a) => `
-        <a class="arbre-card" href="/reflexion/${a.id}" data-link>
+        <a class="arbre-card${a.genre === 'categorie' ? ' arbre-card--categorie' : ''}" href="/reflexion/${a.id}" data-link>
           <h2>${esc(a.title)}</h2>
           ${a.trunk ? `<p class="arbre-tronc-apercu">${esc(a.trunk)}</p>` : ''}
           <span class="arbre-meta">${a.branches} pensée${a.branches > 1 ? 's' : ''}</span>
+          ${queteChip(a.quete)}
         </a>`).join('')}</div>
     </section>` : ''}
     <div class="foret-outils">
       <input id="rech-q" placeholder="Chercher dans tes pensées…" autocomplete="off">
     </div>
     <div id="rech-resultats"></div>`;
+
+  /* La carte se redresse (ou se couche) quand la place change : on la
+     redessine seule, sans relire la page ni le serveur. */
+  carteAJour = () => {
+    if (stale(epoch)) return;
+    const fig = app.querySelector('.carte-pensees');
+    if (fig) fig.outerHTML = dessineCarte(data);
+  };
 
   // la recherche plein texte, sur la même page
   const champ = document.getElementById('rech-q');
@@ -823,9 +943,10 @@ async function vueForet(kind) {
       catch { return; }
       if (champ.value.trim() !== q) return; // une frappe plus récente a gagné
       const arbres = d.arbres.map((a) => `
-        <a class="arbre-card" href="/reflexion/${a.id}" data-link>
+        <a class="arbre-card${a.genre === 'categorie' ? ' arbre-card--categorie' : ''}" href="/reflexion/${a.id}" data-link>
           <h2>${esc(a.title)}</h2>
           ${a.trunk ? `<p class="arbre-tronc-apercu">${esc(a.trunk)}</p>` : ''}
+          ${queteChip(a.quete)}
         </a>`).join('');
       const branches = d.branches.map((b) => `
         <a class="journal-entree" href="/reflexion/${b.tree_id}#b${b.id}" data-link>
@@ -1588,6 +1709,7 @@ async function pageArbre(id) {
   try { data = await api(`/api/arbres/${id}`); }
   catch { return navigate('/pense-mieux', true); }
   if (stale(epoch)) return;
+  retientQuetes(data.arbre);
   const arbre = data.arbre;
   const kind = arbre.kind;
   const def = ARBRES_PAGES[kind];
@@ -1658,6 +1780,18 @@ async function pageArbre(id) {
      catégories. C'est le seul endroit où une réflexion naît. */
   const estDossier = arbre.axe || arbre.genre === 'categorie';
   const dedans = arbre.dedans || [];
+
+  /* Créer ici : une réflexion, ou une catégorie. Deux gestes différents, donc
+     deux onglets qui s'allument — on doit voir, sans le lire, dans lequel on
+     est : l'onglet choisi reste allumé, le formulaire redit ce qu'on est en
+     train de faire et où, et le bouton porte le nom du geste. */
+  const boutonsQuete = (attribut, choisie) => QUETES.map((q) => `
+    <button type="button" class="quete-btn${choisie === q.cle ? ' actif' : ''}"
+            ${attribut}="${q.cle}" aria-pressed="${choisie === q.cle}">
+      <span class="quete-btn-titre">${esc(q.titre)}</span>
+      <span class="quete-btn-sous">${esc(q.sous)}</span>
+    </button>`).join('');
+
   const rangees = estDossier ? `
     <section class="dedans">
       ${dedans.length ? `<div class="foret dedans-liste">
@@ -1668,25 +1802,53 @@ async function pageArbre(id) {
           <span class="arbre-meta">${x.genre === 'categorie'
             ? `catégorie · ${x.contenus} réflexion${x.contenus > 1 ? 's' : ''}`
             : `${x.branches} pensée${x.branches > 1 ? 's' : ''}`}</span>
+          ${x.genre === 'categorie' ? '' : queteChip(x.quete)}
         </a>`).join('')}
       </div>` : ''}
       ${arbre.proprietaire ? `
-      <div class="dedans-crees">
-        <button type="button" class="link-btn" data-cree="reflexion">Ouvrir une réflexion ici</button>
-        <button type="button" class="link-btn" data-cree="categorie">Créer une catégorie</button>
-      </div>
-      <form id="cree-form" class="arbre-form" hidden>
-        <input id="cree-titre" maxlength="120" required>
-        <button type="submit" class="primary">Créer</button>
-        <button type="button" class="link-btn" id="cree-annule">Annuler</button>
-        <p class="form-error" id="cree-err"></p>
-      </form>` : ''}
+      <div class="cree">
+        <div class="dedans-crees" role="group" aria-label="Créer ici">
+          <button type="button" class="cree-onglet" data-cree="reflexion" aria-pressed="false">
+            Ouvrir une réflexion ici</button>
+          <button type="button" class="cree-onglet" data-cree="categorie" aria-pressed="false">
+            Créer une catégorie</button>
+        </div>
+        <form id="cree-form" class="arbre-form cree-form" hidden>
+          <p class="cree-ou">Dans <strong>${esc(arbre.title)}</strong></p>
+          <h3 class="cree-quoi" id="cree-quoi"></h3>
+          <p class="cree-aide" id="cree-aide"></p>
+          <div class="quete-choix" id="cree-quete" role="group"
+               aria-label="Ce que cette réflexion va creuser">
+            <span class="quete-legende">Cette réflexion va creuser…</span>
+            <div class="quete-boutons">${boutonsQuete('data-quete', null)}</div>
+          </div>
+          <input id="cree-titre" maxlength="120" required>
+          <div class="cree-foot">
+            <button type="submit" class="primary" id="cree-ok">Créer</button>
+            <button type="button" class="link-btn" id="cree-annule">Annuler</button>
+          </div>
+          <p class="form-error" id="cree-err"></p>
+        </form>
+      </div>` : ''}
     </section>` : '';
+
+  /* Ce que creuse cette réflexion : la cause, ou le remède. Il se dit en tête
+     de page, et se corrige d'un toucher — une réflexion peut avoir été
+     ouverte du mauvais côté. Ni un espace ni une catégorie n'en portent :
+     ils rangent, ils ne creusent pas. */
+  const bandeauQuete = estDossier ? '' : (arbre.proprietaire ? `
+    <div class="quete-choix quete-choix--page" id="quete-page" role="group"
+         aria-label="Ce que cette réflexion creuse">
+      <span class="quete-legende">Cette réflexion creuse…</span>
+      <div class="quete-boutons">${boutonsQuete('data-quete-page', arbre.quete)}</div>
+      <span class="quete-etat" id="quete-etat"></span>
+    </div>` : (arbre.quete ? `<p class="quete-bandeau">${queteChip(arbre.quete)}</p>` : ''));
 
   /* La carte de l'espace : sa propre visualisation — ses catégories, ses
      réflexions, et les nourritures qui les relient. On y voit la trajectoire
      de ses pensées dans CETTE branche. */
   let carteEspace = '';
+  let dessineEspace = null;
   if (arbre.axe && arbre.proprietaire) {
     try {
       const tout = await api(`/api/arbres?kind=${kind}`);
@@ -1700,14 +1862,19 @@ async function pageArbre(id) {
       if (desc.length) {
         const noeuds = [
           { id: arbre.id, titre: arbre.title, n: (arbre.branches || []).length, espace: true },
-          ...desc.map((a) => ({ id: a.id, titre: a.title, n: a.branches, categorie: a.genre === 'categorie' })),
+          ...desc.map((a) => ({
+            id: a.id, titre: a.title, n: a.branches,
+            categorie: a.genre === 'categorie', quete: a.quete || null,
+          })),
         ];
         const ids = new Set(noeuds.map((x) => x.id));
-        carteEspace = carteSvg(noeuds, [
+        const liens = [
           ...desc.map((a) => ({ de: a.parent_id, vers: a.id, type: 'range' })),
           ...(tout.carte || []).filter((l) => ids.has(l.de) && ids.has(l.vers))
             .map((l) => ({ de: l.de, vers: l.vers, n: l.n, type: 'lien' })),
-        ]);
+        ];
+        dessineEspace = () => carteSvg(noeuds, liens);
+        carteEspace = dessineEspace();
       }
     } catch { /* la carte est un plus, jamais une condition */ }
     if (stale(epoch)) return;
@@ -1723,6 +1890,7 @@ async function pageArbre(id) {
     ${arbre.sous ? `<p class="arbre-sous">${esc(arbre.sous)}</p>` : ''}
     ${arbre.proprietaire && kind === 'pensee' ? '<p class="arbre-partage">À toi, et à personne d’autre.</p>' : ''}
     ${arbre.miroir ? `<p class="arbre-miroir">En regard : <a href="/reflexion/${arbre.miroir.id}" data-link>${esc(arbre.miroir.title)}</a></p>` : ''}
+    ${bandeauQuete}
     ${arbre.trunk ? `<p class="tronc">${esc(arbre.trunk)}</p>` : ''}
     ${carteEspace}
     ${rangees}
@@ -1800,6 +1968,38 @@ async function pageArbre(id) {
   }
   // arrivée par une chip d'un autre arbre : la branche visée s'illumine
   if (/^#b\d+$/.test(location.hash)) setTimeout(() => vaVers(+location.hash.slice(2)), 150);
+
+  // la carte de la branche se redresse (ou se couche) quand la place change
+  if (dessineEspace) {
+    carteAJour = () => {
+      if (stale(epoch)) return;
+      const fig = app.querySelector('.carte-pensees');
+      if (fig) fig.outerHTML = dessineEspace();
+    };
+  }
+
+  /* Corriger la quête d'une réflexion : un toucher, et c'est écrit. Le même
+     toucher sur la quête déjà choisie la retire — une réflexion peut n'avoir
+     pas encore choisi son sens. */
+  const blocQuetePage = document.getElementById('quete-page');
+  if (blocQuetePage) {
+    const etat = document.getElementById('quete-etat');
+    blocQuetePage.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-quete-page]');
+      if (!b) return;
+      const voulue = b.classList.contains('actif') ? null : b.dataset.quetePage;
+      try {
+        const r = await api(`/api/arbres/${id}`, { method: 'PUT', body: { quete: voulue } });
+        arbre.quete = r.quete || null;
+        blocQuetePage.querySelectorAll('[data-quete-page]').forEach((x) => {
+          const sien = x.dataset.quetePage === arbre.quete;
+          x.classList.toggle('actif', sien);
+          x.setAttribute('aria-pressed', String(sien));
+        });
+        if (etat) etat.textContent = arbre.quete ? 'Enregistré.' : 'Sans quête pour l’instant.';
+      } catch (err) { if (etat) etat.textContent = err.message; }
+    });
+  }
 
   /* Le filtre des voix. Une branche qui n'est pas de la voix choisie reste
      visible mais s'efface, sauf si elle ne porte rien de la voix choisie :
@@ -1993,31 +2193,111 @@ async function pageArbre(id) {
   };
 
 
-  // créer ici : une catégorie, ou une réflexion — dans l'espace même ou dans
-  // n'importe laquelle de ses catégories
+  /* Créer ici : une catégorie, ou une réflexion — dans la branche même ou
+     dans n'importe laquelle de ses catégories. Deux gestes qui ne se
+     ressemblent pas : l'onglet touché reste allumé, le formulaire dit lequel
+     est ouvert, et une réflexion ne part pas sans avoir dit ce qu'elle
+     creuse. */
   const creeForm = document.getElementById('cree-form');
   if (creeForm) {
-    let genreCree = 'reflexion';
-    app.querySelectorAll('[data-cree]').forEach((b) => {
+    const onglets = [...app.querySelectorAll('[data-cree]')];
+    const quoi = document.getElementById('cree-quoi');
+    const aide = document.getElementById('cree-aide');
+    const blocQuete = document.getElementById('cree-quete');
+    const valider = document.getElementById('cree-ok');
+    const champ = document.getElementById('cree-titre');
+    const erreur = document.getElementById('cree-err');
+    const GESTES = {
+      reflexion: {
+        titre: 'Ouvrir une réflexion ici',
+        aide: 'Un sujet à creuser : elle portera des pensées, et elle se rangera ici.',
+        marque: 'Ouvrir la réflexion',
+        invite: 'Sur quoi veux-tu réfléchir ?',
+      },
+      categorie: {
+        titre: 'Créer une catégorie',
+        aide: 'Un tiroir : une catégorie ne porte pas de pensées, elle range des réflexions.',
+        marque: 'Créer la catégorie',
+        invite: 'Le nom de la catégorie',
+      },
+    };
+    let genreCree = null;
+    let queteCree = null;
+
+    const allume = () => {
+      onglets.forEach((x) => {
+        const sien = x.dataset.cree === genreCree;
+        x.classList.toggle('actif', sien);
+        x.setAttribute('aria-pressed', String(sien));
+      });
+    };
+    const ferme = () => {
+      genreCree = null;
+      creeForm.hidden = true;
+      erreur.textContent = '';
+      allume();
+    };
+    const ouvre = (genre) => {
+      genreCree = genre;
+      queteCree = null;
+      const g = GESTES[genre];
+      creeForm.hidden = false;
+      creeForm.classList.toggle('cree-form--categorie', genre === 'categorie');
+      quoi.textContent = g.titre;
+      aide.textContent = g.aide;
+      valider.textContent = g.marque;
+      champ.placeholder = g.invite;
+      champ.value = '';
+      erreur.textContent = '';
+      blocQuete.hidden = genre !== 'reflexion';
+      blocQuete.querySelectorAll('[data-quete]').forEach((x) => {
+        x.classList.remove('actif');
+        x.setAttribute('aria-pressed', 'false');
+      });
+      allume();
+      champ.focus();
+    };
+
+    onglets.forEach((b) => {
       b.onclick = () => {
-        genreCree = b.dataset.cree;
-        creeForm.hidden = false;
-        const champ = document.getElementById('cree-titre');
-        champ.placeholder = genreCree === 'categorie' ? 'Le nom de la catégorie' : 'Sur quoi veux-tu réfléchir ?';
-        champ.focus();
+        // le même onglet touché deux fois referme : on n'est plus nulle part
+        if (genreCree === b.dataset.cree) ferme();
+        else ouvre(b.dataset.cree);
       };
     });
-    document.getElementById('cree-annule').onclick = () => { creeForm.hidden = true; };
+
+    blocQuete.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-quete]');
+      if (!b) return;
+      queteCree = b.dataset.quete;
+      blocQuete.querySelectorAll('[data-quete]').forEach((x) => {
+        const sien = x === b;
+        x.classList.toggle('actif', sien);
+        x.setAttribute('aria-pressed', String(sien));
+      });
+      erreur.textContent = '';
+    });
+
+    document.getElementById('cree-annule').onclick = ferme;
     creeForm.onsubmit = async (e) => {
       e.preventDefault();
+      if (!genreCree) return;
+      if (genreCree === 'reflexion' && !queteCree) {
+        erreur.textContent = 'Dis d’abord ce que cette réflexion va creuser.';
+        blocQuete.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        return;
+      }
       try {
         const x = await api('/api/arbres', {
           method: 'POST',
-          body: { kind, title: document.getElementById('cree-titre').value, parent_id: arbre.id, genre: genreCree },
+          body: {
+            kind, title: champ.value, parent_id: arbre.id, genre: genreCree,
+            quete: genreCree === 'reflexion' ? queteCree : null,
+          },
         });
         if (genreCree === 'categorie') pageArbre(id);
         else navigate(`/reflexion/${x.id}`);
-      } catch (err) { document.getElementById('cree-err').textContent = err.message; }
+      } catch (err) { erreur.textContent = err.message; }
     };
   }
 
