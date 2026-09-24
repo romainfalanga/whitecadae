@@ -21,7 +21,10 @@ test('one completed answer is one rung; old duplicates merge, retired history pr
   assert.equal(gameLevel(rows('eg-02-1','eg-02-2','eg-02-1.p0')),2);
   assert.equal(gameLevel(rows('eg-06-1.p0')),0);
   assert.equal(gameLevel(rows('eg-06-1.p0','eg-06-1.p1')),1);
-  assert.equal(gameLevel(rows('n-a-2','n-k-2','n-b-1','eg-01-1')),1);
+  assert.equal(gameLevel(rows('n-a-2','n-k-2','n-b-1','eg-01-1')),2);
+  assert.equal(gameLevel(rows('eg-07-1')),1);
+  assert.ok(!progress(rows('eg-07-1')).solved.has('eg-01-1'));
+  assert.ok(progress(rows('n-b-1')).solved.has('eg-07-1'));
   assert.equal(gameLevel(rows('n-e-1','n-f-1',SHARE)),0);
   const history=rows(...OLD.flatMap(n=>n.answers.map(a=>a.id)));
   assert.ok(accessLevel(history)>=echelonOf(progresOf(history.map(r=>r.riddle_id)).solved));
@@ -57,9 +60,12 @@ test('every authored answer is reachable without relying on removed puzzles',()=
   for(let round=0;round<20;round++)for(const n of NODES){
     if(isPlayable(n,progress(rows(...found))))for(const a of n.answers)if(!found.includes(a.id))found.push(a.id);
   }
-  assert.equal(found.length,21);
+  assert.equal(found.length,22);
   const state=buildGameState(rows(...found));
-  assert.equal(state.pages.length+1,29); // includes the central map
+  assert.deepEqual([...new Set(state.pages.map(p=>p.href.split('#')[0]))].sort(),['/echelon','/echelon/horloge']);
+  assert.ok(state.pages.every(p=>['riddle','workshop','clock'].includes(p.kind)));
+  assert.ok(state.pages.every(p=>!('group' in p)&&!('quotes' in p)&&!('related' in p)));
+  assert.doesNotMatch(JSON.stringify(state),/fourmilière|Goutte|Fini \/ infini|Angles \/ anges|Enfer \/ paradis|Observer|Transformer/);
   assert.ok(!state.pages.some(p=>p.id==='n-f'));
 });
 
@@ -133,6 +139,8 @@ test('API handles permission boundaries, points, migrations and draft conflicts'
   assert.equal((await call('/api/echelon/guess',{id:'eg-13',roots:orange})).gained,1);
   assert.equal((await call('/api/echelon/guess',{id:'eg-13',roots:orange})).gained,0);
   assert.equal((await call('/api/echelon/guess',{id:'eg-11',roots:[src('a'),src('b')],answer:'2 Jésus'})).gained,1);
+  assert.equal((await call('/api/echelon/guess',{id:'n-b',answer:'signes'})).gained,1);
+  assert.equal((await call('/api/echelon/guess',{id:'n-b',answer:'signe'})).gained,0);
   const wrong=await call('/api/echelon/guess',{id:'eg-03',answer:'wrong'});
   assert.equal(wrong.ok,false);
   assert.equal((await call('/api/echelon/guess',{id:'eg-03',answer:'details'})).status,429);

@@ -165,7 +165,11 @@ async function route() {
   if (path === '/paroles') return pageParoles();
   if (path === '/interpretations' || path === '/fil') return navigate('/paroles', true);
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
-  if (path === '/echelon' || /^\/echelon\/(enigme|lecture|galerie|atelier)\/[a-z0-9-]+$/.test(path)) return WCGame.page();
+  if (path === '/echelon' || path === '/echelon/horloge') return WCGame.page();
+  // Old bookmarks converge on the two game pages; no puzzle subpages remain.
+  if ((m = path.match(/^\/echelon\/enigme\/([a-z0-9-]+)$/))) return navigate('/echelon#' + m[1], true);
+  if ((m = path.match(/^\/echelon\/atelier\/(eg-1[0-3])$/))) return navigate('/echelon/horloge' + (m[1] === 'eg-10' ? '' : '#' + m[1]), true);
+  if (/^\/echelon\/(lecture|galerie)\/[a-z0-9-]+$/.test(path)) return navigate('/echelon', true);
   if (path === '/connexion') return pageLogin();
   if (path === '/inscription') return pageRegister();
   if (path === '/admin') return pageAdmin();
@@ -3086,7 +3090,7 @@ async function refreshSession() {
 function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
   if (value === '57' || value === 'echelon') return '/echelon';
-  return /^\/echelon(?:\/(?:enigme|lecture|galerie|atelier)\/[a-z0-9-]+)?$/.test(value || '') ? value : '/';
+  return /^\/echelon(?:\/horloge|\/(?:enigme|lecture|galerie|atelier)\/[a-z0-9-]+)?(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 
 function pageLogin() {
