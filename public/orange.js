@@ -3,9 +3,9 @@ function pageOrange() {
   newEpoch();
   document.title = 'Escape Game Orange · White Cadae';
   app.innerHTML = `<section class="orange-story" aria-labelledby="story-title">
+    <h1 id="story-title" class="orange-title">Escape Game <span>Orange</span></h1>
     <p class="eyebrow">Entre l’enfer et le paradis</p>
-    <h1 id="story-title">Il s’est échappé.<br>Il a laissé des signes.</h1>
-    <div class="orange-story-text"><p>Vulpis était en enfer. Il a réussi à s’en échapper. Avant de rejoindre son paradis, il a créé quatre musiques, réunies dans un petit album qu’il a appelé <strong>57</strong>.</p>
+    <div class="orange-story-text"><p>Vulpis était en enfer. Les quatre morceaux de son petit album <strong>57</strong> l’ont aidé à s’en échapper et à trouver le chemin vers son paradis. En mettant en musique ce qu’il traversait, en extériorisant ce qu’il portait en lui, il a laissé des signes dans ses textes.</p>
     <p>Dans ces quatre morceaux, plusieurs grilles de lecture se superposent : les mêmes paroles peuvent raconter plusieurs choses à la fois. Un mot, une expression, un nombre, une sonorité ou un rapprochement entre deux passages peut révéler un autre sens. Ces codes cachés sont les <strong>signes</strong> que tu dois retrouver.</p>
     <p>Écoute, réécoute et lis les paroles. Fais dialoguer les morceaux pour découvrir les différentes lectures qu’ils contiennent. Puis rends-toi sur la <a href="/57" data-link>page 57</a> pour proposer les signes que tu as trouvés et progresser dans l’escape game.</p></div>
   </section>`;

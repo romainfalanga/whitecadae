@@ -3164,7 +3164,7 @@ async function pageSong(slug) {
     const track = WC57.tracks.find((t) => t.slug === song.slug);
     document.title = `${song.title} · Paroles · White Cadae`;
     app.innerHTML = `<article class="lyrics-page">
-      <a class="back-link" href="/paroles" data-link>← Toutes les paroles</a>
+      ${track ? '' : '<a class="back-link" href="/paroles" data-link>← Toutes les paroles</a>'}
       <p class="eyebrow">${esc(song.album_title || 'White Cadae')} · Paroles</p>
       <h1>${esc(song.title)}</h1>
       ${track ? `<div class="lyrics-actions"><button class="orange-button" data-play-track="${esc(track.slug)}">${WCIcon('play')} Écouter le morceau</button><a href="/57" data-link>Proposer un signe ${WCIcon('arrow')}</a></div>` : ''}
