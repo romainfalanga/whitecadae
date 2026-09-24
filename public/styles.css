@@ -22,6 +22,13 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea, [contenteditable]:not([contenteditable="false"]) {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 body {
   background: var(--bg);
   color: var(--text);

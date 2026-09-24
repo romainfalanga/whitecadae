@@ -3,6 +3,18 @@
 const app = document.getElementById('app');
 const nav = document.getElementById('nav');
 
+// Keep taps and long presses from selecting page text and opening browser search.
+// Text fields retain native selection, editing and paste.
+function isEditableTarget(target) {
+  const element = target instanceof Element ? target : target?.parentElement;
+  return !!element?.closest('input, textarea, [contenteditable]:not([contenteditable="false"])');
+}
+for (const type of ['selectstart', 'contextmenu']) {
+  document.addEventListener(type, (event) => {
+    if (!isEditableTarget(event.target)) event.preventDefault();
+  });
+}
+
 const state = {
   user: null,
   // ce que l'échelon atteint sur la page 57 a ouvert du reste du site
