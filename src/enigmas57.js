@@ -290,7 +290,7 @@ export const NODES = [
 
 const bits = (m) => { let n = 0; while (m) { n += m & 1; m >>= 1; } return n; };
 
-function compileAnswer(a) {
+export function compileAnswer(a) {
   const k = a.parties.length;
   const garde = (map, s, masque) => {
     const cle = s.trim().replace(/\s+/g, ' ');

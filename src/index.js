@@ -1,8 +1,7 @@
 // WhiteCadae : Cloudflare Worker (API + service du site statique)
 
 import {
-  getNode, isLocked, matchNode, buildState, currentAnswerId, echelonOf, accessOf,
-  delaiEssaiMs, enigmesTrouvees, progresOf,
+  currentAnswerId, accessOf, progresOf,
   ECHELON_CONVERSATION, ECHELON_PENSE_MIEUX, ECHELON_VIDEOGRAPHIE,
   ECHELON_CARRE, ECHELON_BRAINSTORM, ECHELON_114,
 } from './enigmas57.js';
@@ -12,6 +11,8 @@ import {
   CADENCES, CADENCES_ORDRE, REPONSES,
   VOLETS_SOCIETE, VOLETS_CLES,
 } from './contenus.js';
+import { handleEchelon, gameRows } from './echelon-api.js';
+import { gameLevel, accessLevel, gameProfile } from './echelon.js';
 
 const SESSION_COOKIE = 'wc_session';
 const SESSION_DAYS = 30;
@@ -137,6 +138,11 @@ async function handleApi(request, env, url) {
 
   let p;
 
+  if (path === '/api/echelon' || path.startsWith('/api/echelon/') ||
+      path === '/api/57' || path === '/api/57/guess') {
+    return handleEchelon(request, env, path, { getUser, json });
+  }
+
   // Lyrics are public and read-only. Older clients cannot create or edit notes.
   if (['POST', 'PUT', 'PATCH'].includes(request.method) &&
       /^\/api\/(annotations|references|passage-references|connections|essays)(?:\/|$)/.test(path)) {
@@ -159,10 +165,8 @@ async function handleApi(request, env, url) {
   //     celui qui regarde (voir getProfile).
   if ((p = route('GET', '/api/users/:username'))) return getProfile(env, request, p[0]);
 
-  // --- le 57 : la porte d'entrée, ouverte à tout membre
-  if (route('GET', '/api/57')) return signsState(request, env);
-  if (route('POST', '/api/57/guess')) return signsGuess(request, env);
-  if (route('DELETE', '/api/57/progress')) return signsReset(request, env);
+  // The retired reset must not erase historical access rights.
+  if (route('DELETE', '/api/57/progress')) return json({ error: 'Cette ancienne fonction a été retirée.' }, 410);
 
   // --- le compte : toujours accessible, sinon on ne pourrait plus en sortir
   if (route('PUT', '/api/account/username')) return updateUsername(request, env);
@@ -389,7 +393,7 @@ async function viewerAccess(request, env) {
   }
   const rows = await riddleRows(env, user.id);
   const { solved } = progresOf(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
-  const echelon = echelonOf(solved);
+  const echelon = accessLevel(rows);
   return { user, echelon, solved, access: accessOf(echelon) };
 }
 
@@ -726,7 +730,8 @@ async function me(request, env) {
     user: user ? { ...user, is_admin: !!user.is_admin, voix } : null,
     access,
     echelon: Number.isFinite(echelon) ? echelon : ECHELON_114,
-    attenteMs: user && Number.isFinite(echelon) ? await attenteRestante(env, user.id, echelon) : 0,
+    gameEchelon: user ? gameLevel(await gameRows(env, user.id)) : 0,
+    attenteMs: 0,
   });
 }
 
@@ -847,14 +852,7 @@ async function getProfile(env, request, username) {
 
   // La part publique : l'échelon, et les énigmes trouvées telles que celui
   // qui regarde a le droit de les nommer.
-  const { solved: solvedCible } = progresOf(
-    (await riddleRows(env, user.id)).filter((r) => r.solved_at).map((r) => r.riddle_id)
-  );
-  const vu = await viewerAccess(request, env);
-  const jeu = {
-    echelon: echelonOf(solvedCible),
-    enigmes: enigmesTrouvees(solvedCible, vu.solved),
-  };
+  const jeu = gameProfile(await gameRows(env, user.id), await gameRows(env, viewer?.id));
 
   const annotations = (await env.DB.prepare(
     `SELECT a.id, a.target_type, a.content, a.created_at, a.updated_at, a.is_published, a.grid_number,
@@ -1334,7 +1332,7 @@ async function getAvatar(env, username) {
   });
 }
 
-/* -------------------------------------- les mots de passe de l'EP 57 (/57) */
+/* -------------------------------------- historique de progression et droits privés */
 
 // Toute la logique du jeu est dans src/enigmas57.js et ne quitte jamais le
 // Worker : le client ne reçoit une réponse qu'une fois trouvée.
@@ -1362,53 +1360,6 @@ async function ensureRiddleTable(env) {
   riddleTableReady = true;
 }
 
-/* Un essai par heure. Le délai court dès qu'un mot de passe est proposé,
-   juste ou faux : c'est ce qui oblige à réfléchir avant de taper. Il est
-   gardé côté serveur : un rechargement de page ne le fait pas sauter.
-
-   La date du dernier essai vit sur une ligne réservée de riddle_progress,
-   dont le riddle_id ne correspond à aucune réponse : buildState l'ignore
-   comme n'importe quel identifiant inconnu, et il n'y a pas de colonne à
-   ajouter à users. */
-// Pas d'`export` ici : le module d'entrée d'un Worker ne peut exporter que
-// son gestionnaire, le reste fait échouer le démarrage du runtime.
-const ESSAI_ROW = '@essai';
-
-// Le délai dépend de l'échelon atteint, et il est relu à chaque fois : monter
-// d'un cran allonge donc l'attente en cours. C'est voulu : l'attente est une
-// propriété de l'échelon où l'on se trouve. Le moment de la tentative n'y change rien.
-async function attenteRestante(env, userId, echelon) {
-  await ensureRiddleTable(env);
-  const row = await env.DB.prepare(
-    `SELECT (julianday('now') - julianday(updated_at)) * 86400000 AS ecoule
-       FROM riddle_progress WHERE user_id = ?1 AND riddle_id = ?2`
-  ).bind(userId, ESSAI_ROW).first();
-  if (!row || row.ecoule == null) return 0;
-  return Math.max(0, Math.round(delaiEssaiMs(echelon) - row.ecoule));
-}
-
-// Réclame le créneau du minuteur, de façon ATOMIQUE. Renvoie true si le
-// créneau était libre (l'essai est autorisé), false s'il court encore.
-//
-// C'est un unique UPSERT conditionnel : le WHERE du DO UPDATE ne laisse
-// réécrire l'horodatage que si le délai est écoulé. D1 sérialise ses écritures,
-// donc parmi N requêtes concurrentes du même joueur, une seule modifie la ligne
-// (changes = 1) et toutes les autres échouent le WHERE (changes = 0). Au tout
-// premier essai, la clé primaire (user_id, '@essai') ne laisse réussir qu'un
-// seul INSERT. Un joueur ne peut donc PAS forcer les signes en rafale en
-// envoyant dix tentatives à la fois : le vieux schéma « lire l'attente, tester,
-// puis marquer » laissait cette course ouverte.
-async function marquerEssai(env, userId, delaiMs) {
-  await ensureRiddleTable(env);
-  const r = await env.DB.prepare(
-    `INSERT INTO riddle_progress (user_id, riddle_id, updated_at)
-     VALUES (?1, ?2, datetime('now'))
-     ON CONFLICT(user_id, riddle_id) DO UPDATE SET updated_at = datetime('now')
-       WHERE (julianday('now') - julianday(updated_at)) * 86400000 >= ?3`
-  ).bind(userId, ESSAI_ROW, delaiMs).run();
-  return r.meta.changes === 1;
-}
-
 // Une ligne par réponse trouvée.
 async function riddleRows(env, userId) {
   await ensureRiddleTable(env);
@@ -1417,104 +1368,6 @@ async function riddleRows(env, userId) {
   ).bind(userId).all();
   // Un nœud a pu être réuni à un autre depuis : la progression suit.
   return (results || []).map((r) => ({ ...r, riddle_id: currentAnswerId(r.riddle_id) }));
-}
-
-async function riddleState(env, userId) {
-  const rows = await riddleRows(env, userId);
-  const etat = buildState(rows);
-  return { ...etat, attenteMs: await attenteRestante(env, userId, etat.echelon) };
-}
-
-// La page se lit sans compte : on voit les éléments, mais rien n'y a été
-// trouvé et il n'y a rien à saisir. C'est le POST qui exige un membre.
-async function signsState(request, env) {
-  const user = await getUser(request, env);
-  if (!user) return json({ ...buildState([]), attenteMs: 0, anonyme: true });
-  return json(await riddleState(env, user.id));
-}
-
-// Un nœud peut porter plusieurs sens : la réponse proposée est confrontée à
-// toutes celles qu'il reste à trouver, dans n'importe quel ordre.
-async function signsGuess(request, env) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
-
-  const body = await readJson(request);
-  const node = getNode(String(body?.id || ''));
-  if (!node) return json({ error: 'Élément introuvable.' }, 404);
-
-  const answer = String(body?.answer ?? '');
-  if (answer.length > 200) return json({ error: 'Réponse trop longue.' }, 400);
-  if (!answer.trim()) return json({ error: 'Réponse vide.' }, 400);
-
-  // Un essai à la fois, juste ou faux : proposer, c'est déjà jouer.
-  const rows = await riddleRows(env, user.id);
-  const { solved, parties } = progresOf(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
-  const echelon = echelonOf(solved);
-
-  // On ne fait pas payer un essai sur un élément encore verrouillé : il ne
-  // peut de toute façon rien valider.
-  if (isLocked(node, solved)) return json({ error: 'Cet élément est encore verrouillé.' }, 403);
-
-  // Le vrai verrou anti-rafale : la réservation atomique du créneau. Une
-  // lecture préalable donnerait un 429 plus lisible dans le cas courant, mais
-  // ne sérialise rien : c'est ce claim, et lui seul, qui empêche dix essais
-  // simultanés de passer ensemble.
-  const libre = await marquerEssai(env, user.id, delaiEssaiMs(echelon));
-  if (!libre) {
-    return json({ error: 'Trop tôt.', attenteMs: await attenteRestante(env, user.id, echelon) }, 429);
-  }
-
-  // `echo` rend la proposition mot pour mot : ce qui était juste, ce qui ne
-  // l'était pas. Ce qui est juste est gardé même quand le reste est faux.
-  const prise = matchNode(node, answer, solved, parties);
-  if (!prise || !prise.prises.length) {
-    return json({
-      ok: false, id: node.id,
-      echo: prise ? prise.echo : null,
-      attenteMs: delaiEssaiMs(echelon),
-    });
-  }
-
-  // Une prise s'écrit partie par partie (lignes `id.pN`) ; la réponse entière
-  // s'écrit aussi sous son propre identifiant dès qu'elle est complète.
-  const lignes = [];
-  for (const p of prise.prises) {
-    const reponse = node.answers.find((a) => a.id === p.id);
-    for (let i = 0; i < reponse.parties.length; i++) {
-      if (p.masque & (1 << i)) lignes.push(`${p.id}.p${i}`);
-    }
-    if (p.complet) lignes.push(p.id);
-  }
-  const upsert = env.DB.prepare(
-    `INSERT INTO riddle_progress (user_id, riddle_id, solved_at)
-     VALUES (?1, ?2, datetime('now'))
-     ON CONFLICT(user_id, riddle_id) DO UPDATE
-       SET solved_at = COALESCE(solved_at, datetime('now')), updated_at = datetime('now')`
-  );
-  await env.DB.batch(lignes.map((id) => upsert.bind(user.id, id)));
-
-  return json({
-    ok: true, id: node.id,
-    partiel: prise.prises.some((p) => !p.complet),
-    echo: prise.echo,
-    state: await riddleState(env, user.id),
-  });
-}
-
-// Plus proposé dans l'interface, mais conservé : c'est le seul moyen de
-// repartir de zéro. On EXCLUT la ligne du minuteur ('@essai') : sans quoi
-// remettre sa progression à zéro effacerait aussi le cooldown, et l'on pourrait
-// boucler « essai raté → reset → essai » pour forcer les premiers signes sans
-// jamais attendre. Le minuteur survit donc au reset.
-async function signsReset(request, env) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
-  await ensureRiddleTable(env);
-  await env.DB.prepare(
-    'DELETE FROM riddle_progress WHERE user_id = ?1 AND riddle_id <> ?2'
-  ).bind(user.id, ESSAI_ROW).run();
-  return json({ ok: true, state: await riddleState(env, user.id) });
 }
 
 /* ---------------------------------- références autonomes sur un passage ---
@@ -3594,8 +3447,8 @@ async function carreAnnuaire(request, env) {
     parUser.get(r.user_id).add(currentAnswerId(r.riddle_id));
   }
   const hauts = [...parUser.entries()]
-    .map(([id, ids]) => ({ id, echelon: echelonOf(progresOf(ids).solved) }))
-    .filter((u) => u.echelon >= ECHELON_CARRE);
+    .map(([id, ids]) => { const rows=[...ids].map(riddle_id=>({riddle_id,solved_at:true})); return { id, echelon: gameLevel(rows), accessRank: accessLevel(rows) }; })
+    .filter((u) => u.accessRank >= ECHELON_CARRE);
   if (!hauts.length) return json({ as: [] });
 
   const marks = hauts.map((_, i) => `?${i + 1}`).join(',');

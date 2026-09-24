@@ -2,128 +2,35 @@
 
 Le site s’ouvre sur **Escape Game Orange** (`/`) : l’histoire de Vulpis, l’album **57** et les signes à retrouver dans ses quatre morceaux.
 
-- **Musique** (`/musique`) : 13h20, 30 vins divins, Sans indices dans les dés, Orange. Les MP3 et la pochette fournis sont servis depuis `public/music/57/`, sans conversion des originaux.
+- **57** (`/57`, ancien `/musique` redirigé) : 13h20, 30 vins divins, Sans indices dans les dés, Orange. Les MP3 et la pochette fournis sont servis depuis `public/music/57/`, sans conversion des originaux.
 - **Paroles** (`/paroles`) : toute la discographie en lecture seule. Les liens `/chanson/:slug` sont conservés ; `/interpretations` et `/fil` redirigent vers les paroles.
-- **57** (`/57`) : le jeu existant, ses signes, ses niveaux et ses délais. Un compte permet de proposer des signes. La connexion depuis cette page y ramène.
+- **Échelon** (`/echelon`) : une carte progressive, des pages d’énigmes et de lectures, et un atelier de durées. Chaque réponse complète distincte rapporte un échelon. La connexion conserve la page demandée.
 
 Le lecteur natif est placé hors du contenu remplacé par la navigation. Il apparaît à la première lecture, propose lecture/pause, précédent/suivant, déplacement dans le morceau, volume sur ordinateur et répétition de l’album. Il enchaîne les quatre titres dans l’ordre et s’arrête après Orange, sauf si la répétition est activée. La position est conservée localement ; un rechargement ne relance jamais la musique automatiquement.
 
 Media Session fournit titres, pochette et commandes système. L’audio reste actif quand la page devient invisible et utilise la session `playback` quand elle est disponible. **Le verrouillage réel d’un iPhone/Android doit être testé sur ces appareils** : un navigateur ou un système qui ferme/suspend l’onglet ne peut pas être contraint par le site. Aucun mode hors ligne de l’album n’est annoncé. Le service worker ignore les fichiers audio et les requêtes Range, et ne stocke jamais les réponses partielles 206.
 
-Les nouveaux POST/PUT/PATCH d’interprétations, références, connexions et essais renvoient 410. Les anciennes contributions restent en base et dans les archives privées de leur auteur. Aucun schéma, texte de chanson ou historique de progression n’est modifié par cette livraison. **Ne pas réimporter les paroles ni réinitialiser D1 lors du déploiement.**
+Les nouveaux POST/PUT/PATCH d’interprétations, références, connexions et essais renvoient 410. Les anciennes contributions restent en base et dans les archives privées de leur auteur. Les anciens identifiants de progression sont conservés. Deux tables additives enregistrent les brouillons et les tentatives du nouveau jeu ; aucune ligne historique n’est supprimée. **Ne pas réimporter les paroles ni réinitialiser D1 lors du déploiement.**
 
 ## Vérifications de cette évolution
 
 `npm test` couvre le lecteur (ordre, fin, répétition, reprise, commandes système, médias concurrents), la fermeture des anciennes écritures, l’API de paroles et les exclusions du service worker. Les essais de navigation, de rendu responsive et de lecture réelle se font dans le navigateur avec une base D1 locale.
 
-Avant la publication : `npx wrangler deploy --dry-run`. Pour publier sur le Worker existant : `npx wrangler deploy`, avec une session Cloudflare autorisée. Pas de migration D1 pour cette évolution.
+Avant la publication : `npx wrangler deploy --dry-run`. Pour publier sur le Worker existant : `npx wrangler deploy`, avec une session Cloudflare autorisée. La migration additive `0027_echelon.sql` est également appliquée à la volée, sans réimport de données. Publier avec `--keep-vars` sur le Worker existant.
 
-## La page « 57 »
+## Échelon
 
-`/57` est un escape game : reconstituer l'arborescence des signes
-cachés dans l'EP **57**. Aucun texte ni indice :
-un élément, un champ, et ce qu'il veut dire.
+Le catalogue et les réponses vivent exclusivement dans `src/echelon.js`. `src/echelon-api.js` ne transmet que les pages déjà découvertes ; visibilité et permission de répondre sont vérifiées séparément côté serveur. Un ancien lien API `/api/57` utilise le même état filtré. L’ancien endpoint de remise à zéro est retiré pour préserver les droits historiques.
 
-Ce ne sont pas des mots de passe mais des **signes** : c'est le mot qu'attend
-chaque champ, et le mot par lequel on en parle ici. Un mot de passe garde, un
-signe, lui, se lit.
+Chaque réponse complète distincte vaut un échelon, y compris lorsqu’une même page contient plusieurs réponses. Le départ est à zéro. Les fragments, les pages d’observation et les étapes intermédiaires ne rapportent aucun point. Aucun plafond ni inventaire des pages futures n’est transmis au navigateur. Les trois anciennes découvertes redondantes « signe » sont réunies ; les réponses retirées restent dans l’historique mais ne comptent plus dans le nouveau jeu.
 
-**Elle se lit sans compte**, et sans le moindre voile : rien n'y est grisé, ni
-les éléments, ni le champ, ni son invite. Le seul signe de fermeture est le
-bouton Valider, éteint (c'est le geste qui est clos, pas la lecture) et deux
-boutons, se connecter ou créer un compte, tiennent lieu de toute explication.
-Le serveur renvoie alors un état vide (`anonyme: true`), et refuse toute
-tentative.
+Horloge ouvre immédiatement l’atelier. Les constructions utilisent des arbres d’opérations et l’origine de chaque chiffre, validés côté serveur dans `src/echelon-workshop.js`. Former deux sept distincts révèle le partage d’un nombre ; aucun échelon n’est gagné à cette étape. Les résultats numériques seuls ne suffisent pas à valider une construction. La lecture symbolique du premier tableau reste une clé propre à l’œuvre.
 
-La page est une liste plate : ni titres, ni sections, ni sommaire. Un
-même élément peut porter plusieurs sens ; dans ce cas il n'a qu'un seul
-champ, et les réponses s'y ajoutent une à une, dans n'importe quel ordre
-(un compteur `1/2` indique combien il en reste). Certains éléments se
-**verrouillent** tant que leurs prérequis ne sont pas trouvés, en masquant
-même leur libellé quand celui-ci est la réponse du précédent. Un refus ne
-dit rien : la carte tressaille, rougit et vibre.
+Les tableaux sont manipulables au toucher et au clavier, avec annulation, rétablissement et reprise des durées. Les brouillons sont conservés sur l’appareil et sur le compte. Un numéro de révision empêche un appareil d’écraser silencieusement l’autre. Le serveur réserve atomiquement les tentatives et ralentit les erreurs répétées.
 
-**Un signe peut se tenir partiellement.** Chaque réponse est découpée en
-**parties** ordonnées (`33 ans` : « 33 » puis « ans » ; `12 arc-anges` :
-« 12 », « arc », « anges »). Proposer une partie seule la fait apparaître
-**en vert, à sa place**, avec un « ? » pour chaque trou : `33 ?`, `? ans`,
-`12 ? anges`. Le serveur n'envoie jamais le texte d'une partie manquante, ni
-leur nombre : un trou contigu ne vaut qu'un seul « ? ». Chaque partie vit
-sur sa propre ligne de `riddle_progress` (`n-e-2.p0`) ; la réponse entière
-garde la sienne, et l'échelon ne compte que les réponses entières.
+`src/enigmas57.js` conserve le catalogue historique uniquement pour traduire les anciennes découvertes, préserver les droits aux espaces privés et partager le moteur de reconnaissance. Le rang d’accès historique reste distinct du nombre d’échelons affiché dans le nouveau jeu. Les profils filtrent leurs découvertes selon ce que leur visiteur peut déjà connaître.
 
-**Ce qui est juste est gardé même quand le reste est faux.** La proposition
-est lue **mot à mot** : « 10 mains » garde le 10 et rend « mains ». L'essai
-est alors rendu sous le champ, chaque mot marqué : **vert** ce qui était
-juste, **rouge barré** ce qui ne l'était pas, et la carte garde `10 ?`. Les
-écritures admises restent strictes (la bonne façon d'écrire le signe, ses
-chiffres en lettres, son singulier ou son pluriel quand les deux se disent) :
-un article ou un mot en trop n'est pas accepté, il est **rendu en rouge** à
-côté de ce qui a été gardé. L'ordre des parties compte : « anges 12 » ne
-garde que les anges. Une partie déjà verte re-proposée ne gagne rien, mais
-n'est pas appelée fausse pour autant.
-
-**On ne pêche pas.** Un seul mot de bruit est toléré à côté de ce qui est
-reconnu : jeter dix mots pour voir lesquels verdissent ne rend rien du tout,
-ni terrain gagné ni écho, et coûte l'essai comme les autres. Quand **rien**
-n'est reconnu, la proposition entière repart en rouge : elle n'apprend rien
-à personne.
-
-Le tout premier bloc est **muet** (`silent`) : pas de libellé, et le serveur
-ne dit pas non plus combien de signes il cache : il envoie seulement
-`open`, qui suffit à savoir s'il faut encore afficher le champ. Le nombre
-total de signes du jeu ne quitte jamais le Worker.
-
-**Un essai à la fois.** Proposer un signe, juste ou faux, ferme tous
-les champs du site : il faut donc choisir ce qu'on tente. Le délai est tenu
-par le serveur (une ligne réservée de `riddle_progress`, dont le `riddle_id`
-ne correspond à aucune réponse), donc un rechargement ne le fait pas sauter.
-Rien ne l'annonce et rien ne l'explique : le décompte prend simplement la
-place du bouton, et tout revient de soi-même.
-
-Il grandit avec l'échelon (`delaiEssaiMs`), sur les trois nombres du disque :
-**12, 33, 57** : repris d'une unité à l'autre :
-
-| Échelon | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Attente | 33 s | 57 s | 12 min | 33 min | 57 min | 12 h | 33 h |
-
-Le sommet du jeu étant l'échelon 7, l'attente la plus longue réellement
-atteignable est 33 h.
-
-Le délai est relu à chaque vérification : monter d'un cran allonge donc
-l'attente en cours. C'est une propriété de là où l'on est, pas du moment où
-l'on a tenté.
-
-### Les échelons
-
-`echelon = ⌊signes / 3⌋ + 1`, où chaque signe titré vaut 1 et chaque signe du
-**bloc muet vaut 3** : un cran entier, donc un échelon gagné mécaniquement.
-
-On est à l'échelon **1** dès l'arrivée : c'est le point de départ que l'on
-gravit ensuite. Treize signes titrés font quatre crans pleins (il en reste un de libre), les
-deux signes muets en ajoutent deux : le sommet est l'échelon **7**. La barre
-de progression montre le chemin restant dans le cran en cours, jamais la
-progression dans le jeu entier.
-
-L'échelon **commande l'accès au site**, et pas seulement l'affichage des liens
-(`accessOf`) : chaque page a sa constante (`ECHELON_*`) :
-
-| Échelon | Ce qui s'ouvre |
-| --- | --- |
-| 1 | Orange, Musique, Paroles et 57 : même sans compte |
-| 2 | la **Conversation** |
-| 3 | **Pense Mieux** |
-| 4 | la **Vidéographie** |
-| 5 | le **Carré d'As** |
-| 6 | le **Brainstorm** |
-| 7 | le **114** : la suite du 57 |
-
-Le tout premier bloc **occupe toute la largeur** et s'entoure d'un halo doré
-(`.enigme--graal`, posé sur les blocs dont le serveur ne donne pas le total) :
-on doit voir au premier regard qu'il n'est pas de la même espèce, sans qu'une
-ligne de texte ait à le dire. **White Cadae** vient juste en dessous, premier
-bloc titré.
+Les tests couvrent la migration des découvertes, les permissions, les constructions, le score, la concurrence des brouillons, le lecteur et les fonctions conservées. Aucune base de production n’est réinitialisée.
 
 ### Les pièces hautes
 

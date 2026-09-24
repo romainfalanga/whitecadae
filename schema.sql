@@ -166,10 +166,10 @@ CREATE TABLE IF NOT EXISTS essay_links (
 
 CREATE INDEX IF NOT EXISTS idx_essay_links_essay ON essay_links(essay_id);
 
--- Progression d'un membre sur les signes de l'EP 57 (page /57). Une ligne par
+-- Progression d'un membre sur les signes de l'EP 57 (page /echelon). Une ligne par
 -- signe rencontré : elle existe dès le premier indice demandé, et solved_at se
 -- remplit quand le signe est trouvé (ou révélé, auquel cas revealed = 1). Les
--- réponses ne sont pas en base : elles vivent dans src/enigmas57.js.
+-- réponses ne sont pas en base : elles vivent dans src/echelon.js (historique : src/enigmas57.js).
 CREATE TABLE IF NOT EXISTS riddle_progress (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   riddle_id TEXT NOT NULL,
@@ -339,4 +339,19 @@ CREATE TABLE IF NOT EXISTS carre_invitations (
   note TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (carre_id, user_id)
+);
+
+-- Additive only. Existing discoveries and historical access remain untouched.
+CREATE TABLE IF NOT EXISTS echelon_drafts (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  board_id TEXT NOT NULL,
+  draft TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, board_id)
+);
+CREATE TABLE IF NOT EXISTS echelon_attempts (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  next_at INTEGER NOT NULL DEFAULT 0,
+  failures INTEGER NOT NULL DEFAULT 0
 );

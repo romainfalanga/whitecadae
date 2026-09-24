@@ -17,10 +17,9 @@ for (const type of ['selectstart', 'contextmenu']) {
 
 const state = {
   user: null,
-  // ce que l'échelon atteint sur la page 57 a ouvert du reste du site
+  // droits aux espaces privés, distincts du compteur du jeu Échelon
   access: { interpretations: false },
-  echelon: 1, // l'échelon du visiteur, tenu par le serveur
-  enigmes: null, // état des énigmes de la page /57
+  echelon: 1, // rang d'accès historique, tenu par le serveur
 };
 
 /* ------------------------------------------------------------------ utils */
@@ -147,6 +146,7 @@ function coupePageTimer() {
 }
 
 async function route() {
+  if (window.WCGame) WCGame.leave();
   window.scrollTo(0, 0);
   closeNav();
   coupePageTimer();
@@ -160,11 +160,12 @@ async function route() {
   let m;
   if (path === '/' || path === '') return pageOrange();
   if (path === '/escape-game-orange') return navigate('/', true);
-  if (path === '/musique') return pageMusique();
+  if (path === '/musique') return navigate('/57', true);
+  if (path === '/57') return pageMusique();
   if (path === '/paroles') return pageParoles();
   if (path === '/interpretations' || path === '/fil') return navigate('/paroles', true);
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
-  if (path === '/57') return pageEnigmes();
+  if (path === '/echelon' || /^\/echelon\/(enigme|lecture|galerie|atelier)\/[a-z0-9-]+$/.test(path)) return WCGame.page();
   if (path === '/connexion') return pageLogin();
   if (path === '/inscription') return pageRegister();
   if (path === '/admin') return pageAdmin();
@@ -188,7 +189,7 @@ async function route() {
     : path.startsWith('/brainstorm') ? 'brainstorm'
     : path === '/114' ? 'cent14'
     : 'interpretations';
-  if (!state.access[cle]) return navigate('/57', true);
+  if (!state.access[cle]) return navigate('/echelon', true);
 
   if (path === '/conversation') return pageConversation();
   // les quatre applications : chacune a son dock et ses vues
@@ -444,7 +445,7 @@ function openSettings() {
 function renderNav() {
   const u = state.user;
   const a = state.access;
-  const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musique</a>', '<a href="/paroles" data-link>Paroles</a>', '<a href="/57" data-link>57</a>'];
+  const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/57" data-link>57</a>', '<a href="/paroles" data-link>Paroles</a>', '<a href="/echelon" data-link>Échelon</a>'];
   if (a.conversation) liens.push('<a href="/conversation" data-link>Conversation</a>');
   if (a.penseMieux) liens.push('<a href="/pense-mieux" data-link>Pense Mieux</a>');
   if (a.videographie) liens.push('<a href="/videographie" data-link>Vidéographie</a>');
@@ -463,7 +464,7 @@ function renderNav() {
     liens.push('<a href="/inscription" data-link class="btn">Créer un compte</a>');
   }
   nav.innerHTML = liens.join('\n       ');
-  nav.querySelectorAll('a').forEach((a) => { if (a.getAttribute('href') === location.pathname) a.setAttribute('aria-current', 'page'); });
+  nav.querySelectorAll('a').forEach((a) => { if ((a.getAttribute('href') === location.pathname || (a.getAttribute('href') === '/echelon' && location.pathname.startsWith('/echelon/')))) a.setAttribute('aria-current', 'page'); });
   const reglages = document.getElementById('nav-settings');
   if (reglages) reglages.onclick = () => openSettings();
 }
@@ -475,7 +476,7 @@ function renderNav() {
 
 function messageHtml(m) {
   const badge = m.min_echelon > 2
-    ? `<span class="msg-echelon" title="Visible dès l’échelon ${m.min_echelon}">≥ ${m.min_echelon}</span>` : '';
+    ? `<span class="msg-echelon" title="Visible dès le niveau d’accès ${m.min_echelon}">≥ ${m.min_echelon}</span>` : '';
   return `<article class="msg">
     <div class="msg-head">${authorLink(m.username)}${badge}
       <time>${esc(formatDate(m.created_at))}</time></div>
@@ -488,7 +489,7 @@ async function pageConversation() {
   app.innerHTML = '<div class="loading">Chargement…</div>';
   let data;
   try { data = await api('/api/conversation'); }
-  catch { return navigate('/57', true); }
+  catch { return navigate('/echelon', true); }
   if (stale(epoch)) return;
 
   // Le filtre est une paire (mode, échelon). « jusqu'à l'échelon 4 », c'est
@@ -517,7 +518,7 @@ async function pageConversation() {
       <textarea id="conv-body" maxlength="2000" rows="2"
         placeholder="Ton message…"></textarea>
       <div class="conv-form-foot">
-        <label class="conv-vis">Visible dès l’échelon
+        <label class="conv-vis">Visible dès le niveau d’accès
           <select id="conv-min">${Array.from({ length: Math.max(1, (state.echelon || 2) - 1) },
             (_, i) => `<option value="${i + 2}">${i + 2}</option>`).join('')}</select>
         </label>
@@ -532,9 +533,9 @@ async function pageConversation() {
       <label>Voir
         <select id="conv-f-mode">
           <option value="tout">tout ce qui m’est ouvert</option>
-          <option value="max">jusqu’à l’échelon…</option>
-          <option value="exact">seulement l’échelon…</option>
-          <option value="min">à partir de l’échelon…</option>
+          <option value="max">jusqu’au niveau d’accès…</option>
+          <option value="exact">seulement le niveau d’accès…</option>
+          <option value="min">à partir du niveau d’accès…</option>
         </select></label>
       <select id="conv-f-niveau" hidden>
         ${optionsNiveaux.map((n) => `<option value="${n}">${n}</option>`).join('')}
@@ -847,7 +848,7 @@ async function vueForet(kind) {
       app.innerHTML = `<h1>${esc(def.titre)}</h1><p class="empty-note">Connecte-toi pour ouvrir tes réflexions.</p>`;
       return;
     }
-    return navigate('/57', true);
+    return navigate('/echelon', true);
   }
   if (stale(epoch)) return;
   retientQuetes(data);
@@ -986,7 +987,7 @@ async function vueRythme() {
       app.innerHTML = '<h1>Vidéographie</h1><p class="empty-note">Connecte-toi.</p>';
       return;
     }
-    return navigate('/57', true);
+    return navigate('/echelon', true);
   }
   if (stale(epoch)) return;
 
@@ -2330,7 +2331,7 @@ async function vueCarreDAs() {
   app.innerHTML = '<div class="loading">Chargement…</div>';
   let d;
   try { d = await chargeCarre(); }
-  catch { return navigate('/57', true); }
+  catch { return navigate('/echelon', true); }
   if (stale(epoch)) return;
 
   if (!state.user) {
@@ -2717,7 +2718,7 @@ async function vueScene() {
   app.innerHTML = '<div class="loading">Chargement…</div>';
   let data;
   try { data = await api('/api/brainstorms'); }
-  catch { return navigate('/57', true); }
+  catch { return navigate('/echelon', true); }
   if (stale(epoch)) return;
 
   const lives = data.brainstorms.filter((b) => b.statut === 'live');
@@ -2740,7 +2741,7 @@ async function vueArchives() {
   // les archives demandent les leurs : reléguées en fin de liste commune,
   // elles disparaissaient dès que le direct et l'annoncé remplissaient la page
   try { data = await api('/api/brainstorms?statut=termine'); }
-  catch { return navigate('/57', true); }
+  catch { return navigate('/echelon', true); }
   if (stale(epoch)) return;
 
   const finis = data.brainstorms;
@@ -2758,7 +2759,7 @@ async function vueAnnoncer() {
   app.innerHTML = '<div class="loading">Chargement…</div>';
   let d;
   try { d = await chargeCarre(); }
-  catch { return navigate('/57', true); }
+  catch { return navigate('/echelon', true); }
   if (stale(epoch)) return;
 
   const complets = (d.carres || []).filter((c) => c.membres.length >= 4);
@@ -2974,7 +2975,7 @@ async function page114() {
   app.innerHTML = '<div class="loading">Chargement…</div>';
   let data;
   try { data = await api('/api/114'); }
-  catch { return navigate('/57', true); }
+  catch { return navigate('/echelon', true); }
   if (stale(epoch)) return;
 
   const { page, ouvert } = data;
@@ -3056,7 +3057,7 @@ async function pageParoles() {
   app.innerHTML = `
     <p class="eyebrow">Les textes, au fil des albums</p>
     <h1>Paroles</h1>
-    <p class="subtitle">Prends le temps de lire chaque morceau. Pour explorer les signes de 57, tu peux aussi <a href="/musique" data-link>écouter l’album</a>.</p>
+    <p class="subtitle">Prends le temps de lire chaque morceau. Pour explorer les signes de 57, tu peux aussi <a href="/57" data-link>écouter l’album</a>.</p>
     <h2 class="albums-title">Les morceaux</h2>
     ${albums || '<p class="empty-note">Aucun album pour le moment.</p>'}
     ${data.orphans?.length ? `<section class="album-card"><h2>Autres morceaux</h2><ul class="song-list">${data.orphans.map((s) => `<li><a href="/chanson/${encodeURIComponent(s.slug)}" data-link>${esc(s.title)}</a></li>`).join('')}</ul></section>` : ''}`;
@@ -3083,7 +3084,9 @@ async function refreshSession() {
 }
 
 function accountDestination() {
-  return new URLSearchParams(location.search).get('retour') === '57' ? '/57' : '/';
+  const value = new URLSearchParams(location.search).get('retour');
+  if (value === '57' || value === 'echelon') return '/echelon';
+  return /^\/echelon(?:\/(?:enigme|lecture|galerie|atelier)\/[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 
 function pageLogin() {
@@ -3098,7 +3101,7 @@ function pageLogin() {
       <input id="lf-password" type="password" required autocomplete="current-password">
       <div class="error-msg" id="lf-error"></div>
       <button type="submit" class="primary">Connexion</button>
-      <p class="form-footer">Pas encore de compte ? <a href="/inscription${destination === '/57' ? '?retour=57' : ''}" data-link>Inscrivez-vous</a></p>
+      <p class="form-footer">Pas encore de compte ? <a href="/inscription${destination !== '/' ? '?retour=' + encodeURIComponent(destination) : ''}" data-link>Inscrivez-vous</a></p>
     </form>`;
   document.getElementById('login-form').onsubmit = async (e) => {
     e.preventDefault();
@@ -3132,7 +3135,7 @@ function pageRegister() {
       <input id="rf-password" type="password" required minlength="8" autocomplete="new-password">
       <div class="error-msg" id="rf-error"></div>
       <button type="submit" class="primary">S’inscrire</button>
-      <p class="form-footer">Déjà inscrit ? <a href="/connexion${destination === '/57' ? '?retour=57' : ''}" data-link>Connectez-vous</a></p>
+      <p class="form-footer">Déjà inscrit ? <a href="/connexion${destination !== '/' ? '?retour=' + encodeURIComponent(destination) : ''}" data-link>Connectez-vous</a></p>
     </form>`;
   document.getElementById('reg-form').onsubmit = async (e) => {
     e.preventDefault();
@@ -3167,9 +3170,9 @@ async function pageSong(slug) {
       ${track ? '' : '<a class="back-link" href="/paroles" data-link>← Toutes les paroles</a>'}
       <p class="eyebrow">${esc(song.album_title || 'White Cadae')} · Paroles</p>
       <h1>${esc(song.title)}</h1>
-      ${track ? `<div class="lyrics-actions"><button class="orange-button" data-play-track="${esc(track.slug)}">${WCIcon('play')} Écouter le morceau</button><a href="/57" data-link>Proposer un signe ${WCIcon('arrow')}</a></div>` : ''}
+      ${track ? `<div class="lyrics-actions"><button class="orange-button" data-play-track="${esc(track.slug)}">${WCIcon('play')} Écouter le morceau</button><a href="/echelon" data-link>Proposer un signe ${WCIcon('arrow')}</a></div>` : ''}
       <div class="lyrics-readable">${lines.length ? lines.map((l) => l.text ? `<p>${esc(l.text)}</p>` : '<div class="lyrics-break" aria-hidden="true"></div>').join('') : '<p>Les paroles de ce morceau seront bientôt disponibles.</p>'}</div>
-      ${track ? '<a class="back-link" href="/musique" data-link>Retrouver l’album 57 →</a>' : ''}
+      ${track ? '<a class="back-link" href="/57" data-link>Retrouver l’album 57 →</a>' : ''}
     </article>`;
     bindMusicButtons();
   } catch (err) {
@@ -3363,332 +3366,8 @@ async function pageProfile(username) {
   }
 }
 
-/* --------------------------------------------------- les énigmes (/57) */
-
-/* Page 57 : un escape game. Aucun texte, aucune explication, aucun indice :
-   un élément, un « = », un champ. Rien de ce qui est à trouver n'apparaît
-   ici : ni réponse, ni nom de classe, ni identifiant. Le Worker ne renvoie
-   une réponse qu'une fois trouvée. */
-
-async function pageEnigmes() {
-  const epoch = newEpoch();
-  app.innerHTML = '<div class="loading">Chargement…</div>';
-  let data;
-  try {
-    data = await api('/api/57');
-  } catch (err) {
-    if (stale(epoch)) return;
-    app.innerHTML = `<h1>57</h1><p class="empty-note">${esc(err.message)}</p>`;
-    return;
-  }
-  if (stale(epoch)) return;
-  state.enigmes = data;
-  renderEnigmesPage();
-}
-
-function nodeClass(n) {
-  // Le bloc qui ne dit ni son nom ni son compte est d'une autre nature : il
-  // occupe toute la largeur et se distingue à l'œil.
-  const rang = n.total === null ? 'enigme enigme--graal' : 'enigme';
-  if (n.locked) return `${rang} enigme--locked`;
-  if (!n.open) return `${rang} enigme--solved`;
-  if (n.found.length || (n.partiels && n.partiels.length)) return `${rang} enigme--partial`;
-  return rang;
-}
-
-// Un seul champ par élément, même quand il porte plusieurs sens : les
-// réponses s'empilent au-dessus au fur et à mesure, dans n'importe quel ordre.
-//
-// Un élément sans libellé n'a pas d'entête du tout, et le serveur ne dit pas
-// combien de mots de passe il cache : ni titre, ni compte.
-function nodeCardHtml(n) {
-  const counter = n.total > 1
-    ? `<span class="enigme-count">${n.found.length}<span>/${n.total}</span></span>` : '';
-  const head = n.source || counter
-    ? `<div class="enigme-head">
-      <span class="enigme-source">${esc(n.source)}</span>${counter}
-    </div>`
-    : '';
-
-  if (n.locked) {
-    const missing = n.requires
-      .map((r) => `<button type="button" class="link-btn enigme-goto" data-goto="${esc(r.node)}">${esc(r.label)}</button>`)
-      .join('');
-    return `${head}<div class="enigme-body">
-      <p class="enigme-locked-note"><span class="enigme-lock" aria-label="verrouillé">🔒</span>${missing}</p>
-    </div>`;
-  }
-
-  const found = n.found
-    .map((a) => `<p class="enigme-line"><strong class="enigme-answer">${esc(a.label)}</strong></p>`)
-    .join('');
-
-  // Un signe tenu partiellement : ses parties trouvées en vert, à leur place,
-  // un « ? » pour chaque trou. Le serveur n'envoie jamais le texte manquant.
-  const partiels = (n.partiels || [])
-    .map((p) => `<p class="enigme-line enigme-partiel">${p.jetons
-      .map((j) => esc(j.sep) + (j.q ? '<span class="seg-q">?</span>' : `<strong class="seg-ok">${esc(j.t)}</strong>`))
-      .join('')}</p>`)
-    .join('');
-
-  const form = !n.open ? '' : `
-    <form class="enigme-form">
-      <input class="enigme-input" type="text" placeholder="signe"
-             autocomplete="off" autocapitalize="off" autocorrect="off"
-             spellcheck="false" enterkeyhint="go" maxlength="200"
-             aria-label="Signe${n.source ? ` pour ${esc(n.source)}` : ''}">
-      <button type="submit" class="primary" aria-label="Valider">
-        <span class="enigme-go">→</span><span class="enigme-go-text">Valider</span>
-      </button>
-    </form>
-    <p class="enigme-msg" role="status" aria-live="polite"></p>`;
-
-  return `${head}<div class="enigme-body">${found}${partiels}${form}</div>`;
-}
-
-// On ne dit jamais combien il y a de mots de passe en tout : la barre montre
-// le chemin qu'il reste dans l'échelon en cours, et rien de plus.
-function enigmesProgressHtml() {
-  const d = state.enigmes;
-  const pct = Math.round((d.step / d.perEchelon) * 100);
-  return `
-    <div class="progress-bar"><span style="width:${pct}%"></span></div>
-    <p class="progress-text"><strong>Échelon ${d.echelon}</strong></p>`;
-}
-
-/* --------------------------------------------------------- l'attente ---
-   Proposer un mot de passe ferme les champs pour une heure. Rien ne
-   l'annonce et rien ne l'explique : le décompte prend simplement la place
-   du bouton, et tout revient de soi-même quand il s'achève.             */
-
-let attenteTimer = null;
-
-// Jusqu'à l'heure on lit des minutes:secondes ; au-delà, « 720:00 » ne dit
-// plus rien à personne : on écrit les heures en toutes lettres de chiffres.
-function attenteLabel(ms) {
-  const s = Math.ceil(ms / 1000);
-  if (s >= 3600) {
-    return `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
-  }
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
-function appliqueAttente() {
-  const jusqua = state.enigmesAttenteFin || 0;
-  const reste = Math.max(0, jusqua - Date.now());
-  const grille = document.querySelector('.enigmes-grid');
-  if (grille) grille.classList.toggle('enigmes-grid--attente', reste > 0);
-
-  document.querySelectorAll('.enigme-form').forEach((f) => {
-    const champ = f.querySelector('.enigme-input');
-    const bouton = f.querySelector('button[type="submit"]');
-    if (champ) champ.disabled = reste > 0;
-    if (!bouton) return;
-    bouton.disabled = reste > 0;
-    const texte = reste > 0 ? attenteLabel(reste) : null;
-    f.querySelector('.enigme-go').textContent = texte ?? '→';
-    f.querySelector('.enigme-go-text').textContent = texte ?? 'Valider';
-  });
-
-  if (reste <= 0 && attenteTimer) { clearInterval(attenteTimer); attenteTimer = null; }
-}
-
-// `ms` vient du serveur : un rechargement de page ne raccourcit rien.
-function armeAttente(ms) {
-  state.enigmesAttenteFin = ms > 0 ? Date.now() + ms : 0;
-  appliqueAttente();
-  if (ms > 0 && !attenteTimer) attenteTimer = setInterval(appliqueAttente, 1000);
-}
-
-// L'attente appartient à une session. Se déconnecter sans recharger la page
-// laissait le décompte battre sur le 57 redevenu anonyme : il y grisait le
-// champ et remplaçait « Valider » par des minutes qui ne voulaient plus rien
-// dire. On le coupe donc avec la session.
-function oublieAttente() {
-  if (attenteTimer) { clearInterval(attenteTimer); attenteTimer = null; }
-  state.enigmesAttenteFin = 0;
-  state.attenteMs = 0;
-}
-
-function renderEnigmesPage() {
-  const d = state.enigmes;
-
-  const nodes = d.nodes
-    .map((n) => `<article class="${nodeClass(n)}" id="e-${esc(n.id)}">${nodeCardHtml(n)}</article>`)
-    .join('');
-
-  // Sans compte on lit la page entière, à pleine encre. Seul le bouton
-  // Valider est éteint, et les deux boutons disent quoi faire, sans une
-  // phrase.
-  const invite = d.anonyme ? `
-    <p class="enigmes-gate-actions">
-      <a href="/connexion?retour=57" data-link class="btn">Se connecter</a>
-      <a href="/inscription?retour=57" data-link class="btn">Créer un compte</a>
-    </p>` : '';
-
-  app.innerHTML = `
-    <h1>57</h1>
-    <p class="subtitle">Retrouve les signes cachés dans les quatre morceaux. <a href="/musique" data-link>Écouter</a> · <a href="/paroles" data-link>Lire les paroles</a></p>
-    <div class="enigmes-progress" id="enigmes-progress">${enigmesProgressHtml()}</div>
-    ${invite}
-    <div class="enigmes-grid">${nodes}</div>`;
-
-  d.nodes.forEach((n) => {
-    const el = document.getElementById('e-' + n.id);
-    if (!el) return;
-    el.dataset.sig = JSON.stringify(n);
-    // Les renvois d'une carte verrouillée vers ce qui lui manque ne sont pas
-    // un geste de jeu : ils marchent aussi sans compte, sinon un lien de la
-    // couleur de l'accent resterait mort sous le doigt.
-    if (d.anonyme) bindEnigmeGoto(el);
-    else bindEnigmeCard(el, n);
-  });
-  if (d.anonyme) { oublieAttente(); figeChamps(); }
-  else armeAttente(d.attenteMs || 0);
-}
-
-// Sans compte, le bouton d'envoi est coupé mais la lecture reste ouverte. Le champ garde son encre
-// et son « mot de passe » : seul le bouton s'éteint. La touche Entrée ne doit
-// pas non plus emporter la page : sans compte, aucune carte n'est branchée,
-// donc rien n'arrêterait l'envoi natif du formulaire.
-function figeChamps() {
-  document.querySelectorAll('.enigme-form').forEach((f) => {
-    const bouton = f.querySelector('button[type="submit"]');
-    if (bouton) bouton.disabled = true;
-    f.addEventListener('submit', (e) => e.preventDefault());
-  });
-}
-
-// Après chaque tentative, le serveur renvoie l'état complet : on ne réécrit
-// que ce qui a changé, pour ne pas perdre le focus ni la position de
-// défilement (essentiel sur mobile, clavier ouvert).
-function applyEnigmesState(data, focusId) {
-  const echelonAvant = state.enigmes ? state.enigmes.echelon : null;
-  state.enigmes = data;
-
-  const prog = document.getElementById('enigmes-progress');
-  if (prog) prog.innerHTML = enigmesProgressHtml();
-
-  // Un échelon franchi peut ouvrir une page : le menu doit suivre aussitôt.
-  if (data.access && data.echelon !== echelonAvant) {
-    state.access = data.access;
-    renderNav();
-  }
-
-  data.nodes.forEach((n) => {
-    const el = document.getElementById('e-' + n.id);
-    if (!el) return;
-    const sig = JSON.stringify(n);
-    if (el.dataset.sig === sig) return;
-    el.dataset.sig = sig;
-    el.className = nodeClass(n);
-    el.innerHTML = nodeCardHtml(n);
-    bindEnigmeCard(el, n);
-  });
-
-  armeAttente(data.attenteMs || 0);
-  if (focusId) flashEnigme(focusId);
-}
-
-// Met la carte en évidence et l'amène au centre de l'écran : sur mobile le
-// clavier vient de se refermer, la réponse doit atterrir sous les yeux.
-function flashEnigme(id) {
-  const el = document.getElementById('e-' + id);
-  if (!el) return;
-  el.classList.add('enigme--just');
-  setTimeout(() => el.classList.remove('enigme--just'), 1800);
-  setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
-}
-
-// Le refus ne dit rien : la carte tressaille, rougit et vibre. La couleur
-// reste jusqu'à la frappe suivante, le tressaillement ne dure qu'un instant.
-function enigmeWrong(el, input) {
-  el.classList.remove('enigme--wrong');
-  void el.offsetWidth; // force le redémarrage de l'animation
-  el.classList.add('enigme--wrong');
-  if (input && !input.disabled) input.select();
-  if (navigator.vibrate) navigator.vibrate(40);
-}
-
-// L'essai qu'on vient de faire, rendu mot pour mot : en vert ce qui était
-// juste, en rouge ce qui ne l'était pas. « 10 mains » garde donc son 10 en
-// vert, et dit que « mains » ne vaut rien : la carte, elle, garde « 10 ? ».
-// La carte a pu être redessinée entre-temps : on la retrouve par son
-// identifiant.
-function montreEssai(nodeId, echo) {
-  if (!echo || !echo.length) return;
-  const carte = document.getElementById('e-' + nodeId);
-  const zone = carte && carte.querySelector('.enigme-msg');
-  if (!zone) return;
-  zone.innerHTML = echo
-    .map((m) => `<span class="${m.ok ? 'essai-ok' : 'essai-faux'}">${esc(m.t)}</span>`)
-    .join(' ');
-}
-
-function bindEnigmeCard(el, n) {
-  const form = el.querySelector('.enigme-form');
-  if (form) {
-    form.onsubmit = async (e) => {
-      e.preventDefault();
-      const input = form.querySelector('.enigme-input');
-      const btn = form.querySelector('button[type="submit"]');
-      const answer = input.value.trim();
-      if (!answer) return;
-      el.classList.remove('enigme--wrong');
-      const msgAvant = el.querySelector('.enigme-msg');
-      if (msgAvant) msgAvant.innerHTML = '';
-      btn.disabled = true;
-      try {
-        const res = await api('/api/57/guess', { method: 'POST', body: { id: n.id, answer } });
-        // Juste ou faux, l'essai est joué : le clavier se referme et tout se
-        // fige jusqu'au bout de l'heure.
-        input.blur();
-        if (res.ok) {
-          applyEnigmesState(res.state, n.id);
-        } else {
-          armeAttente(res.attenteMs || 0);
-          enigmeWrong(el, input);
-        }
-        montreEssai(n.id, res.echo);
-      } catch (err) {
-        // Un essai trop tôt : le serveur dit combien de temps il reste.
-        if (err.data && err.data.attenteMs) {
-          input.blur();
-          armeAttente(err.data.attenteMs);
-          return;
-        }
-        btn.disabled = false;
-        const msg = el.querySelector('.enigme-msg');
-        if (msg) msg.textContent = err.message;
-      }
-    };
-  }
-
-  const field = el.querySelector('.enigme-input');
-  if (field) field.oninput = () => el.classList.remove('enigme--wrong');
-
-  bindEnigmeGoto(el);
-}
-
-// Le renvoi d'une carte verrouillée vers l'élément qui lui manque : il ne
-// touche pas au jeu, il ne fait que déplacer le regard. À part, donc, pour
-// servir aussi les visiteurs sans compte.
-function bindEnigmeGoto(el) {
-  el.querySelectorAll('.enigme-goto').forEach((b) => {
-    b.onclick = () => {
-      const target = document.getElementById('e-' + b.dataset.goto);
-      if (!target) return;
-      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      target.classList.add('enigme--just');
-      setTimeout(() => target.classList.remove('enigme--just'), 1800);
-      // sur mobile, on évite d'ouvrir le clavier au milieu d'un défilement
-      if (window.innerWidth > 700) {
-        const input = target.querySelector('.enigme-input');
-        if (input) setTimeout(() => input.focus(), 450);
-      }
-    };
-  });
-}
+// Échelon owns its timers, drafts and navigation.
+function oublieAttente() { state.attenteMs = 0; WCGame.clear(); }
 
 /* ---------------------------------------------------------------- admin */
 

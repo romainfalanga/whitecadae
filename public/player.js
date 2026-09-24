@@ -36,8 +36,8 @@
 
   root.innerHTML = `
     <div class="player-main">
-      <a class="player-art" href="/musique" data-link aria-label="Ouvrir la playlist 57"><img src="${album.cover}" alt="Pochette de 57" width="52" height="52"></a>
-      <div class="player-track"><a id="player-title" href="/musique" data-link></a><span>Vulpis <span aria-hidden="true">·</span> 57</span></div>
+      <a class="player-art" href="/57" data-link aria-label="Ouvrir la playlist 57"><img src="${album.cover}" alt="Pochette de 57" width="52" height="52"></a>
+      <div class="player-track"><a id="player-title" href="/57" data-link></a><span>Vulpis <span aria-hidden="true">·</span> 57</span></div>
       <div class="player-buttons">
         <button type="button" class="player-icon" id="player-prev" aria-label="Morceau précédent">${icon('previous')}</button>
         <button type="button" class="player-icon player-play" id="player-play" aria-label="Lire">${icon('play')}</button>
