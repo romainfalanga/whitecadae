@@ -37,7 +37,7 @@ const terms=e=>unwrapped(e).op==='add'?[...terms(unwrapped(e).left),...terms(unw
 const sorted=a=>[...a].sort().join('|');
 function isTerm(e,board,value,resources,share=true){try{const v=evaluate(e,board,{share});return v.value===value&&sorted(v.resources)===sorted(resources);}catch{return false;}}
 function seven(e){try{const ts=terms(e);if(ts.length!==2)return false;return ts.some(t=>isTerm(t,'pair',3,['a.0'])||isTerm(t,'pair',3,['c.0']))&&ts.some(t=>isTerm(t,'pair',4,['d.0'])||isTerm(t,'pair',4,['d.1']));}catch{return false;}}
-function collect(e,out=[]){if(!e||out.length>150)return out;out.push(e);if(e.left)collect(e.left,out);if(e.right)collect(e.right,out);if(e.arg)collect(e.arg,out);return out;}
+function collect(e,out=[],depth=0){if(!e||out.length>150||depth>12)return out;out.push(e);if(e.left)collect(e.left,out,depth+1);if(e.right)collect(e.right,out,depth+1);if(e.arg)collect(e.arg,out,depth+1);return out;}
 export function hasTwoSevens(items){
   if(!Array.isArray(items)||items.length>30)return false;
   const candidates=items.flatMap(e=>collect(e)).filter(seven);

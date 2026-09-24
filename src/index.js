@@ -2,7 +2,7 @@
 
 import {
   currentAnswerId, accessOf, progresOf,
-  ECHELON_CONVERSATION, ECHELON_PENSE_MIEUX, ECHELON_VIDEOGRAPHIE,
+  ECHELON_PENSE_MIEUX, ECHELON_VIDEOGRAPHIE,
   ECHELON_CARRE, ECHELON_BRAINSTORM, ECHELON_114,
 } from './enigmas57.js';
 import {
@@ -11,6 +11,7 @@ import {
   CADENCES, CADENCES_ORDRE, REPONSES,
   VOLETS_SOCIETE, VOLETS_CLES,
 } from './contenus.js';
+import { handleConversation, conversationAccess } from './conversation.js';
 import { handleEchelon, gameRows } from './echelon-api.js';
 import { gameLevel, accessLevel, gameProfile } from './echelon.js';
 
@@ -177,8 +178,8 @@ async function handleApi(request, env, url) {
   //     gestionnaire (le corps de la requête et l'échelon du visiteur s'y
   //     lisent ensemble). L'ordre n'a pas d'importance : rien ici n'est
   //     couvert par le barrage plus bas.
-  if (route('GET', '/api/conversation')) return conversationList(request, env);
-  if (route('POST', '/api/conversation')) return conversationPost(request, env);
+  if (route('GET', '/api/conversation')) return handleConversation(request, env, {getUser, json});
+  if (route('POST', '/api/conversation')) return handleConversation(request, env, {getUser, json});
 
   if (route('GET', '/api/arbres')) return arbresList(request, env, url);
   if (route('POST', '/api/arbres')) return arbresCreate(request, env);
@@ -394,7 +395,7 @@ async function viewerAccess(request, env) {
   const rows = await riddleRows(env, user.id);
   const { solved } = progresOf(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
   const echelon = accessLevel(rows);
-  return { user, echelon, solved, access: accessOf(echelon) };
+  return { user, echelon, solved, access: {...accessOf(echelon), conversation:conversationAccess(user, rows).readable} };
 }
 
 // L'échelon exigé par une pièce, et un refus prêt à servir. Le message ne dit
@@ -1996,43 +1997,6 @@ async function ajouteColonne(env, table, colonne, sql) {
    Une seule conversation, pour tout le monde à partir de l'échelon 2. Mais
    chaque message porte l'échelon minimal pour le lire, choisi par son auteur
    entre 2 et son propre échelon : plus on monte, plus on entend.           */
-
-async function conversationList(request, env) {
-  const { vu, refus } = await requireEchelon(request, env, ECHELON_CONVERSATION, 'conversation');
-  if (refus) return refus;
-  await ensureHautesTables(env);
-  const plafond = Number.isFinite(vu.echelon) ? vu.echelon : ECHELON_114;
-  const { results } = await env.DB.prepare(
-    `SELECT m.id, m.body, m.min_echelon, m.created_at, u.username
-       FROM conversation_messages m JOIN users u ON u.id = m.user_id
-      WHERE m.min_echelon <= ?1
-      ORDER BY m.id DESC LIMIT 100`
-  ).bind(plafond).all();
-  return json({ messages: (results || []).reverse(), echelon: plafond });
-}
-
-async function conversationPost(request, env) {
-  const { vu, refus } = await requireEchelon(request, env, ECHELON_CONVERSATION, 'conversation');
-  if (refus) return refus;
-  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
-  await ensureHautesTables(env);
-
-  const body = await readJson(request);
-  const texte = String(body?.body || '').trim();
-  if (!texte) return json({ error: 'Message vide.' }, 400);
-  if (texte.length > 2000) return json({ error: 'Message trop long (2000 caractères).' }, 400);
-
-  // L'auteur choisit qui peut lire : jamais en dessous de la porte de la
-  // page, jamais au-dessus de son propre échelon.
-  const plafond = Number.isFinite(vu.echelon) ? vu.echelon : ECHELON_114;
-  const demande = Number(body?.min_echelon) || ECHELON_CONVERSATION;
-  const minEchelon = Math.max(ECHELON_CONVERSATION, Math.min(demande, plafond));
-
-  const r = await env.DB.prepare(
-    'INSERT INTO conversation_messages (user_id, body, min_echelon) VALUES (?1, ?2, ?3)'
-  ).bind(vu.user.id, texte, minEchelon).run();
-  return json({ ok: true, id: r.meta.last_row_id }, 201);
-}
 
 /* ------------------- les arbres : Pense Mieux (3) et Vidéographie (4) ---
    Même moteur pour les deux : un tronc (le sujet) et des branches emboîtées

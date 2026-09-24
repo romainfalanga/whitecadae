@@ -38,7 +38,10 @@ export async function handleEchelon(request,env,path,{getUser,json}){
     const current=await env.DB.prepare('SELECT draft,revision,updated_at FROM echelon_drafts WHERE user_id=?1 AND board_id=?2').bind(id,n.id).first();
     if(request.method==='GET')return json({sources:boardSources[n.board],draft:current?JSON.parse(current.draft):null,revision:current?.revision||0});
     if(request.method!=='POST')return json({error:'Méthode indisponible.'},405);
-    let draft;try{draft=validDraft(body.draft,n.board,p.milestones.has(SHARE));}catch(e){return json({error:e.message},400);}
+    // A single save may contain both the discovery and the duplication. Do not
+    // make the player wait for a previous autosave to unlock the operation.
+    const share=p.milestones.has(SHARE)||(n.board==='pair'&&hasTwoSevens(body.draft?.items));
+    let draft;try{draft=validDraft(body.draft,n.board,share);}catch(e){return json({error:e.message},400);}
     if(!Number.isInteger(body.revision)||body.revision<0)return json({error:'Version invalide.'},400);
     const result=await env.DB.prepare("INSERT INTO echelon_drafts(user_id,board_id,draft,revision) SELECT ?1,?2,?3,1 WHERE ?4=0 ON CONFLICT(user_id,board_id) DO UPDATE SET draft=excluded.draft,revision=echelon_drafts.revision+1,updated_at=datetime('now') WHERE echelon_drafts.revision=?4").bind(id,n.id,JSON.stringify(draft),body.revision).run();
     // SQLite's INSERT SELECT cannot update a nonzero revision; use a CAS update.
@@ -60,7 +63,8 @@ export async function handleEchelon(request,env,path,{getUser,json}){
   if(!claim.meta.changes){const wait=await env.DB.prepare('SELECT next_at FROM echelon_attempts WHERE user_id=?1').bind(id).first();return json({error:'Prends un instant avant de réessayer.',attenteMs:Math.max(0,wait.next_at-now)},429);}
   let prise;
   if(n.kind==='workshop'){
-    const valid=validateConstruction(n.board,body.roots,p.milestones.has(SHARE));
+    const share=p.milestones.has(SHARE)||(n.board==='pair'&&hasTwoSevens(body.roots));
+    const valid=validateConstruction(n.board,body.roots,share);
     prise=valid?(n.board==='first'?matchNode(n,text,p.solved,p.parts):{prises:[{id:n.answers[0].id,masque:1,complet:true}],echo:[]}):null;
   }else prise=matchNode(n,text,p.solved,p.parts);
   const fresh=prise?.prises||[];

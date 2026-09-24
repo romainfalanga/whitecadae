@@ -33,7 +33,12 @@ test('one completed answer is one rung; old duplicates merge, retired history pr
 
 test('initial territory omits future pages and answers; visibility differs from playability',()=>{
   const start=buildGameState([]);
-  assert.deepEqual(start.nodes.map(n=>n.id),['eg-01','eg-02','n-g']);
+  assert.deepEqual(start.nodes.map(n=>n.id),['n-0','eg-01','eg-02','n-g']);
+  assert.equal(start.nodes[0].title,'');
+  assert.equal(start.nodes[0].locked,false);
+  assert.equal(start.nodes[0].total,null);
+  assert.equal(start.nodes[0].visual,null);
+  assert.doesNotMatch(JSON.stringify(start),/Devincix|Katikas|Katikias|La porte/);
   assert.doesNotMatch(JSON.stringify(start),/Horloge|2031|Jésus|Dieu|VALD|33|eg-13|eg-10/);
   const after=buildGameState(rows('eg-02-1'));
   assert.equal(after.nodes.find(n=>n.id==='eg-05').locked,true);
@@ -65,6 +70,7 @@ test('every authored answer is reachable without relying on removed puzzles',()=
   assert.deepEqual([...new Set(state.pages.map(p=>p.href.split('#')[0]))].sort(),['/echelon','/echelon/horloge']);
   assert.ok(state.pages.every(p=>['riddle','workshop','clock'].includes(p.kind)));
   assert.ok(state.pages.every(p=>!('group' in p)&&!('quotes' in p)&&!('related' in p)));
+  assert.deepEqual(state.nodes.filter(p=>p.visual).map(p=>p.id),['eg-02','eg-06']);
   assert.doesNotMatch(JSON.stringify(state),/fourmilière|Goutte|Fini \/ infini|Angles \/ anges|Enfer \/ paradis|Observer|Transformer/);
   assert.ok(!state.pages.some(p=>p.id==='n-f'));
 });
@@ -75,6 +81,12 @@ test('M=M and named answers accept accents, equal signs and partial discovery',(
   assert.ok(matchNode(n,'méta-moi = moi',new Set()).prises.some(p=>p.id==='eg-06-2'&&p.complet));
   assert.ok(matchNode(n,'mecanisme',new Set()).prises.some(p=>!p.complet));
   assert.ok(matchNode(NODES.find(n=>n.id==='eg-05'),'expansion harmonieuse',new Set()).prises[0].complet);
+  const needle=NODES.find(n=>n.id==='eg-03');
+  assert.equal(needle.answers[1].label,'Détails');
+  assert.ok(matchNode(needle,'details',new Set()).prises[0].complet);
+  assert.equal(buildGameState(rows('eg-03-2')).nodes.find(n=>n.id==='eg-03').found[0].label,'Détails');
+  const door=NODES.find(n=>n.id==='n-0');
+  for(const word of ['devincix','Katikas'])assert.ok(matchNode(door,word,new Set()).prises[0].complet);
 });
 
 test('duration construction validates origin, operations and controlled sharing',()=>{
@@ -128,7 +140,8 @@ test('API handles permission boundaries, points, migrations and draft conflicts'
   assert.equal(clock.gained,1);
   assert.ok(clock.state.pages.some(p=>p.id==='eg-10'));
   assert.equal((await call('/api/echelon/draft/eg-13')).status,404);
-  const firstSave=await call('/api/echelon/draft/eg-12',{revision:0,draft:draft([...sevens,src('b')])});
+  // Discovery and duplication can occur before the first autosave completes.
+  const firstSave=await call('/api/echelon/draft/eg-12',{revision:0,draft:draft([...sevens,src('b'),share(src('b'))])});
   assert.equal(firstSave.status,200);assert.equal(firstSave.revision,1);
   assert.equal(firstSave.state.echelon,5);assert.equal(firstSave.state.capabilities.share,true);
   assert.equal((await call('/api/echelon/draft/eg-13')).status,403);
@@ -151,5 +164,5 @@ test('retired reset cannot erase progress; public Worker exposes only starting t
   const res=await worker.fetch(new Request('https://test.local/api/57/progress',{method:'DELETE'}),{});
   assert.equal(res.status,410);
   const anon=await worker.fetch(new Request('https://test.local/api/echelon'),{});
-  assert.equal(anon.status,200);assert.equal((await anon.json()).nodes.length,3);
+  assert.equal(anon.status,200);assert.equal((await anon.json()).nodes.length,4);
 });

@@ -5,24 +5,10 @@ window.WCGame=(()=>{
   const positions=new Map();
   const e=s=>esc(s??'');
   const pageBy=id=>data?.pages.find(p=>p.id===id);
-  function art(type,small=false){
-    const paths={
-      bird:'<path d="M24 76 77 53 117 61 145 26 174 61 213 53 266 76 205 71 165 82 145 102 125 82 85 71Z"/>',
-      infinity:'<path d="M145 65C70-25 12 25 34 70C63 131 133 47 145 65C220 155 278 105 256 60C227-1 157 83 145 65Z"/><text x="76" y="76">M</text><text x="212" y="76">M</text>',
-      needle:'<path d="m58 100 175-72M70 95l8-3"/><ellipse cx="224" cy="32" rx="12" ry="3" transform="rotate(-24 224 32)"/>',
-      dice:'<path d="m100 25 62-10 33 30-6 57-62 12-34-31Z M100 25l32 32 63-12M132 57l-5 57"/>',
-      arcs:'<path d="M55 95Q145-60 235 95M80 95Q145-7 210 95M107 95Q145 44 183 95"/>',
-      stars:'<path d="m45 90 58-63 41 47 51-37 43 51"/><circle cx="45" cy="90" r="3"/><circle cx="103" cy="27" r="4"/><circle cx="144" cy="74" r="3"/><circle cx="195" cy="37" r="4"/><circle cx="238" cy="88" r="3"/>',
-      layers:'<ellipse cx="118" cy="65" rx="53" ry="38"/><ellipse cx="174" cy="65" rx="53" ry="38"/>',
-      sound:'<path d="M63 62h12m10-16v32m15-45v58m17-72v85m17-56v29m18-52v75m17-85v98m18-73v48m17-33v18m15-11h12"/>',
-      line:'<path d="M75 25h140v80H75ZM20 64h250"/>',
-      clock:'<circle cx="145" cy="65" r="51"/><path d="M145 25v40l32 16M145 14v6m51 45h-6m-45 51v-6M94 65h6"/>',
-      shadow:'<path d="M80 102q-25-62 29-78l-6 32q42-28 84 0l-6-32q54 16 29 78M126 87h38"/>',
-      door:'<path d="M106 110V52a39 39 0 0 1 78 0v58M98 110h94M169 72v8"/>'
-    };
-    if(type==='white')return `<div class="eg-art eg-white ${small?'is-small':''}" aria-hidden="true"><span></span></div>`;
-    if(type==='time'||type==='numbers')return `<div class="eg-art eg-type ${small?'is-small':''}" aria-hidden="true">${type==='time'?'13:20':'Ⅴ · XX'}</div>`;
-    return `<svg class="eg-art ${small?'is-small':''}" viewBox="0 0 290 130" aria-hidden="true" focusable="false">${paths[type]||paths.door}</svg>`;
+  function art(type){
+    if(type==='white')return '<div class="eg-art eg-white" role="img" aria-label="Une pochette entièrement blanche"><span></span></div>';
+    if(type==='infinity')return '<svg class="eg-art eg-infinity" viewBox="0 0 290 130" role="img" aria-label="Un M dans chaque boucle du signe infini"><path d="M145 65C105 7 30 7 30 65S105 123 145 65C185 7 260 7 260 65S185 123 145 65Z"/><text x="78" y="76">M</text><text x="212" y="76">M</text></svg>';
+    return '';
   }
   const versions=new Map();
   const isClock=()=>location.pathname==='/echelon/horloge';
@@ -34,7 +20,7 @@ window.WCGame=(()=>{
   function accept(next){if(data&&next.echelon<data.echelon)return;if(data?.capabilities.share)next.capabilities.share=true;data=next;}
   function found(p){return `<div class="eg-found"><ul>${p.found.map(a=>`<li><span aria-hidden="true">✧</span> ${e(a.label)}</li>`).join('')}${p.partiels.map(v=>`<li class="eg-partial">${v.jetons.map(t=>e(t.sep)+(t.q?'?':`<strong>${e(t.t)}</strong>`)).join('')}</li>`).join('')}</ul>${p.total?`<span>${p.found.length} / ${p.total} ${p.total>1?'signes':'signe'}</span>`:''}</div>`;}
   const notice=()=>'<div class="eg-feedback" role="status" aria-live="polite"></div>';
-  function riddle(p){return `<article id="${e(p.id)}" class="eg-entry ${p.locked?'is-locked':''}" aria-labelledby="title-${e(p.id)}">${art(p.visual,true)}<div class="eg-entry-main"><h2 id="title-${e(p.id)}" tabindex="-1">${e(p.title)}</h2>${found(p)}${p.locked?locked(p):p.open?`<form class="eg-answer" data-answer="${e(p.id)}"><label class="sr-only" for="input-${e(p.id)}">Signe pour ${e(p.title)}</label><div><input id="input-${e(p.id)}" name="answer" placeholder="Proposer un signe" maxlength="200" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" required ${data.anonyme?'disabled':''}><button type="submit" class="orange-button" ${data.anonyme?'disabled':''}>Valider</button></div></form>`:'<p class="eg-complete">Tous les signes sont trouvés.</p>'}${p.id==='eg-03'&&pageBy('eg-10')?'<a class="eg-clock-link" href="/echelon/horloge" data-link>Ouvrir Horloge →</a>':''}${notice()}</div></article>`;}
+  function riddle(p){return `<article id="${e(p.id)}" class="eg-entry ${p.visual?'has-art':''} ${p.locked?'is-locked':''}" ${p.title?`aria-labelledby="title-${e(p.id)}"`:'aria-label="Mot de passe"'} tabindex="-1">${art(p.visual,true)}<div class="eg-entry-main">${p.title?`<h2 id="title-${e(p.id)}" tabindex="-1">${e(p.title)}</h2>`:''}${found(p)}${p.locked?locked(p):p.open?`<form class="eg-answer" data-answer="${e(p.id)}"><label class="sr-only" for="input-${e(p.id)}">${p.title?`Signe pour ${e(p.title)}`:'Mot de passe'}</label><div><input id="input-${e(p.id)}" name="answer" placeholder="${p.title?'Proposer un signe':'Mot de passe'}" maxlength="200" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" required ${data.anonyme?'disabled':''}><button type="submit" class="orange-button" ${data.anonyme?'disabled':''}>Valider</button></div></form>`:'<p class="eg-complete">Tous les signes sont trouvés.</p>'}${p.id==='eg-03'&&pageBy('eg-10')?'<a class="eg-clock-link" href="/echelon/horloge" data-link>Ouvrir Horloge →</a>':''}${notice()}</div></article>`;}
   function lab(p){return `<section id="${e(p.id)}" class="eg-lab" aria-labelledby="title-${e(p.id)}"><h2 id="title-${e(p.id)}">${e(p.title)}</h2><p class="eg-subtitle">${e(p.subtitle)}</p><div class="eg-results">${found(p)}</div>${notice()}<div class="eg-lab-body">${p.locked?locked(p):`<div id="bench-${e(p.id)}" class="eg-workbench" aria-busy="true">Chargement du tableau…</div>`}</div></section>`;}
   function sync(){
     document.querySelectorAll('.eg-level strong').forEach(el=>el.textContent=data.echelon);
@@ -55,7 +41,7 @@ window.WCGame=(()=>{
         versions.set(p.id,version);
         const el=document.getElementById(p.id),form=el.querySelector('form');
         if(form){if(value)form.elements.answer.value=value;form.onsubmit=event=>{event.preventDefault();submit(pageBy(p.id),{answer:form.elements.answer.value.trim()},form.querySelector('button'));};}
-        if(active)(form?.elements.answer||el.querySelector('h2')).focus({preventScroll:true});
+        if(active)(form?.elements.answer||el.querySelector('h2')||el).focus({preventScroll:true});
       }
     }
   }
@@ -98,6 +84,20 @@ window.WCGame=(()=>{
     function expression(x){if(x.op==='src'||x.op==='part')return String(value(x));if(x.op==='reuse')return `${expression(x.arg)} ↗`;return `(${expression(x.left)} ${{add:'+',sub:'−',mul:'×',div:'÷',join:'│'}[x.op]} ${expression(x.right)})`;}
     function origins(x,set=new Set()){if(x.ref)set.add(getSource(x.ref).label);if(x.left)origins(x.left,set);if(x.right)origins(x.right,set);if(x.arg)origins(x.arg,set);return [...set].join(' · ');}
     function checkUses(items){const counts=new Map(),shared=new Set();function visit(x,reused=false){if(x.op==='src'||x.op==='part'){const digits=x.op==='part'?[x.index]:[...String(getSource(x.ref).value)].map((_,i)=>i);for(const i of digits){const key=x.ref+'.'+i;counts.set(key,(counts.get(key)||0)+1);if(reused)shared.add(key);}return;}if(x.op==='reuse'){if(reused)throw Error('Ce nombre est déjà partagé.');visit(x.arg,true);}else{visit(x.left,reused);visit(x.right,reused);}}items.forEach(x=>visit(x));if([...counts].some(([r,n])=>n>(shared.has(r)?2:1)))throw Error('Un nombre partagé peut servir deux fois.');}
+    function canDuplicate(){
+      if(data.capabilities.share)return true;
+      if(p.board!=='pair'||!draft)return false;
+      const sevens=[];
+      function scan(x){
+        if(x.op==='add'){
+          const pair=[x.left,x.right],three=pair.find(t=>t.op==='src'&&['a','c'].includes(t.ref)),four=pair.find(t=>t.op==='part'&&t.ref==='d');
+          if(three&&four)sevens.push([three.ref,four.index]);
+        }
+        if(x.left)scan(x.left);if(x.right)scan(x.right);if(x.arg)scan(x.arg);
+      }
+      draft.items.forEach(scan);
+      return sevens.some(([ref,index])=>sevens.some(([otherRef,otherIndex])=>ref!==otherRef&&index!==otherIndex));
+    }
     function local(){if(!draft)return;try{localStorage.setItem(key(),JSON.stringify({draft,revision,pending:dirty,updatedAt:Date.now()}));}catch{/* quota: remote draft still works */}}
     function schedule(){dirty=true;local();clearTimeout(timer);timer=setTimeout(flush,650);}
     async function flush(){
@@ -105,7 +105,7 @@ window.WCGame=(()=>{
       const snapshot=JSON.stringify(draft);
       saving=(async()=>{
       try{const result=await api(`/api/echelon/draft/${p.id}`,{method:'POST',body:{draft:JSON.parse(snapshot),revision}});revision=result.revision;dirty=JSON.stringify(draft)!==snapshot;local();
-        if(mounted()){const newlyShared=!data.capabilities.share&&result.state.capabilities.share;accept(result.state);sync();if(newlyShared){for(const b of boards.values())b.refresh();scopedFeedback('Une nouvelle possibilité se révèle : partager un nombre.');}else saveLabel('Brouillon sauvegardé');}
+        if(mounted()){const newlyShared=!data.capabilities.share&&result.state.capabilities.share;accept(result.state);sync();if(newlyShared){for(const b of boards.values())b.refresh();scopedFeedback('Tu peux maintenant dupliquer un nombre.');}else saveLabel('Brouillon sauvegardé');}
       }catch(err){if(err.status===409){conflict=true;if(mounted()){paint();scopedFeedback(err.message);}}else if(mounted())saveLabel('Brouillon conservé sur cet appareil');}
       })();
       await saving;saving=null;
@@ -113,18 +113,20 @@ window.WCGame=(()=>{
     function saveLabel(text){const el=document.getElementById(rootId)?.querySelector('[data-save]');if(el)el.textContent=text;}
     function change(next){undo.push(copy(draft));if(undo.length>35)undo.shift();redo=[];draft=next;paint();schedule();}
     function calculate(op){try{
-      const selected=draft.selected,x=draft.items[selected[0]],y=draft.items[selected[1]];
+      const unary=['split','detach','reuse'].includes(op);
+      const selected=unary?draft.selected.slice(-1):draft.selected,x=draft.items[selected[0]],y=draft.items[selected[1]];
+      if(!x)throw Error('Sélectionne un nombre.');
       let output=[];
       if(op==='split'){if(x.op!=='src'||String(value(x)).length<2)throw Error('Sélectionne un groupe de chiffres de la durée.');output=[...String(value(x))].map((_,index)=>({op:'part',ref:x.ref,index}));}
       else if(op==='detach'){if(x.op==='reuse')throw Error('Annule le partage pour modifier ce nombre.');else if(x.left)output=[x.left,x.right];else throw Error('Ce nombre est déjà séparé.');}
-      else if(op==='reuse'){if(!data.capabilities.share)throw Error('Cette possibilité n’est pas encore découverte.');output=[x,{op:'reuse',arg:x}];}
+      else if(op==='reuse'){if(!canDuplicate())throw Error('Cette possibilité n’est pas encore découverte.');output=[x,{op:'reuse',arg:x}];}
       else{if(selected.length!==2)throw Error('Choisis deux nombres, dans l’ordre de ton calcul.');output=[{op,left:x,right:y}];value(output[0]);}
       const items=draft.items.filter((_,i)=>!selected.includes(i)).concat(output);if(items.length>30)throw Error('Détache ou reprends une construction pour faire de la place.');checkUses(items);
       change({version:1,items,selected:output.length===1?[items.length-1]:[]});
     }catch(err){scopedFeedback(err.message);}}
     function paint(){if(!mounted()||!draft)return;const root=document.getElementById(rootId);const active=document.activeElement;const focusKey=root.contains(active)?(active.id?'#'+active.id:active.hasAttribute('data-tile')?'[data-tile="'+active.dataset.tile+'"]':active.hasAttribute('data-op')?'[data-op="'+active.dataset.op+'"]':null):null;root.setAttribute('aria-busy','false');
-      const n=draft.selected.length;
-      root.innerHTML=`<div class="eg-bench"><div class="eg-bench-top"><p>Relie les nombres. Change de lecture.</p><span data-save role="status">${dirty?'Brouillon local':'Brouillon sauvegardé'}</span></div>${conflict?`<div class="eg-conflict">Un autre appareil a enregistré une version.<button id="eg-remote-${p.id}">Charger sa version</button><button id="eg-local-${p.id}">Garder mon brouillon ici</button></div>`:''}<div class="eg-tiles" aria-label="Nombres et constructions">${draft.items.map((x,i)=>`<button class="eg-tile" data-tile="${i}" draggable="true" aria-pressed="${draft.selected.includes(i)}"><small>${e(origins(x))}</small><strong>${e(Number(value(x).toFixed(5)))}</strong>${x.left||x.op==='reuse'?`<span>${e(expression(x))}</span>`:''}<i>${draft.selected.includes(i)?`${draft.selected.indexOf(i)+1} · sélectionné`:'Sélectionner'}</i></button>`).join('')}</div><div class="eg-tools" aria-label="Opérations">${[['add','+','Additionner'],['sub','−','Soustraire'],['mul','×','Multiplier'],['div','÷','Diviser'],['join','│','Assembler']].map(([op,symbol,label])=>`<button data-op="${op}" ${n!==2?'disabled':''}><span aria-hidden="true">${symbol}</span>${label}</button>`).join('')}<button data-op="split" ${n!==1?'disabled':''}>Séparer</button><button data-op="detach" ${n!==1?'disabled':''}>Détacher</button>${data.capabilities.share?`<button data-op="reuse" ${n!==1?'disabled':''}>Partager ↗</button>`:''}</div><div class="eg-history"><button id="eg-undo-${p.id}" ${!undo.length?'disabled':''}>↶ Annuler</button><button id="eg-redo-${p.id}" ${!redo.length?'disabled':''}>Rétablir ↷</button><button id="eg-reset-${p.id}">Repartir des durées</button></div><form id="eg-board-answer-${p.id}" class="eg-answer">${p.board==='first'?`<label for="eg-meaning-${p.id}">Quelle lecture vois-tu ?</label><input id="eg-meaning-${p.id}" name="meaning" maxlength="200" autocomplete="off" placeholder="Proposer un signe" value="${e(answerText)}">`:''}<button class="orange-button" type="submit">Valider ma lecture</button></form><p class="eg-bench-note">Sélectionne deux nombres dans l’ordre souhaité. │ assemble les chiffres. Les essais restent réversibles.</p></div>`;
+      const n=draft.selected.length,selectedNumber=n?value(draft.items[draft.selected.at(-1)]):null;
+      root.innerHTML=`<div class="eg-bench"><div class="eg-bench-top"><p>Relie les nombres. Change de lecture.</p><span data-save role="status">${dirty?'Brouillon local':'Brouillon sauvegardé'}</span></div>${conflict?`<div class="eg-conflict">Un autre appareil a enregistré une version.<button id="eg-remote-${p.id}">Charger sa version</button><button id="eg-local-${p.id}">Garder mon brouillon ici</button></div>`:''}<div class="eg-tiles" aria-label="Nombres et constructions">${draft.items.map((x,i)=>`<button class="eg-tile" data-tile="${i}" draggable="true" aria-pressed="${draft.selected.includes(i)}"><small>${e(origins(x))}</small><strong>${e(Number(value(x).toFixed(5)))}</strong>${x.left||x.op==='reuse'?`<span>${e(expression(x))}</span>`:''}<i>${draft.selected.includes(i)?`${draft.selected.indexOf(i)+1} · sélectionné`:'Sélectionner'}</i></button>`).join('')}</div><div class="eg-tools" aria-label="Opérations">${[['add','+','Additionner'],['sub','−','Soustraire'],['mul','×','Multiplier'],['div','÷','Diviser'],['join','│','Assembler']].map(([op,symbol,label])=>`<button data-op="${op}" ${n!==2?'disabled':''}><span aria-hidden="true">${symbol}</span>${label}</button>`).join('')}<button data-op="split" ${!n?'disabled':''}>Séparer</button><button data-op="detach" ${!n?'disabled':''}>Détacher</button>${p.board!=='first'?`<button data-op="reuse" ${!n||!canDuplicate()?'disabled':''}>Dupliquer${n?' '+e(Number(selectedNumber.toFixed(5))):''}</button>`:''}</div><div class="eg-history"><button id="eg-undo-${p.id}" ${!undo.length?'disabled':''}>↶ Annuler</button><button id="eg-redo-${p.id}" ${!redo.length?'disabled':''}>Rétablir ↷</button><button id="eg-reset-${p.id}">Repartir des durées</button></div><form id="eg-board-answer-${p.id}" class="eg-answer">${p.board==='first'?`<label for="eg-meaning-${p.id}">Quelle lecture vois-tu ?</label><input id="eg-meaning-${p.id}" name="meaning" maxlength="200" autocomplete="off" placeholder="Proposer un signe" value="${e(answerText)}">`:''}<button class="orange-button" type="submit">Valider ma lecture</button></form><p class="eg-bench-note">Sélectionne deux nombres dans l’ordre du calcul. Séparer, détacher et dupliquer agissent sur le dernier nombre sélectionné. │ assemble les chiffres.</p></div>`;
       root.querySelectorAll('[data-tile]').forEach(el=>{const index=+el.dataset.tile;el.onclick=()=>{const d=copy(draft);d.selected=d.selected.includes(index)?d.selected.filter(i=>i!==index):[...d.selected.slice(-1),index];draft=d;paint();schedule();};el.ondragstart=()=>{dragIndex=index;};el.ondragover=event=>event.preventDefault();el.ondrop=event=>{event.preventDefault();if(dragIndex===null||dragIndex===index)return;const items=copy(draft.items),item=items.splice(dragIndex,1)[0];items.splice(index,0,item);change({version:1,items,selected:[]});dragIndex=null;};});
       root.querySelectorAll('[data-op]').forEach(el=>el.onclick=()=>calculate(el.dataset.op));
       root.querySelector('#eg-undo-'+p.id).onclick=()=>{redo.push(copy(draft));draft=undo.pop();paint();schedule();};

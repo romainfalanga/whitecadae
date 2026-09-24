@@ -237,6 +237,7 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   body TEXT NOT NULL,
   min_echelon INTEGER NOT NULL DEFAULT 2,
+  echelon_version INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_conv_created ON conversation_messages(created_at);

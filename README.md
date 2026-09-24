@@ -16,19 +16,21 @@ Les nouveaux POST/PUT/PATCH d’interprétations, références, connexions et es
 
 `npm test` couvre le lecteur (ordre, fin, répétition, reprise, commandes système, médias concurrents), la fermeture des anciennes écritures, l’API de paroles et les exclusions du service worker. Les essais de navigation, de rendu responsive et de lecture réelle se font dans le navigateur avec une base D1 locale.
 
-Avant la publication : `npx wrangler deploy --dry-run`. Pour publier sur le Worker existant : `npx wrangler deploy`, avec une session Cloudflare autorisée. La migration additive `0027_echelon.sql` est également appliquée à la volée, sans réimport de données. Publier avec `--keep-vars` sur le Worker existant.
+Avant la publication : `npx wrangler deploy --dry-run`. Pour publier sur le Worker existant : `npx wrangler deploy`, avec une session Cloudflare autorisée. Les migrations additives `0027_echelon.sql` et `0028_conversation_echelons.sql` sont également appliquées à la volée, sans réimport de données. Ne pas rejouer un `ALTER TABLE` manuel après son application automatique. Publier avec `--keep-vars` sur le Worker existant.
 
 ## Échelon
+
+Le champ sans indice est disponible dès le départ, en première position, sans titre ni compteur de réponses. Seuls XEU (pochette blanche) et M = M (infini avec deux M) ont un visuel, lisible sur ordinateur et mobile. « Détails » conserve le même identifiant de découverte qu’auparavant.
 
 Le catalogue et les réponses vivent exclusivement dans `src/echelon.js`. `src/echelon-api.js` ne transmet que les pages déjà découvertes ; visibilité et permission de répondre sont vérifiées séparément côté serveur. Un ancien lien API `/api/57` utilise le même état filtré. L’ancien endpoint de remise à zéro est retiré pour préserver les droits historiques.
 
 Chaque réponse complète distincte vaut un échelon, y compris lorsqu’une même page contient plusieurs réponses. Le départ est à zéro. Les fragments et les étapes intermédiaires ne rapportent aucun point. Aucun plafond ni inventaire des pages futures n’est transmis au navigateur. Les anciennes découvertes « signe » de 57 et 7 sont réunies dans Aigle. Trompettes retrouve son propre champ et son signe ; une découverte historique de Trompettes conserve aussi le crédit Aigle déjà accordé. Les catégories et pages d’observation ajoutées sont retirées ; les réponses retirées restent dans l’historique mais ne comptent plus dans le nouveau jeu.
 
-La réponse Horloge ouvre immédiatement le laboratoire unique `/echelon/horloge`. Tous les tableaux de durées y sont réunis, avec des brouillons indépendants. Les anciennes URLs d’énigmes, de lectures et de galeries ramènent à `/echelon` ; les anciennes URLs de tableaux ramènent à Horloge. Aucun texte d’indice ni bouton de superposition n’est affiché. Les constructions utilisent des arbres d’opérations et l’origine de chaque chiffre, validés côté serveur dans `src/echelon-workshop.js`. Former deux sept distincts révèle le partage d’un nombre ; aucun échelon n’est gagné à cette étape. Les résultats numériques seuls ne suffisent pas à valider une construction. La lecture symbolique du premier tableau reste une clé propre à l’œuvre.
+La réponse Horloge ouvre immédiatement le laboratoire unique `/echelon/horloge`. Tous les tableaux de durées y sont réunis, avec des brouillons indépendants. Les anciennes URLs d’énigmes, de lectures et de galeries ramènent à `/echelon` ; les anciennes URLs de tableaux ramènent à Horloge. Aucun texte d’indice ni bouton de superposition n’est affiché. Les constructions utilisent des arbres d’opérations et l’origine de chaque chiffre, validés côté serveur dans `src/echelon-workshop.js`. Former deux sept distincts active immédiatement « Dupliquer », même avant la fin de la sauvegarde ; aucun échelon n’est gagné à cette étape. Le bouton cible le dernier nombre sélectionné, même si un autre est encore sélectionné. Le 50 puis le 2 peuvent servir chacun deux fois, avec contrôle de leur provenance côté serveur. Les résultats numériques seuls ne suffisent pas à valider une construction. La lecture symbolique du premier tableau reste une clé propre à l’œuvre.
 
 Les tableaux sont manipulables au toucher et au clavier, avec annulation, rétablissement et reprise des durées. Les brouillons sont conservés sur l’appareil et sur le compte. Un numéro de révision empêche un appareil d’écraser silencieusement l’autre. Le serveur réserve atomiquement les tentatives et ralentit les erreurs répétées.
 
-`src/enigmas57.js` conserve le catalogue historique uniquement pour traduire les anciennes découvertes, préserver les droits aux espaces privés et partager le moteur de reconnaissance. Le rang d’accès historique reste distinct du nombre d’échelons affiché dans le nouveau jeu. Les profils filtrent leurs découvertes selon ce que leur visiteur peut déjà connaître.
+`src/enigmas57.js` conserve le catalogue historique uniquement pour traduire les anciennes découvertes, préserver les droits aux espaces privés et partager le moteur de reconnaissance. Les autres espaces privés conservent leur rang d’accès historique. La conversation utilise directement le nombre de réponses complètes du nouveau jeu, sans plafond fixé à sept. Les profils filtrent leurs découvertes selon ce que leur visiteur peut déjà connaître.
 
 Les tests couvrent la migration des découvertes, les permissions, les constructions, le score, la concurrence des brouillons, le lecteur et les fonctions conservées. Aucune base de production n’est réinitialisée.
 
@@ -58,15 +60,9 @@ voulu des deux côtés. L'annonce reste au salon, car un As peut vouloir
 d'autres carrés encore. La charte du bon carré ouvre le salon — une phrase,
 et c'est tout ce qui reste des anciennes missions.
 
-La **Conversation** (échelon 2) est unique et commune, mais chaque message
-porte l'**échelon minimal pour le lire**, choisi par son auteur entre 2 et son
-propre échelon : plus on monte, plus on entend de ce qui se dit. Un **filtre**
-permet de regarder la conversation autrement : tout ce qui m'est ouvert,
-seulement l'échelon N, à partir de N, ou **jusqu'à N : c'est voir la
-conversation exactement comme la voit un membre de l'échelon N**. Le filtre est
-client : le serveur a déjà envoyé tout ce qui est lisible, filtrer ne coûte
-aucune requête. La page se relit toutes les 20 secondes quand l'onglet est
-visible, et ne se redessine que si quelque chose a changé.
+La **Conversation** s’ouvre dès deux réponses complètes. Chaque nouveau message porte l’échelon minimal réel de lecture, choisi de 2 à l’échelon atteint par son auteur. Les filtres utilisent les mêmes valeurs et suivent le score renvoyé par le serveur. L’administrateur peut choisir tous les échelons actuellement définis dans le catalogue ; ce plafond évolue automatiquement.
+
+La colonne `echelon_version` distingue les messages historiques (1) des nouveaux messages (2). Les anciens seuils ne sont jamais réinterprétés comme des scores : leur audience reste protégée par les droits historiques. Ils sont identifiés « Accès historique » et disposent d’un filtre distinct. Les filtres numériques portent sur les nouveaux messages. L’API vérifie les permissions à chaque lecture et écriture, refuse les seuils supérieurs au score et n’envoie jamais les messages inaccessibles. Les tests SQLite couvrent les niveaux au-delà de sept, les accès historiques, la migration additive et les valeurs invalides.
 
 **Pense Mieux** (échelon 3) est l'outil de la pensée : un sujet devient un
 **arbre** (un tronc, des branches emboîtées qui se font grandir) et

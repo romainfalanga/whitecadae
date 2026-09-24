@@ -16,11 +16,12 @@ const at = (p, n) => p.solved.size >= n;
 const any = (p, ids) => ids.some(id => has(p, id));
 
 export const NODES = [
+  {...legacy('n-0'),source:''},
   {id:'eg-01',source:'Aigle',visual:'bird',answers:[a('eg-01-1','Signe',['signes'])]},
   {id:'eg-02',source:'XEU',visual:'white',answers:[a('eg-02-1','Dieu'),a('eg-02-2','VALD')]},
   {...legacy('n-g'),visual:'dice'},
   {...legacy('n-b'),visual:'sound',show:p=>has(p,'eg-01-1')||p.seen.has('r-1'),answers:legacy('n-b').answers.map(a=>({...a,id:'eg-07-1'}))},
-  {id:'eg-03',source:'Aiguille',visual:'needle',show:p=>has(p,'eg-01-1'),requires:['eg-01-1'],answers:[a('eg-03-1','Horloge'),a('eg-03-2','Les détails',['details','le detail','detail'])]},
+  {id:'eg-03',source:'Aiguille',show:p=>has(p,'eg-01-1'),requires:['eg-01-1'],answers:[a('eg-03-1','Horloge'),a('eg-03-2','Détails')]},
   {...legacy('n-c'),visual:'numbers',min:2,show:p=>at(p,1),answers:[...legacy('n-c').answers,a('eg-04-1','Jésus')]},
   {...legacy('n-w'),visual:'line',min:2,show:p=>at(p,2)},
   {id:'eg-05',source:'Mélange-les…',visual:'layers',show:p=>any(p,['eg-02-1','eg-02-2']),requires:['eg-02-1','eg-02-2'],answers:[answer('eg-05-1','Expansion harmonieuse',[['Expansion'],['harmonieuse']])]},
@@ -32,7 +33,6 @@ export const NODES = [
   ]},
   {...legacy('n-a',['n-a-4']),visual:'arcs',min:6,show:p=>any(p,['n-c-1','eg-04-1']),requires:['n-c-1','eg-04-1']},
   {...legacy('n-k',['n-k-1']),visual:'stars',min:8,show:p=>has(p,'n-a-4'),requires:['n-a-4']},
-  {...legacy('n-0'),source:'',visual:'door',min:8,show:p=>at(p,8)},
   {id:'eg-11',source:'2:24',subtitle:'13h20',kind:'workshop',board:'first',show:p=>has(p,'eg-03-1'),requires:['eg-03-1'],answers:[answer('eg-11-1','2 Jésus',[['2','deux'],['Jésus']])]},
   {id:'eg-12',source:'3:50 ↔ 3:44',subtitle:'30 vins divins · Sans indices dans les dés',kind:'workshop',board:'pair',show:p=>has(p,'eg-03-1'),requires:['eg-03-1'],answers:[a('eg-12-1','2 × 57')]},
   {id:'eg-13',source:'2:39',subtitle:'Orange',kind:'workshop',board:'last',show:p=>p.milestones.has(SHARE),requires:['eg-12-1'],answers:[a('eg-13-1','57')]},
@@ -82,7 +82,7 @@ export function buildGameState(rows=[]) {
     const partiels=n.answers.filter(a=>!has(p,a.id)&&p.parts.has(a.id)).map(a=>({id:a.id,jetons:tokens(a,p.parts.get(a.id))}));
     const missing=n.requires.filter(id=>!has(p,id));
     const deps=[...new Set(missing.map(id=>byAnswer.get(id).n.id))].map(id=>({id,title:byId.get(id).source||'La porte',kind:byId.get(id).kind})).filter(d=>isVisible(byId.get(d.id),p));
-    pages.push({id:n.id,title:n.source||'La porte',source:n.source,subtitle:n.subtitle||'',kind:n.kind,visual:n.visual||'door',board:n.board,
+    pages.push({id:n.id,title:n.source||'',source:n.source,subtitle:n.subtitle||'',kind:n.kind,visual:['white','infinity'].includes(n.visual)?n.visual:null,board:n.board,
       total:n.silent?null:n.answers.length,found,partiels,open:found.length<n.answers.length,locked:!isPlayable(n,p),
       requirements:{level:n.min>p.solved.size?n.min:null,pages:deps}});
   }

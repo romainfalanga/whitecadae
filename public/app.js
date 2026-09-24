@@ -479,8 +479,9 @@ function renderNav() {
    relit toute seule, mais seulement quand elle est visible.               */
 
 function messageHtml(m) {
-  const badge = m.min_echelon > 2
-    ? `<span class="msg-echelon" title="Visible dès le niveau d’accès ${m.min_echelon}">≥ ${m.min_echelon}</span>` : '';
+  const badge = m.echelon_version === 1
+    ? `<span class="msg-echelon" title="Audience d’origine conservée">Accès historique ≥ ${m.min_echelon}</span>`
+    : `<span class="msg-echelon" title="Visible dès l’échelon ${m.min_echelon}">Échelon ≥ ${m.min_echelon}</span>`;
   return `<article class="msg">
     <div class="msg-head">${authorLink(m.username)}${badge}
       <time>${esc(formatDate(m.created_at))}</time></div>
@@ -496,15 +497,16 @@ async function pageConversation() {
   catch { return navigate('/echelon', true); }
   if (stale(epoch)) return;
 
-  // Le filtre est une paire (mode, échelon). « jusqu'à l'échelon 4 », c'est
-  // littéralement voir la conversation comme la voit un membre de l'échelon
-  // 4 ; « seulement » isole une strate ; « à partir de » ne garde que les
-  // hauteurs. Tout se filtre sur place : le serveur a déjà tout envoyé.
+  // Numeric filters use actual game rungs. Historical messages retain their
+  // original audience and are kept out of these differently scaled filters.
+  // The server only sends messages the current viewer is allowed to read.
   const filtre = { mode: 'tout', niveau: 2 };
   let derniereCle = '';
 
   const garde = (m) =>
     filtre.mode === 'tout' ? true
+    : filtre.mode === 'historique' ? m.echelon_version === 1
+    : m.echelon_version === 1 ? false
     : filtre.mode === 'exact' ? m.min_echelon === filtre.niveau
     : filtre.mode === 'min' ? m.min_echelon >= filtre.niveau
     : m.min_echelon <= filtre.niveau;
@@ -515,16 +517,15 @@ async function pageConversation() {
       : `<p class="empty-note">${data.messages.length ? 'Rien à ce niveau du filtre.' : 'Personne n’a encore parlé.'}</p>`;
   };
 
-  const niveauxLisibles = Math.max(2, state.echelon || 2);
+  const niveauxLisibles = Math.max(2, data.echelon);
   const optionsNiveaux = Array.from({ length: niveauxLisibles - 1 }, (_, i) => i + 2);
-  const composer = state.user ? `
+  const composer = state.user && data.echelon >= 2 ? `
     <form id="conv-form" class="conv-form">
       <textarea id="conv-body" maxlength="2000" rows="2"
         placeholder="Ton message…"></textarea>
       <div class="conv-form-foot">
-        <label class="conv-vis">Visible dès le niveau d’accès
-          <select id="conv-min">${Array.from({ length: Math.max(1, (state.echelon || 2) - 1) },
-            (_, i) => `<option value="${i + 2}">${i + 2}</option>`).join('')}</select>
+        <label class="conv-vis">Visible dès l’échelon
+          <select id="conv-min">${optionsNiveaux.map(n => `<option value="${n}">${n}</option>`).join('')}</select>
         </label>
         <button type="submit" class="primary">Envoyer</button>
       </div>
@@ -537,11 +538,12 @@ async function pageConversation() {
       <label>Voir
         <select id="conv-f-mode">
           <option value="tout">tout ce qui m’est ouvert</option>
-          <option value="max">jusqu’au niveau d’accès…</option>
-          <option value="exact">seulement le niveau d’accès…</option>
-          <option value="min">à partir du niveau d’accès…</option>
+          <option value="max">jusqu’à l’échelon…</option>
+          <option value="exact">seulement l’échelon…</option>
+          <option value="min">à partir de l’échelon…</option>
+          <option value="historique">messages historiques</option>
         </select></label>
-      <select id="conv-f-niveau" hidden>
+      <select id="conv-f-niveau" aria-label="Échelon du filtre" hidden>
         ${optionsNiveaux.map((n) => `<option value="${n}">${n}</option>`).join('')}
       </select>
     </div>
@@ -555,7 +557,7 @@ async function pageConversation() {
   const applique = () => {
     filtre.mode = modeSel.value;
     filtre.niveau = +niveauSel.value;
-    niveauSel.hidden = filtre.mode === 'tout';
+    niveauSel.hidden = ['tout','historique'].includes(filtre.mode);
     liste.innerHTML = listeHtml();
     liste.scrollTop = liste.scrollHeight;
   };
@@ -586,6 +588,12 @@ async function pageConversation() {
     let d;
     try { d = await api('/api/conversation'); } catch { return; }
     if (stale(epoch)) return;
+    if (d.echelon !== data.echelon) {
+      const options = Array.from({length:Math.max(1,d.echelon-1)},(_,i)=>`<option value="${i+2}">${i+2}</option>`).join('');
+      for (const select of [niveauSel,document.getElementById('conv-min')].filter(Boolean)) {
+        const selected=select.value;select.innerHTML=options;select.value=Number(selected)<=d.echelon?selected:'2';
+      }
+    }
     data = d;
     const cle = d.messages.map((m) => m.id).join(',');
     if (!force && cle === derniereCle) return;
