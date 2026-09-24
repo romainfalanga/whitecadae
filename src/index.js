@@ -20,6 +20,7 @@ const PBKDF2_ITERATIONS = 100000;
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/music/')) return avecSecurite(await serveMusic(request, env));
     if (url.pathname.startsWith('/api/')) {
       try {
         return avecSecurite(await handleApi(request, env, url));
@@ -32,6 +33,41 @@ export default {
     return avecSecurite(await env.ASSETS.fetch(request));
   },
 };
+
+// Workers Assets may return the whole MP3 even for Range requests. Native
+// players (especially Safari) need real byte ranges to seek before download ends.
+// The four source files are bounded (< 10 MB each); only a partial response is
+// buffered here. Full playback keeps the original streaming asset response.
+async function serveMusic(request, env) {
+  const headers = new Headers(request.headers);
+  const range = headers.get('Range');
+  headers.delete('Range');
+  const response = await env.ASSETS.fetch(new Request(request, { headers }));
+  if (!/^audio\//.test(response.headers.get('Content-Type') || '')) {
+    if ((response.headers.get('Content-Type') || '').includes('text/html')) return new Response('Fichier introuvable', { status: 404 });
+    return response;
+  }
+  const outputHeaders = new Headers(response.headers);
+  outputHeaders.set('Accept-Ranges', 'bytes');
+  const full = () => new Response(response.body, { status: response.status, headers: outputHeaders });
+  if (!range || request.method !== 'GET' || response.status !== 200) return full();
+  const ifRange = request.headers.get('If-Range');
+  if (ifRange && ifRange !== response.headers.get('ETag') && ifRange !== response.headers.get('Last-Modified')) return full();
+  const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+  if (!match || (!match[1] && !match[2])) return full(); // ignore unsupported/malformed ranges
+  // ASSETS.fetch can omit Content-Length even though the final edge response
+  // includes it. Derive the byte length from the original, unencoded MP3.
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const size = bytes.byteLength;
+  const start = match[1] ? Number(match[1]) : Math.max(0, size - Number(match[2]));
+  const end = match[1] && match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= size) {
+    return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}`, 'Accept-Ranges': 'bytes' } });
+  }
+  outputHeaders.set('Content-Range', `bytes ${start}-${end}/${size}`);
+  outputHeaders.set('Content-Length', String(end - start + 1));
+  return new Response(bytes.subarray(start, end + 1), { status: 206, headers: outputHeaders });
+}
 
 /* ------------------------------------------------- en-têtes de sécurité ---
 
@@ -100,6 +136,14 @@ async function handleApi(request, env, url) {
   };
 
   let p;
+
+  // Lyrics are public and read-only. Older clients cannot create or edit notes.
+  if (['POST', 'PUT', 'PATCH'].includes(request.method) &&
+      /^\/api\/(annotations|references|passage-references|connections|essays)(?:\/|$)/.test(path)) {
+    return json({ error: 'Les paroles sont désormais en lecture seule.' }, 410);
+  }
+  if (route('GET', '/api/albums')) return listAlbums(env, request);
+  if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
 
   // --- auth
   if (route('POST', '/api/register')) return register(request, env);
@@ -199,23 +243,14 @@ async function handleApi(request, env, url) {
     if (refus) return refus;
   }
 
-  // --- lecture
-  if (route('GET', '/api/albums')) return listAlbums(env, request);
+  // Legacy corpus reader remains available for private historical references.
   if (route('GET', '/api/corpus')) return getCorpus(env, request);
-  if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
 
   // --- contributions (connecté)
-  if (route('POST', '/api/annotations')) return createAnnotation(request, env);
-  if ((p = route('PUT', '/api/annotations/:id'))) return updateAnnotation(request, env, +p[0]);
   if ((p = route('DELETE', '/api/annotations/:id'))) return deleteAnnotation(request, env, +p[0]);
-  if ((p = route('POST', '/api/annotations/:id/references'))) return addReference(request, env, +p[0]);
   if ((p = route('DELETE', '/api/references/:id'))) return deleteReference(request, env, +p[0]);
-  if (route('POST', '/api/passage-references')) return createPassageReference(request, env);
   if ((p = route('DELETE', '/api/passage-references/:id'))) return deletePassageReference(request, env, +p[0]);
-  if (route('POST', '/api/connections')) return createConnection(request, env);
   if ((p = route('DELETE', '/api/connections/:id'))) return deleteConnection(request, env, +p[0]);
-  if (route('POST', '/api/essays')) return createEssay(request, env);
-  if ((p = route('PUT', '/api/essays/:id'))) return updateEssay(request, env, +p[0]);
   if ((p = route('DELETE', '/api/essays/:id'))) return deleteEssay(request, env, +p[0]);
 
   // --- administration
@@ -759,19 +794,14 @@ async function getCorpus(env, request) {
 }
 
 async function listAlbums(env, request) {
-  const viewer = await getUser(request, env);
-  const viewerId = viewer ? viewer.id : 0;
   const albums = (await env.DB.prepare(
     'SELECT id, title, slug, release_date, is_single FROM albums ORDER BY position, release_date'
   ).all()).results;
-  // le compteur dit ce que MOI j'ai écrit sur ce morceau : c'est ma mémoire
-  // qui se chiffre, pas celle des autres
   const songs = (await env.DB.prepare(
     `SELECT s.id, s.album_id, s.title, s.slug, s.track_number,
-            (SELECT COUNT(*) FROM annotations a WHERE a.song_id = s.id AND a.user_id = ?1) AS annotation_count,
             (SELECT COUNT(*) FROM lyric_lines l WHERE l.song_id = s.id AND l.text <> '') AS line_count
        FROM songs s ORDER BY s.track_number, s.title`
-  ).bind(viewerId).all()).results;
+  ).all()).results;
   for (const album of albums) {
     album.is_single = !!album.is_single;
     album.songs = songs.filter((s) => s.album_id === album.id);
@@ -781,15 +811,6 @@ async function listAlbums(env, request) {
 }
 
 async function getSong(env, request, slug) {
-  await ensureReferenceColumns(env);
-  /* Une interprétation n'appartient qu'à celui qui l'écrit. C'est SA mémoire
-     de ce morceau : ce qu'il y a lu, ce qu'il y a relié. Personne d'autre ne
-     la voit — ni un visiteur, ni un autre membre. Toutes les requêtes qui
-     suivent sont donc bornées à `viewerId`, et un visiteur sans compte lit
-     les paroles sans rien d'autre. */
-  const viewer = await getUser(request, env);
-  const viewerId = viewer ? viewer.id : 0;
-
   const song = await env.DB.prepare(
     `SELECT s.id, s.title, s.slug, s.track_number, s.youtube_url, s.duration_seconds, s.album_id,
             al.title AS album_title
@@ -802,127 +823,7 @@ async function getSong(env, request, slug) {
     'SELECT id, line_number, text FROM lyric_lines WHERE song_id = ?1 ORDER BY line_number'
   ).bind(song.id).all()).results;
 
-  // Grilles de lecture : le numéro de chaque lecture (n°1, n°2, …) est fixé
-  // une fois pour toutes à sa création : il n'est jamais recalculé, y compris
-  // si une lecture plus ancienne du même auteur sur la même cible est supprimée.
-  const annotations = (await env.DB.prepare(
-    `SELECT a.id, a.user_id, a.target_type, a.line_id, a.word_start, a.word_end, a.end_line_id,
-            a.content, a.created_at, a.updated_at, a.is_published, a.grid_number, u.username
-       FROM annotations a JOIN users u ON u.id = a.user_id
-      WHERE a.song_id = ?1 AND a.user_id = ?2
-      ORDER BY a.created_at`
-  ).bind(song.id, viewerId).all()).results;
-
-  const connections = (await env.DB.prepare(
-    `SELECT c.id, c.song_a_id, c.song_b_id, c.explanation, c.created_at, c.user_id,
-            u.username,
-            sa.title AS song_a_title, sa.slug AS song_a_slug,
-            sb.title AS song_b_title, sb.slug AS song_b_slug
-       FROM song_connections c
-       JOIN users u ON u.id = c.user_id
-       JOIN songs sa ON sa.id = c.song_a_id
-       JOIN songs sb ON sb.id = c.song_b_id
-      WHERE (c.song_a_id = ?1 OR c.song_b_id = ?1) AND c.user_id = ?2
-      ORDER BY c.created_at`
-  ).bind(song.id, viewerId).all()).results;
-
-  const allSongs = (await env.DB.prepare(
-    'SELECT id, title, slug FROM songs ORDER BY title'
-  ).all()).results;
-
-  // Grilles de lecture venues d'autres morceaux : les interprétations
-  // écrites ailleurs qui référencent un passage de ce morceau-ci.
-  const inbound = (await env.DB.prepare(
-    `SELECT a.id, a.user_id, a.content, a.created_at, a.updated_at, a.is_published, a.grid_number, u.username,
-            a.target_type, a.word_start, a.word_end,
-            r.ref_line_id, r.ref_end_line_id, r.note AS ref_note,
-            rl.text AS ref_text, rl.line_number AS ref_line_number,
-            rle.text AS ref_end_text, rle.line_number AS ref_end_number,
-            src.title AS source_title, src.slug AS source_slug,
-            sl.text AS source_line_text, sle.text AS source_end_text
-       FROM annotation_references r
-       JOIN annotations a ON a.id = r.annotation_id
-       JOIN users u ON u.id = a.user_id
-       JOIN songs src ON src.id = a.song_id
-       LEFT JOIN lyric_lines rl ON rl.id = r.ref_line_id
-       LEFT JOIN lyric_lines rle ON rle.id = r.ref_end_line_id
-       LEFT JOIN lyric_lines sl ON sl.id = a.line_id
-       LEFT JOIN lyric_lines sle ON sle.id = a.end_line_id
-      WHERE r.ref_song_id = ?1 AND a.song_id <> ?1 AND a.user_id = ?2
-      ORDER BY a.created_at`
-  ).bind(song.id, viewerId).all()).results;
-
-  // Références autonomes posées sur un passage de ce morceau.
-  await ensurePassageRefTable(env);
-  const passageRefs = (await env.DB.prepare(
-    `SELECT pr.id, pr.user_id, pr.target_type, pr.line_id, pr.word_start, pr.word_end,
-            pr.end_line_id, pr.kind, pr.label, pr.artist, pr.note, pr.created_at,
-            pr.ref_song_id, pr.ref_line_id, pr.ref_end_line_id,
-            u.username, rs.slug AS ref_song_slug
-       FROM passage_references pr
-       JOIN users u ON u.id = pr.user_id
-       LEFT JOIN songs rs ON rs.id = pr.ref_song_id
-      WHERE pr.song_id = ?1 AND pr.user_id = ?2
-      ORDER BY pr.created_at`
-  ).bind(song.id, viewerId).all()).results;
-
-  // Références venues d'ailleurs et qui pointent vers ce morceau.
-  const inboundRefs = (await env.DB.prepare(
-    `SELECT pr.id, pr.user_id, pr.note, pr.created_at,
-            pr.ref_line_id, pr.ref_end_line_id,
-            rl.text AS ref_text, rl.line_number AS ref_line_number,
-            rle.text AS ref_end_text, rle.line_number AS ref_end_number,
-            pr.target_type, pr.word_start, pr.word_end,
-            u.username, src.title AS source_title, src.slug AS source_slug,
-            sl.text AS source_line_text, sle.text AS source_end_text
-       FROM passage_references pr
-       JOIN users u ON u.id = pr.user_id
-       JOIN songs src ON src.id = pr.song_id
-       LEFT JOIN lyric_lines rl ON rl.id = pr.ref_line_id
-       LEFT JOIN lyric_lines rle ON rle.id = pr.ref_end_line_id
-       LEFT JOIN lyric_lines sl ON sl.id = pr.line_id
-       LEFT JOIN lyric_lines sle ON sle.id = pr.end_line_id
-      WHERE pr.ref_song_id = ?1 AND pr.song_id <> ?1 AND pr.user_id = ?2
-      ORDER BY pr.created_at`
-  ).bind(song.id, viewerId).all()).results;
-
-  // Interprétations d'ensemble et leurs connexions entre blocs.
-  const essays = (await env.DB.prepare(
-    `SELECT e.id, e.user_id, e.content, e.created_at, e.updated_at, e.is_published, u.username
-       FROM essays e JOIN users u ON u.id = e.user_id
-      WHERE e.song_id = ?1 AND e.user_id = ?2
-      ORDER BY e.created_at`
-  ).bind(song.id, viewerId).all()).results;
-  const essayLinks = (await env.DB.prepare(
-    `SELECT el.id, el.essay_id, el.note,
-            el.from_line_id, el.from_word_start, el.from_word_end,
-            el.to_line_id, el.to_word_start, el.to_word_end,
-            lf.text AS from_text, sf.title AS from_song_title,
-            lt.text AS to_text, st.title AS to_song_title
-       FROM essay_links el
-       JOIN lyric_lines lf ON lf.id = el.from_line_id
-       JOIN songs sf ON sf.id = lf.song_id
-       JOIN lyric_lines lt ON lt.id = el.to_line_id
-       JOIN songs st ON st.id = lt.song_id
-      WHERE el.essay_id IN (SELECT id FROM essays WHERE song_id = ${song.id} AND user_id = ${viewerId})
-      ORDER BY el.essay_id, el.position`
-  ).all()).results;
-  for (const e of essays) e.links = essayLinks.filter((l) => l.essay_id === e.id);
-
-  // Références jointes aux interprétations (libres ou internes).
-  const refs = (await env.DB.prepare(
-    `SELECT r.id, r.annotation_id, r.label, r.artist, r.note,
-            r.ref_song_id, r.ref_line_id, r.ref_end_line_id, rs.slug AS ref_song_slug
-       FROM annotation_references r
-       LEFT JOIN songs rs ON rs.id = r.ref_song_id
-      WHERE r.annotation_id IN (SELECT id FROM annotations WHERE song_id = ?1 AND user_id = ?2)
-      ORDER BY r.annotation_id, r.position`
-  ).bind(song.id, viewerId).all()).results;
-  for (const a of annotations) {
-    a.references = refs.filter((r) => r.annotation_id === a.id);
-  }
-
-  return json({ song, lines, annotations, connections, essays, inbound, passageRefs, inboundRefs, allSongs });
+  return json({ song, lines });
 }
 
 /* ----------------------------------------------------- profils & le livre */

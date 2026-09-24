@@ -2,8 +2,8 @@
 // Stratégie « réseau d'abord » : le site est collaboratif, on ne veut jamais
 // servir de contenu périmé. Le cache sert seulement de filet hors ligne.
 
-const CACHE = 'whitecadae-v6';
-const SHELL = ['/', '/styles.css', '/app.js', '/manifest.webmanifest'];
+const CACHE = 'whitecadae-v7-orange';
+const SHELL = ['/', '/styles.css', '/app.js', '/music.css', '/music57.js', '/player.js', '/orange.js', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -25,6 +25,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Native audio handles byte ranges; never cache a partial response or whole album.
+  if (request.headers.has('range') || request.destination === 'audio' || url.pathname.startsWith('/music/')) return;
+
   // Les appels d'API ne sont jamais mis en cache.
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(fetch(request));
@@ -34,9 +37,9 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        if (response && response.ok) {
+        if (response && response.status === 200) {
           const copy = response.clone();
-          caches.open(CACHE).then((c) => c.put(request, copy));
+          event.waitUntil(caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {}));
         }
         return response;
       })

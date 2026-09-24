@@ -1,69 +1,22 @@
-# WhiteCadae
+# White Cadae — Escape Game Orange
 
-Plateforme communautaire d'explications des textes de **White Cadae**
-([chaîne YouTube](https://www.youtube.com/@WhiteCadae)).
+Le site s’ouvre sur **Escape Game Orange** (`/`) : l’histoire de Vulpis, l’album **57** et les signes à retrouver dans ses quatre morceaux.
 
-**On arrive par le 57.** La racine `/` ouvre l'escape game (voir plus bas) :
-c'est lui qui commande l'accès au reste, échelon par échelon. Il se lit sans
-compte, à pleine encre : seul le bouton Valider y est éteint. Dès le sol
-(échelon 1, compte ou pas), les **Interprétations** sont ouvertes ; chaque
-cran gravi découvre ensuite une pièce de plus, jusqu'au sommet (échelon 7).
+- **Musique** (`/musique`) : 13h20, 30 vins divins, Sans indices dans les dés, Orange. Les MP3 et la pochette fournis sont servis depuis `public/music/57/`, sans conversion des originaux.
+- **Paroles** (`/paroles`) : toute la discographie en lecture seule. Les liens `/chanson/:slug` sont conservés ; `/interpretations` et `/fil` redirigent vers les paroles.
+- **57** (`/57`) : le jeu existant, ses signes, ses niveaux et ses délais. Un compte permet de proposer des signes. La connexion depuis cette page y ramène.
 
-La page **Interprétations** (`/interpretations`) ouvre sur les dernières
-lectures publiées par les membres : le passage visé, puis ce qu’on en dit :
-avec un lien vers le **fil** (`/fil`), qui les déroule toutes de la plus
-récente à la plus ancienne.
+Le lecteur natif est placé hors du contenu remplacé par la navigation. Il apparaît à la première lecture, propose lecture/pause, précédent/suivant, déplacement dans le morceau, volume sur ordinateur et répétition de l’album. Il enchaîne les quatre titres dans l’ordre et s’arrête après Orange, sauf si la répétition est activée. La position est conservée localement ; un rechargement ne relance jamais la musique automatiquement.
 
-Les utilisateurs créent un compte, lisent les paroles et interprètent ce
-qu'ils veulent du texte. **Une sélection est toujours un passage** : un mot,
-deux mots, une phrase entière ou plusieurs : c'est la même chose, un seul bloc
-qui les englobe tous. Le panneau y rassemble tout ce qui touche à l'étendue
-choisie, y compris les lectures écrites du temps où un mot et une phrase
-avaient chacun la leur.
+Media Session fournit titres, pochette et commandes système. L’audio reste actif quand la page devient invisible et utilise la session `playback` quand elle est disponible. **Le verrouillage réel d’un iPhone/Android doit être testé sur ces appareils** : un navigateur ou un système qui ferme/suspend l’onglet ne peut pas être contraint par le site. Aucun mode hors ligne de l’album n’est annoncé. Le service worker ignore les fichiers audio et les requêtes Range, et ne stocke jamais les réponses partielles 206.
 
-Aucun menu système ne s'ouvre sur les paroles : la sélection est entièrement
-peinte à la main (`user-select: none` sur le texte comme sur chaque mot,
-`contextmenu` et `selectstart` neutralisés), sans quoi un appui prolongé
-rouvrirait le « copier / rechercher sur le Web » du navigateur.
+Les nouveaux POST/PUT/PATCH d’interprétations, références, connexions et essais renvoient 410. Les anciennes contributions restent en base et dans les archives privées de leur auteur. Aucun schéma, texte de chanson ou historique de progression n’est modifié par cette livraison. **Ne pas réimporter les paroles ni réinitialiser D1 lors du déploiement.**
 
-Chaque interprétation peut porter des **références** : une œuvre extérieure
-(son nom, son artiste, et en quoi c'en est une) ou un **passage d'un autre
-morceau**, choisi en le sélectionnant directement dans son texte. **Deux
-poignées** y règlent la place : l'une sous la zone où l'on choisit le passage,
-l'autre sous le champ où l'on écrit. Une référence interne apparaît des deux côtés : sur
-l'interprétation qui la pose, et sur la page du morceau visé. Chacune se
-compose dans son propre éditeur et se publie avec son propre bouton, y
-compris après coup sur une interprétation déjà en ligne.
+## Vérifications de cette évolution
 
-Le morceau pris en entier s'interprète dans une **fenêtre ouverte par la
-pastille « Interpréter le titre »**, en haut de chaque page. Un seul bloc, et
-une seule chose à y écrire : l'interprétation. Il n'y a pas de référence ici, donc le champ
-s'ouvre directement, sans choix préalable. Les interprétations d'ensemble
-et les connexions ne sont plus proposées à l'écriture ; celles qui existent
-restent en base et s'affichent dans le fil des profils.
+`npm test` couvre le lecteur (ordre, fin, répétition, reprise, commandes système, médias concurrents), la fermeture des anciennes écritures, l’API de paroles et les exclusions du service worker. Les essais de navigation, de rendu responsive et de lecture réelle se font dans le navigateur avec une base D1 locale.
 
-La **page de profil est publique** pour ce qui est du jeu : n'importe qui,
-même sans compte, y lit l'échelon d'un membre et les énigmes qu'il a percées : le nom de l'élément et
-le nombre de signes trouvés, **jamais les réponses**. Un élément dont
-le libellé est lui-même la réponse d'un autre y reste masqué tant que *celui
-qui regarde* ne l'a pas ouvert de son côté, sans quoi un profil deviendrait
-une antisèche.
-
-En dessous, un **fil** que **seul son propriétaire voit** : tout ce qu'il a
-fait ici, du plus récent au plus ancien, daté entrée par entrée :
-interprétations (jusqu'au passage), interprétations d'ensemble, références,
-connexions, et les publications qui ont rendu tout cela visible.
-Ni compteurs, ni présentation, ni sections. Ce fil-là suit l'accès de celui
-qui regarde : sans les interprétations ouvertes, on ne voit que l'échelon et
-les énigmes. Il n'y a plus rien à publier : ce qu'il écrit est à lui dès la première
-frappe.
-
-**Les interprétations sont la mémoire de leur auteur.** Ce qu'on écrit sur un
-morceau n'est lu que par soi : ni un visiteur, ni un autre membre n'y a
-accès. Il n'y a donc ni fil public, ni favoris, ni commentaires, ni étape de
-publication — ce qu'on écrit est à soi, tout de suite. Les compteurs de la
-page des morceaux disent ce que **j'ai** écrit, et la densité d'un passage
-compte **mes** lectures.
+Avant la publication : `npx wrangler deploy --dry-run`. Pour publier sur le Worker existant : `npx wrangler deploy`, avec une session Cloudflare autorisée. Pas de migration D1 pour cette évolution.
 
 ## La page « 57 »
 
@@ -158,7 +111,7 @@ L'échelon **commande l'accès au site**, et pas seulement l'affichage des liens
 
 | Échelon | Ce qui s'ouvre |
 | --- | --- |
-| 1 | le 57 et les Interprétations : même sans compte |
+| 1 | Orange, Musique, Paroles et 57 : même sans compte |
 | 2 | la **Conversation** |
 | 3 | **Pense Mieux** |
 | 4 | la **Vidéographie** |

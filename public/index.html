@@ -4,8 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>White Cadae</title>
-  <meta name="description" content="White Cadae : la plateforme d'interprétation des textes de White Cadae. Explorez les paroles, interprétez chaque passage, reliez les chansons entre elles.">
+  <meta name="description" content="Escape Game Orange : écoutez 57, les quatre morceaux de Vulpis, lisez les paroles et retrouvez les signes cachés.">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/music.css">
 
   <!-- Onglet du navigateur : icônes rondes (coins transparents). -->
   <link rel="icon" href="/favicon.ico" sizes="any">
@@ -23,7 +24,7 @@
   <meta name="apple-mobile-web-app-title" content="White Cadae">
 
   <meta property="og:title" content="White Cadae">
-  <meta property="og:description" content="Les textes de White Cadae, interprétés par sa communauté.">
+  <meta property="og:description" content="Escape Game Orange. Quatre morceaux, plusieurs grilles de lecture, des signes à découvrir.">
   <meta property="og:image" content="/icons/social.jpg">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
@@ -53,6 +54,11 @@
     <button class="link-btn" id="install-close" aria-label="Plus tard">✕</button>
   </div>
 
+  <audio id="music-audio" preload="none"></audio>
+  <section id="music-player" aria-label="Lecteur de l’album 57" hidden></section>
+  <script src="/music57.js"></script>
+  <script src="/player.js"></script>
+  <script src="/orange.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
