@@ -14,6 +14,7 @@ import {
 import { handleConversation, conversationAccess } from './conversation.js';
 import { handleEchelon, gameRows } from './echelon-api.js';
 import { gameLevel, accessLevel, gameProfile } from './echelon.js';
+import { ensureMetaMoi } from './meta-moi.js';
 
 const SESSION_COOKIE = 'wc_session';
 const SESSION_DAYS = 30;
@@ -775,6 +776,7 @@ async function getCorpus(env, request) {
 
 const cataloguesRenamed = new WeakSet();
 async function listAlbums(env, request) {
+  await ensureMetaMoi(env);
   // Apply the targeted, idempotent catalogue migration through the existing
   // database binding; no extra account-wide D1 permission is needed.
   if (!cataloguesRenamed.has(env.DB)) {
@@ -800,6 +802,7 @@ async function listAlbums(env, request) {
 }
 
 async function getSong(env, request, slug) {
+  if (slug === 'meta-moi') await ensureMetaMoi(env);
   const song = await env.DB.prepare(
     `SELECT s.id, s.title, s.slug, s.track_number, s.youtube_url, s.duration_seconds, s.album_id,
             al.title AS album_title

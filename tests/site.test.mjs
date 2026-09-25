@@ -4,16 +4,34 @@ import worker from '../src/index.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import {DatabaseSync} from 'node:sqlite';
+import {ensureMetaMoi, META_MOI_LYRICS} from '../src/meta-moi.js';
 
-test('catalogue migration renames only the album and preserves its songs and lyrics', async () => {
+function d1Binding(db) {
+  function prepare(query,args=[]) {
+    const params=()=>Object.fromEntries(args.map((value,i)=>[String(i+1),value]));
+    return {
+      bind(...values){return prepare(query,values);},
+      async run(){return {meta:db.prepare(query).run(params())};},
+      async all(){return {results:db.prepare(query).all(params())};},
+      async first(){return db.prepare(query).get(params())||null;},
+    };
+  }
+  return {prepare,async batch(statements){
+    db.exec('BEGIN');
+    try {const results=[];for(const statement of statements)results.push(await statement.run());db.exec('COMMIT');return results;}
+    catch(error){db.exec('ROLLBACK');throw error;}
+  }};
+}
+
+test('catalogue updates preserve existing lyrics and add Meta moi exactly once', async () => {
   const db=new DatabaseSync(':memory:');
   db.exec(`CREATE TABLE albums(id INTEGER PRIMARY KEY,title TEXT,slug TEXT,release_date TEXT,is_single INTEGER,position INTEGER);
-    CREATE TABLE songs(id INTEGER PRIMARY KEY,album_id INTEGER,title TEXT,slug TEXT,track_number INTEGER);
-    CREATE TABLE lyric_lines(id INTEGER PRIMARY KEY,song_id INTEGER,text TEXT);
+    CREATE TABLE songs(id INTEGER PRIMARY KEY,album_id INTEGER,title TEXT,slug TEXT UNIQUE,track_number INTEGER,youtube_url TEXT,duration_seconds INTEGER);
+    CREATE TABLE lyric_lines(id INTEGER PRIMARY KEY,song_id INTEGER,line_number INTEGER,text TEXT);
     INSERT INTO albums VALUES(4,'114','114',NULL,0,4),(9,'114','different',NULL,0,9);
-    INSERT INTO songs VALUES(13,4,'La matière danse','la-matiere-dense',1),(14,4,'Les probabilités','les-probabilites',2),(15,4,'Fais mieux','fais-mieux',3);
-    INSERT INTO lyric_lines VALUES(1,15,'Paroles conservées');`);
-  const env={DB:{prepare(query){return{async run(){return db.prepare(query).run();},async all(){return{results:db.prepare(query).all()};}};}}};
+    INSERT INTO songs(id,album_id,title,slug,track_number) VALUES(13,4,'La matière danse','la-matiere-dense',1),(14,4,'Les probabilités','les-probabilites',2),(15,4,'Fais mieux','fais-mieux',3);
+    INSERT INTO lyric_lines VALUES(1,15,1,'Paroles conservées');`);
+  const env={DB:d1Binding(db)};
   for(let i=0;i<2;i++){
     const response=await worker.fetch(new Request('https://test.local/api/albums'),env);
     assert.equal(response.status,200);
@@ -22,8 +40,36 @@ test('catalogue migration renames only the album and preserves its songs and lyr
     assert.equal(data.albums.find(a=>a.id===9).title,'114');
     assert.deepEqual(data.albums.find(a=>a.id===4).songs.map(s=>s.id),[13,14,15]);
     assert.equal(data.albums.find(a=>a.id===4).songs[2].line_count,1);
+    assert.deepEqual(data.orphans.map(s=>s.slug),['meta-moi']);
   }
+  const response=await worker.fetch(new Request('https://test.local/api/songs/meta-moi'),env);
+  const song=await response.json();
+  assert.equal(response.status,200);
+  assert.equal(song.song.title,'Meta moi');
+  assert.equal(song.song.album_id,null);
+  assert.deepEqual(song.lines.map(line=>line.text),META_MOI_LYRICS.split('\n'));
+  assert.deepEqual(song.lines.map(line=>line.line_number),song.lines.map((_,i)=>i+1));
+  const ids=song.lines.map(line=>line.id);
+  // A fresh Worker binding must respect both the durable marker and later edits.
+  db.prepare('UPDATE lyric_lines SET text=? WHERE id=?').run('Modification ultérieure',ids[0]);
+  await ensureMetaMoi({DB:d1Binding(db)});
+  assert.deepEqual(db.prepare('SELECT id FROM lyric_lines WHERE song_id=? ORDER BY line_number').all(song.song.id).map(line=>line.id),ids);
+  assert.equal(db.prepare('SELECT text FROM lyric_lines WHERE id=?').get(ids[0]).text,'Modification ultérieure');
   assert.equal(db.prepare('SELECT text FROM lyric_lines WHERE id=1').get().text,'Paroles conservées');
+  assert.equal(db.prepare("SELECT count(*) AS total FROM songs WHERE slug='meta-moi'").get().total,1);
+  db.close();
+});
+
+test('Meta moi content insertion preserves a pre-existing version of the song', async () => {
+  const db=new DatabaseSync(':memory:');
+  db.exec(`CREATE TABLE songs(id INTEGER PRIMARY KEY,title TEXT,slug TEXT UNIQUE);
+    CREATE TABLE lyric_lines(id INTEGER PRIMARY KEY,song_id INTEGER,line_number INTEGER,text TEXT);
+    INSERT INTO songs VALUES(1,'Meta moi','meta-moi');
+    INSERT INTO lyric_lines VALUES(1,1,1,'Version déjà enregistrée');`);
+  const env={DB:d1Binding(db)};
+  await Promise.all([ensureMetaMoi(env),ensureMetaMoi(env)]);
+  assert.deepEqual(db.prepare('SELECT text FROM lyric_lines').all().map(line=>line.text),['Version déjà enregistrée']);
+  assert.equal(db.prepare('SELECT count(*) AS total FROM songs').get().total,1);
   db.close();
 });
 

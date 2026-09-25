@@ -103,6 +103,13 @@ L'album **18 juillet 2019** est pré-rempli avec cinq titres :
 Les paroles s'ajoutent depuis la page **Administration** (une ligne par
 vers, une ligne vide entre les strophes).
 
+**Meta moi** figure dans « Autres morceaux » sur la page Paroles, sans
+album attribué. Son texte fourni par l’artiste est conservé dans
+`src/meta-moi.js`. Le Worker ajoute ce morceau et ses paroles une seule
+fois via sa connexion D1 existante, à la première ouverture du catalogue
+ou du morceau. Une transaction et un marqueur durable empêchent les
+doublons et préservent les modifications ultérieures faites en administration.
+
 > ⚠ Remplacer les paroles d'une chanson supprime les explications déjà
 > attachées à ses anciennes phrases et mots (les explications portant sur
 > la chanson entière sont conservées).
