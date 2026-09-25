@@ -1,7 +1,7 @@
 import {ensureMetaMoi} from './meta-moi.js';
 
 export const JULY = {
-  id:'18-juillet-2019', album:'18 juillet 2019', artist:'AA', cover:null,
+  id:'18-juillet-2019', album:'18 juillet 2019', artist:'AA', cover:'/music/18-juillet-2019/cover.jpeg', coverType:'image/jpeg',
   tracks:[
     {slug:'wanheda',title:'Wanheda',src:'/music/18-juillet-2019/wanheda.mp3',duration:234.672},
     {slug:'quand-je-vois-je-pense',title:'Quand je vois je pense',src:'/music/18-juillet-2019/quand-je-vois-je-pense.mp3',duration:198.243},

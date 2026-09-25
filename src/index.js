@@ -50,12 +50,12 @@ async function serveMusic(request, env) {
   const range = headers.get('Range');
   headers.delete('Range');
   const response = await env.ASSETS.fetch(new Request(request, { headers }));
-  if (!/^audio\//.test(response.headers.get('Content-Type') || '')) {
-    if ((response.headers.get('Content-Type') || '').includes('text/html')) return new Response('Fichier introuvable', { status: 404 });
-    return response;
-  }
   const outputHeaders = new Headers(response.headers);
   if(restricted){outputHeaders.set('Cache-Control','private, no-store');outputHeaders.set('Vary','Cookie');}
+  if (!/^audio\//.test(response.headers.get('Content-Type') || '')) {
+    if ((response.headers.get('Content-Type') || '').includes('text/html')) return new Response('Fichier introuvable', { status: 404 });
+    return new Response(response.body,{status:response.status,headers:outputHeaders});
+  }
   outputHeaders.set('Accept-Ranges', 'bytes');
   const full = () => new Response(response.body, { status: response.status, headers: outputHeaders });
   if (!range || request.method !== 'GET' || response.status !== 200) return full();

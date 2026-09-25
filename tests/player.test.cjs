@@ -83,7 +83,7 @@ test('background video generation waits for music to stop', async () => {
   release(); f.player.playTrack(1); assert.equal(f.player.snapshot().slug,'30-vins-divins');
 });
 
-const july={id:'18-juillet-2019',album:'18 juillet 2019',artist:'AA',cover:null,tracks:[
+const july={id:'18-juillet-2019',album:'18 juillet 2019',artist:'AA',cover:'/music/18-juillet-2019/cover.jpeg',coverType:'image/jpeg',tracks:[
   {slug:'wanheda',title:'Wanheda',src:'/music/18-juillet-2019/wanheda.mp3',duration:234},
   {slug:'quand-je-vois-je-pense',title:'Quand je vois je pense',src:'/music/18-juillet-2019/quand-je-vois-je-pense.mp3',duration:198},
   {slug:'un-fil-entre-deux-infinis',title:'Un fil entre deux infinis',src:'/music/18-juillet-2019/un-fil-entre-deux-infinis.mp3',duration:198},
@@ -92,6 +92,8 @@ test('unlocked EP has its own queue, metadata and repeat; logout revokes playbac
   const f=fixture();f.player.playTrack('wanheda');assert.equal(f.audio.calls,0);
   f.player.setAlbums([july]);f.player.toggle('wanheda');await Promise.resolve();
   assert.equal(f.player.snapshot().slug,'wanheda');assert.equal(f.navigator.mediaSession.metadata.album,'18 juillet 2019');
+  assert.equal(f.navigator.mediaSession.metadata.artwork[0].src,july.cover);
+  assert.equal(f.navigator.mediaSession.metadata.artwork[0].type,'image/jpeg');
   f.audio.finish();assert.equal(f.player.snapshot().slug,'quand-je-vois-je-pense');
   f.audio.finish();assert.equal(f.player.snapshot().slug,'un-fil-entre-deux-infinis');
   f.audio.finish();assert.equal(f.audio.paused,true);

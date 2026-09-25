@@ -22,11 +22,15 @@ test('18 juillet catalogue, lyrics, corpus and audio are gated by five actual an
     bind(...values){return prepare(q,values);},async first(){return db.prepare(q).get(params())||null;},async all(){return{results:db.prepare(q).all(params())};},async run(){return{meta:db.prepare(q).run(params())};}
   };}
   let assetReads=0;
-  const env={DB:{prepare,async batch(qs){db.exec('BEGIN');try{const out=[];for(const q of qs)out.push(await q.run());db.exec('COMMIT');return out;}catch(e){db.exec('ROLLBACK');throw e;}}},ASSETS:{async fetch(){assetReads++;return new Response(new Uint8Array([1,2,3,4]),{headers:{'Content-Type':'audio/mpeg'}});}}};
+  const env={DB:{prepare,async batch(qs){db.exec('BEGIN');try{const out=[];for(const q of qs)out.push(await q.run());db.exec('COMMIT');return out;}catch(e){db.exec('ROLLBACK');throw e;}}},ASSETS:{async fetch(request){assetReads++;return new Response(new Uint8Array([1,2,3,4]),{headers:{'Content-Type':request.url.endsWith('.jpeg')?'image/jpeg':'audio/mpeg'}});}}};
   const call=(path,session,headers={})=>worker.fetch(new Request('https://test'+path,{headers:{...(session?{Cookie:'wc_session='+session}:{}),...headers}}),env);
   for(const session of [null,'low','expired','high','admin']){
     const allowed=['high','admin'].includes(session);
     const music=await(await call('/api/music',session)).json();assert.equal(music.albums.length,allowed?1:0);
+    const cover=await call(JULY.cover,session);
+    assert.equal(cover.status,allowed?200:403);
+    assert.match(cover.headers.get('cache-control'),/no-store/);
+    if(allowed)assert.equal(cover.headers.get('content-type'),'image/jpeg');
     if(allowed)assert.deepEqual(music.albums[0].tracks.map(t=>t.slug),JULY.tracks.map(t=>t.slug));
     const albums=await(await call('/api/albums',session)).json();
     assert.equal(albums.albums.at(-1).title,'Meta moi');assert.equal(albums.orphans.length,0);

@@ -13,11 +13,11 @@ function pageOrange() {
 
 async function pageMusique() {
   const epoch=newEpoch();
-  document.title = 'Musique · White Cadae';
+  document.title = 'Musiques · White Cadae';
   app.innerHTML='<div class="loading">Chargement…</div>';
   try {const data=await api('/api/music');if(stale(epoch))return;WCPlayer.setAlbums(data.albums);}
-  catch(err){if(!stale(epoch))app.innerHTML=`<h1>Musique</h1><p>${esc(err.message)}</p><a href="/musique" data-link>Réessayer</a>`;return;}
-  app.innerHTML = `<h1 class="music-page-title">Musique</h1>${WCPlayer.getAlbums().map(album=>`<section class="music-release" id="album-${esc(album.id)}" aria-labelledby="album-title-${esc(album.id)}"><div class="music-album">
+  catch(err){if(!stale(epoch))app.innerHTML=`<h1>Musiques</h1><p>${esc(err.message)}</p><a href="/musique" data-link>Réessayer</a>`;return;}
+  app.innerHTML = `<h1 class="music-page-title">Musiques</h1>${WCPlayer.getAlbums().map(album=>`<section class="music-release" id="album-${esc(album.id)}" aria-labelledby="album-title-${esc(album.id)}"><div class="music-album">
     ${album.cover?`<img class="music-cover" src="${esc(album.cover)}" alt="Pochette de l’album ${esc(album.album)}" width="360" height="360">`:'<div class="music-date-art" aria-hidden="true"><span>18</span><span>juillet</span><span>2019</span></div>'}
     <div><h2 id="album-title-${esc(album.id)}">${esc(album.album)}</h2><p class="music-artist">${esc(album.artist)}</p><p class="music-meta">${album.tracks.length} morceaux <span>·</span> ${mmss(Math.floor(album.tracks.reduce((sum,t)=>sum+t.duration,0)))}</p></div>
   </div>

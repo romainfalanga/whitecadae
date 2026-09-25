@@ -37,7 +37,7 @@
 
   root.innerHTML = `
     <div class="player-main">
-      <a class="player-art" id="player-art" href="/musique" data-link aria-label="Ouvrir la page Musique"></a>
+      <a class="player-art" id="player-art" href="/musique" data-link aria-label="Ouvrir la page Musiques"></a>
       <div class="player-track"><a id="player-title" href="/musique" data-link></a><span id="player-album"></span></div>
       <div class="player-buttons">
         <button type="button" class="player-icon" id="player-prev" aria-label="Morceau précédent">${icon('previous')}</button>
@@ -102,7 +102,7 @@
     if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track().title, artist: album.artist, album: album.album,
-      artwork: album.cover ? [{ src: album.cover, sizes: '1024x1024', type: 'image/png' }] : [],
+      artwork: album.cover ? [{ src: album.cover, sizes: '1024x1024', type: album.coverType || 'image/png' }] : [],
     });
     const handlers = {
       play: () => playTrack(selected), pause,

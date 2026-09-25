@@ -419,7 +419,7 @@ function openSettings() {
 function renderNav() {
   const u = state.user;
   const a = state.access;
-  const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musique</a>', '<a href="/paroles" data-link>Paroles</a>', '<a href="/echelon" data-link>Échelons</a>'];
+  const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musiques</a>', '<a href="/paroles" data-link>Paroles</a>', '<a href="/echelon" data-link>Échelons</a>'];
   if (a.conversation) liens.push('<a href="/conversation" data-link>Conversation</a>');
   if (a.videographie) liens.push('<a href="/videographie" data-link>Vidéographie</a>');
   // La déconnexion se fait depuis les paramètres du compte (page profil) :
