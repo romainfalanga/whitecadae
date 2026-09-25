@@ -18,7 +18,7 @@ const any = (p, ids) => ids.some(id => has(p, id));
 export const NODES = [
   {...legacy('n-0'),source:''},
   {id:'eg-01',source:'Aigle',visual:'bird',answers:[a('eg-01-1','Signe',['signes'])]},
-  {id:'eg-02',source:'XEU',visual:'white',answers:[a('eg-02-1','Dieu'),a('eg-02-2','VALD')]},
+  {id:'eg-02',source:'XEU',answers:[a('eg-02-1','Dieu'),a('eg-02-2','VALD')]},
   {...legacy('n-g'),visual:'dice'},
   {...legacy('n-b'),visual:'sound',show:p=>has(p,'eg-01-1')||p.seen.has('r-1'),answers:legacy('n-b').answers.map(a=>({...a,id:'eg-07-1'}))},
   {id:'eg-03',source:'Aiguille',show:p=>has(p,'eg-01-1'),requires:['eg-01-1'],answers:[a('eg-03-1','Horloge'),a('eg-03-2','Détails')]},
@@ -82,7 +82,7 @@ export function buildGameState(rows=[]) {
     const partiels=n.answers.filter(a=>!has(p,a.id)&&p.parts.has(a.id)).map(a=>({id:a.id,jetons:tokens(a,p.parts.get(a.id))}));
     const missing=n.requires.filter(id=>!has(p,id));
     const deps=[...new Set(missing.map(id=>byAnswer.get(id).n.id))].map(id=>({id,title:byId.get(id).source||'La porte',kind:byId.get(id).kind})).filter(d=>isVisible(byId.get(d.id),p));
-    pages.push({id:n.id,title:n.source||'',source:n.source,subtitle:n.subtitle||'',kind:n.kind,visual:['white','infinity'].includes(n.visual)?n.visual:null,board:n.board,
+    pages.push({id:n.id,title:n.source||'',source:n.source,subtitle:n.subtitle||'',kind:n.kind,visual:n.visual==='infinity'?n.visual:null,board:n.board,
       total:n.silent?null:n.answers.length,found,partiels,open:found.length<n.answers.length,locked:!isPlayable(n,p),
       requirements:{level:n.min>p.solved.size?n.min:null,pages:deps}});
   }

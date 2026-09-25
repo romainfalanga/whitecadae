@@ -6,7 +6,6 @@ window.WCGame=(()=>{
   const e=s=>esc(s??'');
   const pageBy=id=>data?.pages.find(p=>p.id===id);
   function art(type){
-    if(type==='white')return '<div class="eg-art eg-white" role="img" aria-label="Une pochette entièrement blanche"><span></span></div>';
     if(type==='infinity')return '<svg class="eg-art eg-infinity" viewBox="0 0 290 130" role="img" aria-label="Un M dans chaque boucle du signe infini"><path d="M145 65C105 7 30 7 30 65S105 123 145 65C185 7 260 7 260 65S185 123 145 65Z"/><text x="78" y="76">M</text><text x="212" y="76">M</text></svg>';
     return '';
   }
@@ -14,7 +13,7 @@ window.WCGame=(()=>{
   const isClock=()=>location.pathname==='/echelon/horloge';
   function link(p){const local=p.href.split('#')[0]===location.pathname;return `<a href="${e(local?'#'+p.id:p.href)}" ${local?'':'data-link'}>${e(p.title)}</a>`;}
   function login(){const query='?retour='+encodeURIComponent(location.pathname+location.hash);return `<div class="eg-account"><a class="orange-button" href="/connexion${query}" data-link>Se connecter</a><a href="/inscription${query}" data-link>Créer un compte</a></div>`;}
-  function header(){return `<header class="eg-header"><div>${isClock()?'<nav class="eg-breadcrumb" aria-label="Fil d’Ariane"><a href="/echelon" data-link>Échelon</a></nav>':'<p class="eyebrow">Escape Game Orange</p>'}<h1>${isClock()?'Horloge':'Échelon'}</h1></div><div class="eg-level" aria-label="Échelon actuel"><span>Échelon</span><strong>${data.echelon}</strong></div></header>`;}
+  function header(){return `<header class="eg-header"><div>${isClock()?'<nav class="eg-breadcrumb" aria-label="Fil d’Ariane"><a href="/echelon" data-link>Échelons</a></nav>':'<p class="eyebrow">Escape Game Orange</p>'}<h1>${isClock()?'Horloge':'Échelons'}</h1></div><div class="eg-level" aria-label="Échelon actuel"><span>Échelon</span><strong>${data.echelon}</strong></div></header>`;}
   function locked(p){const r=p.requirements||{},deps=(r.pages||[]).map(d=>pageBy(d.id)).filter(Boolean);return `<p class="eg-lock">Verrouillé${r.level?` · Échelon ${r.level}`:''}${deps.length?` · Termine ${deps.map(link).join(', ')}`:''}</p>`;}
   function feedback(message,id){const box=id?document.querySelector(`#${id} .eg-feedback`):document.getElementById('eg-feedback');if(box){box.textContent=message;box.classList.add('is-visible');}}
   function accept(next){if(data&&next.echelon<data.echelon)return;if(data?.capabilities.share)next.capabilities.share=true;data=next;}
@@ -47,9 +46,9 @@ window.WCGame=(()=>{
   }
   function render(){
     versions.clear();
-    if(isClock()&&!pageBy('eg-10')){app.innerHTML='<section class="eg-page"><h1>Ce chemin n’est pas disponible.</h1><a href="/echelon" data-link>Retrouver Échelon →</a></section>';return;}
-    app.innerHTML=`<section class="eg-page">${header()}<div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}${isClock()?`<div class="eg-durations">${WC57.tracks.map(t=>`<div><span>${e(t.title)}</span><strong>${mmss(Math.floor(t.duration))}</strong><button class="eg-listen" data-play-track="${e(t.slug)}">Écouter</button></div>`).join('')}</div>`:''}<div id="eg-game-content" class="${isClock()?'eg-labs':'eg-entries'}"></div><footer class="eg-footer"><a href="/57" data-link>Écouter 57</a><a href="/paroles" data-link>Lire les paroles</a>${isClock()?'<a href="/echelon" data-link>Retour à Échelon</a>':''}</footer></section>`;
-    document.title=`${isClock()?'Horloge · ':''}Échelon · White Cadae`;
+    if(isClock()&&!pageBy('eg-10')){app.innerHTML='<section class="eg-page"><h1>Ce chemin n’est pas disponible.</h1><a href="/echelon" data-link>Retrouver Échelons →</a></section>';return;}
+    app.innerHTML=`<section class="eg-page">${header()}<div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}${isClock()?`<div class="eg-durations">${WC57.tracks.map(t=>`<div><span>${e(t.title)}</span><strong>${mmss(Math.floor(t.duration))}</strong><button class="eg-listen" data-play-track="${e(t.slug)}">Écouter</button></div>`).join('')}</div>`:''}<div id="eg-game-content" class="${isClock()?'eg-labs':'eg-entries'}"></div><footer class="eg-footer"><a href="/57" data-link>Écouter 57</a><a href="/paroles" data-link>Lire les paroles</a>${isClock()?'<a href="/echelon" data-link>Retour à Échelons</a>':''}</footer></section>`;
+    document.title=`${isClock()?'Horloge · ':''}Échelons · White Cadae`;
     sync();if(isClock())bindMusicButtons();
   }
   async function submit(p,payload,button){
@@ -67,7 +66,7 @@ window.WCGame=(()=>{
     finally{if(token===serial)sending=false;}
     if(token===serial&&button)button.disabled=false;
   }
-  async function page(){const epoch=newEpoch(),token=++serial;currentPath=location.pathname;app.innerHTML='<div class="loading">Chargement…</div>';try{data=await api('/api/echelon');if(token!==serial||stale(epoch))return;render();const anchor=location.hash.slice(1),y=positions.get(currentPath);if(anchor&&/^[a-z0-9-]+$/.test(anchor))document.getElementById(anchor)?.scrollIntoView();else if(y)requestAnimationFrame(()=>window.scrollTo(0,y));}catch(err){if(token===serial)app.innerHTML=`<h1>Échelon</h1><p>${e(err.message)}</p><a href="/echelon" data-link>Réessayer</a>`;}}
+  async function page(){const epoch=newEpoch(),token=++serial;currentPath=location.pathname;app.innerHTML='<div class="loading">Chargement…</div>';try{data=await api('/api/echelon');if(token!==serial||stale(epoch))return;render();const anchor=location.hash.slice(1),y=positions.get(currentPath);if(anchor&&/^[a-z0-9-]+$/.test(anchor))document.getElementById(anchor)?.scrollIntoView();else if(y)requestAnimationFrame(()=>window.scrollTo(0,y));}catch(err){if(token===serial)app.innerHTML=`<h1>Échelons</h1><p>${e(err.message)}</p><a href="/echelon" data-link>Réessayer</a>`;}}
   function leave(){if(currentPath){positions.set(currentPath,window.scrollY);currentPath='';}serial++;sending=false;timers.forEach(clearInterval);timers=[];for(const b of boards.values())b.leave();boards.clear();}
 
   function createBoard(p,token){

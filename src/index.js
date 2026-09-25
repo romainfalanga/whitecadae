@@ -139,6 +139,10 @@ async function handleApi(request, env, url) {
 
   let p;
 
+  if (/^\/api\/(carre|societes|brainstorms|114)(?:\/|$)/.test(path)) {
+    return json({error:'Cet espace a été supprimé.'}, 410);
+  }
+
   if (path === '/api/echelon' || path.startsWith('/api/echelon/') ||
       path === '/api/57' || path === '/api/57/guess') {
     return handleEchelon(request, env, path, { getUser, json });
@@ -204,40 +208,6 @@ async function handleApi(request, env, url) {
   if ((p = route('POST', '/api/branches/:id/vocal'))) return vocalAttache(request, env, +p[0]);
   if ((p = route('GET', '/api/branches/:id/vocal'))) return vocalSert(request, env, +p[0]);
   if ((p = route('DELETE', '/api/branches/:id/vocal'))) return vocalDetache(request, env, +p[0]);
-
-  // les littéraux d'abord, la page d'un carré (:id) ensuite
-  if (route('GET', '/api/carre')) return carreGet(request, env);
-  if (route('POST', '/api/carre')) return carreCreate(request, env);
-  if (route('GET', '/api/carre/as')) return carreAnnuaire(request, env);
-  if (route('GET', '/api/carre/recrutement')) return carreRecrutement(request, env);
-  if (route('PUT', '/api/carre/annonce')) return carreAnnoncePut(request, env);
-  if (route('DELETE', '/api/carre/annonce')) return carreAnnonceDelete(request, env);
-  if (route('POST', '/api/carre/invitations')) return carreInvite(request, env);
-  if ((p = route('POST', '/api/carre/invitations/:id/accepte'))) return carreInviteAccepte(request, env, +p[0]);
-  if ((p = route('POST', '/api/carre/invitations/:id/refuse'))) return carreInviteRefuse(request, env, +p[0]);
-  if ((p = route('GET', '/api/carre/:id'))) return carreDetail(request, env, +p[0]);
-  if ((p = route('PUT', '/api/carre/:id'))) return carreUpdate(request, env, +p[0]);
-  if ((p = route('POST', '/api/carre/:id/rejoindre'))) return carreJoin(request, env, +p[0]);
-  if ((p = route('POST', '/api/carre/:id/quitter'))) return carreLeave(request, env, +p[0]);
-  if ((p = route('GET', '/api/carre/:id/conversation'))) return carreChatList(request, env, +p[0]);
-  if ((p = route('POST', '/api/carre/:id/conversation'))) return carreChatPost(request, env, +p[0]);
-  // les sociétés harmonieuses : ce qu'un carré imagine ensemble
-  if ((p = route('POST', '/api/carre/:id/societes'))) return societeCreate(request, env, +p[0]);
-  if ((p = route('GET', '/api/societes/:id'))) return societeGet(request, env, +p[0]);
-  if ((p = route('PUT', '/api/societes/:id'))) return societeUpdate(request, env, +p[0]);
-  if ((p = route('DELETE', '/api/societes/:id'))) return societeDelete(request, env, +p[0]);
-  if ((p = route('POST', '/api/societes/:id/idees'))) return societeIdee(request, env, +p[0]);
-  if ((p = route('DELETE', '/api/societes/:id/idees/:idee'))) return societeIdeeDelete(request, env, +p[0], +p[1]);
-
-  if (route('GET', '/api/brainstorms')) return brainstormsList(request, env, url);
-  if (route('POST', '/api/brainstorms')) return brainstormsCreate(request, env);
-  if ((p = route('GET', '/api/brainstorms/:id'))) return brainstormGet(request, env, +p[0]);
-  if ((p = route('PUT', '/api/brainstorms/:id'))) return brainstormUpdate(request, env, +p[0]);
-  if ((p = route('POST', '/api/brainstorms/:id/idees'))) return brainstormIdee(request, env, +p[0]);
-  if ((p = route('POST', '/api/brainstorms/:id/votes'))) return brainstormVote(request, env, +p[0]);
-  if ((p = route('POST', '/api/brainstorms/:id/retenues'))) return brainstormRetenue(request, env, +p[0]);
-
-  if (route('GET', '/api/114')) return cent14Get(request, env);
 
   // --- le tronc commun : les interprétations. Ouvert dès l'échelon 1, donc à
   //     tout le monde, visiteur compris : le barrage ne ferme plus que ce qui
@@ -384,18 +354,22 @@ async function requireAdmin(request, env) {
    L'artiste en est exempté : il ne peut pas se retrouver enfermé dehors de
    son propre site par un jeu dont il connaît déjà les réponses.            */
 
+function activeAccess(echelon) {
+  return {...accessOf(echelon), penseMieux:false, carre:false, brainstorm:false, cent14:false};
+}
+
 async function viewerAccess(request, env) {
   const user = await getUser(request, env);
   // Sans compte on est au sol, comme tout le monde : l'échelon 1 ouvre déjà
   // les interprétations, en lecture.
-  if (!user) return { user: null, echelon: 1, solved: new Set(), access: accessOf(1) };
+  if (!user) return { user: null, echelon: 1, solved: new Set(), access: activeAccess(1) };
   if (user.is_admin) {
-    return { user, echelon: Infinity, solved: new Set(), access: accessOf(Infinity) };
+    return { user, echelon: Infinity, solved: new Set(), access: activeAccess(Infinity) };
   }
   const rows = await riddleRows(env, user.id);
   const { solved } = progresOf(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
   const echelon = accessLevel(rows);
-  return { user, echelon, solved, access: {...accessOf(echelon), conversation:conversationAccess(user, rows).readable} };
+  return { user, echelon, solved, access: {...activeAccess(echelon), conversation:conversationAccess(user, rows).readable} };
 }
 
 // L'échelon exigé par une pièce, et un refus prêt à servir. Le message ne dit
@@ -2013,6 +1987,7 @@ function kindDe(raw) {
 }
 
 async function gateArbre(request, env, kind) {
+  if (kind !== 'video') return {refus:json({error:'Cet espace a été supprimé.'}, 410)};
   const def = ARBRE_KINDS[kind];
   const { vu, refus } = await requireEchelon(request, env, def.echelon(), def.cle);
   if (refus) return { refus };

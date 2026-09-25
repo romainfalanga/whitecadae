@@ -70,7 +70,7 @@ test('every authored answer is reachable without relying on removed puzzles',()=
   assert.deepEqual([...new Set(state.pages.map(p=>p.href.split('#')[0]))].sort(),['/echelon','/echelon/horloge']);
   assert.ok(state.pages.every(p=>['riddle','workshop','clock'].includes(p.kind)));
   assert.ok(state.pages.every(p=>!('group' in p)&&!('quotes' in p)&&!('related' in p)));
-  assert.deepEqual(state.nodes.filter(p=>p.visual).map(p=>p.id),['eg-02','eg-06']);
+  assert.deepEqual(state.nodes.filter(p=>p.visual).map(p=>p.id),['eg-06']);
   assert.doesNotMatch(JSON.stringify(state),/fourmilière|Goutte|Fini \/ infini|Angles \/ anges|Enfer \/ paradis|Observer|Transformer/);
   assert.ok(!state.pages.some(p=>p.id==='n-f'));
 });
