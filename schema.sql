@@ -238,6 +238,7 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
   body TEXT NOT NULL,
   min_echelon INTEGER NOT NULL DEFAULT 2,
   echelon_version INTEGER NOT NULL DEFAULT 1,
+  theme TEXT NOT NULL DEFAULT 'general',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_conv_created ON conversation_messages(created_at);

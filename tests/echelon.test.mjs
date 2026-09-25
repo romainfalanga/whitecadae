@@ -21,7 +21,7 @@ test('one completed answer is one rung; old duplicates merge, retired history pr
   assert.equal(gameLevel(rows('eg-02-1','eg-02-2','eg-02-1.p0')),2);
   assert.equal(gameLevel(rows('eg-06-1.p0')),0);
   assert.equal(gameLevel(rows('eg-06-1.p0','eg-06-1.p1')),1);
-  assert.equal(gameLevel(rows('n-a-2','n-k-2','n-b-1','eg-01-1')),2);
+  assert.equal(gameLevel(rows('n-a-2','n-k-2','n-b-1','eg-01-1')),4);
   assert.equal(gameLevel(rows('eg-07-1')),1);
   assert.ok(!progress(rows('eg-07-1')).solved.has('eg-01-1'));
   assert.ok(progress(rows('n-b-1')).solved.has('eg-07-1'));
@@ -65,7 +65,7 @@ test('every authored answer is reachable without relying on removed puzzles',()=
   for(let round=0;round<20;round++)for(const n of NODES){
     if(isPlayable(n,progress(rows(...found))))for(const a of n.answers)if(!found.includes(a.id))found.push(a.id);
   }
-  assert.equal(found.length,22);
+  assert.equal(found.length,25);
   const state=buildGameState(rows(...found));
   assert.deepEqual([...new Set(state.pages.map(p=>p.href.split('#')[0]))].sort(),['/echelon','/echelon/horloge']);
   assert.ok(state.pages.every(p=>['riddle','workshop','clock'].includes(p.kind)));
@@ -100,6 +100,27 @@ test('the two numeric formulas independently accept the same date and preserve e
   assert.equal(gameLevel(rows('n-c-1','eg-04-1')),2);
   assert.equal(gameLevel(rows('eg-04-1.p0','eg-04-1','eg-14-1')),1);
   assert.ok(!progress(rows('n-c-1')).solved.has('eg-14-1'));
+});
+
+test('AA, apostles and repeated signs remain independent; corrected history keeps earned rungs',()=>{
+  const aa=NODES.find(n=>n.id==='eg-15'),fiftySeven=NODES.find(n=>n.id==='n-a'),seven=NODES.find(n=>n.id==='n-k');
+  for(const text of ['Andromédien autiste','andromedien autiste'])assert.ok(matchNode(aa,text,new Set()).prises[0].complet);
+  assert.deepEqual(fiftySeven.answers.map(a=>a.label),['12 apôtres','Signe']);
+  assert.deepEqual(seven.answers.map(a=>a.label),['Galaxie','Signe']);
+  for(const text of ['12 apôtres','douze apotres'])assert.ok(matchNode(fiftySeven,text,new Set()).prises[0].complet);
+  assert.ok(!matchNode(fiftySeven,'archanges',new Set())?.prises?.length);
+  assert.equal(gameLevel(rows('n-a-4')),1);
+  assert.equal(gameLevel(rows('n-a-4.p0','n-a-4.p1','n-a-4.p2')),1);
+  assert.equal(gameLevel(rows('n-a-4.p0','n-a-4.p1')),0);
+  assert.deepEqual([...progress(rows('n-a-4.p0','n-a-4.p1')).parts.get('eg-16-1')],[0]);
+  assert.equal(gameLevel(rows('n-a-4','eg-16-1')),1);
+  const signs=progress(rows('eg-16-2','eg-17-1'));
+  assert.equal(signs.solved.size,2);assert.ok(!signs.solved.has('eg-01-1'));
+  const full=NODES.flatMap(n=>n.answers.map(a=>a.id));
+  for(const records of [rows(...full),rows('n-a-2','n-k-2'),rows('n-c-1','eg-14-1')]){
+    const ids=buildGameState(records).nodes.filter(n=>n.kind==='riddle').map(n=>n.id);
+    for(const [a,b]of [['n-a','n-k'],['n-c','eg-14']])if(ids.includes(a)&&ids.includes(b))assert.ok(Math.abs(ids.indexOf(a)-ids.indexOf(b))>1);
+  }
 });
 
 test('duration construction validates origin, operations and controlled sharing',()=>{
@@ -178,4 +199,5 @@ test('retired reset cannot erase progress; public Worker exposes only starting t
   assert.equal(res.status,410);
   const anon=await worker.fetch(new Request('https://test.local/api/echelon'),{});
   assert.equal(anon.status,200);assert.equal((await anon.json()).nodes.length,4);
+  assert.equal((await worker.fetch(new Request('https://test.local/api/echelon/map'),{})).status,401);
 });

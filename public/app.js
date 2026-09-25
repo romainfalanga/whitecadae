@@ -147,6 +147,7 @@ function coupePageTimer() {
 
 async function route() {
   if (window.WCGame) WCGame.leave();
+  if (window.WCJourney) WCJourney.leave();
   window.scrollTo(0, 0);
   closeNav();
   coupePageTimer();
@@ -159,6 +160,8 @@ async function route() {
   renderNav();
   let m;
   if (path === '/' || path === '') return pageOrange();
+  if (path === '/aa') return pageAA();
+  if (path === '/parcours') return WCJourney.page();
   if (path === '/escape-game-orange') return navigate('/', true);
   if (path === '/57') return navigate('/musique#album-57', true);
   if (path === '/musique') return pageMusique();
@@ -190,7 +193,7 @@ async function route() {
     : path.startsWith('/videographie') || path.startsWith('/reflexion/') || path.startsWith('/arbre/') ? 'videographie'
     : 'interpretations';
   if (!state.access[cle]) return navigate('/echelon', true);
-  if (path === '/conversation') return pageConversation();
+  if (path === '/conversation') return WCConversation.page();
   if (path === '/videographie') return vueRythme();
   if (path === '/videographie/carre') return navigate('/videographie', true);
   if ((m = path.match(/^\/videographie\/(\d+)$/))) return pageArbre(+m[1]);
@@ -443,138 +446,6 @@ function renderNav() {
    Une seule conversation. Chaque message porte l'échelon minimal pour le
    lire, choisi par son auteur : plus on monte, plus on entend. La page se
    relit toute seule, mais seulement quand elle est visible.               */
-
-function messageHtml(m) {
-  const badge = m.echelon_version === 1
-    ? `<span class="msg-echelon" title="Audience d’origine conservée">Accès historique ≥ ${m.min_echelon}</span>`
-    : `<span class="msg-echelon" title="Visible dès l’échelon ${m.min_echelon}">Échelon ≥ ${m.min_echelon}</span>`;
-  return `<article class="msg">
-    <div class="msg-head">${authorLink(m.username)}${badge}
-      <time>${esc(formatDate(m.created_at))}</time></div>
-    <p class="msg-body">${esc(m.body)}</p>
-  </article>`;
-}
-
-async function pageConversation() {
-  const epoch = newEpoch();
-  app.innerHTML = '<div class="loading">Chargement…</div>';
-  let data;
-  try { data = await api('/api/conversation'); }
-  catch { return navigate('/echelon', true); }
-  if (stale(epoch)) return;
-
-  // Numeric filters use actual game rungs. Historical messages retain their
-  // original audience and are kept out of these differently scaled filters.
-  // The server only sends messages the current viewer is allowed to read.
-  const filtre = { mode: 'tout', niveau: 2 };
-  let derniereCle = '';
-
-  const garde = (m) =>
-    filtre.mode === 'tout' ? true
-    : filtre.mode === 'historique' ? m.echelon_version === 1
-    : m.echelon_version === 1 ? false
-    : filtre.mode === 'exact' ? m.min_echelon === filtre.niveau
-    : filtre.mode === 'min' ? m.min_echelon >= filtre.niveau
-    : m.min_echelon <= filtre.niveau;
-
-  const listeHtml = () => {
-    const vus = data.messages.filter(garde);
-    return vus.length ? vus.map(messageHtml).join('')
-      : `<p class="empty-note">${data.messages.length ? 'Rien à ce niveau du filtre.' : 'Personne n’a encore parlé.'}</p>`;
-  };
-
-  const niveauxLisibles = Math.max(2, data.echelon);
-  const optionsNiveaux = Array.from({ length: niveauxLisibles - 1 }, (_, i) => i + 2);
-  const composer = state.user && data.echelon >= 2 ? `
-    <form id="conv-form" class="conv-form">
-      <textarea id="conv-body" maxlength="2000" rows="2"
-        placeholder="Ton message…"></textarea>
-      <div class="conv-form-foot">
-        <label class="conv-vis">Visible dès l’échelon
-          <select id="conv-min">${optionsNiveaux.map(n => `<option value="${n}">${n}</option>`).join('')}</select>
-        </label>
-        <button type="submit" class="primary">Envoyer</button>
-      </div>
-      <p class="form-error" id="conv-err"></p>
-    </form>` : '';
-
-  app.innerHTML = `
-    <h1>Conversation</h1>
-    <div class="conv-filtre">
-      <label>Voir
-        <select id="conv-f-mode">
-          <option value="tout">tout ce qui m’est ouvert</option>
-          <option value="max">jusqu’à l’échelon…</option>
-          <option value="exact">seulement l’échelon…</option>
-          <option value="min">à partir de l’échelon…</option>
-          <option value="historique">messages historiques</option>
-        </select></label>
-      <select id="conv-f-niveau" aria-label="Échelon du filtre" hidden>
-        ${optionsNiveaux.map((n) => `<option value="${n}">${n}</option>`).join('')}
-      </select>
-    </div>
-    <div class="conv-list" id="conv-list">${listeHtml()}</div>
-    ${composer}`;
-  const liste = document.getElementById('conv-list');
-  liste.scrollTop = liste.scrollHeight;
-
-  const modeSel = document.getElementById('conv-f-mode');
-  const niveauSel = document.getElementById('conv-f-niveau');
-  const applique = () => {
-    filtre.mode = modeSel.value;
-    filtre.niveau = +niveauSel.value;
-    niveauSel.hidden = ['tout','historique'].includes(filtre.mode);
-    liste.innerHTML = listeHtml();
-    liste.scrollTop = liste.scrollHeight;
-  };
-  modeSel.onchange = applique;
-  niveauSel.onchange = applique;
-
-  const form = document.getElementById('conv-form');
-  if (form) {
-    form.onsubmit = async (e) => {
-      e.preventDefault();
-      const champ = document.getElementById('conv-body');
-      const texte = champ.value.trim();
-      if (!texte) return;
-      try {
-        await api('/api/conversation', {
-          method: 'POST',
-          body: { body: texte, min_echelon: +document.getElementById('conv-min').value },
-        });
-        champ.value = '';
-        await recharge(true);
-      } catch (err) { document.getElementById('conv-err').textContent = err.message; }
-    };
-  }
-
-  // La relecture ne redessine que si quelque chose a changé : pas de
-  // clignotement pour rien, pas de défilement perdu.
-  async function recharge(force = false) {
-    let d;
-    try { d = await api('/api/conversation'); } catch { return; }
-    if (stale(epoch)) return;
-    if (d.echelon !== data.echelon) {
-      const options = Array.from({length:Math.max(1,d.echelon-1)},(_,i)=>`<option value="${i+2}">${i+2}</option>`).join('');
-      for (const select of [niveauSel,document.getElementById('conv-min')].filter(Boolean)) {
-        const selected=select.value;select.innerHTML=options;select.value=Number(selected)<=d.echelon?selected:'2';
-      }
-    }
-    data = d;
-    const cle = d.messages.map((m) => m.id).join(',');
-    if (!force && cle === derniereCle) return;
-    derniereCle = cle;
-    const enBas = liste.scrollHeight - liste.scrollTop - liste.clientHeight < 60;
-    liste.innerHTML = listeHtml();
-    if (enBas || force) liste.scrollTop = liste.scrollHeight;
-  }
-  derniereCle = data.messages.map((m) => m.id).join(',');
-
-  // le battement : toutes les 20 s, si l'onglet est visible
-  pageTimer = setInterval(() => {
-    if (!document.hidden) recharge();
-  }, 20000);
-}
 
 /* ------------------- les arbres : Pense Mieux (3) et Vidéographie (4) ---
    Un arbre par sujet : un tronc, des branches emboîtées qui se font grandir.
@@ -2214,6 +2085,7 @@ async function refreshSession() {
 
 function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
+  if(value==='/parcours'||value==='/aa')return value;
   if (value === '57' || value === 'echelon') return '/echelon';
   return /^\/echelon(?:\/horloge|\/(?:enigme|lecture|galerie|atelier)\/[a-z0-9-]+)?(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
@@ -2486,7 +2358,7 @@ async function pageProfile(username) {
       ${isMe ? `<button type="button" class="icon-btn" id="settings-btn"
         title="Paramètres du compte" aria-label="Paramètres du compte">⚙</button>` : ''}
     </div>
-    ${jeuHtml(jeu)}
+    ${isMe&&data.journey?`<section class="profile-journey"><div class="jeu-echelon"><span>Échelon</span> <strong>${jeu.echelon}</strong></div><h2>Mon champ des possibles</h2><p>${data.journey.remaining} signes visibles à trouver · ${data.journey.locked} énigmes verrouillées</p><a class="orange-button" href="/parcours" data-link>Explorer mon arborescence →</a></section>`:jeuHtml(jeu)}
     ${data.restreint ? '' : `<div class="timeline">${entries.map((e) => e.html).join('')
       || '<p class="empty-note">Rien pour l’instant.</p>'}</div>`}`;
 

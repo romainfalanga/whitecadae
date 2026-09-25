@@ -26,6 +26,15 @@ test('18 juillet catalogue, lyrics, corpus and audio are gated by five actual an
   const call=(path,session,headers={})=>worker.fetch(new Request('https://test'+path,{headers:{...(session?{Cookie:'wc_session='+session}:{}),...headers}}),env);
   for(const session of [null,'low','expired','high','admin']){
     const allowed=['high','admin'].includes(session);
+    assert.equal((await(await call('/api/journey',session)).json()).aa,allowed);
+    const story=await call('/api/aa',session);assert.equal(story.status,allowed?200:403);
+    assert.match(story.headers.get('cache-control'),/no-store/);
+    const storyText=await story.text();
+    if(allowed){assert.match(storyText,/Vulpis/);assert.match(storyText,/Andromédien Autiste/);assert.doesNotMatch(storyText,/Vulpix/);}
+    else assert.doesNotMatch(storyText,/Andromédien|dépersonnalisation/);
+    const map=await call('/api/echelon/map',session);
+    assert.equal(map.status,['low','high','admin'].includes(session)?200:401);
+    if(map.status===200)assert.equal((await map.json()).nodes.some(n=>n.id==='eg-15'),session==='high');
     const music=await(await call('/api/music',session)).json();assert.equal(music.albums.length,allowed?1:0);
     const cover=await call(JULY.cover,session);
     assert.equal(cover.status,allowed?200:403);

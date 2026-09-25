@@ -32,11 +32,15 @@ window.WCGame=(()=>{
         if(!p.locked&&!boards.has(p.id)){const instance=createBoard(p,serial);boards.set(p.id,instance);instance.load();}
       }
     }else{
-      for(const p of data.nodes.filter(n=>n.kind==='riddle')){
+      const riddles=data.nodes.filter(n=>n.kind==='riddle');
+      for(const [index,p] of riddles.entries()){
         const version=JSON.stringify(p),old=document.getElementById(p.id);
         if(old&&versions.get(p.id)===version)continue;
         const active=old?.contains(document.activeElement),value=old?.querySelector('input')?.value;
-        if(old)old.outerHTML=riddle(p);else root.insertAdjacentHTML('beforeend',riddle(p));
+        if(old)old.outerHTML=riddle(p);else{
+          const next=riddles.slice(index+1).map(n=>document.getElementById(n.id)).find(Boolean);
+          if(next)next.insertAdjacentHTML('beforebegin',riddle(p));else root.insertAdjacentHTML('beforeend',riddle(p));
+        }
         versions.set(p.id,version);
         const el=document.getElementById(p.id),form=el.querySelector('form');
         if(form){if(value)form.elements.answer.value=value;form.onsubmit=event=>{event.preventDefault();submit(pageBy(p.id),{answer:form.elements.answer.value.trim()},form.querySelector('button'));};}

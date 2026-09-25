@@ -1,14 +1,23 @@
 // Public entry points for the album and its escape game.
-function pageOrange() {
-  newEpoch();
+async function pageOrange() {
+  const epoch=newEpoch();
   document.title = 'Escape Game Orange · White Cadae';
   app.innerHTML = `<section class="orange-story" aria-labelledby="story-title">
     <h1 id="story-title" class="orange-title">Escape Game <span>Orange</span></h1>
-    <p class="eyebrow">Entre l’enfer et le paradis</p>
     <div class="orange-story-text"><p>Vulpis était en enfer. Les quatre morceaux de son petit album <strong>57</strong> l’ont aidé à s’en échapper et à trouver le chemin vers son paradis. En mettant en musique ce qu’il traversait, en extériorisant ce qu’il portait en lui, il a laissé des signes dans ses textes.</p>
     <p>Dans ces quatre morceaux, plusieurs grilles de lecture se superposent : les mêmes paroles peuvent raconter plusieurs choses à la fois. Un mot, une expression, un nombre, une sonorité ou un rapprochement entre deux passages peut révéler un autre sens. Ces codes cachés sont les <strong>signes</strong> que tu dois retrouver.</p>
     <p>Écoute, réécoute et lis les paroles. Fais dialoguer les morceaux pour découvrir les différentes lectures qu’ils contiennent. Puis rends-toi sur la <a href="/echelon" data-link>page Échelons</a> pour proposer les signes que tu as trouvés et progresser dans l’escape game.</p></div>
+    <div id="orange-aa"></div>
   </section>`;
+  try{const journey=await api('/api/journey');if(!stale(epoch)&&journey.aa)document.getElementById('orange-aa').innerHTML='<a class="orange-button aa-entry" href="/aa" data-link>AA</a>';}catch{/* The public story remains readable offline. */}
+}
+
+async function pageAA(){
+  const epoch=newEpoch();app.innerHTML='<div class="loading">Chargement…</div>';
+  try{const story=await api('/api/aa');if(stale(epoch))return;
+    document.title='AA · White Cadae';
+    app.innerHTML=`<article class="aa-story"><a class="back-link" href="/" data-link>← Escape Game Orange</a><p class="eyebrow">18 juillet 2019</p><h1>${esc(story.title)}</h1><h2>${esc(story.subtitle)}</h2><div class="orange-story-text">${story.paragraphs.map(p=>`<p>${esc(p)}</p>`).join('')}</div><nav class="aa-links" aria-label="Poursuivre l’exploration"><a href="/musique#album-18-juillet-2019" data-link>18 juillet 2019 →</a><a href="/parcours" data-link>Mon arborescence →</a></nav></article>`;
+  }catch(err){if(!stale(epoch))app.innerHTML=`<h1>Un chemin à découvrir</h1><p>${esc(err.message)}</p><a href="/echelon" data-link>Retrouver Échelons →</a>`;}
 }
 
 async function pageMusique() {

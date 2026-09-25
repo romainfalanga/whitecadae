@@ -15,6 +15,7 @@ import { handleConversation, conversationAccess } from './conversation.js';
 import { handleEchelon, gameRows } from './echelon-api.js';
 import { gameLevel, accessLevel, gameProfile } from './echelon.js';
 import {JULY,retiredSong,julySong,visibleSong,ensureMusicCatalogue} from './music-catalogue.js';
+import {AA_STORY,buildJourney} from './journey.js';
 
 const SESSION_COOKIE = 'wc_session';
 const SESSION_DAYS = 30;
@@ -161,6 +162,8 @@ async function handleApi(request, env, url) {
   }
   if (route('GET', '/api/albums')) return listAlbums(env, request);
   if (route('GET', '/api/music')) return json({albums:await julyAccess(request,env)?[JULY]:[]});
+  if (route('GET', '/api/journey')) return json({aa:await julyAccess(request,env)});
+  if (route('GET', '/api/aa')) return await julyAccess(request,env)?json(AA_STORY):json({error:'Ce chemin n’est pas encore ouvert.'},403);
   if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
 
   // --- auth
@@ -959,6 +962,7 @@ async function getProfile(env, request, username) {
   return json({
     user: { username: user.username, created_at: user.created_at, is_admin: !!user.is_admin },
     jeu,
+    ...(isOwner?{journey:buildJourney(await gameRows(env,user.id)).summary}:{}),
     stats, annotations:allowedAnnotations, essays:allowedEssays,
     passageRefs:passageRefs.filter(p=>visible(p.song_slug)&&visible(p.ref_song_slug)),
     connections:connections.filter(c=>visible(c.song_a_slug)&&visible(c.song_b_slug)),

@@ -19,24 +19,25 @@ export const NODES = [
   {...legacy('n-0'),source:''},
   {id:'eg-01',source:'Aigle',visual:'bird',answers:[a('eg-01-1','Signe',['signes'])]},
   {id:'eg-02',source:'XEU',answers:[a('eg-02-1','Dieu'),a('eg-02-2','VALD')]},
-  {...legacy('n-g'),visual:'dice'},
-  {...legacy('n-b'),visual:'sound',show:p=>has(p,'eg-01-1')||p.seen.has('r-1'),answers:legacy('n-b').answers.map(a=>({...a,id:'eg-07-1'}))},
-  {id:'eg-03',source:'Aiguille',show:p=>has(p,'eg-01-1'),requires:['eg-01-1'],answers:[a('eg-03-1','Horloge'),a('eg-03-2','Détails')]},
-  {...legacy('n-c'),source:'5 vins divins',min:2,show:p=>at(p,1)},
-  {id:'eg-14',source:'30 vins divins',min:2,show:p=>at(p,1),answers:legacy('n-c').answers.map(a=>({...a,id:'eg-14-1'}))},
-  {...legacy('n-w'),visual:'line',min:2,show:p=>at(p,2)},
-  {id:'eg-05',source:'Mélange-les…',visual:'layers',show:p=>any(p,['eg-02-1','eg-02-2']),requires:['eg-02-1','eg-02-2'],answers:[answer('eg-05-1','Expansion harmonieuse',[['Expansion'],['harmonieuse']])]},
-  {...legacy('n-h'),visual:'shadow',min:3,show:p=>has(p,'n-g-1'),requires:['n-g-1']},
-  {...legacy('n-e',['n-e-2']),visual:'time',min:4,show:p=>has(p,'eg-03-1'),requires:['eg-03-1','eg-03-2']},
-  {id:'eg-06',source:'M = M',visual:'infinity',min:4,show:p=>has(p,'eg-05-1'),requires:['eg-05-1'],answers:[
+  {...legacy('n-b'),visual:'sound',reveal:{any:['eg-01-1'],seen:['r-1']},answers:legacy('n-b').answers.map(a=>({...a,id:'eg-07-1'}))},
+  {id:'eg-03',source:'Aiguille',reveal:{any:['eg-01-1']},requires:['eg-01-1'],answers:[a('eg-03-1','Horloge'),a('eg-03-2','Détails')]},
+  {...legacy('n-c'),source:'5 vins divins',min:2,reveal:{level:1}},
+  {...legacy('n-w'),visual:'line',min:2,reveal:{level:2}},
+  {id:'eg-05',source:'Mélange-les…',visual:'layers',reveal:{any:['eg-02-1','eg-02-2']},requires:['eg-02-1','eg-02-2'],answers:[answer('eg-05-1','Expansion harmonieuse',[['Expansion'],['harmonieuse']])]},
+  {...legacy('n-h'),visual:'shadow',min:3,reveal:{any:['n-g-1']},requires:['n-g-1']},
+  {...legacy('n-e',['n-e-2']),visual:'time',min:4,reveal:{any:['eg-03-1']},requires:['eg-03-1','eg-03-2']},
+  {id:'eg-14',source:'30 vins divins',min:2,reveal:{level:2},answers:legacy('n-c').answers.map(a=>({...a,id:'eg-14-1'}))},
+  {id:'eg-06',source:'M = M',visual:'infinity',min:4,reveal:{any:['eg-05-1']},requires:['eg-05-1'],answers:[
     {...answer('eg-06-1','Mécanisme = matière',[['Mécanisme','mecanismes'],['matière']]),seps:[' = ']},
     {...answer('eg-06-2','Méta-moi = moi',[['Méta-moi','meta moi','metamoi'],['moi']]),seps:[' = ']}
   ]},
-  {...legacy('n-a',['n-a-4']),visual:'arcs',min:6,show:p=>any(p,['n-c-1','eg-14-1']),requires:['n-c-1','eg-14-1']},
-  {...legacy('n-k',['n-k-1']),visual:'stars',min:8,show:p=>has(p,'n-a-4'),requires:['n-a-4']},
-  {id:'eg-11',source:'2:24',subtitle:'13h20',kind:'workshop',board:'first',show:p=>has(p,'eg-03-1'),requires:['eg-03-1'],answers:[answer('eg-11-1','2 Jésus',[['2','deux'],['Jésus']])]},
-  {id:'eg-12',source:'3:50 ↔ 3:44',subtitle:'30 vins divins · Sans indices dans les dés',kind:'workshop',board:'pair',show:p=>has(p,'eg-03-1'),requires:['eg-03-1'],answers:[a('eg-12-1','2 × 57')]},
-  {id:'eg-13',source:'2:39',subtitle:'Orange',kind:'workshop',board:'last',show:p=>p.milestones.has(SHARE),requires:['eg-12-1'],answers:[a('eg-13-1','57')]},
+  {id:'n-a',source:'57',min:6,reveal:{any:['n-c-1','eg-14-1']},requires:['n-c-1','eg-14-1'],answers:[answer('eg-16-1','12 apôtres',[['12','douze'],['apôtres','apotre']]),a('eg-16-2','Signe',['signes'])]},
+  {...legacy('n-g'),visual:'dice'},
+  {id:'eg-15',source:'AA',min:5,reveal:{level:5},answers:[answer('eg-15-1','Andromédien autiste',[['Andromédien'],['autiste']])]},
+  {...legacy('n-k',['n-k-1']),visual:'stars',min:8,reveal:{any:['eg-16-1']},requires:['eg-16-1'],answers:[...legacy('n-k',['n-k-1']).answers,a('eg-17-1','Signe',['signes'])]},
+  {id:'eg-11',source:'2:24',subtitle:'13h20',kind:'workshop',board:'first',reveal:{any:['eg-03-1']},requires:['eg-03-1'],answers:[answer('eg-11-1','2 Jésus',[['2','deux'],['Jésus']])]},
+  {id:'eg-12',source:'3:50 ↔ 3:44',subtitle:'30 vins divins · Sans indices dans les dés',kind:'workshop',board:'pair',reveal:{any:['eg-03-1']},requires:['eg-03-1'],answers:[a('eg-12-1','2 × 57')]},
+  {id:'eg-13',source:'2:39',subtitle:'Orange',kind:'workshop',board:'last',reveal:{milestone:SHARE,any:['eg-12-1']},requires:['eg-12-1'],answers:[a('eg-13-1','57')]},
 ].map(n=>({...n,kind:n.kind||'riddle',requires:n.requires||[],min:n.min||0}));
 const byId = new Map(NODES.map(n=>[n.id,n]));
 const byAnswer = new Map(NODES.flatMap(n=>n.answers.map(a=>[a.id,{a,n}])));
@@ -47,10 +48,17 @@ export function canonicalId(id) {
 }
 export function progress(rows=[]) {
   const solved=new Set(),parts=new Map(),seen=new Set(),milestones=new Set();
+  const previous=new Set(rows.filter(r=>r.solved_at).map(r=>oldId(r.riddle_id)));
+  // The corrected interpretation keeps a completed historical rung. Only the
+  // numeric fragment transfers; arc/ange fragments cannot solve « apôtres ».
+  if(previous.has('n-a-4')||[0,1,2].every(i=>previous.has('n-a-4.p'+i)))solved.add('eg-16-1');
+  else if(previous.has('n-a-4.p0'))parts.set('eg-16-1',new Set([0]));
   for(const r of rows){
     if(!r.solved_at)continue;
     if(r.riddle_id.startsWith('@eg/seen/')){seen.add(r.riddle_id.slice(9));continue;}
     if(r.riddle_id===SHARE){milestones.add(SHARE);continue;}
+    if(['n-a-2','n-a-2.p0'].includes(r.riddle_id))solved.add('eg-16-2');
+    if(['n-k-2','n-k-2.p0'].includes(r.riddle_id))solved.add('eg-17-1');
     // Transfer the retired second numeric answer's earned rung to the second
     // formula. New submissions only accept the date, independently per formula.
     if(['eg-04-1','eg-04-1.p0'].includes(r.riddle_id)){solved.add('eg-14-1');continue;}
@@ -74,7 +82,8 @@ export function accessLevel(rows) {
   return Math.max(old,Math.min(7,1+Math.floor(gameLevel(rows)/3)));
 }
 export const getGameNode=id=>byId.get(id)||null;
-export function isVisible(n,p){return p.seen.has(n.id)||n.answers?.some(a=>has(p,a.id)||p.parts.has(a.id))||!n.show||n.show(p);}
+function revealed(n,p){const r=n.reveal;return !r||(r.level!==undefined&&at(p,r.level))||(r.any&&any(p,r.any))||(r.seen&&r.seen.some(id=>p.seen.has(id)))||(r.milestone&&p.milestones.has(r.milestone));}
+export function isVisible(n,p){return p.seen.has(n.id)||n.answers?.some(a=>has(p,a.id)||p.parts.has(a.id))||revealed(n,p);}
 export function isPlayable(n,p){return isVisible(n,p)&&at(p,n.min)&&all(p,n.requires);}
 function tokens(a,set){const out=[];for(let i=0;i<a.parties.length;i++){if(set.has(i))out.push({t:a.parties[i].t,sep:out.length?(set.has(i-1)?a.seps?.[i-1]||' ':' '):''});else if(!out.at(-1)?.q)out.push({q:true,sep:out.length?' ':''});}return out;}
 
