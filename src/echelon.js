@@ -22,7 +22,8 @@ export const NODES = [
   {...legacy('n-g'),visual:'dice'},
   {...legacy('n-b'),visual:'sound',show:p=>has(p,'eg-01-1')||p.seen.has('r-1'),answers:legacy('n-b').answers.map(a=>({...a,id:'eg-07-1'}))},
   {id:'eg-03',source:'Aiguille',show:p=>has(p,'eg-01-1'),requires:['eg-01-1'],answers:[a('eg-03-1','Horloge'),a('eg-03-2','Détails')]},
-  {...legacy('n-c'),visual:'numbers',min:2,show:p=>at(p,1),answers:[...legacy('n-c').answers,a('eg-04-1','Jésus')]},
+  {...legacy('n-c'),source:'5, 20, 10, 20',min:2,show:p=>at(p,1)},
+  {id:'eg-14',source:'30, 20, 10, 20',min:2,show:p=>at(p,1),answers:legacy('n-c').answers.map(a=>({...a,id:'eg-14-1'}))},
   {...legacy('n-w'),visual:'line',min:2,show:p=>at(p,2)},
   {id:'eg-05',source:'Mélange-les…',visual:'layers',show:p=>any(p,['eg-02-1','eg-02-2']),requires:['eg-02-1','eg-02-2'],answers:[answer('eg-05-1','Expansion harmonieuse',[['Expansion'],['harmonieuse']])]},
   {...legacy('n-h'),visual:'shadow',min:3,show:p=>has(p,'n-g-1'),requires:['n-g-1']},
@@ -31,7 +32,7 @@ export const NODES = [
     {...answer('eg-06-1','Mécanisme = matière',[['Mécanisme','mecanismes'],['matière']]),seps:[' = ']},
     {...answer('eg-06-2','Méta-moi = moi',[['Méta-moi','meta moi','metamoi'],['moi']]),seps:[' = ']}
   ]},
-  {...legacy('n-a',['n-a-4']),visual:'arcs',min:6,show:p=>any(p,['n-c-1','eg-04-1']),requires:['n-c-1','eg-04-1']},
+  {...legacy('n-a',['n-a-4']),visual:'arcs',min:6,show:p=>any(p,['n-c-1','eg-14-1']),requires:['n-c-1','eg-14-1']},
   {...legacy('n-k',['n-k-1']),visual:'stars',min:8,show:p=>has(p,'n-a-4'),requires:['n-a-4']},
   {id:'eg-11',source:'2:24',subtitle:'13h20',kind:'workshop',board:'first',show:p=>has(p,'eg-03-1'),requires:['eg-03-1'],answers:[answer('eg-11-1','2 Jésus',[['2','deux'],['Jésus']])]},
   {id:'eg-12',source:'3:50 ↔ 3:44',subtitle:'30 vins divins · Sans indices dans les dés',kind:'workshop',board:'pair',show:p=>has(p,'eg-03-1'),requires:['eg-03-1'],answers:[a('eg-12-1','2 × 57')]},
@@ -39,7 +40,7 @@ export const NODES = [
 ].map(n=>({...n,kind:n.kind||'riddle',requires:n.requires||[],min:n.min||0}));
 const byId = new Map(NODES.map(n=>[n.id,n]));
 const byAnswer = new Map(NODES.flatMap(n=>n.answers.map(a=>[a.id,{a,n}])));
-const merged = {'n-a-2':'eg-01-1','n-k-2':'eg-01-1','n-b-1':'eg-01-1'};
+const merged = {'n-a-2':'eg-01-1','n-k-2':'eg-01-1','n-b-1':'eg-01-1','eg-04-1':'eg-14-1'};
 export function canonicalId(id) {
   const initial=oldId(id), m=/^(.+?)(\.p\d+)?$/.exec(initial);
   return (merged[m[1]]||m[1])+(m[2]||'');
@@ -50,6 +51,9 @@ export function progress(rows=[]) {
     if(!r.solved_at)continue;
     if(r.riddle_id.startsWith('@eg/seen/')){seen.add(r.riddle_id.slice(9));continue;}
     if(r.riddle_id===SHARE){milestones.add(SHARE);continue;}
+    // Transfer the retired second numeric answer's earned rung to the second
+    // formula. New submissions only accept the date, independently per formula.
+    if(['eg-04-1','eg-04-1.p0'].includes(r.riddle_id)){solved.add('eg-14-1');continue;}
     // Restore Trompettes and retain the Aigle credit granted by the previous release.
     // New Trompettes submissions use a separate id and never auto-solve Aigle.
     if(['n-b-1','n-b-1.p0'].includes(r.riddle_id))solved.add('eg-07-1');

@@ -11,23 +11,27 @@ function pageOrange() {
   </section>`;
 }
 
-function pageMusique() {
-  newEpoch();
-  document.title = '57 · Vulpis · White Cadae';
-  app.innerHTML = `<section class="music-album">
-    <img class="music-cover" src="${WC57.cover}" alt="Pochette de l’album 57 de Vulpis" width="360" height="360">
-    <div><p class="eyebrow">L’album de l’Escape Game Orange</p><h1>57</h1><p class="music-artist">Vulpis</p><p class="music-meta">4 morceaux <span>·</span> 12 min 39</p></div>
-  </section>
-  <section class="music-list" aria-label="Les quatre morceaux dans l’ordre">
+async function pageMusique() {
+  const epoch=newEpoch();
+  document.title = 'Musique · White Cadae';
+  app.innerHTML='<div class="loading">Chargement…</div>';
+  try {const data=await api('/api/music');if(stale(epoch))return;WCPlayer.setAlbums(data.albums);}
+  catch(err){if(!stale(epoch))app.innerHTML=`<h1>Musique</h1><p>${esc(err.message)}</p><a href="/musique" data-link>Réessayer</a>`;return;}
+  app.innerHTML = `<h1 class="music-page-title">Musique</h1>${WCPlayer.getAlbums().map(album=>`<section class="music-release" id="album-${esc(album.id)}" aria-labelledby="album-title-${esc(album.id)}"><div class="music-album">
+    ${album.cover?`<img class="music-cover" src="${esc(album.cover)}" alt="Pochette de l’album ${esc(album.album)}" width="360" height="360">`:'<div class="music-date-art" aria-hidden="true"><span>18</span><span>juillet</span><span>2019</span></div>'}
+    <div><h2 id="album-title-${esc(album.id)}">${esc(album.album)}</h2><p class="music-artist">${esc(album.artist)}</p><p class="music-meta">${album.tracks.length} morceaux <span>·</span> ${mmss(Math.floor(album.tracks.reduce((sum,t)=>sum+t.duration,0)))}</p></div>
+  </div>
+  <div class="music-list" aria-label="Les morceaux de ${esc(album.album)} dans l’ordre">
     <div class="music-list-head"><span>L’album, dans l’ordre</span><span>Durée</span></div>
-    <ol>${WC57.tracks.map((t, i) => `<li data-track-row="${t.slug}">
+    <ol>${album.tracks.map((t, i) => `<li data-track-row="${t.slug}">
       <span class="track-number">${String(i + 1).padStart(2, '0')}</span>
-      <button class="track-play" data-play-track="${t.slug}" aria-label="Écouter ${esc(t.title)}">${WCIcon('play')}<span>${esc(t.title)}<small>Vulpis</small></span></button>
+      <button class="track-play" data-play-track="${t.slug}" aria-label="Écouter ${esc(t.title)}">${WCIcon('play')}<span>${esc(t.title)}<small>${esc(album.artist)}</small></span></button>
       <a class="track-lyrics" href="/chanson/${t.slug}" data-link aria-label="Lire les paroles de ${esc(t.title)}">${WCIcon('book')}<span>Paroles</span></a>
       <span class="track-duration">${mmss(Math.floor(t.duration))}</span>
     </li>`).join('')}</ol>
-  </section><p class="album-game-link"><a href="/echelon" data-link>Le jeu se poursuit dans Échelons →</a></p>`;
+  </div></section>`).join('')}<p class="album-game-link"><a href="/echelon" data-link>Le jeu se poursuit dans Échelons →</a></p>`;
   bindMusicButtons();
+  if(location.hash.startsWith('#album-'))document.getElementById(location.hash.slice(1))?.scrollIntoView();
 }
 
 function bindMusicButtons() {
@@ -40,13 +44,14 @@ function bindMusicButtons() {
 function updateMusicButtons() {
   const current = WCPlayer.snapshot();
   document.querySelectorAll('[data-play-track]').forEach((button) => {
-    const t = WC57.tracks.find((track) => track.slug === button.dataset.playTrack);
+    const t = WCPlayer.findTrack(button.dataset.playTrack);
+    if(!t){button.disabled=true;return;}
     const playing = current.slug === t.slug && (current.playing || current.loading);
     const label = `${playing ? 'Mettre en pause' : 'Écouter'} ${t.title}`;
     button.setAttribute('aria-label', label);
     button.setAttribute('aria-pressed', String(playing));
     button.innerHTML = button.classList.contains('track-play')
-      ? `${WCIcon(playing ? 'pause' : 'play')}<span>${esc(t.title)}<small>Vulpis</small></span>`
+      ? `${WCIcon(playing ? 'pause' : 'play')}<span>${esc(t.title)}<small>${esc(t.artist)}</small></span>`
       : `${WCIcon(playing ? 'pause' : 'play')} ${playing ? 'Mettre en pause' : 'Écouter le morceau'}`;
   });
   document.querySelectorAll('[data-track-row]').forEach((row) => {

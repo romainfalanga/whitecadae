@@ -9,6 +9,7 @@ function fixture(saved) {
     constructor() { super(); this.hidden = false; this.attributes = {}; this.style = { setProperty() {} }; this.classList = { toggle() {} }; }
     setAttribute(k,v) { this.attributes[k]=v; }
     getAttribute(k) { return this.attributes[k] ?? null; }
+    removeAttribute(k) { delete this.attributes[k]; }
     getBoundingClientRect() { return {height:120}; }
   }
   class Audio extends Element {
@@ -17,6 +18,7 @@ function fixture(saved) {
     get src() { return this.attributes.src || ''; }
     play() { this.calls++; this.paused=false; this.readyState=4; this.dispatchEvent(new Event('loadedmetadata')); this.dispatchEvent(new Event('playing')); return Promise.resolve(); }
     pause() { this.paused=true; this.dispatchEvent(new Event('pause')); }
+    load() { this.currentTime=0;this.readyState=0; }
     finish() { this.paused=true; this.ended=true; this.currentTime=this.duration; this.dispatchEvent(new Event('ended')); }
   }
   const elements = new Map();
@@ -79,4 +81,28 @@ test('background video generation waits for music to stop', async () => {
   await Promise.resolve(); assert.equal(granted,false);
   f.player.pause(); const release=await reservation; assert.equal(granted,true);
   release(); f.player.playTrack(1); assert.equal(f.player.snapshot().slug,'30-vins-divins');
+});
+
+const july={id:'18-juillet-2019',album:'18 juillet 2019',artist:'AA',cover:null,tracks:[
+  {slug:'wanheda',title:'Wanheda',src:'/music/18-juillet-2019/wanheda.mp3',duration:234},
+  {slug:'quand-je-vois-je-pense',title:'Quand je vois je pense',src:'/music/18-juillet-2019/quand-je-vois-je-pense.mp3',duration:198},
+  {slug:'un-fil-entre-deux-infinis',title:'Un fil entre deux infinis',src:'/music/18-juillet-2019/un-fil-entre-deux-infinis.mp3',duration:198},
+]};
+test('unlocked EP has its own queue, metadata and repeat; logout revokes playback',async()=>{
+  const f=fixture();f.player.playTrack('wanheda');assert.equal(f.audio.calls,0);
+  f.player.setAlbums([july]);f.player.toggle('wanheda');await Promise.resolve();
+  assert.equal(f.player.snapshot().slug,'wanheda');assert.equal(f.navigator.mediaSession.metadata.album,'18 juillet 2019');
+  f.audio.finish();assert.equal(f.player.snapshot().slug,'quand-je-vois-je-pense');
+  f.audio.finish();assert.equal(f.player.snapshot().slug,'un-fil-entre-deux-infinis');
+  f.audio.finish();assert.equal(f.audio.paused,true);
+  f.elements.get('player-repeat').onclick();f.player.toggle();f.audio.finish();assert.equal(f.player.snapshot().slug,'wanheda');
+  f.player.toggle('13h20');assert.equal(f.player.snapshot().slug,'13h20');
+  f.player.toggle('wanheda');f.player.setAlbums([]);
+  assert.equal(f.audio.paused,true);assert.equal(f.audio.src,'');assert.equal(f.player.snapshot().slug,null);
+  assert.equal(f.elements.get('music-player').hidden,true);
+});
+test('restoring a gated track waits for catalogue access and never starts playback',()=>{
+  const f=fixture({slug:'wanheda',position:32});
+  assert.equal(f.player.snapshot().slug,null);
+  f.player.setAlbums([july]);assert.equal(f.player.snapshot().slug,'wanheda');assert.equal(f.audio.calls,0);
 });

@@ -2,11 +2,15 @@
 
 Le site s’ouvre sur **Escape Game Orange** (`/`) : l’histoire de Vulpis, l’album **57** et les signes à retrouver dans ses quatre morceaux.
 
-- **57** (`/57`, ancien `/musique` redirigé) : 13h20, 30 vins divins, Sans indices dans les dés, Orange. Les MP3 et la pochette fournis sont servis depuis `public/music/57/`, sans conversion des originaux.
-- **Paroles** (`/paroles`) : toute la discographie en lecture seule. Les liens `/chanson/:slug` sont conservés ; `/interpretations` et `/fil` redirigent vers les paroles.
+- **Musique** (`/musique`, ancien `/57` redirigé vers l’album 57) : 13h20, 30 vins divins, Sans indices dans les dés, Orange. Dès cinq réponses complètes, l’EP **18 juillet 2019** apparaît : Wanheda, Quand je vois je pense, Un fil entre deux infinis. Les fichiers MP3 fournis sont conservés sans conversion.
+- **Paroles** (`/paroles`) : les sorties les plus récentes en premier, avec **Meta moi** en tête. Les paroles de 18 juillet 2019 suivent le même seuil de cinq réponses. Ma folie et Rendors-toi sont retirés du catalogue public, sans effacer les données historiques. Les liens `/chanson/:slug` sont conservés ; `/interpretations` et `/fil` redirigent vers les paroles.
 - **Échelons** (`/echelon`) : toutes les énigmes et leurs champs sur une page, sans catégories ; seul le laboratoire Horloge possède une page distincte. Chaque réponse complète distincte rapporte un échelon. La connexion conserve la page demandée.
 
-Le lecteur natif est placé hors du contenu remplacé par la navigation. Il apparaît à la première lecture, propose lecture/pause, précédent/suivant, déplacement dans le morceau, volume sur ordinateur et répétition de l’album. Il enchaîne les quatre titres dans l’ordre et s’arrête après Orange, sauf si la répétition est activée. La position est conservée localement ; un rechargement ne relance jamais la musique automatiquement.
+Le lecteur natif est placé hors du contenu remplacé par la navigation. Il apparaît à la première lecture, propose lecture/pause, précédent/suivant, déplacement dans le morceau, volume sur ordinateur et répétition de l’album. Il enchaîne les titres de l’EP sélectionné dans l’ordre puis s’arrête, sauf si la répétition est activée. La position est conservée localement ; un rechargement ne relance jamais la musique automatiquement. Les métadonnées système suivent l’EP actif.
+
+Le seuil de **18 juillet 2019** est contrôlé côté serveur pour le catalogue musical, les paroles, le corpus historique et chaque requête audio, y compris les plages d’octets. Les réponses protégées ne sont pas mises en cache ; le service worker ne conserve aucun audio ni aucune API. La déconnexion retire l’EP du lecteur et décharge son audio. L’administrateur conserve son accès de gestion.
+
+Les suites **5, 20, 10, 20** et **30, 20, 10, 20** possèdent chacune leur champ et une seule réponse complète : « 25 décembre », également acceptée sous la forme « 25/12 ». Chacune rapporte un échelon. L’ancien crédit de la seconde réponse numérique est transféré à la seconde formule pour préserver le score et les accès existants ; les nouvelles propositions « Jésus » ne sont plus acceptées ici.
 
 Media Session fournit titres, pochette et commandes système. L’audio reste actif quand la page devient invisible et utilise la session `playback` quand elle est disponible. **Le verrouillage réel d’un iPhone/Android doit être testé sur ces appareils** : un navigateur ou un système qui ferme/suspend l’onglet ne peut pas être contraint par le site. Aucun mode hors ligne de l’album n’est annoncé. Le service worker ignore les fichiers audio et les requêtes Range, et ne stocke jamais les réponses partielles 206.
 
@@ -103,8 +107,10 @@ L'album **18 juillet 2019** est pré-rempli avec cinq titres :
 Les paroles s'ajoutent depuis la page **Administration** (une ligne par
 vers, une ligne vide entre les strophes).
 
-**Meta moi** figure dans « Autres morceaux » sur la page Paroles, sans
-album attribué. Son texte fourni par l’artiste est conservé dans
+**Meta moi** figure en tête de la page Paroles, sous son propre titre.
+La migration additive `0031-meta-moi-single` le rattache à une sortie simple
+en dernière position du catalogue chronologique, sans toucher aux paroles.
+Son texte fourni par l’artiste est conservé dans
 `src/meta-moi.js`. Le Worker ajoute ce morceau et ses paroles une seule
 fois via sa connexion D1 existante, à la première ouverture du catalogue
 ou du morceau. Une transaction et un marqueur durable empêchent les

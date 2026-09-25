@@ -1,7 +1,8 @@
 // One audio element survives every SPA route, including account changes.
 (() => {
   'use strict';
-  const album = window.WC57;
+  let albums = [window.WC57];
+  let album = window.WC57;
   const audio = document.getElementById('music-audio');
   const root = document.getElementById('music-player');
   const key = 'wc_music_57_v1';
@@ -36,8 +37,8 @@
 
   root.innerHTML = `
     <div class="player-main">
-      <a class="player-art" href="/57" data-link aria-label="Ouvrir la playlist 57"><img src="${album.cover}" alt="Pochette de 57" width="52" height="52"></a>
-      <div class="player-track"><a id="player-title" href="/57" data-link></a><span>Vulpis <span aria-hidden="true">·</span> 57</span></div>
+      <a class="player-art" id="player-art" href="/musique" data-link aria-label="Ouvrir la page Musique"></a>
+      <div class="player-track"><a id="player-title" href="/musique" data-link></a><span id="player-album"></span></div>
       <div class="player-buttons">
         <button type="button" class="player-icon" id="player-prev" aria-label="Morceau précédent">${icon('previous')}</button>
         <button type="button" class="player-icon player-play" id="player-play" aria-label="Lire">${icon('play')}</button>
@@ -79,6 +80,9 @@
     document.body.classList.toggle('with-player', !!track());
     if (!track()) return;
     el('title').textContent = track().title;
+    el('album').textContent = `${album.artist} · ${album.album}`;
+    el('art').innerHTML = album.cover ? `<img src="${album.cover}" alt="" width="52" height="52">` : '<span class="player-date" aria-hidden="true">18<br>07</span>';
+    el('title').href = el('art').href = `/musique#album-${album.id}`;
     el('lyrics').href = `/chanson/${track().slug}`;
     el('play').innerHTML = icon(active() ? 'pause' : 'play');
     el('play').setAttribute('aria-label', active() ? 'Mettre en pause' : error ? 'Réessayer la lecture' : 'Lire');
@@ -98,7 +102,7 @@
     if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track().title, artist: album.artist, album: album.album,
-      artwork: [{ src: album.cover, sizes: '1024x1024', type: 'image/png' }],
+      artwork: album.cover ? [{ src: album.cover, sizes: '1024x1024', type: 'image/png' }] : [],
     });
     const handlers = {
       play: () => playTrack(selected), pause,
@@ -130,8 +134,10 @@
 
   // Called synchronously by the user's click (no await before audio.play).
   function playTrack(value = selected < 0 ? 0 : selected) {
-    const index = typeof value === 'string' ? album.tracks.findIndex((t) => t.slug === value) : value;
-    if (!Number.isInteger(index) || !album.tracks[index]) return;
+    const targetAlbum = typeof value === 'string' ? albums.find(a=>a.tracks.some(t=>t.slug===value)) : album;
+    if(!targetAlbum)return;
+    const index = typeof value === 'string' ? targetAlbum.tracks.findIndex((t) => t.slug === value) : value;
+    if (!Number.isInteger(index) || !targetAlbum.tracks[index]) return;
     if (automaticMedia) {
       error = 'Une vidéo est en préparation. Réessaie la lecture dans un instant.';
       update();
@@ -139,7 +145,8 @@
     }
     for (const media of otherMedia) media.pause();
     document.querySelectorAll('audio, video').forEach((media) => { if (media !== audio) media.pause(); });
-    const changed = index !== selected;
+    const changed = index !== selected || targetAlbum.id !== album.id;
+    album=targetAlbum;
     const retry = !!audio.error;
     if (changed) { selected = index; pendingSeek = 0; }
     else if (retry) pendingSeek = audio.currentTime;
@@ -169,9 +176,9 @@
   }
 
   function toggle(value) {
-    const index = value == null ? selected : typeof value === 'string' ? album.tracks.findIndex((t) => t.slug === value) : value;
-    if (index === selected && active()) pause();
-    else playTrack(index < 0 ? 0 : index);
+    const same = value == null || (typeof value === 'string' ? value===track()?.slug : value===selected);
+    if (same && active()) pause();
+    else playTrack(value ?? (selected<0?0:selected));
   }
   function next() {
     if (selected + 1 < album.tracks.length) playTrack(selected + 1);
@@ -228,13 +235,34 @@
     return () => { if (!released) { released = true; automaticMedia--; signal(); } };
   }
 
+  let savedTrack=null;
+  function setAlbums(extra) {
+    const previous=track()?.slug;
+    albums=[window.WC57,...extra];
+    const nextAlbum=albums.find(a=>a.tracks.some(t=>t.slug===previous));
+    if(previous&&!nextAlbum){
+      pause();selected=-1;pendingSeek=null;album=window.WC57;
+      audio.removeAttribute('src');audio.load();
+      safeStore(null);
+      if('mediaSession' in navigator)navigator.mediaSession.metadata=null;
+    }else if(nextAlbum)album=nextAlbum;
+    if(!previous&&savedTrack){
+      const restored=albums.find(a=>a.tracks.some(t=>t.slug===savedTrack.slug));
+      if(restored){album=restored;selected=album.tracks.findIndex(t=>t.slug===savedTrack.slug);pendingSeek=Math.max(0,Math.min(Number(savedTrack.position)||0,track().duration-.1));}
+    }
+    savedTrack=null;
+    update();
+  }
+  const findTrack = slug => {const found=albums.find(a=>a.tracks.some(t=>t.slug===slug));return found?{...found.tracks.find(t=>t.slug===slug),artist:found.artist,album:found.album,albumId:found.id}:null;};
   window.WCPlayer = Object.freeze({
     playTrack, toggle, pause, snapshot, isPlaying: active, watchMedia, reserveAutomaticMedia,
+    setAlbums, getAlbums:()=>albums, findTrack,
     beforeRecording() { pause(); if ('audioSession' in navigator) { try { navigator.audioSession.type = 'auto'; } catch {} } },
   });
   try {
     const saved = JSON.parse(localStorage.getItem(key) || 'null');
     if (saved) {
+      savedTrack=saved;
       selected = album.tracks.findIndex((t) => t.slug === saved.slug);
       if (selected >= 0) pendingSeek = Math.max(0, Math.min(Number(saved.position) || 0, track().duration - 0.1));
       repeat = saved.repeat === true;

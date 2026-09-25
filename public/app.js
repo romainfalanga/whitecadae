@@ -160,8 +160,8 @@ async function route() {
   let m;
   if (path === '/' || path === '') return pageOrange();
   if (path === '/escape-game-orange') return navigate('/', true);
-  if (path === '/musique') return navigate('/57', true);
-  if (path === '/57') return pageMusique();
+  if (path === '/57') return navigate('/musique#album-57', true);
+  if (path === '/musique') return pageMusique();
   if (path === '/paroles') return pageParoles();
   if (path === '/interpretations' || path === '/fil') return navigate('/paroles', true);
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
@@ -407,6 +407,7 @@ function openSettings() {
     // sans compte on garde le sol : les interprétations restent là
     state.access = { interpretations: true };
     state.echelon = 1;
+    WCPlayer.setAlbums([]);
     oublieAttente();
     closeSettings();
     navigate('/');
@@ -418,7 +419,7 @@ function openSettings() {
 function renderNav() {
   const u = state.user;
   const a = state.access;
-  const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/57" data-link>57</a>', '<a href="/paroles" data-link>Paroles</a>', '<a href="/echelon" data-link>Échelons</a>'];
+  const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musique</a>', '<a href="/paroles" data-link>Paroles</a>', '<a href="/echelon" data-link>Échelons</a>'];
   if (a.conversation) liens.push('<a href="/conversation" data-link>Conversation</a>');
   if (a.videographie) liens.push('<a href="/videographie" data-link>Vidéographie</a>');
   // La déconnexion se fait depuis les paramètres du compte (page profil) :
@@ -2183,7 +2184,7 @@ async function pageParoles() {
   app.innerHTML = `
     <p class="eyebrow">Les textes, au fil des albums</p>
     <h1>Paroles</h1>
-    <p class="subtitle">Prends le temps de lire chaque morceau. Pour explorer les signes de 57, tu peux aussi <a href="/57" data-link>écouter l’album</a>.</p>
+    <p class="subtitle">Prends le temps de lire chaque morceau. Pour explorer les signes de 57, tu peux aussi <a href="/musique#album-57" data-link>écouter l’album</a>.</p>
     <h2 class="albums-title">Les morceaux</h2>
     ${albums || '<p class="empty-note">Aucun album pour le moment.</p>'}
     ${data.orphans?.length ? `<section class="album-card"><h2>Autres morceaux</h2><ul class="song-list">${data.orphans.map((s) => `<li><a href="/chanson/${encodeURIComponent(s.slug)}" data-link>${esc(s.title)}</a></li>`).join('')}</ul></section>` : ''}`;
@@ -2207,6 +2208,8 @@ async function refreshSession() {
     state.echelon = 1;
     state.attenteMs = 0;
   }
+  try { const music=await api('/api/music');WCPlayer.setAlbums(music.albums); }
+  catch { WCPlayer.setAlbums([]); }
 }
 
 function accountDestination() {
@@ -2290,7 +2293,7 @@ async function pageSong(slug) {
   try {
     const { song, lines } = await api(`/api/songs/${encodeURIComponent(slug)}`);
     if (stale(epoch)) return;
-    const track = WC57.tracks.find((t) => t.slug === song.slug);
+    const track = WCPlayer.findTrack(song.slug);
     document.title = `${song.title} · Paroles · White Cadae`;
     app.innerHTML = `<article class="lyrics-page">
       ${track ? '' : '<a class="back-link" href="/paroles" data-link>← Toutes les paroles</a>'}
@@ -2298,7 +2301,7 @@ async function pageSong(slug) {
       <h1>${esc(song.title)}</h1>
       ${track ? `<div class="lyrics-actions"><button class="orange-button" data-play-track="${esc(track.slug)}">${WCIcon('play')} Écouter le morceau</button><a href="/echelon" data-link>Proposer un signe ${WCIcon('arrow')}</a></div>` : ''}
       <div class="lyrics-readable">${lines.length ? lines.map((l) => l.text ? `<p>${esc(l.text)}</p>` : '<div class="lyrics-break" aria-hidden="true"></div>').join('') : '<p>Les paroles de ce morceau seront bientôt disponibles.</p>'}</div>
-      ${track ? '<a class="back-link" href="/57" data-link>Retrouver l’album 57 →</a>' : ''}
+      ${track ? `<a class="back-link" href="/musique#album-${esc(track.albumId)}" data-link>Retrouver l’album ${esc(track.album)} →</a>` : ''}
     </article>`;
     bindMusicButtons();
   } catch (err) {

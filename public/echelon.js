@@ -47,7 +47,7 @@ window.WCGame=(()=>{
   function render(){
     versions.clear();
     if(isClock()&&!pageBy('eg-10')){app.innerHTML='<section class="eg-page"><h1>Ce chemin n’est pas disponible.</h1><a href="/echelon" data-link>Retrouver Échelons →</a></section>';return;}
-    app.innerHTML=`<section class="eg-page">${header()}<div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}${isClock()?`<div class="eg-durations">${WC57.tracks.map(t=>`<div><span>${e(t.title)}</span><strong>${mmss(Math.floor(t.duration))}</strong><button class="eg-listen" data-play-track="${e(t.slug)}">Écouter</button></div>`).join('')}</div>`:''}<div id="eg-game-content" class="${isClock()?'eg-labs':'eg-entries'}"></div><footer class="eg-footer"><a href="/57" data-link>Écouter 57</a><a href="/paroles" data-link>Lire les paroles</a>${isClock()?'<a href="/echelon" data-link>Retour à Échelons</a>':''}</footer></section>`;
+    app.innerHTML=`<section class="eg-page">${header()}<div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}${isClock()?`<div class="eg-durations">${WC57.tracks.map(t=>`<div><span>${e(t.title)}</span><strong>${mmss(Math.floor(t.duration))}</strong><button class="eg-listen" data-play-track="${e(t.slug)}">Écouter</button></div>`).join('')}</div>`:''}<div id="eg-game-content" class="${isClock()?'eg-labs':'eg-entries'}"></div><footer class="eg-footer"><a href="/musique#album-57" data-link>Écouter 57</a><a href="/paroles" data-link>Lire les paroles</a>${isClock()?'<a href="/echelon" data-link>Retour à Échelons</a>':''}</footer></section>`;
     document.title=`${isClock()?'Horloge · ':''}Échelons · White Cadae`;
     sync();if(isClock())bindMusicButtons();
   }

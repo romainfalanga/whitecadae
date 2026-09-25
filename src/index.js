@@ -14,7 +14,7 @@ import {
 import { handleConversation, conversationAccess } from './conversation.js';
 import { handleEchelon, gameRows } from './echelon-api.js';
 import { gameLevel, accessLevel, gameProfile } from './echelon.js';
-import { ensureMetaMoi } from './meta-moi.js';
+import {JULY,retiredSong,julySong,visibleSong,ensureMusicCatalogue} from './music-catalogue.js';
 
 const SESSION_COOKIE = 'wc_session';
 const SESSION_DAYS = 30;
@@ -39,9 +39,13 @@ export default {
 
 // Workers Assets may return the whole MP3 even for Range requests. Native
 // players (especially Safari) need real byte ranges to seek before download ends.
-// The four source files are bounded (< 10 MB each); only a partial response is
+// The source files are bounded (< 10 MB each); only a partial response is
 // buffered here. Full playback keeps the original streaming asset response.
 async function serveMusic(request, env) {
+  let path;
+  try { path=decodeURIComponent(new URL(request.url).pathname); } catch { return new Response('Fichier introuvable',{status:404}); }
+  const restricted=path.startsWith('/music/18-juillet-2019/');
+  if(restricted && !await julyAccess(request,env))return json({error:'Cet EP se découvre à l’échelon 5.'},403);
   const headers = new Headers(request.headers);
   const range = headers.get('Range');
   headers.delete('Range');
@@ -51,6 +55,7 @@ async function serveMusic(request, env) {
     return response;
   }
   const outputHeaders = new Headers(response.headers);
+  if(restricted){outputHeaders.set('Cache-Control','private, no-store');outputHeaders.set('Vary','Cookie');}
   outputHeaders.set('Accept-Ranges', 'bytes');
   const full = () => new Response(response.body, { status: response.status, headers: outputHeaders });
   if (!range || request.method !== 'GET' || response.status !== 200) return full();
@@ -155,6 +160,7 @@ async function handleApi(request, env, url) {
     return json({ error: 'Les paroles sont désormais en lecture seule.' }, 410);
   }
   if (route('GET', '/api/albums')) return listAlbums(env, request);
+  if (route('GET', '/api/music')) return json({albums:await julyAccess(request,env)?[JULY]:[]});
   if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
 
   // --- auth
@@ -332,6 +338,11 @@ async function getUser(request, env) {
       WHERE s.token = ?1 AND s.expires_at > datetime('now')`
   ).bind(token).first();
   return row || null;
+}
+
+async function julyAccess(request,env) {
+  const user=await getUser(request,env);
+  return !!user && (!!user.is_admin || gameLevel(await gameRows(env,user.id))>=5);
 }
 
 async function requireUser(request, env) {
@@ -719,13 +730,15 @@ async function me(request, env) {
 async function getCorpus(env, request) {
   const viewer = await getUser(request, env);
   const viewerId = viewer ? viewer.id : 0;
+  const unlocked=await julyAccess(request,env);
   const songs = (await env.DB.prepare(
     'SELECT id, title, slug FROM songs ORDER BY title'
-  ).all()).results;
+  ).all()).results.filter(song=>visibleSong(song,unlocked));
+  const visibleIds=new Set(songs.map(song=>song.id));
   const lines = (await env.DB.prepare(
     `SELECT id, song_id, line_number, text FROM lyric_lines
       WHERE text <> '' AND text NOT LIKE '[%' ORDER BY song_id, line_number`
-  ).all()).results;
+  ).all()).results.filter(line=>visibleIds.has(line.song_id));
 
   // Nombre de MES interprétations couvrant chaque phrase : une référence
   // interne ne vise qu'un passage que j'ai déjà interprété, puisque je suis
@@ -776,7 +789,8 @@ async function getCorpus(env, request) {
 
 const cataloguesRenamed = new WeakSet();
 async function listAlbums(env, request) {
-  await ensureMetaMoi(env);
+  await ensureMusicCatalogue(env);
+  const unlocked=await julyAccess(request,env);
   // Apply the targeted, idempotent catalogue migration through the existing
   // database binding; no extra account-wide D1 permission is needed.
   if (!cataloguesRenamed.has(env.DB)) {
@@ -787,22 +801,25 @@ async function listAlbums(env, request) {
   }
   const albums = (await env.DB.prepare(
     'SELECT id, title, slug, release_date, is_single FROM albums ORDER BY position, release_date'
-  ).all()).results;
+  ).all()).results.filter(album=>album.slug!=='18-juillet-2019'||unlocked);
   const songs = (await env.DB.prepare(
     `SELECT s.id, s.album_id, s.title, s.slug, s.track_number,
             (SELECT COUNT(*) FROM lyric_lines l WHERE l.song_id = s.id AND l.text <> '') AS line_count
        FROM songs s ORDER BY s.track_number, s.title`
-  ).all()).results;
+  ).all()).results.filter(song=>visibleSong(song,unlocked));
   for (const album of albums) {
     album.is_single = !!album.is_single;
     album.songs = songs.filter((s) => s.album_id === album.id);
+    if(album.slug==='18-juillet-2019')album.songs.forEach((song,i)=>song.track_number=i+1);
   }
   const orphans = songs.filter((s) => !albums.some((a) => a.id === s.album_id));
   return json({ albums, orphans });
 }
 
 async function getSong(env, request, slug) {
-  if (slug === 'meta-moi') await ensureMetaMoi(env);
+  if(retiredSong(slug))return json({error:'Ce morceau a été retiré.'},404);
+  if(julySong(slug)&&!await julyAccess(request,env))return json({error:'Les paroles de cet EP se découvrent à l’échelon 5.'},403);
+  if (slug === 'meta-moi') await ensureMusicCatalogue(env);
   const song = await env.DB.prepare(
     `SELECT s.id, s.title, s.slug, s.track_number, s.youtube_url, s.duration_seconds, s.album_id,
             al.title AS album_title
@@ -883,8 +900,8 @@ async function getProfile(env, request, username) {
   const essayLinks = (await env.DB.prepare(
     `SELECT el.essay_id, el.note,
             el.from_word_start, el.from_word_end, el.to_word_start, el.to_word_end,
-            lf.text AS from_text, sf.title AS from_song_title,
-            lt.text AS to_text, st.title AS to_song_title
+            lf.text AS from_text, sf.title AS from_song_title, sf.slug AS from_song_slug,
+            lt.text AS to_text, st.title AS to_song_title, st.slug AS to_song_slug
        FROM essay_links el
        JOIN lyric_lines lf ON lf.id = el.from_line_id
        JOIN songs sf ON sf.id = lf.song_id
@@ -933,10 +950,18 @@ async function getProfile(env, request, username) {
        (SELECT COUNT(*) FROM song_connections WHERE user_id = ?1) AS connections`
   ).bind(user.id).first();
 
+  const unlocked=await julyAccess(request,env);
+  const visible=slug=>!slug||visibleSong({slug},unlocked);
+  const allowedAnnotations=annotations.filter(a=>visible(a.song_slug));
+  for(const a of allowedAnnotations)a.references=a.references.filter(r=>visible(r.ref_song_slug));
+  const allowedEssays=essays.filter(e=>visible(e.song_slug));
+  for(const e of allowedEssays)e.links=e.links.filter(l=>visible(l.from_song_slug)&&visible(l.to_song_slug));
   return json({
     user: { username: user.username, created_at: user.created_at, is_admin: !!user.is_admin },
     jeu,
-    stats, annotations, essays, passageRefs, connections,
+    stats, annotations:allowedAnnotations, essays:allowedEssays,
+    passageRefs:passageRefs.filter(p=>visible(p.song_slug)&&visible(p.ref_song_slug)),
+    connections:connections.filter(c=>visible(c.song_a_slug)&&visible(c.song_b_slug)),
   });
 }
 

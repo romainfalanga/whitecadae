@@ -13,7 +13,15 @@
 .orange-story-text a { color:var(--orange);font-weight:650;text-decoration:underline;text-underline-offset:.2em; }
 .music-album { display:flex;gap:3rem;align-items:center;padding:2rem 0 3rem; }
 .music-cover { width:32%;height:auto;border-radius:8px;box-shadow:0 15px 40px #0007; }
-.music-album h1 { font-family:Georgia,serif;font-size:5.5rem;line-height:1;margin:0 0 1rem;color:#fff2df; }
+.music-page-title { font-family:Georgia,serif;font-size:clamp(2.2rem,5vw,3.5rem); }
+.music-release { margin-bottom:3rem;scroll-margin-top:5rem; }
+.music-release + .music-release { border-top:1px solid #ffffff18;padding-top:1rem; }
+.music-album h2 { font-family:Georgia,serif;font-size:clamp(2rem,5vw,4rem);line-height:1.1;margin:0 0 1rem;color:#fff2df; }
+.music-date-art { width:32%;aspect-ratio:1;flex-shrink:0;display:flex;flex-direction:column;justify-content:center;align-items:center;border:1px solid #c7bfaa55;border-radius:8px;background:#ddd5c4;color:#272723;box-shadow:0 15px 40px #0007;font-family:Georgia,serif; }
+.music-date-art span:first-child { font-size:clamp(3rem,9vw,7rem);line-height:1; }
+.music-date-art span:nth-child(2) { font-style:italic;font-size:1.5rem;margin:.3rem 0; }
+.music-date-art span:last-child { font-size:1rem;letter-spacing:.35em;margin-left:.35em; }
+.player-date { display:flex;width:52px;height:52px;align-items:center;justify-content:center;background:#ddd5c4;color:#272723;border-radius:5px;text-align:center;font:700 17px/1.05 Georgia,serif; }
 .music-artist { font-size:1.4rem;margin:0 0 .5rem; }
 .music-meta { color:#9f9a96;font-size:.85rem; }
 .music-meta span { padding:0 .5rem; }
@@ -70,7 +78,7 @@ body.with-player #install-banner { bottom:calc(var(--player-height) + 1rem); }
   .site-header { z-index:50; }
   .orange-story { padding:.25rem 0; }
   .orange-title { flex-direction:column;gap:.05em;margin-bottom:1.4rem; }
-  .music-album { gap:1.6rem;flex-direction:column;text-align:center;padding:1rem 0 2rem; }.music-cover { width:72%;max-width:300px; }.music-album h1 { font-size:4rem; }.music-album .eyebrow { font-size:.65rem; }
+  .music-album { gap:1.6rem;flex-direction:column;text-align:center;padding:1rem 0 2rem; }.music-cover,.music-date-art { width:72%;max-width:300px; }.music-album h2 { font-size:2.7rem; }.music-album .eyebrow { font-size:.65rem; }.player-date { width:36px;height:36px;font-size:13px; }
   .music-list li { gap:.6rem;padding:.65rem .1rem; }.track-play { gap:.65rem;font-size:.9rem; }.track-number { font-size:.7rem; }.track-lyrics span { display:none; }.track-duration { min-width:2.4rem;font-size:.75rem; }
   .music-list-head { padding:1rem .1rem; }
   /* Two rows at every phone width: track + playback, then seek + extras. */

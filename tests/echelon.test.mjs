@@ -89,6 +89,19 @@ test('M=M and named answers accept accents, equal signs and partial discovery',(
   for(const word of ['devincix','Katikas'])assert.ok(matchNode(door,word,new Set()).prises[0].complet);
 });
 
+test('the two numeric formulas independently accept the same date and preserve earned rungs',()=>{
+  for(const id of ['n-c','eg-14']){
+    const n=NODES.find(n=>n.id===id);assert.equal(n.answers.length,1);
+    for(const text of ['25 décembre','25/12'])assert.ok(matchNode(n,text,new Set()).prises[0].complet);
+    assert.ok(!matchNode(n,'Jésus',new Set())?.prises?.length);
+  }
+  assert.equal(gameLevel(rows('n-c-1')),1);
+  assert.equal(gameLevel(rows('n-c-1','eg-14-1')),2);
+  assert.equal(gameLevel(rows('n-c-1','eg-04-1')),2);
+  assert.equal(gameLevel(rows('eg-04-1.p0','eg-04-1','eg-14-1')),1);
+  assert.ok(!progress(rows('n-c-1')).solved.has('eg-14-1'));
+});
+
 test('duration construction validates origin, operations and controlled sharing',()=>{
   assert.ok(validateConstruction('first',[src('b'),src('a')],false));
   assert.ok(hasTwoSevens([...sevens,src('b')]));

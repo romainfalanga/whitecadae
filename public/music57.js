@@ -1,6 +1,6 @@
 // The public album catalogue contains music metadata only, never game answers.
 window.WC57 = Object.freeze({
-  artist: 'Vulpis', album: '57', cover: '/music/57/cover.png',
+  id:'57', artist: 'Vulpis', album: '57', cover: '/music/57/cover.png',
   tracks: Object.freeze([
     { slug: '13h20', title: '13h20', src: '/music/57/13h20.mp3', duration: 144.456 },
     { slug: '30-vins-divins', title: '30 vins divins', src: '/music/57/30-vins-divins.mp3', duration: 230.374 },

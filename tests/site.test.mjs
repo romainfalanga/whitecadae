@@ -25,7 +25,7 @@ function d1Binding(db) {
 
 test('catalogue updates preserve existing lyrics and add Meta moi exactly once', async () => {
   const db=new DatabaseSync(':memory:');
-  db.exec(`CREATE TABLE albums(id INTEGER PRIMARY KEY,title TEXT,slug TEXT,release_date TEXT,is_single INTEGER,position INTEGER);
+  db.exec(`CREATE TABLE albums(id INTEGER PRIMARY KEY,title TEXT,slug TEXT UNIQUE,release_date TEXT,is_single INTEGER,position INTEGER);
     CREATE TABLE songs(id INTEGER PRIMARY KEY,album_id INTEGER,title TEXT,slug TEXT UNIQUE,track_number INTEGER,youtube_url TEXT,duration_seconds INTEGER);
     CREATE TABLE lyric_lines(id INTEGER PRIMARY KEY,song_id INTEGER,line_number INTEGER,text TEXT);
     INSERT INTO albums VALUES(4,'114','114',NULL,0,4),(9,'114','different',NULL,0,9);
@@ -40,13 +40,15 @@ test('catalogue updates preserve existing lyrics and add Meta moi exactly once',
     assert.equal(data.albums.find(a=>a.id===9).title,'114');
     assert.deepEqual(data.albums.find(a=>a.id===4).songs.map(s=>s.id),[13,14,15]);
     assert.equal(data.albums.find(a=>a.id===4).songs[2].line_count,1);
-    assert.deepEqual(data.orphans.map(s=>s.slug),['meta-moi']);
+    assert.deepEqual(data.orphans,[]);
+    assert.equal(data.albums.at(-1).title,'Meta moi');
+    assert.deepEqual(data.albums.at(-1).songs.map(s=>s.slug),['meta-moi']);
   }
   const response=await worker.fetch(new Request('https://test.local/api/songs/meta-moi'),env);
   const song=await response.json();
   assert.equal(response.status,200);
   assert.equal(song.song.title,'Meta moi');
-  assert.equal(song.song.album_id,null);
+  assert.equal(song.song.album_title,'Meta moi');
   assert.deepEqual(song.lines.map(line=>line.text),META_MOI_LYRICS.split('\n'));
   assert.deepEqual(song.lines.map(line=>line.line_number),song.lines.map((_,i)=>i+1));
   const ids=song.lines.map(line=>line.id);
