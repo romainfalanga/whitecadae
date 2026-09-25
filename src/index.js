@@ -1,9 +1,8 @@
 // WhiteCadae : Cloudflare Worker (API + service du site statique)
 
 import {
-  getNode, isLocked, matchNode, buildState, currentAnswerId, echelonOf, accessOf,
-  delaiEssaiMs, enigmesTrouvees, progresOf,
-  ECHELON_CONVERSATION, ECHELON_PENSE_MIEUX, ECHELON_VIDEOGRAPHIE,
+  currentAnswerId, accessOf, progresOf,
+  ECHELON_PENSE_MIEUX, ECHELON_VIDEOGRAPHIE,
   ECHELON_CARRE, ECHELON_BRAINSTORM, ECHELON_114,
 } from './enigmas57.js';
 import {
@@ -12,6 +11,12 @@ import {
   CADENCES, CADENCES_ORDRE, REPONSES,
   VOLETS_SOCIETE, VOLETS_CLES,
 } from './contenus.js';
+import { handleConversation } from './conversation.js';
+import { handleEchelon, gameRows } from './echelon-api.js';
+import { gameLevel, accessLevel, gameProfile } from './echelon.js';
+import {RELEASES,retiredSong,gatedTrack,gatedAlbum,visibleSong,canListen,musicAlbums,ensureMusicCatalogue} from './music-catalogue.js';
+import {contentAccess} from './content-access.js';
+import {buildJourney} from './journey.js';
 
 const SESSION_COOKIE = 'wc_session';
 const SESSION_DAYS = 30;
@@ -20,6 +25,7 @@ const PBKDF2_ITERATIONS = 100000;
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/music/')) return avecSecurite(await serveMusic(request, env));
     if (url.pathname.startsWith('/api/')) {
       try {
         return avecSecurite(await handleApi(request, env, url));
@@ -32,6 +38,51 @@ export default {
     return avecSecurite(await env.ASSETS.fetch(request));
   },
 };
+
+// Workers Assets may return the whole MP3 even for Range requests. Native
+// players (especially Safari) need real byte ranges to seek before download ends.
+// The source files are bounded (< 10 MB each); only a partial response is
+// buffered here. Full playback keeps the original streaming asset response.
+async function serveMusic(request, env) {
+  let path;
+  try { path=decodeURIComponent(new URL(request.url).pathname); } catch { return new Response('Fichier introuvable',{status:404}); }
+  const release=RELEASES.find(album=>path.startsWith('/music/'+album.id+'/'));
+  const restricted=!!release;
+  if(restricted){
+    const item=path===release.cover?release.tracks[0]:release.tracks.find(track=>track.src===path);
+    if(!item)return json({error:'Fichier introuvable.'},404);
+    if(!canListen(item,await listeningAccess(request,env)))return json({error:`Ce contenu se découvre à l’échelon ${item.minLevel}.`},403);
+  }
+  const headers = new Headers(request.headers);
+  const range = headers.get('Range');
+  headers.delete('Range');
+  const response = await env.ASSETS.fetch(new Request(request, { headers }));
+  const outputHeaders = new Headers(response.headers);
+  if(restricted){outputHeaders.set('Cache-Control','private, no-store');outputHeaders.set('Vary','Cookie');}
+  if (!/^audio\//.test(response.headers.get('Content-Type') || '')) {
+    if ((response.headers.get('Content-Type') || '').includes('text/html')) return new Response('Fichier introuvable', { status: 404 });
+    return new Response(response.body,{status:response.status,headers:outputHeaders});
+  }
+  outputHeaders.set('Accept-Ranges', 'bytes');
+  const full = () => new Response(response.body, { status: response.status, headers: outputHeaders });
+  if (!range || request.method !== 'GET' || response.status !== 200) return full();
+  const ifRange = request.headers.get('If-Range');
+  if (ifRange && ifRange !== response.headers.get('ETag') && ifRange !== response.headers.get('Last-Modified')) return full();
+  const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+  if (!match || (!match[1] && !match[2])) return full(); // ignore unsupported/malformed ranges
+  // ASSETS.fetch can omit Content-Length even though the final edge response
+  // includes it. Derive the byte length from the original, unencoded MP3.
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const size = bytes.byteLength;
+  const start = match[1] ? Number(match[1]) : Math.max(0, size - Number(match[2]));
+  const end = match[1] && match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= size) {
+    return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}`, 'Accept-Ranges': 'bytes' } });
+  }
+  outputHeaders.set('Content-Range', `bytes ${start}-${end}/${size}`);
+  outputHeaders.set('Content-Length', String(end - start + 1));
+  return new Response(bytes.subarray(start, end + 1), { status: 206, headers: outputHeaders });
+}
 
 /* ------------------------------------------------- en-têtes de sécurité ---
 
@@ -101,6 +152,25 @@ async function handleApi(request, env, url) {
 
   let p;
 
+  if (/^\/api\/(carre|societes|brainstorms|114)(?:\/|$)/.test(path)) {
+    return json({error:'Cet espace a été supprimé.'}, 410);
+  }
+
+  if (path === '/api/echelon' || path.startsWith('/api/echelon/') ||
+      path === '/api/57' || path === '/api/57/guess') {
+    return handleEchelon(request, env, path, { getUser, json });
+  }
+
+  // Lyrics are read-only; individual song access is checked below.
+  if (['POST', 'PUT', 'PATCH'].includes(request.method) &&
+      /^\/api\/(annotations|references|passage-references|connections|essays)(?:\/|$)/.test(path)) {
+    return json({ error: 'Les paroles sont désormais en lecture seule.' }, 410);
+  }
+  if (route('GET', '/api/albums')) return listAlbums(env, request);
+  if (route('GET', '/api/music')) return json({albums:musicAlbums(await listeningAccess(request,env))});
+  if (path==='/api/aa'||path==='/api/journey') return json({error:'Cette page a été retirée.'},410);
+  if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
+
   // --- auth
   if (route('POST', '/api/register')) return register(request, env);
   if (route('POST', '/api/login')) return login(request, env);
@@ -115,10 +185,8 @@ async function handleApi(request, env, url) {
   //     celui qui regarde (voir getProfile).
   if ((p = route('GET', '/api/users/:username'))) return getProfile(env, request, p[0]);
 
-  // --- le 57 : la porte d'entrée, ouverte à tout membre
-  if (route('GET', '/api/57')) return signsState(request, env);
-  if (route('POST', '/api/57/guess')) return signsGuess(request, env);
-  if (route('DELETE', '/api/57/progress')) return signsReset(request, env);
+  // The retired reset must not erase historical access rights.
+  if (route('DELETE', '/api/57/progress')) return json({ error: 'Cette ancienne fonction a été retirée.' }, 410);
 
   // --- le compte : toujours accessible, sinon on ne pourrait plus en sortir
   if (route('PUT', '/api/account/username')) return updateUsername(request, env);
@@ -129,8 +197,8 @@ async function handleApi(request, env, url) {
   //     gestionnaire (le corps de la requête et l'échelon du visiteur s'y
   //     lisent ensemble). L'ordre n'a pas d'importance : rien ici n'est
   //     couvert par le barrage plus bas.
-  if (route('GET', '/api/conversation')) return conversationList(request, env);
-  if (route('POST', '/api/conversation')) return conversationPost(request, env);
+  if (route('GET', '/api/conversation')) return handleConversation(request, env, {getUser, json});
+  if (route('POST', '/api/conversation')) return handleConversation(request, env, {getUser, json});
 
   if (route('GET', '/api/arbres')) return arbresList(request, env, url);
   if (route('POST', '/api/arbres')) return arbresCreate(request, env);
@@ -156,40 +224,6 @@ async function handleApi(request, env, url) {
   if ((p = route('GET', '/api/branches/:id/vocal'))) return vocalSert(request, env, +p[0]);
   if ((p = route('DELETE', '/api/branches/:id/vocal'))) return vocalDetache(request, env, +p[0]);
 
-  // les littéraux d'abord, la page d'un carré (:id) ensuite
-  if (route('GET', '/api/carre')) return carreGet(request, env);
-  if (route('POST', '/api/carre')) return carreCreate(request, env);
-  if (route('GET', '/api/carre/as')) return carreAnnuaire(request, env);
-  if (route('GET', '/api/carre/recrutement')) return carreRecrutement(request, env);
-  if (route('PUT', '/api/carre/annonce')) return carreAnnoncePut(request, env);
-  if (route('DELETE', '/api/carre/annonce')) return carreAnnonceDelete(request, env);
-  if (route('POST', '/api/carre/invitations')) return carreInvite(request, env);
-  if ((p = route('POST', '/api/carre/invitations/:id/accepte'))) return carreInviteAccepte(request, env, +p[0]);
-  if ((p = route('POST', '/api/carre/invitations/:id/refuse'))) return carreInviteRefuse(request, env, +p[0]);
-  if ((p = route('GET', '/api/carre/:id'))) return carreDetail(request, env, +p[0]);
-  if ((p = route('PUT', '/api/carre/:id'))) return carreUpdate(request, env, +p[0]);
-  if ((p = route('POST', '/api/carre/:id/rejoindre'))) return carreJoin(request, env, +p[0]);
-  if ((p = route('POST', '/api/carre/:id/quitter'))) return carreLeave(request, env, +p[0]);
-  if ((p = route('GET', '/api/carre/:id/conversation'))) return carreChatList(request, env, +p[0]);
-  if ((p = route('POST', '/api/carre/:id/conversation'))) return carreChatPost(request, env, +p[0]);
-  // les sociétés harmonieuses : ce qu'un carré imagine ensemble
-  if ((p = route('POST', '/api/carre/:id/societes'))) return societeCreate(request, env, +p[0]);
-  if ((p = route('GET', '/api/societes/:id'))) return societeGet(request, env, +p[0]);
-  if ((p = route('PUT', '/api/societes/:id'))) return societeUpdate(request, env, +p[0]);
-  if ((p = route('DELETE', '/api/societes/:id'))) return societeDelete(request, env, +p[0]);
-  if ((p = route('POST', '/api/societes/:id/idees'))) return societeIdee(request, env, +p[0]);
-  if ((p = route('DELETE', '/api/societes/:id/idees/:idee'))) return societeIdeeDelete(request, env, +p[0], +p[1]);
-
-  if (route('GET', '/api/brainstorms')) return brainstormsList(request, env, url);
-  if (route('POST', '/api/brainstorms')) return brainstormsCreate(request, env);
-  if ((p = route('GET', '/api/brainstorms/:id'))) return brainstormGet(request, env, +p[0]);
-  if ((p = route('PUT', '/api/brainstorms/:id'))) return brainstormUpdate(request, env, +p[0]);
-  if ((p = route('POST', '/api/brainstorms/:id/idees'))) return brainstormIdee(request, env, +p[0]);
-  if ((p = route('POST', '/api/brainstorms/:id/votes'))) return brainstormVote(request, env, +p[0]);
-  if ((p = route('POST', '/api/brainstorms/:id/retenues'))) return brainstormRetenue(request, env, +p[0]);
-
-  if (route('GET', '/api/114')) return cent14Get(request, env);
-
   // --- le tronc commun : les interprétations. Ouvert dès l'échelon 1, donc à
   //     tout le monde, visiteur compris : le barrage ne ferme plus que ce qui
   //     est au-dessus. On le garde en place : si un jour un échelon doit se
@@ -199,23 +233,14 @@ async function handleApi(request, env, url) {
     if (refus) return refus;
   }
 
-  // --- lecture
-  if (route('GET', '/api/albums')) return listAlbums(env, request);
+  // Legacy corpus reader remains available for private historical references.
   if (route('GET', '/api/corpus')) return getCorpus(env, request);
-  if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
 
   // --- contributions (connecté)
-  if (route('POST', '/api/annotations')) return createAnnotation(request, env);
-  if ((p = route('PUT', '/api/annotations/:id'))) return updateAnnotation(request, env, +p[0]);
   if ((p = route('DELETE', '/api/annotations/:id'))) return deleteAnnotation(request, env, +p[0]);
-  if ((p = route('POST', '/api/annotations/:id/references'))) return addReference(request, env, +p[0]);
   if ((p = route('DELETE', '/api/references/:id'))) return deleteReference(request, env, +p[0]);
-  if (route('POST', '/api/passage-references')) return createPassageReference(request, env);
   if ((p = route('DELETE', '/api/passage-references/:id'))) return deletePassageReference(request, env, +p[0]);
-  if (route('POST', '/api/connections')) return createConnection(request, env);
   if ((p = route('DELETE', '/api/connections/:id'))) return deleteConnection(request, env, +p[0]);
-  if (route('POST', '/api/essays')) return createEssay(request, env);
-  if ((p = route('PUT', '/api/essays/:id'))) return updateEssay(request, env, +p[0]);
   if ((p = route('DELETE', '/api/essays/:id'))) return deleteEssay(request, env, +p[0]);
 
   // --- administration
@@ -323,6 +348,11 @@ async function getUser(request, env) {
   return row || null;
 }
 
+async function listeningAccess(request,env) {
+  const user=await getUser(request,env);
+  return contentAccess(user,user?await gameRows(env,user.id):[]);
+}
+
 async function requireUser(request, env) {
   const user = await getUser(request, env);
   if (!user) throw json({ error: 'Connexion requise.' }, 401);
@@ -344,18 +374,23 @@ async function requireAdmin(request, env) {
    L'artiste en est exempté : il ne peut pas se retrouver enfermé dehors de
    son propre site par un jeu dont il connaît déjà les réponses.            */
 
+function activeAccess(echelon) {
+  return {...accessOf(echelon), penseMieux:false, carre:false, brainstorm:false, cent14:false};
+}
+
 async function viewerAccess(request, env) {
   const user = await getUser(request, env);
   // Sans compte on est au sol, comme tout le monde : l'échelon 1 ouvre déjà
   // les interprétations, en lecture.
-  if (!user) return { user: null, echelon: 1, solved: new Set(), access: accessOf(1) };
+  if (!user) return { user: null, echelon: 1, solved: new Set(), access: activeAccess(1) };
   if (user.is_admin) {
-    return { user, echelon: Infinity, solved: new Set(), access: accessOf(Infinity) };
+    return { user, echelon: Infinity, solved: new Set(), access: activeAccess(Infinity) };
   }
   const rows = await riddleRows(env, user.id);
   const { solved } = progresOf(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
-  const echelon = echelonOf(solved);
-  return { user, echelon, solved, access: accessOf(echelon) };
+  const echelon = accessLevel(rows);
+  const spaces=contentAccess(user,rows);
+  return { user, echelon, solved, access: {...activeAccess(echelon), conversation:spaces.conversation,videographie:spaces.videographie} };
 }
 
 // L'échelon exigé par une pièce, et un refus prêt à servir. Le message ne dit
@@ -691,7 +726,8 @@ async function me(request, env) {
     user: user ? { ...user, is_admin: !!user.is_admin, voix } : null,
     access,
     echelon: Number.isFinite(echelon) ? echelon : ECHELON_114,
-    attenteMs: user && Number.isFinite(echelon) ? await attenteRestante(env, user.id, echelon) : 0,
+    gameEchelon: user ? gameLevel(await gameRows(env, user.id)) : 0,
+    attenteMs: 0,
   });
 }
 
@@ -703,13 +739,15 @@ async function me(request, env) {
 async function getCorpus(env, request) {
   const viewer = await getUser(request, env);
   const viewerId = viewer ? viewer.id : 0;
+  const unlocked=await listeningAccess(request,env);
   const songs = (await env.DB.prepare(
     'SELECT id, title, slug FROM songs ORDER BY title'
-  ).all()).results;
+  ).all()).results.filter(song=>visibleSong(song,unlocked));
+  const visibleIds=new Set(songs.map(song=>song.id));
   const lines = (await env.DB.prepare(
     `SELECT id, song_id, line_number, text FROM lyric_lines
       WHERE text <> '' AND text NOT LIKE '[%' ORDER BY song_id, line_number`
-  ).all()).results;
+  ).all()).results.filter(line=>visibleIds.has(line.song_id));
 
   // Nombre de MES interprétations couvrant chaque phrase : une référence
   // interne ne vise qu'un passage que j'ai déjà interprété, puisque je suis
@@ -758,38 +796,43 @@ async function getCorpus(env, request) {
   return json({ songs, lines });
 }
 
+const cataloguesRenamed = new WeakSet();
 async function listAlbums(env, request) {
-  const viewer = await getUser(request, env);
-  const viewerId = viewer ? viewer.id : 0;
+  await ensureMusicCatalogue(env);
+  const unlocked=await listeningAccess(request,env);
+  // Apply the targeted, idempotent catalogue migration through the existing
+  // database binding; no extra account-wide D1 permission is needed.
+  if (!cataloguesRenamed.has(env.DB)) {
+    await env.DB.prepare(`UPDATE albums SET title = 'Fais Mieux'
+      WHERE slug IN ('114','fais-mieux') AND title IN ('114','Fais mieux','Fais Mieux')
+        AND EXISTS (SELECT 1 FROM songs WHERE album_id = albums.id AND slug = 'fais-mieux')`).run();
+    cataloguesRenamed.add(env.DB);
+  }
   const albums = (await env.DB.prepare(
     'SELECT id, title, slug, release_date, is_single FROM albums ORDER BY position, release_date'
-  ).all()).results;
-  // le compteur dit ce que MOI j'ai écrit sur ce morceau : c'est ma mémoire
-  // qui se chiffre, pas celle des autres
+  ).all()).results.filter(album=>!gatedAlbum(album.slug)||canListen(gatedAlbum(album.slug).tracks[0],unlocked));
   const songs = (await env.DB.prepare(
     `SELECT s.id, s.album_id, s.title, s.slug, s.track_number,
-            (SELECT COUNT(*) FROM annotations a WHERE a.song_id = s.id AND a.user_id = ?1) AS annotation_count,
             (SELECT COUNT(*) FROM lyric_lines l WHERE l.song_id = s.id AND l.text <> '') AS line_count
        FROM songs s ORDER BY s.track_number, s.title`
-  ).bind(viewerId).all()).results;
+  ).all()).results.filter(song=>visibleSong(song,unlocked));
   for (const album of albums) {
     album.is_single = !!album.is_single;
     album.songs = songs.filter((s) => s.album_id === album.id);
+    const release=gatedAlbum(album.slug);
+    if(release){album.title=release.album;album.songs.forEach((song,i)=>{song.track_number=i+1;const track=gatedTrack(song.slug);if(track)song.title=track.title;});}
   }
   const orphans = songs.filter((s) => !albums.some((a) => a.id === s.album_id));
   return json({ albums, orphans });
 }
 
 async function getSong(env, request, slug) {
-  await ensureReferenceColumns(env);
-  /* Une interprétation n'appartient qu'à celui qui l'écrit. C'est SA mémoire
-     de ce morceau : ce qu'il y a lu, ce qu'il y a relié. Personne d'autre ne
-     la voit — ni un visiteur, ni un autre membre. Toutes les requêtes qui
-     suivent sont donc bornées à `viewerId`, et un visiteur sans compte lit
-     les paroles sans rien d'autre. */
-  const viewer = await getUser(request, env);
-  const viewerId = viewer ? viewer.id : 0;
-
+  if(retiredSong(slug))return json({error:'Ce morceau a été retiré.'},404);
+  const track=gatedTrack(slug);
+  if(track){
+    if(!canListen(track,await listeningAccess(request,env)))return json({error:`Ces paroles se découvrent à l’échelon ${track.minLevel}.`},403);
+  }
+  if (slug === 'meta-moi') await ensureMusicCatalogue(env);
   const song = await env.DB.prepare(
     `SELECT s.id, s.title, s.slug, s.track_number, s.youtube_url, s.duration_seconds, s.album_id,
             al.title AS album_title
@@ -797,132 +840,13 @@ async function getSong(env, request, slug) {
       WHERE s.slug = ?1`
   ).bind(slug).first();
   if (!song) return json({ error: 'Chanson introuvable.' }, 404);
+  if(track){song.title=track.title;song.duration_seconds=track.duration;song.album_title=RELEASES.find(album=>album.tracks.includes(track)).album;}
 
   const lines = (await env.DB.prepare(
     'SELECT id, line_number, text FROM lyric_lines WHERE song_id = ?1 ORDER BY line_number'
   ).bind(song.id).all()).results;
 
-  // Grilles de lecture : le numéro de chaque lecture (n°1, n°2, …) est fixé
-  // une fois pour toutes à sa création : il n'est jamais recalculé, y compris
-  // si une lecture plus ancienne du même auteur sur la même cible est supprimée.
-  const annotations = (await env.DB.prepare(
-    `SELECT a.id, a.user_id, a.target_type, a.line_id, a.word_start, a.word_end, a.end_line_id,
-            a.content, a.created_at, a.updated_at, a.is_published, a.grid_number, u.username
-       FROM annotations a JOIN users u ON u.id = a.user_id
-      WHERE a.song_id = ?1 AND a.user_id = ?2
-      ORDER BY a.created_at`
-  ).bind(song.id, viewerId).all()).results;
-
-  const connections = (await env.DB.prepare(
-    `SELECT c.id, c.song_a_id, c.song_b_id, c.explanation, c.created_at, c.user_id,
-            u.username,
-            sa.title AS song_a_title, sa.slug AS song_a_slug,
-            sb.title AS song_b_title, sb.slug AS song_b_slug
-       FROM song_connections c
-       JOIN users u ON u.id = c.user_id
-       JOIN songs sa ON sa.id = c.song_a_id
-       JOIN songs sb ON sb.id = c.song_b_id
-      WHERE (c.song_a_id = ?1 OR c.song_b_id = ?1) AND c.user_id = ?2
-      ORDER BY c.created_at`
-  ).bind(song.id, viewerId).all()).results;
-
-  const allSongs = (await env.DB.prepare(
-    'SELECT id, title, slug FROM songs ORDER BY title'
-  ).all()).results;
-
-  // Grilles de lecture venues d'autres morceaux : les interprétations
-  // écrites ailleurs qui référencent un passage de ce morceau-ci.
-  const inbound = (await env.DB.prepare(
-    `SELECT a.id, a.user_id, a.content, a.created_at, a.updated_at, a.is_published, a.grid_number, u.username,
-            a.target_type, a.word_start, a.word_end,
-            r.ref_line_id, r.ref_end_line_id, r.note AS ref_note,
-            rl.text AS ref_text, rl.line_number AS ref_line_number,
-            rle.text AS ref_end_text, rle.line_number AS ref_end_number,
-            src.title AS source_title, src.slug AS source_slug,
-            sl.text AS source_line_text, sle.text AS source_end_text
-       FROM annotation_references r
-       JOIN annotations a ON a.id = r.annotation_id
-       JOIN users u ON u.id = a.user_id
-       JOIN songs src ON src.id = a.song_id
-       LEFT JOIN lyric_lines rl ON rl.id = r.ref_line_id
-       LEFT JOIN lyric_lines rle ON rle.id = r.ref_end_line_id
-       LEFT JOIN lyric_lines sl ON sl.id = a.line_id
-       LEFT JOIN lyric_lines sle ON sle.id = a.end_line_id
-      WHERE r.ref_song_id = ?1 AND a.song_id <> ?1 AND a.user_id = ?2
-      ORDER BY a.created_at`
-  ).bind(song.id, viewerId).all()).results;
-
-  // Références autonomes posées sur un passage de ce morceau.
-  await ensurePassageRefTable(env);
-  const passageRefs = (await env.DB.prepare(
-    `SELECT pr.id, pr.user_id, pr.target_type, pr.line_id, pr.word_start, pr.word_end,
-            pr.end_line_id, pr.kind, pr.label, pr.artist, pr.note, pr.created_at,
-            pr.ref_song_id, pr.ref_line_id, pr.ref_end_line_id,
-            u.username, rs.slug AS ref_song_slug
-       FROM passage_references pr
-       JOIN users u ON u.id = pr.user_id
-       LEFT JOIN songs rs ON rs.id = pr.ref_song_id
-      WHERE pr.song_id = ?1 AND pr.user_id = ?2
-      ORDER BY pr.created_at`
-  ).bind(song.id, viewerId).all()).results;
-
-  // Références venues d'ailleurs et qui pointent vers ce morceau.
-  const inboundRefs = (await env.DB.prepare(
-    `SELECT pr.id, pr.user_id, pr.note, pr.created_at,
-            pr.ref_line_id, pr.ref_end_line_id,
-            rl.text AS ref_text, rl.line_number AS ref_line_number,
-            rle.text AS ref_end_text, rle.line_number AS ref_end_number,
-            pr.target_type, pr.word_start, pr.word_end,
-            u.username, src.title AS source_title, src.slug AS source_slug,
-            sl.text AS source_line_text, sle.text AS source_end_text
-       FROM passage_references pr
-       JOIN users u ON u.id = pr.user_id
-       JOIN songs src ON src.id = pr.song_id
-       LEFT JOIN lyric_lines rl ON rl.id = pr.ref_line_id
-       LEFT JOIN lyric_lines rle ON rle.id = pr.ref_end_line_id
-       LEFT JOIN lyric_lines sl ON sl.id = pr.line_id
-       LEFT JOIN lyric_lines sle ON sle.id = pr.end_line_id
-      WHERE pr.ref_song_id = ?1 AND pr.song_id <> ?1 AND pr.user_id = ?2
-      ORDER BY pr.created_at`
-  ).bind(song.id, viewerId).all()).results;
-
-  // Interprétations d'ensemble et leurs connexions entre blocs.
-  const essays = (await env.DB.prepare(
-    `SELECT e.id, e.user_id, e.content, e.created_at, e.updated_at, e.is_published, u.username
-       FROM essays e JOIN users u ON u.id = e.user_id
-      WHERE e.song_id = ?1 AND e.user_id = ?2
-      ORDER BY e.created_at`
-  ).bind(song.id, viewerId).all()).results;
-  const essayLinks = (await env.DB.prepare(
-    `SELECT el.id, el.essay_id, el.note,
-            el.from_line_id, el.from_word_start, el.from_word_end,
-            el.to_line_id, el.to_word_start, el.to_word_end,
-            lf.text AS from_text, sf.title AS from_song_title,
-            lt.text AS to_text, st.title AS to_song_title
-       FROM essay_links el
-       JOIN lyric_lines lf ON lf.id = el.from_line_id
-       JOIN songs sf ON sf.id = lf.song_id
-       JOIN lyric_lines lt ON lt.id = el.to_line_id
-       JOIN songs st ON st.id = lt.song_id
-      WHERE el.essay_id IN (SELECT id FROM essays WHERE song_id = ${song.id} AND user_id = ${viewerId})
-      ORDER BY el.essay_id, el.position`
-  ).all()).results;
-  for (const e of essays) e.links = essayLinks.filter((l) => l.essay_id === e.id);
-
-  // Références jointes aux interprétations (libres ou internes).
-  const refs = (await env.DB.prepare(
-    `SELECT r.id, r.annotation_id, r.label, r.artist, r.note,
-            r.ref_song_id, r.ref_line_id, r.ref_end_line_id, rs.slug AS ref_song_slug
-       FROM annotation_references r
-       LEFT JOIN songs rs ON rs.id = r.ref_song_id
-      WHERE r.annotation_id IN (SELECT id FROM annotations WHERE song_id = ?1 AND user_id = ?2)
-      ORDER BY r.annotation_id, r.position`
-  ).bind(song.id, viewerId).all()).results;
-  for (const a of annotations) {
-    a.references = refs.filter((r) => r.annotation_id === a.id);
-  }
-
-  return json({ song, lines, annotations, connections, essays, inbound, passageRefs, inboundRefs, allSongs });
+  return json({ song, lines });
 }
 
 /* ----------------------------------------------------- profils & le livre */
@@ -946,14 +870,7 @@ async function getProfile(env, request, username) {
 
   // La part publique : l'échelon, et les énigmes trouvées telles que celui
   // qui regarde a le droit de les nommer.
-  const { solved: solvedCible } = progresOf(
-    (await riddleRows(env, user.id)).filter((r) => r.solved_at).map((r) => r.riddle_id)
-  );
-  const vu = await viewerAccess(request, env);
-  const jeu = {
-    echelon: echelonOf(solvedCible),
-    enigmes: enigmesTrouvees(solvedCible, vu.solved),
-  };
+  const jeu = gameProfile(await gameRows(env, user.id), await gameRows(env, viewer?.id));
 
   const annotations = (await env.DB.prepare(
     `SELECT a.id, a.target_type, a.content, a.created_at, a.updated_at, a.is_published, a.grid_number,
@@ -997,8 +914,8 @@ async function getProfile(env, request, username) {
   const essayLinks = (await env.DB.prepare(
     `SELECT el.essay_id, el.note,
             el.from_word_start, el.from_word_end, el.to_word_start, el.to_word_end,
-            lf.text AS from_text, sf.title AS from_song_title,
-            lt.text AS to_text, st.title AS to_song_title
+            lf.text AS from_text, sf.title AS from_song_title, sf.slug AS from_song_slug,
+            lt.text AS to_text, st.title AS to_song_title, st.slug AS to_song_slug
        FROM essay_links el
        JOIN lyric_lines lf ON lf.id = el.from_line_id
        JOIN songs sf ON sf.id = lf.song_id
@@ -1047,10 +964,19 @@ async function getProfile(env, request, username) {
        (SELECT COUNT(*) FROM song_connections WHERE user_id = ?1) AS connections`
   ).bind(user.id).first();
 
+  const unlocked=await listeningAccess(request,env);
+  const visible=slug=>!slug||visibleSong({slug},unlocked);
+  const allowedAnnotations=annotations.filter(a=>visible(a.song_slug));
+  for(const a of allowedAnnotations)a.references=a.references.filter(r=>visible(r.ref_song_slug));
+  const allowedEssays=essays.filter(e=>visible(e.song_slug));
+  for(const e of allowedEssays)e.links=e.links.filter(l=>visible(l.from_song_slug)&&visible(l.to_song_slug));
   return json({
     user: { username: user.username, created_at: user.created_at, is_admin: !!user.is_admin },
     jeu,
-    stats, annotations, essays, passageRefs, connections,
+    ...(isOwner?{journey:buildJourney(await gameRows(env,user.id),user).summary}:{}),
+    stats, annotations:allowedAnnotations, essays:allowedEssays,
+    passageRefs:passageRefs.filter(p=>visible(p.song_slug)&&visible(p.ref_song_slug)),
+    connections:connections.filter(c=>visible(c.song_a_slug)&&visible(c.song_b_slug)),
   });
 }
 
@@ -1433,7 +1359,7 @@ async function getAvatar(env, username) {
   });
 }
 
-/* -------------------------------------- les mots de passe de l'EP 57 (/57) */
+/* -------------------------------------- historique de progression et droits privés */
 
 // Toute la logique du jeu est dans src/enigmas57.js et ne quitte jamais le
 // Worker : le client ne reçoit une réponse qu'une fois trouvée.
@@ -1461,53 +1387,6 @@ async function ensureRiddleTable(env) {
   riddleTableReady = true;
 }
 
-/* Un essai par heure. Le délai court dès qu'un mot de passe est proposé,
-   juste ou faux : c'est ce qui oblige à réfléchir avant de taper. Il est
-   gardé côté serveur : un rechargement de page ne le fait pas sauter.
-
-   La date du dernier essai vit sur une ligne réservée de riddle_progress,
-   dont le riddle_id ne correspond à aucune réponse : buildState l'ignore
-   comme n'importe quel identifiant inconnu, et il n'y a pas de colonne à
-   ajouter à users. */
-// Pas d'`export` ici : le module d'entrée d'un Worker ne peut exporter que
-// son gestionnaire, le reste fait échouer le démarrage du runtime.
-const ESSAI_ROW = '@essai';
-
-// Le délai dépend de l'échelon atteint, et il est relu à chaque fois : monter
-// d'un cran allonge donc l'attente en cours. C'est voulu : l'attente est une
-// propriété de l'échelon où l'on se trouve. Le moment de la tentative n'y change rien.
-async function attenteRestante(env, userId, echelon) {
-  await ensureRiddleTable(env);
-  const row = await env.DB.prepare(
-    `SELECT (julianday('now') - julianday(updated_at)) * 86400000 AS ecoule
-       FROM riddle_progress WHERE user_id = ?1 AND riddle_id = ?2`
-  ).bind(userId, ESSAI_ROW).first();
-  if (!row || row.ecoule == null) return 0;
-  return Math.max(0, Math.round(delaiEssaiMs(echelon) - row.ecoule));
-}
-
-// Réclame le créneau du minuteur, de façon ATOMIQUE. Renvoie true si le
-// créneau était libre (l'essai est autorisé), false s'il court encore.
-//
-// C'est un unique UPSERT conditionnel : le WHERE du DO UPDATE ne laisse
-// réécrire l'horodatage que si le délai est écoulé. D1 sérialise ses écritures,
-// donc parmi N requêtes concurrentes du même joueur, une seule modifie la ligne
-// (changes = 1) et toutes les autres échouent le WHERE (changes = 0). Au tout
-// premier essai, la clé primaire (user_id, '@essai') ne laisse réussir qu'un
-// seul INSERT. Un joueur ne peut donc PAS forcer les signes en rafale en
-// envoyant dix tentatives à la fois : le vieux schéma « lire l'attente, tester,
-// puis marquer » laissait cette course ouverte.
-async function marquerEssai(env, userId, delaiMs) {
-  await ensureRiddleTable(env);
-  const r = await env.DB.prepare(
-    `INSERT INTO riddle_progress (user_id, riddle_id, updated_at)
-     VALUES (?1, ?2, datetime('now'))
-     ON CONFLICT(user_id, riddle_id) DO UPDATE SET updated_at = datetime('now')
-       WHERE (julianday('now') - julianday(updated_at)) * 86400000 >= ?3`
-  ).bind(userId, ESSAI_ROW, delaiMs).run();
-  return r.meta.changes === 1;
-}
-
 // Une ligne par réponse trouvée.
 async function riddleRows(env, userId) {
   await ensureRiddleTable(env);
@@ -1516,104 +1395,6 @@ async function riddleRows(env, userId) {
   ).bind(userId).all();
   // Un nœud a pu être réuni à un autre depuis : la progression suit.
   return (results || []).map((r) => ({ ...r, riddle_id: currentAnswerId(r.riddle_id) }));
-}
-
-async function riddleState(env, userId) {
-  const rows = await riddleRows(env, userId);
-  const etat = buildState(rows);
-  return { ...etat, attenteMs: await attenteRestante(env, userId, etat.echelon) };
-}
-
-// La page se lit sans compte : on voit les éléments, mais rien n'y a été
-// trouvé et il n'y a rien à saisir. C'est le POST qui exige un membre.
-async function signsState(request, env) {
-  const user = await getUser(request, env);
-  if (!user) return json({ ...buildState([]), attenteMs: 0, anonyme: true });
-  return json(await riddleState(env, user.id));
-}
-
-// Un nœud peut porter plusieurs sens : la réponse proposée est confrontée à
-// toutes celles qu'il reste à trouver, dans n'importe quel ordre.
-async function signsGuess(request, env) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
-
-  const body = await readJson(request);
-  const node = getNode(String(body?.id || ''));
-  if (!node) return json({ error: 'Élément introuvable.' }, 404);
-
-  const answer = String(body?.answer ?? '');
-  if (answer.length > 200) return json({ error: 'Réponse trop longue.' }, 400);
-  if (!answer.trim()) return json({ error: 'Réponse vide.' }, 400);
-
-  // Un essai à la fois, juste ou faux : proposer, c'est déjà jouer.
-  const rows = await riddleRows(env, user.id);
-  const { solved, parties } = progresOf(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
-  const echelon = echelonOf(solved);
-
-  // On ne fait pas payer un essai sur un élément encore verrouillé : il ne
-  // peut de toute façon rien valider.
-  if (isLocked(node, solved)) return json({ error: 'Cet élément est encore verrouillé.' }, 403);
-
-  // Le vrai verrou anti-rafale : la réservation atomique du créneau. Une
-  // lecture préalable donnerait un 429 plus lisible dans le cas courant, mais
-  // ne sérialise rien : c'est ce claim, et lui seul, qui empêche dix essais
-  // simultanés de passer ensemble.
-  const libre = await marquerEssai(env, user.id, delaiEssaiMs(echelon));
-  if (!libre) {
-    return json({ error: 'Trop tôt.', attenteMs: await attenteRestante(env, user.id, echelon) }, 429);
-  }
-
-  // `echo` rend la proposition mot pour mot : ce qui était juste, ce qui ne
-  // l'était pas. Ce qui est juste est gardé même quand le reste est faux.
-  const prise = matchNode(node, answer, solved, parties);
-  if (!prise || !prise.prises.length) {
-    return json({
-      ok: false, id: node.id,
-      echo: prise ? prise.echo : null,
-      attenteMs: delaiEssaiMs(echelon),
-    });
-  }
-
-  // Une prise s'écrit partie par partie (lignes `id.pN`) ; la réponse entière
-  // s'écrit aussi sous son propre identifiant dès qu'elle est complète.
-  const lignes = [];
-  for (const p of prise.prises) {
-    const reponse = node.answers.find((a) => a.id === p.id);
-    for (let i = 0; i < reponse.parties.length; i++) {
-      if (p.masque & (1 << i)) lignes.push(`${p.id}.p${i}`);
-    }
-    if (p.complet) lignes.push(p.id);
-  }
-  const upsert = env.DB.prepare(
-    `INSERT INTO riddle_progress (user_id, riddle_id, solved_at)
-     VALUES (?1, ?2, datetime('now'))
-     ON CONFLICT(user_id, riddle_id) DO UPDATE
-       SET solved_at = COALESCE(solved_at, datetime('now')), updated_at = datetime('now')`
-  );
-  await env.DB.batch(lignes.map((id) => upsert.bind(user.id, id)));
-
-  return json({
-    ok: true, id: node.id,
-    partiel: prise.prises.some((p) => !p.complet),
-    echo: prise.echo,
-    state: await riddleState(env, user.id),
-  });
-}
-
-// Plus proposé dans l'interface, mais conservé : c'est le seul moyen de
-// repartir de zéro. On EXCLUT la ligne du minuteur ('@essai') : sans quoi
-// remettre sa progression à zéro effacerait aussi le cooldown, et l'on pourrait
-// boucler « essai raté → reset → essai » pour forcer les premiers signes sans
-// jamais attendre. Le minuteur survit donc au reset.
-async function signsReset(request, env) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
-  await ensureRiddleTable(env);
-  await env.DB.prepare(
-    'DELETE FROM riddle_progress WHERE user_id = ?1 AND riddle_id <> ?2'
-  ).bind(user.id, ESSAI_ROW).run();
-  return json({ ok: true, state: await riddleState(env, user.id) });
 }
 
 /* ---------------------------------- références autonomes sur un passage ---
@@ -2243,43 +2024,6 @@ async function ajouteColonne(env, table, colonne, sql) {
    chaque message porte l'échelon minimal pour le lire, choisi par son auteur
    entre 2 et son propre échelon : plus on monte, plus on entend.           */
 
-async function conversationList(request, env) {
-  const { vu, refus } = await requireEchelon(request, env, ECHELON_CONVERSATION, 'conversation');
-  if (refus) return refus;
-  await ensureHautesTables(env);
-  const plafond = Number.isFinite(vu.echelon) ? vu.echelon : ECHELON_114;
-  const { results } = await env.DB.prepare(
-    `SELECT m.id, m.body, m.min_echelon, m.created_at, u.username
-       FROM conversation_messages m JOIN users u ON u.id = m.user_id
-      WHERE m.min_echelon <= ?1
-      ORDER BY m.id DESC LIMIT 100`
-  ).bind(plafond).all();
-  return json({ messages: (results || []).reverse(), echelon: plafond });
-}
-
-async function conversationPost(request, env) {
-  const { vu, refus } = await requireEchelon(request, env, ECHELON_CONVERSATION, 'conversation');
-  if (refus) return refus;
-  if (!vu.user) return json({ error: 'Connexion requise.' }, 401);
-  await ensureHautesTables(env);
-
-  const body = await readJson(request);
-  const texte = String(body?.body || '').trim();
-  if (!texte) return json({ error: 'Message vide.' }, 400);
-  if (texte.length > 2000) return json({ error: 'Message trop long (2000 caractères).' }, 400);
-
-  // L'auteur choisit qui peut lire : jamais en dessous de la porte de la
-  // page, jamais au-dessus de son propre échelon.
-  const plafond = Number.isFinite(vu.echelon) ? vu.echelon : ECHELON_114;
-  const demande = Number(body?.min_echelon) || ECHELON_CONVERSATION;
-  const minEchelon = Math.max(ECHELON_CONVERSATION, Math.min(demande, plafond));
-
-  const r = await env.DB.prepare(
-    'INSERT INTO conversation_messages (user_id, body, min_echelon) VALUES (?1, ?2, ?3)'
-  ).bind(vu.user.id, texte, minEchelon).run();
-  return json({ ok: true, id: r.meta.last_row_id }, 201);
-}
-
 /* ------------------- les arbres : Pense Mieux (3) et Vidéographie (4) ---
    Même moteur pour les deux : un tronc (le sujet) et des branches emboîtées
    qui se font grandir. En Vidéographie, chaque branche est une vidéo
@@ -2295,6 +2039,7 @@ function kindDe(raw) {
 }
 
 async function gateArbre(request, env, kind) {
+  if (kind !== 'video') return {refus:json({error:'Cet espace a été supprimé.'}, 410)};
   const def = ARBRE_KINDS[kind];
   const { vu, refus } = await requireEchelon(request, env, def.echelon(), def.cle);
   if (refus) return { refus };
@@ -3693,8 +3438,8 @@ async function carreAnnuaire(request, env) {
     parUser.get(r.user_id).add(currentAnswerId(r.riddle_id));
   }
   const hauts = [...parUser.entries()]
-    .map(([id, ids]) => ({ id, echelon: echelonOf(progresOf(ids).solved) }))
-    .filter((u) => u.echelon >= ECHELON_CARRE);
+    .map(([id, ids]) => { const rows=[...ids].map(riddle_id=>({riddle_id,solved_at:true})); return { id, echelon: gameLevel(rows), accessRank: accessLevel(rows) }; })
+    .filter((u) => u.accessRank >= ECHELON_CARRE);
   if (!hauts.length) return json({ as: [] });
 
   const marks = hauts.map((_, i) => `?${i + 1}`).join(',');
