@@ -38,7 +38,7 @@ Les tests couvrent la migration des découvertes, les permissions, les construct
 
 La page porte le nom **Échelons** dans le menu, les titres et les liens. Son adresse `/echelon` reste stable pour conserver les liens et les brouillons existants. Le compteur individuel reste « Échelon N ».
 
-L’album anciennement nommé « 114 » est renommé **Fais mieux**, comme son morceau. La migration ciblée `0029_album_fais_mieux.sql` modifie uniquement le titre de l’album existant (id 4), en conservant ses trois morceaux et leurs paroles. Elle doit être appliquée à la base concernée au déploiement ; elle est idempotente.
+L’album anciennement nommé « 114 » est renommé **Fais mieux**, comme son morceau. La migration ciblée `0029_album_fais_mieux.sql` modifie uniquement le titre de l’album existant (id 4), en conservant ses trois morceaux et leurs paroles. Elle est appliquée automatiquement à la première lecture du catalogue par le Worker, via sa connexion D1 existante ; elle est idempotente et ne nécessite aucune extension des droits de l’outil de déploiement.
 
 Pense Mieux, Carré d’As, Brainstorm et la page 114 sont retirés du menu et du routage. Leurs anciens liens affichent une page supprimée ; leurs endpoints dédiés renvoient 410. Le moteur partagé des réflexions refuse les contenus de type `pensee`, tout en conservant ceux de Vidéographie. Les données historiques ne sont pas effacées. Vidéographie et ses récapitulatifs restent accessibles selon les droits existants, en attendant leur évolution.
 

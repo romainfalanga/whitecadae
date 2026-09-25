@@ -773,7 +773,16 @@ async function getCorpus(env, request) {
   return json({ songs, lines });
 }
 
+const cataloguesRenamed = new WeakSet();
 async function listAlbums(env, request) {
+  // Apply the targeted, idempotent catalogue migration through the existing
+  // database binding; no extra account-wide D1 permission is needed.
+  if (!cataloguesRenamed.has(env.DB)) {
+    await env.DB.prepare(`UPDATE albums SET title = 'Fais mieux'
+      WHERE id = 4 AND slug = '114' AND title = '114'
+        AND EXISTS (SELECT 1 FROM songs WHERE album_id = albums.id AND slug = 'fais-mieux')`).run();
+    cataloguesRenamed.add(env.DB);
+  }
   const albums = (await env.DB.prepare(
     'SELECT id, title, slug, release_date, is_single FROM albums ORDER BY position, release_date'
   ).all()).results;

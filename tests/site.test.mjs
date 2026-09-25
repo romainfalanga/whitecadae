@@ -3,6 +3,29 @@ import assert from 'node:assert/strict';
 import worker from '../src/index.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import {DatabaseSync} from 'node:sqlite';
+
+test('catalogue migration renames only the album and preserves its songs and lyrics', async () => {
+  const db=new DatabaseSync(':memory:');
+  db.exec(`CREATE TABLE albums(id INTEGER PRIMARY KEY,title TEXT,slug TEXT,release_date TEXT,is_single INTEGER,position INTEGER);
+    CREATE TABLE songs(id INTEGER PRIMARY KEY,album_id INTEGER,title TEXT,slug TEXT,track_number INTEGER);
+    CREATE TABLE lyric_lines(id INTEGER PRIMARY KEY,song_id INTEGER,text TEXT);
+    INSERT INTO albums VALUES(4,'114','114',NULL,0,4),(9,'114','different',NULL,0,9);
+    INSERT INTO songs VALUES(13,4,'La matière danse','la-matiere-dense',1),(14,4,'Les probabilités','les-probabilites',2),(15,4,'Fais mieux','fais-mieux',3);
+    INSERT INTO lyric_lines VALUES(1,15,'Paroles conservées');`);
+  const env={DB:{prepare(query){return{async run(){return db.prepare(query).run();},async all(){return{results:db.prepare(query).all()};}};}}};
+  for(let i=0;i<2;i++){
+    const response=await worker.fetch(new Request('https://test.local/api/albums'),env);
+    assert.equal(response.status,200);
+    const data=await response.json();
+    assert.equal(data.albums.find(a=>a.id===4).title,'Fais mieux');
+    assert.equal(data.albums.find(a=>a.id===9).title,'114');
+    assert.deepEqual(data.albums.find(a=>a.id===4).songs.map(s=>s.id),[13,14,15]);
+    assert.equal(data.albums.find(a=>a.id===4).songs[2].line_count,1);
+  }
+  assert.equal(db.prepare('SELECT text FROM lyric_lines WHERE id=1').get().text,'Paroles conservées');
+  db.close();
+});
 
 test('MP3 serving handles bounded, open, suffix and invalid byte ranges', async () => {
   const env={ASSETS:{async fetch(){return new Response(new Uint8Array([0,1,2,3,4,5,6,7,8,9]),{headers:{'Content-Type':'audio/mpeg','Content-Length':'10','ETag':'"test"'}});}}};
