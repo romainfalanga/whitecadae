@@ -1,12 +1,12 @@
-# Parcours, AA et conversations — septembre 2026
+# Parcours, ouvertures et conversations — septembre 2026
 
 ## Intention et déroulé
 
-Le jeu invite à rapprocher plusieurs lectures, extérioriser une idée et observer sa propre manière de penser. Les textes de *Wanheda*, *Quand je vois je pense* et *Un fil entre deux infinis* donnent la place aux images mentales, aux mouvements, aux connexions et à leur expression. Le récit AA reprend cette expérience subjective de l’artiste sans en faire une consigne thérapeutique ou une explication des réponses du jeu.
+Le jeu invite à rapprocher plusieurs lectures, extérioriser une idée et observer sa propre manière de penser. Les textes de *Wanheda*, *Quand je vois je pense* et *Un fil entre deux infinis* donnent la place aux images mentales, aux mouvements, aux connexions et à leur expression. Ils sont découverts successivement, sans page narrative AA intermédiaire.
 
 1. Corriger les réponses et préserver chaque découverte enregistrée.
-2. Relier le récit AA, son énigme et l’EP 18 juillet 2019 au même seuil de cinq réponses complètes.
-3. Construire la carte à partir des règles de visibilité et d’accès du jeu, sans second catalogue ni plafond annoncé.
+2. Retirer la page narrative AA et son bouton ; conserver l’énigme et ses découvertes. Distribuer les trois morceaux et leurs paroles aux échelons 5, 6 et 7.
+3. Construire la carte à partir des règles de visibilité et d’accès du jeu, sans second catalogue ni plafond annoncé. Ajouter une vue des ouvertures par échelon, calculée à partir des permissions réelles.
 4. Croiser les conversations par intention et niveau d’accès, tout en préservant les anciens messages.
 5. Vérifier les migrations, permissions et interactions avant de publier sur le Worker existant.
 
@@ -30,6 +30,14 @@ Ces seuils conservent plusieurs pistes en parallèle et des énigmes grisées co
 
 La carte est accessible uniquement pour son propre compte. Les profils publics conservent leur filtrage selon le territoire du visiteur. Aucune réponse future, condition secrète ou liste exhaustive des énigmes n’est envoyée au navigateur. Le réseau, les vues et les données de progression restent les mêmes sur ordinateur et mobile ; la carte défile dans son propre cadre et le détail passe sous elle sur petit écran.
 
+## Ouvertures par échelon
+
+Une seconde vue du parcours présente les espaces et les contenus sur une ligne de progression. Elle est accessible depuis le profil et par l’onglet Ouvertures. Les espaces du départ sont suivis de Conversation à 2, Wanheda à 5, Quand je vois je pense à 6, Un fil entre deux infinis à 7, puis Vidéographie à 9. Chaque morceau ouvre son audio et ses paroles en même temps. Le 9 correspond au rang historique 4 de Vidéographie pour un nouveau joueur ; les droits déjà acquis restent conservés et sont signalés.
+
+Les joueurs voient leurs ouvertures acquises et le prochain palier, en gris, sans lien actif. Le compte auteur voit tous les paliers de contenu et les intervalles sans nouvelle ouverture pour repérer les possibilités d’amélioration. Aucun compteur de signes n’inclut ces contenus et aucun plafond final du jeu n’est annoncé. Horloge reste une ouverture par découverte, affichée uniquement lorsque ce chemin est connu.
+
+Les seuils des morceaux sont définis une seule fois dans `music-catalogue.js`, puis partagés par le catalogue, les paroles, les fichiers audio, la pochette, le corpus et les archives du profil. Le lecteur reçoit seulement les pistes autorisées et garde une file dans leur ordre. La vue des espaces s’appuie sur `content-access.js`, également utilisé pour les permissions de Conversation et Vidéographie. Aucune migration de progression ni réinitialisation de données n’est nécessaire.
+
 ## Conservation des données
 
 Les identifiants existants et les lignes de progression ne sont ni supprimés ni réécrits. Les réponses Signe de 57 et 7 retrouvent chacune leur crédit. Le crédit Aigle accordé dans la version précédente reste acquis. Les nouvelles réponses Signe restent indépendantes.
@@ -46,4 +54,4 @@ La colonne `theme` est ajoutée de façon additive et idempotente au premier acc
 
 ## Validation
 
-Les tests couvrent les réponses indépendantes, le transfert historique, les accès au seuil 4/5, la progression complète possible, la carte partielle et ses liens, les thèmes croisés avec les niveaux, la pagination et la conservation des audiences historiques. Les essais dans le navigateur vérifient le profil, les cartes, la recherche, les liens vers les champs, le récit AA et le formulaire de conversation sur ordinateur et mobile. Les messages d’essai restent dans la base locale.
+Les tests couvrent les réponses indépendantes, le transfert historique, les accès aux seuils 4/5/6/7, les files de lecture partielles, les ouvertures par étape, la vue auteur, la progression complète possible, la carte partielle et ses liens, les thèmes croisés avec les niveaux, la pagination et la conservation des audiences historiques. Les essais dans le navigateur vérifient le profil, les deux vues du parcours, leurs liens et les déblocages sur ordinateur et mobile. Les messages et comptes d’essai restent dans la base locale.

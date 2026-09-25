@@ -108,3 +108,21 @@ test('restoring a gated track waits for catalogue access and never starts playba
   assert.equal(f.player.snapshot().slug,null);
   f.player.setAlbums([july]);assert.equal(f.player.snapshot().slug,'wanheda');assert.equal(f.audio.calls,0);
 });
+
+test('partial EP never queues locked tracks and expands without interrupting playback',async()=>{
+  const f=fixture();const portion=n=>({...july,tracks:july.tracks.slice(0,n)});
+  f.player.setAlbums([portion(1)]);f.player.playTrack('wanheda');await Promise.resolve();
+  f.audio.finish();assert.equal(f.audio.paused,true);assert.equal(f.player.snapshot().slug,'wanheda');
+  const calls=f.audio.calls;f.player.playTrack('quand-je-vois-je-pense');assert.equal(f.audio.calls,calls);
+  f.player.playTrack('wanheda');await Promise.resolve();f.audio.currentTime=31;
+  f.player.setAlbums([portion(2)]);assert.equal(f.audio.paused,false);assert.equal(f.audio.currentTime,31);
+  f.audio.finish();assert.equal(f.player.snapshot().slug,'quand-je-vois-je-pense');
+  f.audio.finish();assert.equal(f.audio.paused,true);
+  f.player.setAlbums([portion(3)]);f.player.playTrack('quand-je-vois-je-pense');f.audio.finish();assert.equal(f.player.snapshot().slug,'un-fil-entre-deux-infinis');
+  f.player.setAlbums([portion(1)]);assert.equal(f.audio.src,'');assert.equal(f.audio.paused,true);assert.equal(f.player.snapshot().slug,null);
+});
+
+test('a saved higher track cannot resume from a partially unlocked album',()=>{
+  const f=fixture({slug:'un-fil-entre-deux-infinis',position:55});f.player.setAlbums([{...july,tracks:july.tracks.slice(0,1)}]);
+  assert.equal(f.player.snapshot().slug,null);assert.equal(f.audio.calls,0);assert.equal(f.audio.src,'');
+});

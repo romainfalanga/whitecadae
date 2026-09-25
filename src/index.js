@@ -11,11 +11,12 @@ import {
   CADENCES, CADENCES_ORDRE, REPONSES,
   VOLETS_SOCIETE, VOLETS_CLES,
 } from './contenus.js';
-import { handleConversation, conversationAccess } from './conversation.js';
+import { handleConversation } from './conversation.js';
 import { handleEchelon, gameRows } from './echelon-api.js';
 import { gameLevel, accessLevel, gameProfile } from './echelon.js';
-import {JULY,retiredSong,julySong,visibleSong,ensureMusicCatalogue} from './music-catalogue.js';
-import {AA_STORY,buildJourney} from './journey.js';
+import {JULY,retiredSong,julySong,visibleSong,canListen,musicAlbums,ensureMusicCatalogue} from './music-catalogue.js';
+import {contentAccess} from './content-access.js';
+import {buildJourney} from './journey.js';
 
 const SESSION_COOKIE = 'wc_session';
 const SESSION_DAYS = 30;
@@ -46,7 +47,11 @@ async function serveMusic(request, env) {
   let path;
   try { path=decodeURIComponent(new URL(request.url).pathname); } catch { return new Response('Fichier introuvable',{status:404}); }
   const restricted=path.startsWith('/music/18-juillet-2019/');
-  if(restricted && !await julyAccess(request,env))return json({error:'Cet EP se découvre à l’échelon 5.'},403);
+  if(restricted){
+    const item=path===JULY.cover?JULY.tracks[0]:JULY.tracks.find(track=>track.src===path);
+    if(!item)return json({error:'Fichier introuvable.'},404);
+    if(!canListen(item,await listeningAccess(request,env)))return json({error:`Ce contenu se découvre à l’échelon ${item.minLevel}.`},403);
+  }
   const headers = new Headers(request.headers);
   const range = headers.get('Range');
   headers.delete('Range');
@@ -161,9 +166,8 @@ async function handleApi(request, env, url) {
     return json({ error: 'Les paroles sont désormais en lecture seule.' }, 410);
   }
   if (route('GET', '/api/albums')) return listAlbums(env, request);
-  if (route('GET', '/api/music')) return json({albums:await julyAccess(request,env)?[JULY]:[]});
-  if (route('GET', '/api/journey')) return json({aa:await julyAccess(request,env)});
-  if (route('GET', '/api/aa')) return await julyAccess(request,env)?json(AA_STORY):json({error:'Ce chemin n’est pas encore ouvert.'},403);
+  if (route('GET', '/api/music')) return json({albums:musicAlbums(await listeningAccess(request,env))});
+  if (path==='/api/aa'||path==='/api/journey') return json({error:'Cette page a été retirée.'},410);
   if ((p = route('GET', '/api/songs/:slug'))) return getSong(env, request, p[0]);
 
   // --- auth
@@ -343,9 +347,9 @@ async function getUser(request, env) {
   return row || null;
 }
 
-async function julyAccess(request,env) {
+async function listeningAccess(request,env) {
   const user=await getUser(request,env);
-  return !!user && (!!user.is_admin || gameLevel(await gameRows(env,user.id))>=5);
+  return contentAccess(user,user?await gameRows(env,user.id):[]);
 }
 
 async function requireUser(request, env) {
@@ -384,7 +388,8 @@ async function viewerAccess(request, env) {
   const rows = await riddleRows(env, user.id);
   const { solved } = progresOf(rows.filter((r) => r.solved_at).map((r) => r.riddle_id));
   const echelon = accessLevel(rows);
-  return { user, echelon, solved, access: {...activeAccess(echelon), conversation:conversationAccess(user, rows).readable} };
+  const spaces=contentAccess(user,rows);
+  return { user, echelon, solved, access: {...activeAccess(echelon), conversation:spaces.conversation,videographie:spaces.videographie} };
 }
 
 // L'échelon exigé par une pièce, et un refus prêt à servir. Le message ne dit
@@ -733,7 +738,7 @@ async function me(request, env) {
 async function getCorpus(env, request) {
   const viewer = await getUser(request, env);
   const viewerId = viewer ? viewer.id : 0;
-  const unlocked=await julyAccess(request,env);
+  const unlocked=await listeningAccess(request,env);
   const songs = (await env.DB.prepare(
     'SELECT id, title, slug FROM songs ORDER BY title'
   ).all()).results.filter(song=>visibleSong(song,unlocked));
@@ -793,7 +798,7 @@ async function getCorpus(env, request) {
 const cataloguesRenamed = new WeakSet();
 async function listAlbums(env, request) {
   await ensureMusicCatalogue(env);
-  const unlocked=await julyAccess(request,env);
+  const unlocked=await listeningAccess(request,env);
   // Apply the targeted, idempotent catalogue migration through the existing
   // database binding; no extra account-wide D1 permission is needed.
   if (!cataloguesRenamed.has(env.DB)) {
@@ -804,7 +809,7 @@ async function listAlbums(env, request) {
   }
   const albums = (await env.DB.prepare(
     'SELECT id, title, slug, release_date, is_single FROM albums ORDER BY position, release_date'
-  ).all()).results.filter(album=>album.slug!=='18-juillet-2019'||unlocked);
+  ).all()).results.filter(album=>album.slug!=='18-juillet-2019'||canListen(JULY.tracks[0],unlocked));
   const songs = (await env.DB.prepare(
     `SELECT s.id, s.album_id, s.title, s.slug, s.track_number,
             (SELECT COUNT(*) FROM lyric_lines l WHERE l.song_id = s.id AND l.text <> '') AS line_count
@@ -821,7 +826,10 @@ async function listAlbums(env, request) {
 
 async function getSong(env, request, slug) {
   if(retiredSong(slug))return json({error:'Ce morceau a été retiré.'},404);
-  if(julySong(slug)&&!await julyAccess(request,env))return json({error:'Les paroles de cet EP se découvrent à l’échelon 5.'},403);
+  if(julySong(slug)){
+    const track=JULY.tracks.find(t=>t.slug===slug);
+    if(!canListen(track,await listeningAccess(request,env)))return json({error:`Ces paroles se découvrent à l’échelon ${track.minLevel}.`},403);
+  }
   if (slug === 'meta-moi') await ensureMusicCatalogue(env);
   const song = await env.DB.prepare(
     `SELECT s.id, s.title, s.slug, s.track_number, s.youtube_url, s.duration_seconds, s.album_id,
@@ -953,7 +961,7 @@ async function getProfile(env, request, username) {
        (SELECT COUNT(*) FROM song_connections WHERE user_id = ?1) AS connections`
   ).bind(user.id).first();
 
-  const unlocked=await julyAccess(request,env);
+  const unlocked=await listeningAccess(request,env);
   const visible=slug=>!slug||visibleSong({slug},unlocked);
   const allowedAnnotations=annotations.filter(a=>visible(a.song_slug));
   for(const a of allowedAnnotations)a.references=a.references.filter(r=>visible(r.ref_song_slug));
@@ -962,7 +970,7 @@ async function getProfile(env, request, username) {
   return json({
     user: { username: user.username, created_at: user.created_at, is_admin: !!user.is_admin },
     jeu,
-    ...(isOwner?{journey:buildJourney(await gameRows(env,user.id)).summary}:{}),
+    ...(isOwner?{journey:buildJourney(await gameRows(env,user.id),user).summary}:{}),
     stats, annotations:allowedAnnotations, essays:allowedEssays,
     passageRefs:passageRefs.filter(p=>visible(p.song_slug)&&visible(p.ref_song_slug)),
     connections:connections.filter(c=>visible(c.song_a_slug)&&visible(c.song_b_slug)),

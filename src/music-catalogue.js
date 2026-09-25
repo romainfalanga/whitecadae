@@ -3,14 +3,17 @@ import {ensureMetaMoi} from './meta-moi.js';
 export const JULY = {
   id:'18-juillet-2019', album:'18 juillet 2019', artist:'AA', cover:'/music/18-juillet-2019/cover.jpeg', coverType:'image/jpeg',
   tracks:[
-    {slug:'wanheda',title:'Wanheda',src:'/music/18-juillet-2019/wanheda.mp3',duration:234.672},
-    {slug:'quand-je-vois-je-pense',title:'Quand je vois je pense',src:'/music/18-juillet-2019/quand-je-vois-je-pense.mp3',duration:198.243},
-    {slug:'un-fil-entre-deux-infinis',title:'Un fil entre deux infinis',src:'/music/18-juillet-2019/un-fil-entre-deux-infinis.mp3',duration:198.624},
+    {slug:'wanheda',title:'Wanheda',src:'/music/18-juillet-2019/wanheda.mp3',duration:234.672,minLevel:5},
+    {slug:'quand-je-vois-je-pense',title:'Quand je vois je pense',src:'/music/18-juillet-2019/quand-je-vois-je-pense.mp3',duration:198.243,minLevel:6},
+    {slug:'un-fil-entre-deux-infinis',title:'Un fil entre deux infinis',src:'/music/18-juillet-2019/un-fil-entre-deux-infinis.mp3',duration:198.624,minLevel:7},
   ],
 };
 export const retiredSong = slug => ['ma-folie','rendors-toi'].includes(slug);
 export const julySong = slug => JULY.tracks.some(t=>t.slug===slug);
-export const visibleSong = (song,unlocked) => !retiredSong(song.slug)&&(!julySong(song.slug)||unlocked);
+export const canListen = (track,access) => !!access&&(access.admin||access.level>=track.minLevel);
+export const julyTracks = access => JULY.tracks.filter(track=>canListen(track,access));
+export function musicAlbums(access){const tracks=julyTracks(access);return tracks.length?[{...JULY,tracks}]:[];}
+export const visibleSong = (song,access) => !retiredSong(song.slug)&&(!julySong(song.slug)||canListen(JULY.tracks.find(t=>t.slug===song.slug),access));
 const ready=new WeakMap();
 export async function ensureMusicCatalogue(env) {
   if(ready.has(env.DB))return ready.get(env.DB);

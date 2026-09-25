@@ -29,7 +29,7 @@ export async function handleEchelon(request,env,path,{getUser,json}){
   if(request.method==='GET'&&(path==='/api/echelon'||path==='/api/57'))return json(await stateFor(env,id));
   if(!id)return json({error:'Connecte-toi pour conserver tes découvertes.'},401);
   const rows=await gameRows(env,id),p=progress(rows);
-  if(request.method==='GET'&&path==='/api/echelon/map')return json(buildJourney(rows));
+  if(request.method==='GET'&&path==='/api/echelon/map')return json(buildJourney(rows,user));
   let body={};
   if(request.method==='POST')try{body=await bodyOf(request);}catch{return json({error:'Requête invalide.'},400);}
   const draftMatch=/^\/api\/echelon\/draft\/([a-z0-9-]+)$/.exec(path);

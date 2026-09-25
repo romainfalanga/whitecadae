@@ -1,5 +1,6 @@
 import {NODES, gameLevel, accessLevel} from './echelon.js';
 import {gameRows} from './echelon-api.js';
+import {contentAccess,CONVERSATION_LEVEL} from './content-access.js';
 
 export const THEMES = [
   {id:'general',label:'Général',description:'Faire connaissance, partager une expérience, prendre du recul.',prompt:'Qu’as-tu envie de partager ?'},
@@ -16,7 +17,7 @@ export function conversationAccess(user, rows = []) {
     // The author can address every currently authored rung, without a fixed cap.
     ceiling: user?.is_admin ? NODES.reduce((sum, n) => sum + n.answers.length, 0) : echelon,
     legacy,
-    readable: !!user && (!!user.is_admin || echelon >= 2 || legacy >= 2),
+    readable: contentAccess(user,rows).conversation,
   };
 }
 
@@ -56,9 +57,9 @@ export async function handleConversation(request, env, {getUser, json}) {
     const theme=params.get('theme')||'tout', mode=params.get('mode')||'tout';
     if(theme!=='tout'&&!THEMES.some(t=>t.id===theme))return json({error:'Thème inconnu.'},400);
     if(!['tout','exact','min','max','historique'].includes(mode))return json({error:'Filtre inconnu.'},400);
-    const level=Number(params.get('niveau')||2),before=Number(params.get('before')||0);
+    const level=Number(params.get('niveau')||CONVERSATION_LEVEL),before=Number(params.get('before')||0);
     if(!Number.isInteger(before)||before<0||!Number.isSafeInteger(before))return json({error:'Pagination invalide.'},400);
-    if(!Number.isSafeInteger(level)||level<2)return json({error:'Échelon invalide.'},400);
+    if(!Number.isSafeInteger(level)||level<CONVERSATION_LEVEL)return json({error:'Échelon invalide.'},400);
     if(!['tout','historique'].includes(mode)&&level>access.ceiling)return json({error:'Cet échelon n’est pas encore atteint.'},403);
     // Historical thresholds retain their original audience. They must never be
     // reinterpreted as the much faster new score, which would expose messages.
@@ -81,10 +82,10 @@ export async function handleConversation(request, env, {getUser, json}) {
   const texte = String(body?.body || '').trim();
   if (!texte) return json({error:'Message vide.'}, 400);
   if (texte.length > 2000) return json({error:'Message trop long (2000 caractères).'}, 400);
-  const minimum = body?.min_echelon ?? 2;
+  const minimum = body?.min_echelon ?? CONVERSATION_LEVEL;
   const theme=body?.theme??'general';
   if(!THEMES.some(t=>t.id===theme))return json({error:'Thème inconnu.'},400);
-  if (!Number.isInteger(minimum) || minimum < 2) return json({error:'Échelon invalide.'}, 400);
+  if (!Number.isInteger(minimum) || minimum < CONVERSATION_LEVEL) return json({error:'Échelon invalide.'}, 400);
   if (minimum > access.ceiling) return json({error:'Cet échelon n’est pas encore atteint.'}, 403);
   const result = await env.DB.prepare('INSERT INTO conversation_messages (user_id, body, min_echelon, echelon_version, theme) VALUES (?1, ?2, ?3, 2, ?4)')
     .bind(user.id, texte, minimum,theme).run();

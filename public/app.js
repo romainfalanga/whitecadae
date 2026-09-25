@@ -160,7 +160,7 @@ async function route() {
   renderNav();
   let m;
   if (path === '/' || path === '') return pageOrange();
-  if (path === '/aa') return pageAA();
+  if (path === '/aa' || path === '/aa/') return navigate('/',true);
   if (path === '/parcours') return WCJourney.page();
   if (path === '/escape-game-orange') return navigate('/', true);
   if (path === '/57') return navigate('/musique#album-57', true);
@@ -2085,7 +2085,7 @@ async function refreshSession() {
 
 function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
-  if(value==='/parcours'||value==='/aa')return value;
+  if(value==='/parcours')return value;
   if (value === '57' || value === 'echelon') return '/echelon';
   return /^\/echelon(?:\/horloge|\/(?:enigme|lecture|galerie|atelier)\/[a-z0-9-]+)?(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
@@ -2358,7 +2358,7 @@ async function pageProfile(username) {
       ${isMe ? `<button type="button" class="icon-btn" id="settings-btn"
         title="Paramètres du compte" aria-label="Paramètres du compte">⚙</button>` : ''}
     </div>
-    ${isMe&&data.journey?`<section class="profile-journey"><div class="jeu-echelon"><span>Échelon</span> <strong>${jeu.echelon}</strong></div><h2>Mon champ des possibles</h2><p>${data.journey.remaining} signes visibles à trouver · ${data.journey.locked} énigmes verrouillées</p><a class="orange-button" href="/parcours" data-link>Explorer mon arborescence →</a></section>`:jeuHtml(jeu)}
+    ${isMe&&data.journey?`<section class="profile-journey"><div class="jeu-echelon"><span>Échelon</span> <strong>${jeu.echelon}</strong></div><h2>Mon champ des possibles</h2><p>${data.journey.remaining} signes visibles à trouver · ${data.journey.locked} énigmes verrouillées</p><a class="orange-button" href="/parcours" data-link>Explorer mon arborescence →</a><a class="profile-openings-link" href="/parcours?view=ouvertures" data-link>Voir les ouvertures →</a></section>`:jeuHtml(jeu)}
     ${data.restreint ? '' : `<div class="timeline">${entries.map((e) => e.html).join('')
       || '<p class="empty-note">Rien pour l’instant.</p>'}</div>`}`;
 

@@ -2,6 +2,13 @@ window.WCJourney=(()=>{
   let resize=null;
   const labels={available:'À explorer',partial:'En cours',solved:'Résolue',locked:'Verrouillée',passage:'Passage ouvert'};
   function leave(){resize?.disconnect();resize=null;}
+  function openingsHtml(data){
+    const {items,author,nextLevel}=data.openings;
+    const levels=author?Array.from({length:Math.max(...items.map(item=>item.level))+1},(_,level)=>level):[...new Set(items.map(item=>item.level))].sort((a,b)=>a-b);
+    const card=item=>`<article class="opening-card ${item.open?'is-open':'is-locked'}"><span class="opening-state">${item.open?'Accessible':'À débloquer'}</span><h3>${esc(item.title)}</h3><p>${esc(item.description)}</p>${item.exception?`<p class="opening-exception">${item.exception==='author'?'Accès auteur':'Accès historique conservé'}</p>`:''}${item.open?`<div class="opening-links"><a href="${esc(item.href)}" data-link>${item.lyricsHref?'Écouter':'Ouvrir'} →</a>${item.lyricsHref?`<a href="${esc(item.lyricsHref)}" data-link>Lire les paroles →</a>`:''}</div>`:`<p class="opening-requirement">Encore ${item.level-data.echelon} échelon${item.level-data.echelon>1?'s':''} à gagner</p>`}</article>`;
+    const clock=data.nodes.find(n=>n.kind==='clock');
+    return `<div class="openings-intro"><h2>Ce que les échelons ouvrent</h2><p>${author?'Vue auteur : tous les paliers de contenu sont affichés, y compris ceux sans nouvelle ouverture, pour préparer la progression des joueurs.':nextLevel!==null?'Tes accès acquis et la prochaine ouverture. La suite se dévoile au fil de ta progression.':'Tes accès acquis. Les énigmes peuvent encore révéler d’autres chemins.'}</p>${nextLevel!==null?`<p class="opening-next">Prochaine ouverture à l’échelon <strong>${nextLevel}</strong></p>`:''}</div><ol class="opening-timeline">${levels.map(level=>`<li class="opening-step ${data.echelon>=level?'is-reached':''}"><div class="opening-milestone"><span>${level===0?'Départ':'Échelon'}</span><strong>${level}</strong></div><div class="opening-cards">${items.filter(item=>item.level===level).map(card).join('')||'<p class="opening-empty">Aucune ouverture de contenu prévue à cet échelon.</p>'}</div></li>`).join('')}</ol>${clock?`<section class="opening-discovery"><h2>Ouvert par une découverte</h2><p>Certains chemins demandent un signe précis, quel que soit ton échelon.</p>${card({title:'Horloge',description:'La réponse Horloge dans Aiguille donne accès au laboratoire des durées.',open:true,href:clock.href})}</section>`:''}<p class="journey-hint">Ouvrir un espace ou un morceau ne rapporte pas de point. Chaque réponse complète distincte fait gagner un échelon.${author?' Ces paliers décrivent les contenus actuellement prévus, pas la fin du jeu.':''}</p>`;
+  }
   async function page(){
     leave();const epoch=newEpoch();document.title='Mon arborescence · White Cadae';
     app.innerHTML='<div class="loading">Chargement de ton arborescence…</div>';
@@ -20,17 +27,18 @@ window.WCJourney=(()=>{
     const title=n=>n.title||'La porte';
     const count=n=>n.kind==='clock'?'Laboratoire':n.total===null?`${n.found.length} signe${n.found.length>1?'s':''} trouvé${n.found.length>1?'s':''}`:`${n.found.length} / ${n.total} signe${n.total>1?'s':''}`;
     app.innerHTML=`<section class="journey-page"><a class="back-link" href="/membre/${encodeURIComponent(state.user.username)}" data-link>← Mon profil</a><header class="journey-header"><div><p class="eyebrow">Ton champ des possibles</p><h1>Mon arborescence</h1></div><div class="eg-level"><span>Échelon</span><strong>${data.echelon}</strong></div></header>
-      <div class="journey-summary"><div><strong>${data.summary.remaining}</strong><span>signes visibles à trouver</span></div><div><strong>${data.summary.horizon}${data.summary.uncounted?' +':''}</strong><span>horizon d’échelon actuellement visible</span></div></div>
+      <div class="journey-views" role="tablist" aria-label="Vue du parcours"><button type="button" role="tab" id="view-signs" aria-controls="journey-signs" aria-selected="true" data-journey-view="signes">Signes et énigmes</button><button type="button" role="tab" id="view-openings" aria-controls="journey-openings" aria-selected="false" tabindex="-1" data-journey-view="ouvertures">Ouvertures</button></div>
+      <section id="journey-signs" role="tabpanel" aria-labelledby="view-signs"><div class="journey-summary"><div><strong>${data.summary.remaining}</strong><span>signes visibles à trouver</span></div><div><strong>${data.summary.horizon}${data.summary.uncounted?' +':''}</strong><span>horizon d’échelon actuellement visible</span></div></div>
       <p class="journey-intro">Ce champ s’agrandit avec tes découvertes. Les chemins gris sont visibles, mais attendent encore une clé ou un échelon.${data.summary.uncounted?' La porte garde une part inconnue.':''}</p>
       <div class="journey-tools"><div class="journey-filters" role="group" aria-label="État des énigmes">${[['all','Tout voir'],['todo','À explorer'],['partial','En cours'],['solved','Résolues'],['locked','Verrouillées']].map(([id,label])=>`<button type="button" data-map-filter="${id}" aria-pressed="${id==='all'}">${label}</button>`).join('')}</div><label class="journey-search"><span class="sr-only">Rechercher une énigme visible</span><input id="journey-search" type="search" placeholder="Rechercher une énigme…"></label></div>
       <p id="journey-filter-status" class="journey-hint" role="status" aria-live="polite"></p>
       <div class="journey-workspace"><div class="journey-scroll" tabindex="0" aria-label="Carte des chemins visibles, défilement horizontal"><div class="journey-map" id="journey-map"><svg class="journey-lines" aria-hidden="true"></svg>${columns.map((nodes,i)=>`<div class="journey-column" data-depth="${i}">${nodes.map(n=>`<button type="button" class="journey-node ${n.status}" data-map-node="${n.id}" aria-pressed="false" aria-controls="journey-detail"><span class="journey-node-status">${labels[n.status]}</span><strong>${esc(title(n))}</strong><span>${count(n)}</span>${n.minLevel?`<small>Échelon ${n.minLevel}${data.echelon>=n.minLevel?' atteint':' requis'}</small>`:''}</button>`).join('')}</div>`).join('')}</div></div>
       <aside id="journey-detail" class="journey-detail" aria-label="Détail du chemin"><p class="eyebrow">Choisis une énigme</p><h2>Une piste en ouvre une autre.</h2><p>Sélectionne une carte pour voir tes découvertes, ce qui lui donne accès et les chemins déjà visibles qu’elle ouvre.</p><a href="/echelon" data-link>Retrouver les énigmes →</a></aside></div>
-      <p class="journey-hint">Les traits relient les découvertes et leurs ouvertures. Une même énigme peut demander plusieurs signes ; chacun fait gagner un échelon.</p></section>`;
+      <p class="journey-hint">Les traits relient les découvertes et leurs ouvertures. Une même énigme peut demander plusieurs signes ; chacun fait gagner un échelon.</p></section><section id="journey-openings" role="tabpanel" aria-labelledby="view-openings" hidden>${openingsHtml(data)}</section></section>`;
     const root=document.getElementById('journey-map'),detail=document.getElementById('journey-detail');
     const cards=new Map([...root.querySelectorAll('[data-map-node]')].map(el=>[el.dataset.mapNode,el]));
     function draw(){
-      if(stale(epoch))return;const svg=root.querySelector('svg'),box=root.getBoundingClientRect();
+      if(stale(epoch)||!root.offsetWidth)return;const svg=root.querySelector('svg'),box=root.getBoundingClientRect();
       svg.setAttribute('viewBox',`0 0 ${root.scrollWidth} ${root.scrollHeight}`);
       svg.innerHTML=data.edges.map(edge=>{
         const a=cards.get(edge.from).getBoundingClientRect(),b=cards.get(edge.to).getBoundingClientRect();
@@ -60,7 +68,14 @@ window.WCJourney=(()=>{
     cards.forEach((card,id)=>card.onclick=()=>{select(id);if(window.matchMedia('(max-width:700px)').matches)detail.scrollIntoView({block:'start',behavior:motion()});});
     document.querySelectorAll('[data-map-filter]').forEach(button=>button.onclick=()=>{filter=button.dataset.mapFilter;apply();});
     document.getElementById('journey-search').oninput=event=>{search=event.target.value.toLocaleLowerCase('fr').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();apply();};
-    resize=new ResizeObserver(draw);resize.observe(root);apply();requestAnimationFrame(draw);
+    const viewButtons=[...document.querySelectorAll('[data-journey-view]')];
+    function showView(view,remember=true){
+      for(const button of viewButtons){const active=button.dataset.journeyView===view;button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;document.getElementById(button.getAttribute('aria-controls')).hidden=!active;}
+      if(remember)history.replaceState(null,'','/parcours'+(view==='ouvertures'?'?view=ouvertures':''));
+      if(view==='signes')requestAnimationFrame(draw);
+    }
+    viewButtons.forEach((button,index)=>{button.onclick=()=>showView(button.dataset.journeyView);button.onkeydown=event=>{let target;if(event.key==='ArrowRight'||event.key==='ArrowLeft')target=viewButtons[1-index];else if(event.key==='Home')target=viewButtons[0];else if(event.key==='End')target=viewButtons[1];if(target){event.preventDefault();target.focus();showView(target.dataset.journeyView);}};});
+    resize=new ResizeObserver(draw);resize.observe(root);apply();showView(new URLSearchParams(location.search).get('view')==='ouvertures'?'ouvertures':'signes',false);
   }
   return {page,leave};
 })();
