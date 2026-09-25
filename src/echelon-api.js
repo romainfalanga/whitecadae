@@ -2,6 +2,7 @@ import {buildGameState,progress,getGameNode,isVisible,isPlayable,SHARE,boardSour
 import {matchNode} from './enigmas57.js';
 import {validDraft,hasTwoSevens,validateConstruction} from './echelon-workshop.js';
 import {buildJourney} from './journey.js';
+import {newlyOpened} from './content-access.js';
 
 let ready=false;
 export async function ensureGameTables(env){
@@ -81,5 +82,5 @@ export async function handleEchelon(request,env,path,{getUser,json}){
   await saveIds(env,id,ids);
   await env.DB.prepare('UPDATE echelon_attempts SET next_at=0,failures=0 WHERE user_id=?1').bind(id).run();
   const state=await stateFor(env,id);
-  return json({ok:true,gained:Math.max(0,state.echelon-p.solved.size),echo:prise.echo||[],state});
+  return json({ok:true,gained:Math.max(0,state.echelon-p.solved.size),opened:newlyOpened(rows,await gameRows(env,id),user),echo:prise.echo||[],state});
 }

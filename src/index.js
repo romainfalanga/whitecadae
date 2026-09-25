@@ -14,7 +14,7 @@ import {
 import { handleConversation } from './conversation.js';
 import { handleEchelon, gameRows } from './echelon-api.js';
 import { gameLevel, accessLevel, gameProfile } from './echelon.js';
-import {JULY,retiredSong,julySong,visibleSong,canListen,musicAlbums,ensureMusicCatalogue} from './music-catalogue.js';
+import {RELEASES,retiredSong,gatedTrack,gatedAlbum,visibleSong,canListen,musicAlbums,ensureMusicCatalogue} from './music-catalogue.js';
 import {contentAccess} from './content-access.js';
 import {buildJourney} from './journey.js';
 
@@ -46,9 +46,10 @@ export default {
 async function serveMusic(request, env) {
   let path;
   try { path=decodeURIComponent(new URL(request.url).pathname); } catch { return new Response('Fichier introuvable',{status:404}); }
-  const restricted=path.startsWith('/music/18-juillet-2019/');
+  const release=RELEASES.find(album=>path.startsWith('/music/'+album.id+'/'));
+  const restricted=!!release;
   if(restricted){
-    const item=path===JULY.cover?JULY.tracks[0]:JULY.tracks.find(track=>track.src===path);
+    const item=path===release.cover?release.tracks[0]:release.tracks.find(track=>track.src===path);
     if(!item)return json({error:'Fichier introuvable.'},404);
     if(!canListen(item,await listeningAccess(request,env)))return json({error:`Ce contenu se découvre à l’échelon ${item.minLevel}.`},403);
   }
@@ -160,7 +161,7 @@ async function handleApi(request, env, url) {
     return handleEchelon(request, env, path, { getUser, json });
   }
 
-  // Lyrics are public and read-only. Older clients cannot create or edit notes.
+  // Lyrics are read-only; individual song access is checked below.
   if (['POST', 'PUT', 'PATCH'].includes(request.method) &&
       /^\/api\/(annotations|references|passage-references|connections|essays)(?:\/|$)/.test(path)) {
     return json({ error: 'Les paroles sont désormais en lecture seule.' }, 410);
@@ -802,14 +803,14 @@ async function listAlbums(env, request) {
   // Apply the targeted, idempotent catalogue migration through the existing
   // database binding; no extra account-wide D1 permission is needed.
   if (!cataloguesRenamed.has(env.DB)) {
-    await env.DB.prepare(`UPDATE albums SET title = 'Fais mieux'
-      WHERE id = 4 AND slug = '114' AND title = '114'
+    await env.DB.prepare(`UPDATE albums SET title = 'Fais Mieux'
+      WHERE slug IN ('114','fais-mieux') AND title IN ('114','Fais mieux','Fais Mieux')
         AND EXISTS (SELECT 1 FROM songs WHERE album_id = albums.id AND slug = 'fais-mieux')`).run();
     cataloguesRenamed.add(env.DB);
   }
   const albums = (await env.DB.prepare(
     'SELECT id, title, slug, release_date, is_single FROM albums ORDER BY position, release_date'
-  ).all()).results.filter(album=>album.slug!=='18-juillet-2019'||canListen(JULY.tracks[0],unlocked));
+  ).all()).results.filter(album=>!gatedAlbum(album.slug)||canListen(gatedAlbum(album.slug).tracks[0],unlocked));
   const songs = (await env.DB.prepare(
     `SELECT s.id, s.album_id, s.title, s.slug, s.track_number,
             (SELECT COUNT(*) FROM lyric_lines l WHERE l.song_id = s.id AND l.text <> '') AS line_count
@@ -818,7 +819,8 @@ async function listAlbums(env, request) {
   for (const album of albums) {
     album.is_single = !!album.is_single;
     album.songs = songs.filter((s) => s.album_id === album.id);
-    if(album.slug==='18-juillet-2019')album.songs.forEach((song,i)=>song.track_number=i+1);
+    const release=gatedAlbum(album.slug);
+    if(release){album.title=release.album;album.songs.forEach((song,i)=>{song.track_number=i+1;const track=gatedTrack(song.slug);if(track)song.title=track.title;});}
   }
   const orphans = songs.filter((s) => !albums.some((a) => a.id === s.album_id));
   return json({ albums, orphans });
@@ -826,8 +828,8 @@ async function listAlbums(env, request) {
 
 async function getSong(env, request, slug) {
   if(retiredSong(slug))return json({error:'Ce morceau a été retiré.'},404);
-  if(julySong(slug)){
-    const track=JULY.tracks.find(t=>t.slug===slug);
+  const track=gatedTrack(slug);
+  if(track){
     if(!canListen(track,await listeningAccess(request,env)))return json({error:`Ces paroles se découvrent à l’échelon ${track.minLevel}.`},403);
   }
   if (slug === 'meta-moi') await ensureMusicCatalogue(env);
@@ -838,6 +840,7 @@ async function getSong(env, request, slug) {
       WHERE s.slug = ?1`
   ).bind(slug).first();
   if (!song) return json({ error: 'Chanson introuvable.' }, 404);
+  if(track){song.title=track.title;song.duration_seconds=track.duration;song.album_title=RELEASES.find(album=>album.tracks.includes(track)).album;}
 
   const lines = (await env.DB.prepare(
     'SELECT id, line_number, text FROM lyric_lines WHERE song_id = ?1 ORDER BY line_number'

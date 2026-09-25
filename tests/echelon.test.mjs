@@ -172,6 +172,7 @@ test('API handles permission boundaries, points, migrations and draft conflicts'
   assert.equal((await call('/api/echelon/guess',{id:'eg-01',answer:'Signe'})).gained,1);
   const clock=await call('/api/echelon/guess',{id:'eg-03',answer:'horloge'});
   assert.equal(clock.gained,1);
+  assert.deepEqual(clock.opened.map(item=>item.id),['music-wanheda']);
   assert.ok(clock.state.pages.some(p=>p.id==='eg-10'));
   assert.equal((await call('/api/echelon/draft/eg-13')).status,404);
   // Discovery and duplication can occur before the first autosave completes.

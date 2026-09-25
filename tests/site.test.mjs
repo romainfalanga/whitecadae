@@ -36,10 +36,11 @@ test('catalogue updates preserve existing lyrics and add Meta moi exactly once',
     const response=await worker.fetch(new Request('https://test.local/api/albums'),env);
     assert.equal(response.status,200);
     const data=await response.json();
-    assert.equal(data.albums.find(a=>a.id===4).title,'Fais mieux');
+    assert.equal(data.albums.find(a=>a.id===4),undefined);
+    assert.equal(db.prepare('SELECT title FROM albums WHERE id=4').get().title,'Fais Mieux');
     assert.equal(data.albums.find(a=>a.id===9).title,'114');
-    assert.deepEqual(data.albums.find(a=>a.id===4).songs.map(s=>s.id),[13,14,15]);
-    assert.equal(data.albums.find(a=>a.id===4).songs[2].line_count,1);
+    assert.deepEqual(db.prepare('SELECT id FROM songs WHERE album_id=4 ORDER BY track_number').all().map(s=>s.id),[13,14,15]);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM lyric_lines WHERE song_id=15').get().n,1);
     assert.deepEqual(data.orphans,[]);
     assert.equal(data.albums.at(-1).title,'Meta moi');
     assert.deepEqual(data.albums.at(-1).songs.map(s=>s.slug),['meta-moi']);
