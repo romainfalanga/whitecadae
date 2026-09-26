@@ -3,18 +3,18 @@ import {ensureMetaMoi} from './meta-moi.js';
 export const JULY = {
   id:'18-juillet-2019', album:'18 juillet 2019', artist:'AA', cover:'/music/18-juillet-2019/cover.jpeg', coverType:'image/jpeg', lyricAlbums:['18-juillet-2019'],
   tracks:[
-    {slug:'wanheda',title:'Wanheda',src:'/music/18-juillet-2019/wanheda.mp3',duration:234.672,minLevel:5},
-    {slug:'quand-je-vois-je-pense',title:'Quand je vois je pense',src:'/music/18-juillet-2019/quand-je-vois-je-pense.mp3',duration:198.243,minLevel:6},
-    {slug:'un-fil-entre-deux-infinis',title:'Un fil entre deux infinis',src:'/music/18-juillet-2019/un-fil-entre-deux-infinis.mp3',duration:198.624,minLevel:7},
+    {slug:'wanheda',title:'Wanheda',src:'/music/18-juillet-2019/wanheda.mp3',duration:234.672,minLevel:6},
+    {slug:'quand-je-vois-je-pense',title:'Quand je vois je pense',src:'/music/18-juillet-2019/quand-je-vois-je-pense.mp3',duration:198.243,minLevel:7},
+    {slug:'un-fil-entre-deux-infinis',title:'Un fil entre deux infinis',src:'/music/18-juillet-2019/un-fil-entre-deux-infinis.mp3',duration:198.624,minLevel:8},
   ],
 };
 export const FAIS_MIEUX = {
   id:'fais-mieux',album:'Fais Mieux',artist:'White Cadae',cover:'/music/fais-mieux/cover.png',coverType:'image/png',lyricAlbums:['114','fais-mieux'],
   tracks:[
     // Preserve the existing lyric URL and its references; only the display title is used in the UI.
-    {slug:'la-matiere-dense',title:'La matière danse',src:'/music/fais-mieux/la-matiere-danse.mp3',duration:78.653854,minLevel:10},
-    {slug:'les-probabilites',title:'Les probabilités',src:'/music/fais-mieux/les-probabilites.mp3',duration:93,minLevel:12},
-    {slug:'fais-mieux',title:'Fais Mieux',src:'/music/fais-mieux/fais-mieux.mp3',duration:80.149271,minLevel:14},
+    {slug:'la-matiere-dense',title:'La matière danse',src:'/music/fais-mieux/la-matiere-danse.mp3',duration:78.653854,minLevel:3},
+    {slug:'les-probabilites',title:'Les probabilités',src:'/music/fais-mieux/les-probabilites.mp3',duration:93,minLevel:4},
+    {slug:'fais-mieux',title:'Fais Mieux',src:'/music/fais-mieux/fais-mieux.mp3',duration:80.149271,minLevel:5},
   ],
 };
 export const RELEASES=[JULY,FAIS_MIEUX];

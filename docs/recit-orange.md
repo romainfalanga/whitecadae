@@ -1,29 +1,13 @@
-# Récit Orange et arborescence — 26 septembre 2026
+# Accueil Orange et espaces communautaires
 
-## Plan et choix éditoriaux
+L’accueil reprend les trois paragraphes d’origine, sans récit ajouté. Il affiche uniquement les accès acquis, dans cet ordre : Conversation (2), La matière danse (3), Les probabilités (4), Fais Mieux (5), Wanheda (6), Quand je vois je pense (7), Un fil entre deux infinis (8), Vidéographie (9).
 
-1. Accueillir sous le titre Échelon 1, puis ajouter un chapitre par échelon atteint.
-2. Relier les textes de 18 juillet 2019 au récit de Vulpis début 2023 (chronologie fournie par l’auteur).
-3. À l’échelon 6, révéler que Vulpis est un personnage de White Cadae dans le contexte de son trouble schizoaffectif, et expliciter l’objectif de découverte de l’auteur et de compréhension de soi.
-4. Conserver les apocalypses 16 et 26 sous la mention « Révélation à définir », conformément à la demande de l’auteur. Les autres textes accompagnent une lecture des chansons ; ils n’ajoutent pas de nouveaux événements biographiques.
-5. Déplacer les paliers et accès vers l’accueil. Conserver une arborescence des énigmes sur une page large, avec défilement normal et liens explicites entre pistes.
+Conversation conserve un fil commun et deux thèmes : Général et Indice. Les anciennes publications Interprétations et Idées deviennent Général, sans modifier leur seuil ni leur version de permissions. Les filtres de lecture sont indépendants des options de publication. Le formulaire reste à l’écran, et le fil défile entre les filtres et le formulaire.
 
-Les chapitres 1–4 accompagnent 57 ; 5–8 contextualisent les trois morceaux de 2019 et la révélation ; 9–15 accompagnent l’expression, Fais Mieux et la relecture ; 17–25 proposent des rapprochements avec Meta moi et le reste du corpus. Aucun nouveau fait médical n’est inféré des paroles.
+Vidéographie utilise des tables vg_posts, vg_comments et vg_media créées à la première requête autorisée. Aucun ancien arbre privé ni récapitulatif n’est importé. Les seuils sont vérifiés sur les listes, détails, commentaires et fichiers. Abaisser le seuil d’une vidéo ayant des réponses est interdit pour préserver leur audience. Les suppressions de publications et réponses sont logiques et leurs médias deviennent inaccessibles.
 
-## Règles techniques
+Le bucket R2 privé whitecadae-media est lié au Worker par MEDIA. Vidéos : MP4, WebM ou QuickTime lisible par le navigateur, dix minutes / 80 Mo ; liens YouTube également acceptés. Les liens externes conservent la visibilité décidée sur YouTube. R2 sert les fichiers via le Worker authentifié, avec Range et sans cache public. Pas de transcodage vidéo côté serveur.
 
-- `src/orange-story.js` est le catalogue éditorial côté serveur. `GET /api/orange` utilise uniquement la session et la progression enregistrées. Aucun paramètre de niveau fourni par le navigateur ne donne un accès.
-- Le chapitre 1 est l’accueil dès zéro réponse ; le score du jeu reste zéro. Le chapitre 2 est débloqué au score 2. Aucun score ou seuil existant n’est renuméroté.
-- Les comptes auteur voient les 26 chapitres avec une mention explicite de prévisualisation. Les visiteurs et membres ne reçoivent pas les textes futurs, même dans les sources JavaScript publiques.
-- Le jeu possède actuellement 25 réponses possibles. Le chapitre 26 est préparé mais reste inaccessible aux joueurs tant que le jeu n’est pas étendu. Aucun point artificiel n’est ajouté.
-- Les accès proviennent de `buildOpenings`, la source existante des permissions, et figurent sous le chapitre correspondant. Les accès historiques restent conservés. Horloge demeure une ouverture par découverte.
-- Chaque chapitre peut recevoir un tableau `videos: [{title, url}]`. Il est filtré avec le chapitre, puis rendu comme liens de visionnage. Aucune vidéo fictive ni lecteur vide n’est affiché ; les vidéos seront à fournir.
-- Les API restent `no-store` ; le service worker ne les enregistre pas. Sa version change pour actualiser la nouvelle feuille de style.
-- `/parcours?view=ouvertures` redirige vers `/#mon-palier`. Les liens de Conversation et Échelons suivent cette nouvelle destination. Le lien « Mes paliers » est retiré du profil.
-- L’arborescence organise les cartes selon leurs dépendances visibles. Sur grand écran, trois colonnes ; sur tablette, deux ; sur mobile, une. Aucun cadre interne à hauteur fixe ni panoramique horizontal. Les détails sont dépliables sur place et les liens entre pistes réinitialisent les filtres avant de placer le focus sur la cible.
+Les vocaux (trois minutes / 8 Mo) passent par la réduction de bruit du navigateur, l’égalisation et la compression existantes avant envoi et transcription Workers AI. Les brouillons audio et texte sont conservés dans IndexedDB. La correction du texte conserve les repères des mots inchangés et interpole les mots modifiés. Les minutages proviennent des mots ou segments retournés par la transcription ; ils sont approximatifs dans les segments. La préécoute permet de les vérifier. Le lecteur parcourt les réponses en profondeur, conserve la voix réelle et affiche progressivement le texte ; un premier geste lance la lecture conformément aux navigateurs mobiles.
 
-## Validation
-
-- Tests existants et tests du récit : 38 réussis, couvrant les seuils, le masquage des révélations, les mentions à définir, les contenus et la route publique.
-- Essais navigateur sur une base SQLite locale isolée : visiteurs, niveaux 5, 6, 16, 25, auteur ; largeurs 390 et 1440 pixels ; absence de débordement horizontal, ouverture des détails, navigation entre pistes, recherche sans résultat, redirection de l’ancienne vue.
-- Aucune migration de la base de production nécessaire.
+Limites serveur : dix vidéos et soixante réponses par jour (hors auteur) ; cent réservations de fichiers et 200 Mo par jour, 1 Go par membre et 8 Go de réserve globale. Trois tentatives de transcription par vocal. Une réservation abandonnée peut être retirée ; les brouillons restants comptent dans les limites. Les autorisations du compte et du serveur doivent être conservées à chaque évolution.

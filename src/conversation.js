@@ -4,9 +4,7 @@ import {contentAccess,CONVERSATION_LEVEL} from './content-access.js';
 
 export const THEMES = [
   {id:'general',label:'Général',description:'Faire connaissance, partager une expérience, prendre du recul.',prompt:'Qu’as-tu envie de partager ?'},
-  {id:'indices',label:'Indices',description:'Faire chercher : une question, un détour ou un rapprochement, sans donner la réponse.',prompt:'Quelle piste peux-tu laisser sans dévoiler le signe ?'},
-  {id:'interpretations',label:'Interprétations',description:'Croiser les lectures des paroles et expliquer ce qui les relie.',prompt:'Quel passage lis-tu autrement, et pourquoi ?'},
-  {id:'idees',label:'Idées',description:'Faire grandir une idée ensemble et imaginer une façon de la mettre en pratique.',prompt:'Quelle idée proposes-tu, et qu’aimerais-tu essayer ?'},
+  {id:'indices',label:'Indice',description:'Une piste pour les autres joueurs.',prompt:'Partager un indice…'},
 ];
 
 export function conversationAccess(user, rows = []) {
@@ -41,6 +39,7 @@ async function ensureConversation(env) {
     }
   }
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_conversation_theme_id ON conversation_messages(theme,id)').run();
+  await env.DB.prepare("UPDATE conversation_messages SET theme='general' WHERE theme IN ('interpretations','idees')").run();
   })();
   ready.set(env.DB,pending);
   try{await pending;}catch(error){ready.delete(env.DB);throw error;}
@@ -57,7 +56,8 @@ export async function handleConversation(request, env, {getUser, json}) {
     const theme=params.get('theme')||'tout', mode=params.get('mode')||'tout';
     if(theme!=='tout'&&!THEMES.some(t=>t.id===theme))return json({error:'Thème inconnu.'},400);
     if(!['tout','exact','min','max','historique'].includes(mode))return json({error:'Filtre inconnu.'},400);
-    const level=Number(params.get('niveau')||CONVERSATION_LEVEL),before=Number(params.get('before')||0);
+    const level=Number(params.get('niveau')||CONVERSATION_LEVEL),before=Number(params.get('before')||0),after=Number(params.get('after')||0);
+    if(!Number.isSafeInteger(after)||after<0||(before&&after))return json({error:'Pagination invalide.'},400);
     if(!Number.isInteger(before)||before<0||!Number.isSafeInteger(before))return json({error:'Pagination invalide.'},400);
     if(!Number.isSafeInteger(level)||level<CONVERSATION_LEVEL)return json({error:'Échelon invalide.'},400);
     if(!['tout','historique'].includes(mode)&&level>access.ceiling)return json({error:'Cet échelon n’est pas encore atteint.'},403);
@@ -72,9 +72,11 @@ export async function handleConversation(request, env, {getUser, json}) {
           OR (m.echelon_version=2 AND ((?5='exact' AND m.min_echelon=?6)
             OR (?5='min' AND m.min_echelon>=?6) OR (?5='max' AND m.min_echelon<=?6))))
         AND (?7=0 OR m.id<?7)
-      ORDER BY m.id DESC LIMIT 101`).bind(user.is_admin ? 1 : 0, access.echelon, access.legacy,theme,mode,level,before).all();
-    const selected=(results||[]).slice(0,100).reverse();
-    return json({messages:selected,echelon:access.ceiling,themes:THEMES,nextBefore:results?.length>100?selected[0].id:null});
+        AND (?8=0 OR m.id>?8)
+      ORDER BY m.id ${after?'ASC':'DESC'} LIMIT 101`).bind(user.is_admin ? 1 : 0, access.echelon, access.legacy,theme,mode,level,before,after).all();
+    const selected=(results||[]).slice(0,100);
+    if(!after)selected.reverse();
+    return json({messages:selected,echelon:access.ceiling,themes:THEMES,nextBefore:!after&&results?.length>100?selected[0].id:null,nextAfter:after&&results?.length>100?selected.at(-1).id:null});
   }
   if(request.method!=='POST')return json({error:'Méthode indisponible.'},405);
   let body;

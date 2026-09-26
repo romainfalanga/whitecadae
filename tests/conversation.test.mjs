@@ -48,18 +48,18 @@ test('conversation uses every actual rung, rejects unauthorized levels and prese
   assert.ok(!(await call(high)).messages.some(m=>m.body==='Highest authored rung'));
   assert.equal(sql.prepare('SELECT count(*) AS n FROM conversation_messages WHERE echelon_version=1').get().n,2);
   assert.ok(highView.messages.every(m=>m.theme==='general'));
-  assert.deepEqual(highView.themes.map(t=>t.id),['general','indices','interpretations','idees']);
+  assert.deepEqual(highView.themes.map(t=>t.id),['general','indices']);
   assert.equal((await call(high,{body:'Hidden hint',min_echelon:10,theme:'indices'})).status,201);
   assert.equal((await call(low,{body:'Shared hint',min_echelon:2,theme:'indices'})).status,201);
-  assert.equal((await call(high,{body:'Interpretation',min_echelon:4,theme:'interpretations'})).status,201);
-  assert.equal((await call(high,{body:'Creative idea',min_echelon:6,theme:'idees'})).status,201);
+  assert.equal((await call(high,{body:'Interpretation',min_echelon:4,theme:'interpretations'})).status,400);
+  assert.equal((await call(high,{body:'Creative idea',min_echelon:6,theme:'idees'})).status,400);
   assert.equal((await call(high,{body:'Unknown',min_echelon:2,theme:'spoilers'})).status,400);
-  for(const query of ['?theme=invalid','?mode=invalid','?before=-1','?before=1.2','?niveau=NaN','?mode=exact&niveau=1'])assert.equal((await call(high,null,query)).status,400);
+  for(const query of ['?theme=invalid','?mode=invalid','?before=-1','?before=1.2','?after=-1','?before=2&after=1','?niveau=NaN','?mode=exact&niveau=1'])assert.equal((await call(high,null,query)).status,400);
   assert.equal((await call(low,null,'?mode=exact&niveau=10')).status,403);
   assert.deepEqual((await call(low,null,'?theme=indices')).messages.map(m=>m.body),['Shared hint']);
   assert.deepEqual((await call(high,null,'?theme=indices&mode=exact&niveau=10')).messages.map(m=>m.body),['Hidden hint']);
   assert.deepEqual((await call(high,null,'?theme=indices&mode=max&niveau=2')).messages.map(m=>m.body),['Shared hint']);
-  assert.deepEqual((await call(high,null,'?theme=interpretations&mode=min&niveau=4')).messages.map(m=>m.body),['Interpretation']);
+  assert.equal((await call(high,null,'?theme=interpretations&mode=min&niveau=4')).status,400);
   assert.deepEqual((await call(high,null,'?theme=indices&mode=historique')).messages,[]);
   assert.deepEqual((await call(history,null,'?theme=general&mode=historique')).messages.map(m=>m.body),['Historic private','Historic common']);
   // Filtering happens before pagination, not on a truncated all-themes window.
@@ -71,4 +71,5 @@ test('conversation uses every actual rung, rejects unauthorized levels and prese
   const third=await call(low,null,'?theme=indices&before='+second.nextBefore);assert.equal(third.messages.length,6);assert.equal(third.nextBefore,null);
   const messages=[...third.messages,...second.messages,...first.messages];assert.equal(new Set(messages.map(m=>m.id)).size,206);
   assert.ok(messages.every(m=>m.theme==='indices'&&m.min_echelon===2));
+  const updates=await call(low,null,'?theme=indices&after='+messages[0].id);assert.equal(updates.messages.length,100);assert.deepEqual(updates.messages.map(m=>m.id),messages.slice(1,101).map(m=>m.id));assert.equal(updates.nextAfter,updates.messages.at(-1).id);
 });

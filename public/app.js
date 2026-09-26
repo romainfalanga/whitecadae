@@ -46,7 +46,7 @@ function tokens(text) {
 function mmss(seconds) {
   if (seconds == null) return null;
   const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
+  const s = Math.floor(seconds % 60);
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
@@ -146,6 +146,8 @@ function coupePageTimer() {
 }
 
 async function route() {
+  window.WCConversation?.leave();
+  window.WCVideographie?.leave();
   if (window.WCGame) WCGame.leave();
   if (window.WCJourney) WCJourney.leave();
   window.scrollTo(0, 0);
@@ -194,7 +196,8 @@ async function route() {
     : 'interpretations';
   if (!state.access[cle]) return navigate('/echelon', true);
   if (path === '/conversation') return WCConversation.page();
-  if (path === '/videographie') return vueRythme();
+  if (path === '/videographie') return WCVideographie.feed();
+  if ((m = path.match(/^\/videographie\/video\/(\d+)$/))) return WCVideographie.detail(+m[1]);
   if (path === '/videographie/carre') return navigate('/videographie', true);
   if ((m = path.match(/^\/videographie\/(\d+)$/))) return pageArbre(+m[1]);
   if ((m = path.match(/^\/reflexion\/(\d+)$/))) return pageArbre(+m[1]);

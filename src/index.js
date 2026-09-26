@@ -17,7 +17,8 @@ import { gameLevel, accessLevel, gameProfile } from './echelon.js';
 import {RELEASES,retiredSong,gatedTrack,gatedAlbum,visibleSong,canListen,musicAlbums,ensureMusicCatalogue} from './music-catalogue.js';
 import {contentAccess} from './content-access.js';
 import {buildJourney} from './journey.js';
-import {buildStory} from './orange-story.js';
+import {buildOrange} from './orange-access.js';
+import {handleVideographie} from './videographie.js';
 
 const SESSION_COOKIE = 'wc_session';
 const SESSION_DAYS = 30;
@@ -153,9 +154,13 @@ async function handleApi(request, env, url) {
 
   let p;
 
+  if (/^\/api\/(videographies|vg-media|vg-comments)(?:\/|$)/.test(path)) {
+    return handleVideographie(request, env, {getUser, json});
+  }
+
   if (route('GET', '/api/orange')) {
     const user = await getUser(request, env);
-    return json(buildStory(await gameRows(env, user?.id), user));
+    return json(buildOrange(await gameRows(env, user?.id), user));
   }
 
   if (/^\/api\/(carre|societes|brainstorms|114)(?:\/|$)/.test(path)) {

@@ -1,15 +1,13 @@
 import {gameLevel,accessLevel} from './echelon.js';
-import {ECHELON_CONVERSATION,ECHELON_VIDEOGRAPHIE} from './enigmas57.js';
 import {RELEASES,canListen} from './music-catalogue.js';
 
 export const CONVERSATION_LEVEL=2;
-// Historical rank 4 corresponds to nine completed answers in the current game.
-export const VIDEO_LEVEL=3*(ECHELON_VIDEOGRAPHIE-1);
+export const VIDEO_LEVEL=9;
 export function contentAccess(user,rows=[]){
   const level=gameLevel(rows),legacy=accessLevel(rows),admin=!!user?.is_admin;
   return {level,legacy,admin,
-    conversation:!!user&&(admin||level>=CONVERSATION_LEVEL||legacy>=ECHELON_CONVERSATION),
-    videographie:!!user&&(admin||legacy>=ECHELON_VIDEOGRAPHIE),
+    conversation:!!user&&(admin||level>=CONVERSATION_LEVEL),
+    videographie:!!user&&(admin||level>=VIDEO_LEVEL),
   };
 }
 
@@ -22,9 +20,9 @@ export function buildOpenings(rows=[],user={}){
     {id:'lyrics',title:'Paroles',description:'Lire les textes des morceaux auxquels tu as accès.',level:0,open:true,href:'/paroles'},
     {id:'echelons',title:'Échelons',description:'Proposer les signes et conserver les découvertes sur ton compte.',level:0,open:true,href:'/echelon'},
     {id:'profile',title:'Mon profil et mon arborescence',description:'Suivre tes découvertes et les chemins qui s’ouvrent.',level:0,open:true,href:user.username?'/membre/'+encodeURIComponent(user.username):'/parcours'},
-    {id:'conversation',title:'Conversation',description:'Échanger des indices, des interprétations et des idées. Chaque message conserve son propre niveau d’accès.',level:CONVERSATION_LEVEL,open:access.conversation,href:'/conversation'},
+    {id:'conversation',title:'Conversation',description:'La discussion commune et les indices, selon ton échelon.',level:CONVERSATION_LEVEL,open:access.conversation,href:'/conversation'},
     ...RELEASES.flatMap(album=>album.tracks.map(track=>({id:'music-'+track.slug,title:track.title,description:album.album+' · musique et paroles',level:track.minLevel,open:canListen(track,access),href:'/musique#track-'+track.slug,lyricsHref:'/chanson/'+track.slug}))),
-    {id:'videographie',title:'Vidéographie',description:'Accéder à l’espace de vidéographie et à ses récapitulatifs.',level:VIDEO_LEVEL,open:access.videographie,href:'/videographie'},
+    {id:'videographie',title:'Vidéographie',description:'Partager des vidéos et faire grandir les réflexions ensemble.',level:VIDEO_LEVEL,open:access.videographie,href:'/videographie'},
   ];
   const pending=items.filter(item=>!item.open&&item.level>access.level);
   const nextLevel=pending.length?Math.min(...pending.map(item=>item.level)):null;

@@ -2,8 +2,8 @@
 // Stratégie « réseau d'abord » : le site est collaboratif, on ne veut jamais
 // servir de contenu périmé. Le cache sert seulement de filet hors ligne.
 
-const CACHE = 'whitecadae-v19-orange-recit';
-const SHELL = ['/', '/styles.css', '/app.js', '/music.css', '/music57.js', '/player.js', '/orange.js', '/echelon.js', '/echelon.css', '/journey.js', '/journey.css', '/story.css', '/conversation.js', '/manifest.webmanifest'];
+const CACHE = 'whitecadae-v20-community';
+const SHELL = ['/', '/styles.css', '/app.js', '/music.css', '/music57.js', '/player.js', '/orange.js', '/echelon.js', '/echelon.css', '/journey.js', '/journey.css', '/story.css', '/chat.js', '/community.css', '/vocal.js', '/videographie.js', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -26,7 +26,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   // Native audio handles byte ranges; never cache a partial response or whole album.
-  if (request.headers.has('range') || request.destination === 'audio' || url.pathname.startsWith('/music/')) return;
+  if (request.headers.has('range') || ['audio','video'].includes(request.destination) || url.pathname.startsWith('/music/')) return;
 
   // Les appels d'API ne sont jamais mis en cache.
   if (url.pathname.startsWith('/api/')) {

@@ -25,6 +25,7 @@
       "database_id": "94a4fab8-be1e-41be-8ef1-df5aa32835f3"
     }
   ],
+  "r2_buckets": [{"binding":"MEDIA","bucket_name":"whitecadae-media"}],
   "vars": {
     // Les comptes créés avec ces emails deviennent automatiquement administrateurs.
     "ADMIN_EMAILS": "romainfalanga83@gmail.com"

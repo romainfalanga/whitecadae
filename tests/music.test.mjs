@@ -39,7 +39,7 @@ test('every gated track opens with its lyrics, cover and direct audio at its own
     assert.equal((await call('/api/journey',session)).status,410);
     const story=await call('/api/aa',session);assert.equal(story.status,410);assert.doesNotMatch(await story.text(),/Andromédien|dépersonnalisation/);
     const map=await call('/api/echelon/map',session);assert.equal(map.status,accounts.some(a=>a.session===session)?200:401);
-    if(map.status===200){const data=await map.json();assert.deepEqual(data.openings.items.filter(i=>i.id.startsWith('music-')&&i.id!=='music-57'&&i.open).map(i=>i.id),expectedTracks.map(t=>'music-'+t.slug));}
+    if(map.status===200){const data=await map.json();assert.deepEqual(data.openings.items.filter(i=>i.id.startsWith('music-')&&i.id!=='music-57'&&i.open).map(i=>i.id),[...expectedTracks].sort((a,b)=>a.minLevel-b.minLevel).map(t=>'music-'+t.slug));}
     const catalogue=await(await call('/api/albums',session)).json();
     const corpus=JSON.stringify(await(await call('/api/corpus',session)).json());
     assert.doesNotMatch(corpus,/Retired verse/);
