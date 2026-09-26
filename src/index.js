@@ -17,6 +17,7 @@ import { gameLevel, accessLevel, gameProfile } from './echelon.js';
 import {RELEASES,retiredSong,gatedTrack,gatedAlbum,visibleSong,canListen,musicAlbums,ensureMusicCatalogue} from './music-catalogue.js';
 import {contentAccess} from './content-access.js';
 import {buildJourney} from './journey.js';
+import {buildStory} from './orange-story.js';
 
 const SESSION_COOKIE = 'wc_session';
 const SESSION_DAYS = 30;
@@ -151,6 +152,11 @@ async function handleApi(request, env, url) {
   };
 
   let p;
+
+  if (route('GET', '/api/orange')) {
+    const user = await getUser(request, env);
+    return json(buildStory(await gameRows(env, user?.id), user));
+  }
 
   if (/^\/api\/(carre|societes|brainstorms|114)(?:\/|$)/.test(path)) {
     return json({error:'Cet espace a été supprimé.'}, 410);

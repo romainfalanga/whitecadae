@@ -1,12 +1,26 @@
 // Public entry points for the album and its escape game.
-function pageOrange() {
+async function pageOrange() {
+  const epoch=newEpoch();
   document.title = 'Escape Game Orange · White Cadae';
-  app.innerHTML = `<section class="orange-story" aria-labelledby="story-title">
-    <h1 id="story-title" class="orange-title">Escape Game <span>Orange</span></h1>
-    <div class="orange-story-text"><p>Vulpis était en enfer. Les quatre morceaux de son petit album <strong>57</strong> l’ont aidé à s’en échapper et à trouver le chemin vers son paradis. En mettant en musique ce qu’il traversait, en extériorisant ce qu’il portait en lui, il a laissé des signes dans ses textes.</p>
-    <p>Dans ces quatre morceaux, plusieurs grilles de lecture se superposent : les mêmes paroles peuvent raconter plusieurs choses à la fois. Un mot, une expression, un nombre, une sonorité ou un rapprochement entre deux passages peut révéler un autre sens. Ces codes cachés sont les <strong>signes</strong> que tu dois retrouver.</p>
-    <p>Écoute, réécoute et lis les paroles. Fais dialoguer les morceaux pour découvrir les différentes lectures qu’ils contiennent. Puis rends-toi sur la <a href="/echelon" data-link>page Échelons</a> pour proposer les signes que tu as trouvés et progresser dans l’escape game.</p></div>
+  app.innerHTML='<div class="loading">Ouverture de ton récit…</div>';
+  let data;
+  try{data=await api('/api/orange');}catch(error){if(!stale(epoch))app.innerHTML=`<h1>Escape Game Orange</h1><p>${esc(error.message)}</p><a href="/" data-link>Réessayer</a>`;return;}
+  if(stale(epoch))return;
+  const access=item=>`<a class="story-access" href="${esc(item.href)}" data-link><span>${item.lyricsHref?'Musique':'Explorer'}</span>${esc(item.title)} ↗</a>${item.lyricsHref?`<a class="story-lyrics" href="${esc(item.lyricsHref)}" data-link>Paroles de ${esc(item.title)} ↗</a>`:''}`;
+  app.innerHTML=`<section class="orange-story story-progressive" aria-labelledby="story-title">
+    <header class="story-header"><p class="eyebrow">Un récit qui s’ouvre avec tes découvertes</p><h1 id="story-title" class="orange-title">Escape Game <span>Orange</span></h1><p>Écouter. Chercher. Revenir avec un autre regard.</p></header>
+    ${data.author?'<p class="story-author">Vue auteur · Tous les chapitres préparés sont visibles, y compris les révélations à définir. Les joueurs ne voient que les étapes atteintes.</p>':''}
+    <div class="story-position"><span>${data.score===0?'Le récit commence ici':`Ton récit · Échelon ${data.level}`}</span>${data.level>1?'<button type="button" id="story-current">Reprendre ma lecture ↓</button>':'<a href="/echelon" data-link>Chercher les premiers signes →</a>'}</div>
+    ${data.chapters.length>1?`<details class="story-index"><summary>Retrouver un échelon</summary><nav aria-label="Chapitres accessibles">${data.chapters.map(c=>`<a href="#recit-${c.level}" ${c.level===data.level?'aria-current="step"':''}>${c.level}</a>`).join('')}</nav></details>`:''}
+    <div class="story-chapters">${data.chapters.map(c=>`<article id="recit-${c.level}" class="story-chapter ${c.apocalypse?'story-revelation':''}" ${c.level===data.level?'aria-current="step"':''}><div class="story-chapter-heading"><h2>Échelon ${c.level}</h2>${c.apocalypse?'<span class="story-apocalypse">Apocalypse · Révélation</span>':''}</div><h3>${esc(c.title)}</h3><p>${esc(c.text)}</p>${c.access.length?`<div class="story-resources" aria-label="Accès de cet échelon">${c.access.map(access).join('')}</div>`:''}${c.videos.length?`<div class="story-videos"><h4>Pour aller plus loin</h4>${c.videos.map(video=>`<a href="${esc(safeUrl(video.url))}" target="_blank" rel="noopener noreferrer">Voir ${esc(video.title)} ↗</a>`).join('')}</div>`:''}</article>`).join('')}</div>
+    ${data.historicalAccess.length?`<section class="story-extra"><h2>Tes accès conservés</h2><p>Ces contenus restent accessibles grâce à ta progression précédente.</p>${data.historicalAccess.map(access).join('')}</section>`:''}
+    ${data.discovery?`<section class="story-extra"><h2>Une découverte ouvre aussi un chemin</h2><a href="${esc(data.discovery.href)}" data-link>Retrouver ${esc(data.discovery.title)} →</a></section>`:''}
+    <footer class="story-next"><p class="eyebrow">L’histoire continue</p><h2>${data.nextLevel?`La suite à l’échelon ${data.nextLevel}`:'Continue d’explorer'}</h2><p>Chaque nouvel échelon dévoile un autre paragraphe. Tu peux toujours revenir sur ceux que tu as déjà ouverts.</p>${data.nextAccess.length?`<p class="story-next-access">Prochain contenu · ${data.nextAccess.map(i=>`${esc(i.title)} — échelon ${i.level}`).join(' · ')}</p>`:''}<a class="orange-button" href="/echelon" data-link>Poursuivre les énigmes →</a></footer>
   </section>`;
+  const current=()=>document.getElementById('recit-'+Math.min(data.level,data.chapters.at(-1).level));
+  document.getElementById('story-current')?.addEventListener('click',()=>current()?.scrollIntoView({block:'start',behavior:'auto'}));
+  if(location.hash==='#mon-palier')current()?.scrollIntoView({block:'start'});
+  else if(/^#recit-\d+$/.test(location.hash))document.getElementById(location.hash.slice(1))?.scrollIntoView({block:'start'});
 }
 
 async function pageMusique() {
