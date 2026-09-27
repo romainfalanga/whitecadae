@@ -208,8 +208,7 @@ async function handleApi(request, env, url) {
   //     gestionnaire (le corps de la requête et l'échelon du visiteur s'y
   //     lisent ensemble). L'ordre n'a pas d'importance : rien ici n'est
   //     couvert par le barrage plus bas.
-  if (route('GET', '/api/conversation')) return handleConversation(request, env, {getUser, json});
-  if (route('POST', '/api/conversation')) return handleConversation(request, env, {getUser, json});
+  if (path === '/api/conversation' || path.startsWith('/api/conversation/')) return handleConversation(request, env, {getUser, json});
 
   if (route('GET', '/api/arbres')) return arbresList(request, env, url);
   if (route('POST', '/api/arbres')) return arbresCreate(request, env);
@@ -2031,9 +2030,9 @@ async function ajouteColonne(env, table, colonne, sql) {
 }
 
 /* --------------------------------------------- la conversation (échelon 2)
-   Une seule conversation, pour tout le monde à partir de l'échelon 2. Mais
-   chaque message porte l'échelon minimal pour le lire, choisi par son auteur
-   entre 2 et son propre échelon : plus on monte, plus on entend.           */
+   Conversation générale à 2, sujets à 12. Chaque nouveau message garde
+   l'échelon réel de son auteur au moment de l'envoi. Les règles et quotas
+   sont vérifiés dans conversation.js.                                    */
 
 /* ------------------- les arbres : Pense Mieux (3) et Vidéographie (4) ---
    Même moteur pour les deux : un tronc (le sujet) et des branches emboîtées

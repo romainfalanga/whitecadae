@@ -232,6 +232,17 @@ CREATE TABLE IF NOT EXISTS auth_attempts (
 -- Toutes ces tables se créent aussi d'elles-mêmes au premier passage du
 -- Worker (ensureHautesTables) : cette migration est le chemin propre.
 
+CREATE TABLE IF NOT EXISTS conversation_topics (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  created_echelon INTEGER NOT NULL,
+  client_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, client_id)
+);
+
 CREATE TABLE IF NOT EXISTS conversation_messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -239,6 +250,7 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
   min_echelon INTEGER NOT NULL DEFAULT 2,
   echelon_version INTEGER NOT NULL DEFAULT 1,
   theme TEXT NOT NULL DEFAULT 'general',
+  topic_id INTEGER REFERENCES conversation_topics(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_conv_created ON conversation_messages(created_at);

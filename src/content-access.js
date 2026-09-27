@@ -2,11 +2,14 @@ import {gameLevel,accessLevel} from './echelon.js';
 import {RELEASES,canListen} from './music-catalogue.js';
 
 export const CONVERSATION_LEVEL=2;
+export const TOPIC_LEVELS=[12,18,23];
+export const topicLimit=level=>TOPIC_LEVELS.filter(minimum=>level>=minimum).length;
 export const VIDEO_LEVEL=12;
 export function contentAccess(user,rows=[]){
   const level=gameLevel(rows),legacy=accessLevel(rows),admin=!!user?.is_admin;
   return {level,legacy,admin,
     conversation:!!user&&(admin||level>=CONVERSATION_LEVEL),
+    topics:!!user&&level>=TOPIC_LEVELS[0],
     videographie:!!user&&(admin||level>=VIDEO_LEVEL),
   };
 }
@@ -19,9 +22,9 @@ export function buildOpenings(rows=[],user={}){
     {id:'lyrics',title:'Paroles',description:'Lire les textes des morceaux auxquels tu as accès.',level:0,open:true,href:'/paroles'},
     {id:'echelons',title:'Échelons',description:'Proposer les signes et conserver les découvertes sur ton compte.',level:0,open:true,href:'/echelon'},
     {id:'profile',title:'Mon profil et mon arborescence',description:'Suivre tes découvertes et les chemins qui s’ouvrent.',level:0,open:true,href:user.username?'/membre/'+encodeURIComponent(user.username):'/parcours'},
-    {id:'conversation',title:'Conversation',description:'La discussion commune et les indices, selon ton échelon.',level:CONVERSATION_LEVEL,open:access.conversation,href:'/conversation'},
+    {id:'conversation',title:'Conversation générale',description:'La discussion commune, avec les messages accessibles à ton échelon.',level:CONVERSATION_LEVEL,open:access.conversation,href:'/conversation'},
     ...RELEASES.flatMap(album=>album.tracks.map(track=>({id:'music-'+track.slug,title:track.title,description:album.album+' · musique et paroles',level:track.minLevel,open:canListen(track,access),href:'/musique#track-'+track.slug,lyricsHref:'/chanson/'+track.slug}))),
-    {id:'videographie',title:'Vidéographie',description:'Partager des vidéos et faire grandir les réflexions ensemble.',level:VIDEO_LEVEL,open:access.videographie,href:'/videographie'},
+    ...TOPIC_LEVELS.map((level,index)=>({id:index?'conversation-topic-'+(index+1):'conversation-topics',title:index?'Créer un '+(index===1?'deuxième':'troisième')+' sujet':'Tous les sujets · créer un premier sujet',description:index?'Un salon supplémentaire pour échanger.':'Accéder aux salons et créer ton premier sujet de conversation.',level,open:access.level>=level,href:'/conversation?view=topics'})),
   ];
   const pending=items.filter(item=>!item.open&&item.level>access.level);
   const nextLevel=pending.length?Math.min(...pending.map(item=>item.level)):null;

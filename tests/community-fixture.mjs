@@ -5,7 +5,7 @@ export function fixture(){
   const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
   sql.exec('CREATE TABLE IF NOT EXISTS riddle_progress(user_id INTEGER,riddle_id TEXT,solved_at TEXT,PRIMARY KEY(user_id,riddle_id))');
   const ids=NODES.flatMap(n=>n.answers.map(a=>a.id));
-  for(const level of [0,2,3,5,6,7,8,9,10,11,12,13,16,25,99]){
+  for(const level of [0,2,3,5,6,7,8,9,10,11,12,13,16,17,18,22,23,25,99]){
     const id=level+1;sql.prepare('INSERT INTO users(id,email,username,password_hash,is_admin) VALUES(?,?,?,?,?)').run(id,`qa${level}@local.test`,`QA${level}`,'unused',level===99?1:0);
     sql.prepare('INSERT INTO sessions(token,user_id,expires_at) VALUES(?,?,?)').run('qa'+level,id,'2099-01-01');
     for(const riddle of ids.slice(0,level===99?0:Math.max(0,level-1)))sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(id,riddle,'2026-09-26');

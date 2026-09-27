@@ -427,7 +427,6 @@ function renderNav() {
   const a = state.access;
   const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musiques</a>', '<a href="/echelon" data-link>Échelons</a>'];
   if (a.conversation) liens.push('<a href="/conversation" data-link>Conversation</a>');
-  if (a.videographie) liens.push('<a href="/videographie" data-link>Vidéographie</a>');
   // La déconnexion se fait depuis les paramètres du compte (page profil) :
   // pas besoin de la dupliquer dans le menu.
   if (u) {
@@ -446,8 +445,8 @@ function renderNav() {
 }
 
 /* --------------------------------------------- la conversation (échelon 2)
-   Une seule conversation. Chaque message porte l'échelon minimal pour le
-   lire, choisi par son auteur : plus on monte, plus on entend. La page se
+   Conversation générale et sujets. Chaque nouveau message conserve
+   l'échelon de son auteur à l'envoi : plus on monte, plus on entend. La page se
    relit toute seule, mais seulement quand elle est visible.               */
 
 /* ------------------- les arbres : Pense Mieux (3) et Vidéographie (4) ---
