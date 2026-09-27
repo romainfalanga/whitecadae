@@ -12,40 +12,49 @@ progression n’est supprimée. `schema.sql` inclut le schéma pour une base neu
 Les modifications de fiches/actions utilisent une révision et les créations
 une clé d’idempotence. Les quotas sont vérifiés dans la requête d’insertion.
 
-## Séances
+## Séances et lives externes
 
 Le créateur d’une fiche organise une séance de 15 à 180 minutes, immédiate ou
 programmée. Son échelon à la création fixe l’accès minimal. Chaque message
-possède en plus son propre seuil. Les discussions écrites et les synthèses
-restent dans D1 ; les données vocales ne sont pas enregistrées.
+possède en plus son propre seuil. Discussions écrites et synthèses restent dans D1.
+
+L’organisateur colle un lien public YouTube (watch, youtu.be ou /live/), une chaîne
+Twitch, une invitation Discord ou un lien direct vers un salon Discord. Le lien
+peut être modifié après création, avec contrôle de propriétaire et de révision.
+Les paramètres de suivi sont retirés et les domaines validés côté serveur.
+Aucun HTML arbitraire, clé de diffusion privée ou proxy vidéo n’est accepté.
+
+YouTube et Twitch utilisent leur iframe officielle, chargée uniquement après
+clic, sans lecture automatique. Le player Twitch reçoit le véritable hostname
+dans son paramètre parent. Un bouton permet toujours d’ouvrir la plateforme,
+notamment si l’intégration est interdite par l’organisateur ou le navigateur.
+Sur un écran trop étroit pour le lecteur Twitch (400 pixels), le lien externe
+est privilégié. Discord s’ouvre dans un nouvel onglet ; il n’est pas intégré.
+
+La musique est mise en pause lorsqu’on ouvre le live. Reprendre la musique
+ferme le lecteur intégré. Le rafraîchissement de la discussion ne recharge pas
+une iframe inchangée. Quitter la séance détruit l’iframe.
+
+L’organisateur démarre sa diffusion sur YouTube/Twitch ou crée son salon Discord.
+White Cadae organise la séance et sa discussion ; il ne crée pas le live chez
+ces fournisseurs, ne diffuse ni n’enregistre son audio/vidéo. L’accès au lien sur
+White Cadae est limité par l’échelon ; la confidentialité du live lui-même dépend
+des réglages de la plateforme externe. La date de la séance n’indique pas si le
+diffuseur externe a effectivement démarré sa diffusion.
 
 `BRAINSTORM_LIVE` lie le Durable Object `BrainstormLive`, SQLite via la migration
-`v1-brainstorm-live`. L’upgrade WebSocket réauthentifie la session, contrôle
-l’origine, la séance et le niveau puis construit ses propres claims. Le DO
-ne fait transiter que présence, notifications et signalisation. Les messages
-persistants passent par l’API authentifiée. Les connexions ont une durée de
-validité courte, renouvelée par la lecture HTTP authentifiée ; elles conservent
-leurs métadonnées lors de l’hibernation.
+`v1-brainstorm-live`, uniquement pour la présence et les notifications écrites.
+L’upgrade WebSocket réauthentifie la session, contrôle l’origine, la séance et le
+niveau puis construit ses propres claims. Les messages persistants passent par
+l’API authentifiée. Les connexions sont renouvelées par lecture HTTP authentifiée.
 
-La voix utilise un maillage WebRTC limité à 8 personnes. Le microphone s’ouvre
-uniquement après clic et entre coupé. Quitter la page arrête pistes et connexions.
-Une reconnexion brève réutilise le microphone déjà autorisé, sans en ouvrir un
-nouveau. Après 15 secondes d’interruption, le microphone est fermé.
+Aucun abonnement Cloudflare Realtime/TURN, clé TURN ou serveur de diffusion
+audio/vidéo n’est nécessaire. Le code de capture micro et de signalisation WebRTC
+a été retiré de Brainstorm. L’ancien endpoint vocal renvoie 410.
 
-### Activation du relais vocal
-
-L’écrit fonctionne indépendamment de TURN. Pour activer le vocal en production :
-
-1. Activer Cloudflare Realtime/TURN après validation de son abonnement à l’usage.
-2. Créer une clé TURN dédiée à White Cadae.
-3. Enregistrer son identifiant et son jeton **uniquement comme secrets du Worker** :
-   `wrangler secret put CF_TURN_KEY_ID` puis `wrangler secret put CF_TURN_TOKEN`.
-4. Tester une séance sur deux réseaux distincts ; ne jamais commiter ces secrets.
-
-L’API génère les identifiants ICE temporaires côté serveur. La clé permanente
-n’est jamais transmise au navigateur. Sans les deux secrets, le bouton vocal
-reste désactivé et la discussion écrite demeure disponible. Référence :
-https://developers.cloudflare.com/realtime/turn/generate-credentials/
+Références officielles :
+- https://developers.google.com/youtube/player_parameters
+- https://dev.twitch.tv/docs/embed/video-and-clips/
 
 ## Musique
 
@@ -69,8 +78,8 @@ requêtes Range ; une variante accessible ne contient jamais de titre verrouill�
 Le service worker ne cache pas les fichiers audio. Une baisse des droits vide
 également les chapitres déjà chargés devenus inaccessibles.
 
-Les tests automatisés couvrent droits, quotas, conflits, messages, signalisation,
+Les tests automatisés couvrent droits, quotas, conflits, messages, liens de diffusion,
 repères, répétition et accès directs aux fichiers. Les essais navigateur locaux
-doivent vérifier aussi la réception WebRTC, les petits écrans, la navigation,
+doivent vérifier aussi les intégrations externes, les petits écrans, la navigation,
 et la lecture pendant un blocage du thread JavaScript. Ils ne remplacent pas
 un essai physique iOS/Android avec écran verrouillé.

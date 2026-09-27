@@ -132,7 +132,7 @@ const CSP = [
   "connect-src 'self' wss://whitecadae.fr wss://whitecadae.romainfalanga83.workers.dev",
   "worker-src 'self'",
   "manifest-src 'self'",
-  'frame-src https://www.youtube.com https://www.youtube-nocookie.com',
+  'frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.twitch.tv',
   "form-action 'self'",
   "frame-ancestors 'none'",
   "base-uri 'none'",

@@ -388,7 +388,7 @@ CREATE TABLE IF NOT EXISTS community_brainstorms (
     id INTEGER PRIMARY KEY AUTOINCREMENT, room_id INTEGER NOT NULL REFERENCES conversation_topics(id),
     user_id INTEGER NOT NULL REFERENCES users(id), title TEXT NOT NULL, agenda TEXT NOT NULL DEFAULT '',
     starts_at INTEGER NOT NULL, ends_at INTEGER NOT NULL, ended_at INTEGER, min_echelon INTEGER NOT NULL,
-    summary TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL DEFAULT 0, client_id TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '', live_url TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL DEFAULT 0, client_id TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(room_id,user_id,client_id));
 CREATE TABLE IF NOT EXISTS community_brainstorm_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT, brainstorm_id INTEGER NOT NULL REFERENCES community_brainstorms(id),

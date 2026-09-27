@@ -1,0 +1,13 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
+function fixture(){class El{constructor(tag){this.tag=tag;this.children=[];this.dataset={};this.clientWidth=600;}append(...nodes){for(const n of nodes){n.parent=this;this.children.push(n)}}replaceChildren(...nodes){this.children=[];this.append(...nodes)}remove(){this.parent.children=this.parent.children.filter(n=>n!==this)}querySelector(selector){const matches=n=>selector==='iframe'?n.tag==='iframe':selector==='[data-show-live]'?'showLive'in n.dataset:'hideLive'in n.dataset;for(const c of this.children){if(matches(c))return c;const child=c.querySelector(selector);if(child)return child;}return null;}}
+  let pauses=0;const context={window:{},document:{createElement:t=>new El(t)},WCPlayer:{pause:()=>pauses++},safeUrl:x=>x,URLSearchParams,location:{hostname:'whitecadae.fr'}};vm.runInNewContext(fs.readFileSync(new URL('../public/live-player.js','file://'+__filename.replaceAll('\\','/')),'utf8'),context);const root=new El('div');return {root,player:context.window.WCExternalLive.create(root),get pauses(){return pauses}};}
+test('external player stays unloaded until a click and polling does not reload a playing iframe',()=>{
+  const f=fixture(),live={provider:'youtube',label:'YouTube',id:'abcdefghijk',url:'https://www.youtube.com/watch?v=abcdefghijk'};f.player.render(live);assert.equal(f.root.querySelector('iframe'),null);assert.equal(f.pauses,0);
+  f.root.querySelector('[data-show-live]').onclick();const frame=f.root.querySelector('iframe');assert.equal(new URL(frame.src).host,'www.youtube-nocookie.com');assert.equal(new URL(frame.src).searchParams.get('autoplay'),'0');assert.equal(f.pauses,1);
+  f.player.render({...live});assert.equal(f.root.querySelector('iframe'),frame);f.player.hide();assert.equal(f.root.querySelector('iframe'),null);assert.equal(f.root.querySelector('[data-show-live]').hidden,false);
+});
+test('Twitch uses the actual parent, mobile can open externally, and Discord never creates an iframe',()=>{
+  const f=fixture(),live={provider:'twitch',label:'Twitch',id:'example',url:'https://www.twitch.tv/example'};f.player.render(live);f.root.querySelector('[data-show-live]').onclick();assert.equal(new URL(f.root.querySelector('iframe').src).searchParams.get('parent'),'whitecadae.fr');
+  f.player.hide();f.root.clientWidth=320;f.root.querySelector('[data-show-live]').onclick();assert.equal(f.root.querySelector('iframe'),null);
+  f.player.render({provider:'discord',label:'Discord',url:'https://discord.gg/example'});assert.equal(f.root.querySelector('[data-show-live]'),null);assert.equal(f.root.querySelector('iframe'),null);
+});
