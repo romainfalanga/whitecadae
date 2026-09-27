@@ -11,7 +11,7 @@ async function pageOrange() {
   try {
     const data = await api("/api/orange");
     if (stale(epoch)) return;
-    document.getElementById("orange-openings").innerHTML = data.openings.map(item => `<div class="orange-opening"><span>Échelon ${item.level}</span><a href="${esc(item.href)}" data-link>${esc(item.title)} ↗</a>${item.lyricsHref ? `<a class="opening-lyrics" href="${esc(item.lyricsHref)}" data-link>Paroles</a>` : ""}</div>`).join("");
+    document.getElementById("orange-openings").innerHTML = data.openings.map(item => `<div class="orange-opening"><span>Échelon ${item.level}</span><a href="${esc(item.href)}" data-link>${esc(item.title)}</a>${item.lyricsHref ? `<a class="opening-lyrics" href="${esc(item.lyricsHref)}" data-link>Paroles</a>` : ""}</div>`).join("");
   } catch { /* The original welcome remains readable if access loading fails. */ }
 }
 
@@ -28,7 +28,7 @@ async function pageMusique() {
   <div class="music-list" aria-label="Les morceaux de ${esc(album.album)} dans l’ordre">
     <div class="music-list-head"><span>L’album, dans l’ordre</span><span>Durée</span></div>
     <ol>${album.tracks.map((t, i) => `<li id="track-${t.slug}" data-track-row="${t.slug}">
-      <span class="track-number">${String(i + 1).padStart(2, '0')}</span>
+      <span class="track-number">${String(t.number || i + 1).padStart(2, '0')}</span>
       <button class="track-play" data-play-track="${t.slug}" aria-label="Écouter ${esc(t.title)}">${WCIcon('play')}<span>${esc(t.title)}<small>${esc(album.artist)}</small></span></button>
       <a class="track-lyrics" href="/chanson/${t.slug}" data-link aria-label="Lire les paroles de ${esc(t.title)}">${WCIcon('book')}<span>Paroles</span></a>
       <span class="track-duration">${mmss(Math.floor(t.duration))}</span>

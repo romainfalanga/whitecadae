@@ -2,7 +2,7 @@
 window.WC57 = Object.freeze({
   id:'57', artist: 'Vulpis', album: '57', cover: '/music/57/cover.png',
   tracks: Object.freeze([
-    {slug:'30-vins-divins',title:'30 vins divins',src:'/music/57/30-vins-divins.mp3',duration:230.374,minLevel:1},
+    {slug:'30-vins-divins',title:'30 vins divins',src:'/music/57/30-vins-divins.mp3',duration:230.374,minLevel:1,number:2},
   ].map(Object.freeze)),
 });
 

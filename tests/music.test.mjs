@@ -49,7 +49,7 @@ test('every gated track opens with its lyrics, cover and direct audio at its own
       const tracks=release.tracks.filter(permitted),visible=tracks.length>0;
       const listed=catalogue.albums.find(a=>release.lyricAlbums.includes(a.slug));
       assert.equal(!!listed,visible,release.id+' '+session);
-      if(visible){assert.equal(listed.title,release.album);assert.deepEqual(listed.songs.map(s=>s.slug),tracks.map(t=>t.slug));assert.deepEqual(listed.songs.map(s=>s.track_number),tracks.map((_,i)=>i+1));}
+      if(visible){assert.equal(listed.title,release.album);assert.deepEqual(listed.songs.map(s=>s.slug),tracks.map(t=>t.slug));assert.deepEqual(listed.songs.map(s=>s.track_number),tracks.map(t=>release.tracks.indexOf(t)+1));}
       const cover=await call(release.cover,session);assert.equal(cover.status,visible?200:403);assert.match(cover.headers.get('cache-control'),/no-store/);
       if(visible)assert.equal(cover.headers.get('content-type'),release.coverType);
       for(const track of release.tracks){

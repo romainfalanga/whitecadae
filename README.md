@@ -132,8 +132,6 @@ doublons et préservent les modifications ultérieures faites en administration.
 > attachées à ses anciennes phrases et mots (les explications portant sur
 > la chanson entière sont conservées).
 
-### Fais Mieux et repères de progression
+### Musique progressive et coopération
 
-L’EP **Fais Mieux** s’ouvre morceau par morceau : La matière danse à 10, Les probabilités à 12, Fais Mieux à 14. La même règle côté serveur couvre les fichiers audio, la pochette, les paroles, le corpus et les archives ; le lecteur ne reçoit que les pistes accessibles. Les probabilités est nettoyé et dure réellement 1 min 33. Les paroles existantes et leurs identifiants sont conservés.
-
-**Mes paliers** affiche pour chaque joueur tous les échelons parcourus, même sans nouvelle ouverture, sa position actuelle et le prochain contenu. Chaque réponse gagnante annonce les nouveaux accès éventuels avec leurs liens. Les contenus futurs plus lointains restent cachés aux joueurs ; la vue auteur conserve le planning complet. La Conversation regroupe désormais thèmes, réglage d’échelon dépliable, résumé de sélection et remise à zéro dans un panneau adapté au mobile. Les filtres et les droits des messages restent inchangés.
+La progression actuelle, les sujets, les projets, les séances Brainstorm et la configuration du vocal sont documentés dans [docs/cooperation.md](docs/cooperation.md). L’album 114 s’ouvre aux échelons 6, 7 et 8, suivi de 18 juillet 2019 aux échelons 9, 10 et 11. Les sujets et projets ont des quotas indépendants aux échelons 12, 18 et 23.

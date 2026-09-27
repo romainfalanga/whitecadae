@@ -32,7 +32,7 @@ test('author sees all stages but not an artificially solved puzzle map',()=>{
   assert.deepEqual(author.summary,buildJourney([]).summary);
 });
 test('each gained rung announces just the new contents and repeating an answer announces nothing',()=>{
-  const expected={2:['conversation'],3:['music-sans-indice-dans-les-des'],4:['music-13h20'],5:['music-orange'],6:['music-la-matiere-dense'],7:['music-les-probabilites'],8:['music-fais-mieux'],9:['music-wanheda'],10:['music-quand-je-vois-je-pense'],11:['music-un-fil-entre-deux-infinis'],12:['conversation-topics'],18:['conversation-topic-2'],23:['conversation-topic-3']};
+  const expected={2:['conversation'],3:['music-sans-indice-dans-les-des'],4:['music-13h20'],5:['music-orange'],6:['music-la-matiere-dense'],7:['music-les-probabilites'],8:['music-fais-mieux'],9:['music-wanheda'],10:['music-quand-je-vois-je-pense'],11:['music-un-fil-entre-deux-infinis'],12:['conversation-topics','conversation-project-1','conversation-brainstorm'],18:['conversation-topic-2','conversation-project-2'],23:['conversation-topic-3','conversation-project-3']};
   for(let level=2;level<=24;level++)assert.deepEqual(newlyOpened(rows(level-1),rows(level),{}).map(i=>i.id),expected[level]||[]);
   assert.deepEqual(newlyOpened(rows(3),rows(3),{}),[]);
   assert.deepEqual(newlyOpened(rows(3),rows(4),{is_admin:true}),[]);

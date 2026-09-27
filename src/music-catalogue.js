@@ -1,11 +1,12 @@
 import {ensureMetaMoi} from './meta-moi.js';
+import {CONTINUOUS} from './music-continuous.js';
 
 export const ALBUM57={
   id:'57',album:'57',artist:'Vulpis',cover:'/music/57/cover.png',coverType:'image/png',lyricAlbums:['57'],
   tracks:[
+    {slug:'13h20',title:'13h20',src:'/music/57/13h20.mp3',duration:144.456,minLevel:4},
     {slug:'30-vins-divins',title:'30 vins divins',src:'/music/57/30-vins-divins.mp3',duration:230.374,minLevel:1},
     {slug:'sans-indice-dans-les-des',title:'Sans indices dans les dés',src:'/music/57/sans-indices-dans-les-des.mp3',duration:224.808,minLevel:3},
-    {slug:'13h20',title:'13h20',src:'/music/57/13h20.mp3',duration:144.456,minLevel:4},
     {slug:'orange',title:'Orange',src:'/music/57/orange.mp3',duration:159.373,minLevel:5},
   ],
 };
@@ -31,7 +32,13 @@ export const gatedTrack=slug=>RELEASES.flatMap(album=>album.tracks).find(track=>
 export const gatedAlbum=slug=>RELEASES.find(album=>album.lyricAlbums.includes(slug));
 export const retiredSong = slug => ['ma-folie','rendors-toi'].includes(slug);
 export const canListen = (track,access) => !!access&&(access.admin||access.level>=track.minLevel);
-export function musicAlbums(access){return RELEASES.flatMap(({lyricAlbums,...album})=>{const tracks=album.tracks.filter(track=>canListen(track,access));return tracks.length?[{...album,tracks}]:[];});}
+export const continuousTrack=path=>Object.values(CONTINUOUS).flat().find(item=>item.src===path);
+export function musicAlbums(access){return RELEASES.flatMap(({lyricAlbums,...album})=>{
+  const tracks=album.tracks.map((track,index)=>({...track,number:index+1})).filter(track=>canListen(track,access));
+  const variant=(CONTINUOUS[album.id]||[]).filter(item=>canListen(item,access)).at(-1);
+  const playback=variant?{src:variant.src,duration:variant.duration,chapters:variant.chapters}:null;
+  return tracks.length?[{...album,tracks,playback}]:[];
+});}
 export const visibleSong = (song,access) => !retiredSong(song.slug)&&(!gatedTrack(song.slug)||canListen(gatedTrack(song.slug),access));
 const ready=new WeakMap();
 export async function ensureMusicCatalogue(env) {

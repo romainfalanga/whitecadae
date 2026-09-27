@@ -237,6 +237,14 @@ CREATE TABLE IF NOT EXISTS conversation_topics (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'topic',
+  question TEXT NOT NULL DEFAULT '',
+  goal TEXT NOT NULL DEFAULT '',
+  needs TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  resources TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'open',
+  revision INTEGER NOT NULL DEFAULT 0,
   created_echelon INTEGER NOT NULL,
   client_id TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -369,3 +377,23 @@ CREATE TABLE IF NOT EXISTS echelon_attempts (
   next_at INTEGER NOT NULL DEFAULT 0,
   failures INTEGER NOT NULL DEFAULT 0
 );
+
+-- Cooperative projects and live sessions (additive).
+CREATE TABLE IF NOT EXISTS community_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, room_id INTEGER NOT NULL REFERENCES conversation_topics(id),
+    user_id INTEGER NOT NULL REFERENCES users(id), title TEXT NOT NULL, details TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'todo', assignee_id INTEGER REFERENCES users(id), revision INTEGER NOT NULL DEFAULT 0,
+    client_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(room_id,user_id,client_id));
+CREATE TABLE IF NOT EXISTS community_brainstorms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, room_id INTEGER NOT NULL REFERENCES conversation_topics(id),
+    user_id INTEGER NOT NULL REFERENCES users(id), title TEXT NOT NULL, agenda TEXT NOT NULL DEFAULT '',
+    starts_at INTEGER NOT NULL, ends_at INTEGER NOT NULL, ended_at INTEGER, min_echelon INTEGER NOT NULL,
+    summary TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL DEFAULT 0, client_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(room_id,user_id,client_id));
+CREATE TABLE IF NOT EXISTS community_brainstorm_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, brainstorm_id INTEGER NOT NULL REFERENCES community_brainstorms(id),
+    user_id INTEGER NOT NULL REFERENCES users(id), body TEXT NOT NULL, author_echelon INTEGER NOT NULL,
+    client_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(brainstorm_id,user_id,client_id));
+CREATE INDEX IF NOT EXISTS idx_community_sessions ON community_brainstorms(starts_at,id);
+CREATE INDEX IF NOT EXISTS idx_community_actions_room ON community_actions(room_id,id);
+CREATE INDEX IF NOT EXISTS idx_community_messages_room ON community_brainstorm_messages(brainstorm_id,id);

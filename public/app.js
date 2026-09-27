@@ -147,6 +147,7 @@ function coupePageTimer() {
 
 async function route() {
   window.WCConversation?.leave();
+  window.WCCommunity?.leave();
   window.WCVideographie?.leave();
   if (window.WCGame) WCGame.leave();
   if (window.WCJourney) WCJourney.leave();
@@ -175,7 +176,7 @@ async function route() {
   if ((m = path.match(/^\/echelon\/enigme\/([a-z0-9-]+)$/))) return navigate('/echelon#' + m[1], true);
   if ((m = path.match(/^\/echelon\/atelier\/(eg-1[0-3])$/))) return navigate('/echelon/horloge' + (m[1] === 'eg-10' ? '' : '#' + m[1]), true);
   if (/^\/echelon\/(lecture|galerie)\/[a-z0-9-]+$/.test(path)) return navigate('/echelon', true);
-  if (/^\/(pense-mieux|carre-d-as|societe|brainstorm|114|game-master-orange)(?:\/|$)/.test(path)) {
+  if (/^\/(pense-mieux|carre-d-as|societe|114|game-master-orange)(?:\/|$)/.test(path)) {
     app.innerHTML = '<h1>Cette page a été supprimée</h1><p><a href="/echelon" data-link>Retrouver Échelons</a></p>';
     return;
   }
@@ -191,11 +192,15 @@ async function route() {
   // Une page qu'on n'a pas encore atteinte ne se discute pas : on revient au
   // 57, sans un mot. Chaque pièce haute a sa clé d'accès ; le serveur revérifie
   // de toute façon à chaque appel.
-  const cle = path === '/conversation' ? 'conversation'
+  const cle = /^\/(conversation|sujets|projets|brainstorm)(?:\/|$)/.test(path) ? 'conversation'
     : path.startsWith('/videographie') || path.startsWith('/reflexion/') || path.startsWith('/arbre/') ? 'videographie'
     : 'interpretations';
   if (!state.access[cle]) return navigate('/echelon', true);
   if (path === '/conversation') return WCConversation.page();
+  if (path === '/sujets' || path === '/projets') return WCConversation.page();
+  if ((m = path.match(/^\/(?:sujets|projets)\/(\d+)$/))) return WCCommunity.room(+m[1]);
+  if (path === '/brainstorm') return WCCommunity.brainstorms();
+  if ((m = path.match(/^\/brainstorm\/(\d+)$/))) return WCCommunity.brainstorm(+m[1]);
   if (path === '/videographie') return WCVideographie.feed();
   if ((m = path.match(/^\/videographie\/video\/(\d+)$/))) return WCVideographie.detail(+m[1]);
   if (path === '/videographie/carre') return navigate('/videographie', true);

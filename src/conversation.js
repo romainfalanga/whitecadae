@@ -9,7 +9,7 @@ export function conversationAccess(user, rows = []) {
 }
 
 const ready = new WeakMap();
-async function ensureConversation(env) {
+export async function ensureConversation(env) {
   if (ready.has(env.DB)) return ready.get(env.DB);
   const pending = (async () => {
     await env.DB.prepare(`CREATE TABLE IF NOT EXISTS conversation_topics (
@@ -20,6 +20,14 @@ async function ensureConversation(env) {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(user_id, client_id)
     )`).run();
+    const roomColumn = async name => (await env.DB.prepare('PRAGMA table_info(conversation_topics)').all()).results.some(c=>c.name===name);
+    for(const [name,definition] of [['kind',"TEXT NOT NULL DEFAULT 'topic'"],['question',"TEXT NOT NULL DEFAULT ''"],['goal',"TEXT NOT NULL DEFAULT ''"],['needs',"TEXT NOT NULL DEFAULT ''"],['summary',"TEXT NOT NULL DEFAULT ''"],['resources',"TEXT NOT NULL DEFAULT '[]'"],['status',"TEXT NOT NULL DEFAULT 'open'"],['revision','INTEGER NOT NULL DEFAULT 0']]){
+      if(!await roomColumn(name)){
+        try{await env.DB.prepare(`ALTER TABLE conversation_topics ADD COLUMN ${name} ${definition}`).run();}
+        catch(error){if(!await roomColumn(name))throw error;}
+      }
+    }
+    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_topics_kind_owner ON conversation_topics(kind,user_id,id)').run();
     await env.DB.prepare(`CREATE TABLE IF NOT EXISTS conversation_messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -44,12 +52,12 @@ async function ensureConversation(env) {
   try { await pending; } catch (error) { ready.delete(env.DB); throw error; }
 }
 
-async function topicAllowance(env, user, access) {
-  const {n} = await env.DB.prepare('SELECT COUNT(*) AS n FROM conversation_topics WHERE user_id=?1').bind(user.id).first();
+async function topicAllowance(env, user, access, kind='topic') {
+  const {n} = await env.DB.prepare('SELECT COUNT(*) AS n FROM conversation_topics WHERE user_id=?1 AND kind=?2').bind(user.id,kind).first();
   return {accessible:access.topics, used:n, limit:access.limit, nextLevel:TOPIC_LEVELS.find(level => level > access.echelon) ?? null};
 }
 
-async function readBody(request) {
+export async function readBody(request, limit=16384) {
   // Cap streamed input as well as requests carrying Content-Length.
   const reader = request.body?.getReader();
   if (!reader) throw new Error('Requête invalide.');
@@ -58,7 +66,7 @@ async function readBody(request) {
     while (true) {
       const {value, done} = await reader.read(); if (done) break;
       size += value.byteLength;
-      if (size > 16384) { await reader.cancel(); throw new Error('Requête trop longue.'); }
+      if (size > limit) { await reader.cancel(); throw new Error('Requête trop longue.'); }
       chunks.push(value);
     }
   } finally { reader.releaseLock(); }
@@ -73,7 +81,9 @@ export async function handleConversation(request, env, {getUser, json}) {
   const access = conversationAccess(user, await gameRows(env, user.id));
   if (!access.readable) return json({error:'La conversation s’ouvre à l’échelon 2.', locked:'conversation'}, 403);
   const url = new URL(request.url), params = url.searchParams;
-  const directory = url.pathname === '/api/conversation/topics';
+  const directory = ['/api/conversation/topics','/api/conversation/projects'].includes(url.pathname);
+  const kind = url.pathname.endsWith('/projects') ? 'project' : 'topic';
+  const noun = kind==='project' ? 'projet' : 'sujet';
   if (!directory && url.pathname !== '/api/conversation') return json({error:'Page inconnue.'}, 404);
   if (!['GET','POST'].includes(request.method)) return json({error:'Méthode indisponible.'}, 405);
   if (request.method === 'POST' && request.headers.has('Origin') && request.headers.get('Origin') !== url.origin) return json({error:'Origine invalide.'}, 403);
@@ -83,7 +93,7 @@ export async function handleConversation(request, env, {getUser, json}) {
   await ensureConversation(env);
   let topic = null;
   if (topicId !== null) {
-    topic = await env.DB.prepare('SELECT t.id,t.title,t.description,t.created_echelon,t.created_at,u.username FROM conversation_topics t JOIN users u ON u.id=t.user_id WHERE t.id=?1').bind(topicId).first();
+    topic = await env.DB.prepare('SELECT t.id,t.kind,t.title,t.description,t.created_echelon,t.created_at,u.username FROM conversation_topics t JOIN users u ON u.id=t.user_id WHERE t.id=?1').bind(topicId).first();
     if (!topic) return json({error:'Sujet introuvable.'}, 404);
   }
 
@@ -91,12 +101,12 @@ export async function handleConversation(request, env, {getUser, json}) {
     if (request.method === 'GET') {
       const before = Number(params.get('before') || 0), search = (params.get('q') || '').trim();
       if (!Number.isSafeInteger(before) || before < 0 || search.length > 80) return json({error:'Recherche invalide.'}, 400);
-      const {results} = await env.DB.prepare(`SELECT t.id,t.title,t.description,t.created_echelon,t.created_at,u.username
+      const {results} = await env.DB.prepare(`SELECT t.id,t.kind,t.title,t.description,t.status,t.created_echelon,t.created_at,u.username
         FROM conversation_topics t JOIN users u ON u.id=t.user_id
-        WHERE (?1=0 OR t.id<?1) AND (?2='' OR instr(lower(t.title),lower(?2))>0)
-        ORDER BY t.id DESC LIMIT 51`).bind(before, search).all();
+        WHERE (?1=0 OR t.id<?1) AND (?2='' OR instr(lower(t.title),lower(?2))>0) AND t.kind=?3
+        ORDER BY t.id DESC LIMIT 51`).bind(before, search, kind).all();
       const topics = results.slice(0,50);
-      return json({topics, echelon:access.echelon, allowance:await topicAllowance(env,user,access), nextBefore:results.length>50 ? topics.at(-1).id : null});
+      return json({topics, kind, echelon:access.echelon, allowance:await topicAllowance(env,user,access,kind), nextBefore:results.length>50 ? topics.at(-1).id : null});
     }
     let body;
     try { body = await readBody(request); } catch { return json({error:'Requête invalide ou trop longue.'}, 400); }
@@ -106,12 +116,12 @@ export async function handleConversation(request, env, {getUser, json}) {
     if (typeof body?.client_id !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(body.client_id)) return json({error:'Identifiant de création invalide.'}, 400);
     // A single SQLite statement makes quota enforcement atomic, even when two
     // tabs send requests together. The unique key makes retries idempotent.
-    await env.DB.prepare(`INSERT INTO conversation_topics(user_id,title,description,created_echelon,client_id)
-      SELECT ?1,?2,?3,?4,?5 WHERE (SELECT COUNT(*) FROM conversation_topics WHERE user_id=?1) < ?6
-      ON CONFLICT(user_id,client_id) DO NOTHING`).bind(user.id,title,description,access.echelon,body.client_id,access.limit).run();
-    const created = await env.DB.prepare('SELECT id FROM conversation_topics WHERE user_id=?1 AND client_id=?2').bind(user.id,body.client_id).first();
-    const allowance = await topicAllowance(env,user,access);
-    if (!created) return json({error:allowance.nextLevel ? `Tu as utilisé tes ${access.limit} sujet${access.limit>1?'s':''}. Le prochain s’ouvre à l’échelon ${allowance.nextLevel}.` : 'Tu as déjà créé tes trois sujets.', allowance}, 409);
+    await env.DB.prepare(`INSERT INTO conversation_topics(user_id,title,description,created_echelon,client_id,kind)
+      SELECT ?1,?2,?3,?4,?5,?7 WHERE (SELECT COUNT(*) FROM conversation_topics WHERE user_id=?1 AND kind=?7) < ?6
+      ON CONFLICT(user_id,client_id) DO NOTHING`).bind(user.id,title,description,access.echelon,body.client_id,access.limit,kind).run();
+    const created = await env.DB.prepare('SELECT id FROM conversation_topics WHERE user_id=?1 AND client_id=?2 AND kind=?3').bind(user.id,body.client_id,kind).first();
+    const allowance = await topicAllowance(env,user,access,kind);
+    if (!created) return json({error:allowance.nextLevel ? `Tu as utilisé tes ${access.limit} ${noun}${access.limit>1?'s':''}. Le prochain s’ouvre à l’échelon ${allowance.nextLevel}.` : `Tu as déjà créé tes trois ${noun}s.`, allowance}, 409);
     return json({ok:true, id:created.id, allowance}, 201);
   }
 

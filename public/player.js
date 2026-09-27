@@ -19,18 +19,22 @@
   let automaticMedia = 0;
   const otherMedia = new Set();
   let error = '';
+  let transport = null;
 
   const time = (s) => {
     const n = Number.isFinite(s) ? Math.max(0, Math.floor(s)) : 0;
     return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
   };
   const track = () => album.tracks[selected];
-  const duration = () => Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : track()?.duration || 0;
+  const chapter = () => transport?.chapters.find(c=>c.slug===track()?.slug);
+  const offset = () => chapter()?.start || 0;
+  const position = () => Math.max(0,(pendingSeek ?? audio.currentTime)-offset());
+  const duration = () => transport?.continuous ? chapter()?.duration || track()?.duration || 0 : Number.isFinite(audio.duration) && audio.duration > 0 && audio.readyState>0 ? audio.duration : track()?.duration || 0;
   const active = () => !!track() && (!audio.paused || loading);
   const safeStore = (value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private browsing */ } };
   const save = () => {
     if (!track()) return;
-    safeStore({ slug: track().slug, position: pendingSeek ?? audio.currentTime, repeat, volume: audio.volume });
+    safeStore({ slug: track().slug, position: position(), repeat, volume: audio.volume });
     lastSaved = Date.now();
   };
   const signal = () => window.dispatchEvent(new CustomEvent('wc:music', { detail: snapshot() }));
@@ -64,7 +68,7 @@
 
   function updatePosition() {
     const d = duration();
-    const t = pendingSeek ?? audio.currentTime;
+    const t = position();
     el('elapsed').textContent = time(t);
     el('duration').textContent = time(d);
     el('seek').max = String(d || 1);
@@ -73,7 +77,7 @@
     el('seek').style.setProperty('--progress', `${d ? Math.min(100, 100 * t / d) : 0}%`);
     if ('mediaSession' in navigator && typeof navigator.mediaSession.setPositionState === 'function' && Number.isFinite(audio.duration) && audio.duration > 0) {
       try {
-        navigator.mediaSession.setPositionState({ duration: audio.duration, position: Math.min(audio.currentTime, audio.duration), playbackRate: audio.playbackRate });
+        navigator.mediaSession.setPositionState({ duration:d, position:Math.min(t,d), playbackRate:audio.playbackRate });
       } catch { /* optional browser support */ }
     }
   }
@@ -82,7 +86,7 @@
     root.hidden = !track();
     document.body.classList.toggle('with-player', !!track());
     if (!track()) { resize(); signal(); return; }
-    audio.loop = repeat || album.tracks.length === 1;
+    audio.loop = !!transport?.continuous || repeat || album.tracks.length === 1;
     el('title').textContent = track().title;
     el('album').textContent = `${album.artist} · ${album.album}`;
     el('art').innerHTML = album.cover ? `<img src="${album.cover}" alt="" width="52" height="52">` : '<span class="player-date" aria-hidden="true">18<br>07</span>';
@@ -111,11 +115,11 @@
       artwork: album.cover ? [{ src: album.cover, sizes: '1024x1024', type: album.coverType || 'image/png' }] : [],
     });
     const handlers = {
-      play: () => playTrack(selected), pause,
+      play: () => playTrack(), pause,
       previoustrack: previous, nexttrack: next,
       seekto: (d) => seek(d.seekTime),
-      seekbackward: (d) => seek(audio.currentTime - (d.seekOffset || 10)),
-      seekforward: (d) => seek(audio.currentTime + (d.seekOffset || 10)),
+      seekbackward: (d) => seek(position() - (d.seekOffset || 10)),
+      seekforward: (d) => seek(position() + (d.seekOffset || 10)),
       stop: () => { pause(); seek(0); },
     };
     for (const [action, handler] of Object.entries(handlers)) {
@@ -124,6 +128,7 @@
   }
 
   function pause() {
+    syncTrack();
     requestId++;
     loading = false;
     audio.pause();
@@ -132,14 +137,16 @@
   }
   function seek(position) {
     const value = Math.max(0, Math.min(Number(position) || 0, duration()));
-    if (!audio.src || audio.readyState < 1) pendingSeek = value;
-    else { audio.currentTime = value; pendingSeek = null; }
+    if (!audio.src || audio.readyState < 1) pendingSeek = offset()+value;
+    else { audio.currentTime = offset()+value; pendingSeek = null; }
     save();
     updatePosition();
   }
 
   // Called synchronously by the user's click (no await before audio.play).
-  function playTrack(value = selected < 0 ? 0 : selected) {
+  function playTrack(value, autoplay = true) {
+    syncTrack();
+    value ??= selected < 0 ? 0 : selected;
     const targetAlbum = typeof value === 'string' ? albums.find(a=>a.tracks.some(t=>t.slug===value)) : album;
     if(!targetAlbum)return;
     const index = typeof value === 'string' ? targetAlbum.tracks.findIndex((t) => t.slug === value) : value;
@@ -149,22 +156,29 @@
       update();
       return;
     }
-    for (const media of otherMedia) media.pause();
-    document.querySelectorAll('audio, video').forEach((media) => { if (media !== audio) media.pause(); });
-    const changed = index !== selected || targetAlbum.id !== album.id;
+    if(autoplay){
+      for (const media of otherMedia) media.pause();
+      document.querySelectorAll('audio, video').forEach((media) => { if (media !== audio) media.pause(); });
+    }
+    const changed = index !== selected || targetAlbum.id !== album.id, previousPosition=position();
     album=targetAlbum;
     const retry = !!audio.error;
-    if (changed) { selected = index; pendingSeek = 0; }
-    else if (retry) pendingSeek = audio.currentTime;
+    selected=index;
+    const nextTransport=!repeat&&album.playback ? {...album.playback,continuous:true} : {src:track().src,continuous:false,chapters:[{slug:track().slug,start:0,duration:track().duration}]};
+    const sourceChanged=nextTransport.src!==audio.getAttribute('src');
+    transport=nextTransport;
+    if(changed||sourceChanged||retry)pendingSeek=offset()+(changed?0:Math.min(previousPosition,track().duration-.1));
     const id = ++requestId;
     error = '';
-    loading = true;
+    loading = autoplay;
     if ('audioSession' in navigator) {
       try { navigator.audioSession.type = 'playback'; } catch { /* unsupported type */ }
     }
-    if (changed || !audio.getAttribute('src') || retry) audio.src = track().src;
-    if (audio.ended) { audio.currentTime = 0; pendingSeek = null; }
+    if(sourceChanged||retry)audio.src=transport.src;
+    if(pendingSeek!==null&&audio.readyState>=1){audio.currentTime=pendingSeek;pendingSeek=null;}
+    if (audio.ended) { audio.currentTime = offset(); pendingSeek = null; }
     systemMetadata();
+    if(!autoplay){loading=false;save();update();return;}
     const started = audio.play();
     update();
     if (started) started.then(() => {
@@ -182,16 +196,19 @@
   }
 
   function toggle(value) {
+    syncTrack();
     const same = value == null || (typeof value === 'string' ? value===track()?.slug : value===selected);
     if (same && active()) pause();
     else playTrack(value ?? (selected<0?0:selected));
   }
   function next() {
+    syncTrack();
     if (selected + 1 < album.tracks.length) playTrack(selected + 1);
     else if (album.tracks.length) playTrack(0);
   }
   function previous() {
-    if (audio.currentTime > 3 || selected === 0) { seek(0); return; }
+    syncTrack();
+    if (position() > 3 || selected === 0) { seek(0); return; }
     playTrack(Math.max(0, selected - 1));
   }
 
@@ -202,22 +219,30 @@
     }
     updatePosition();
   });
-  audio.addEventListener('timeupdate', () => { updatePosition(); if (Date.now() - lastSaved > 5000) save(); });
+  // Native playback crosses chapter boundaries even while JavaScript sleeps.
+  // This only catches the labels up; it is never needed to advance the audio.
+  function syncTrack(){
+    if(!transport?.continuous||pendingSeek!==null)return;
+    const current=transport.chapters.filter(c=>audio.currentTime>=c.start).at(-1);
+    const index=album.tracks.findIndex(t=>t.slug===current?.slug);
+    if(index>=0&&index!==selected){selected=index;systemMetadata();update();}
+  }
+  audio.addEventListener('timeupdate', () => { syncTrack(); updatePosition(); if (Date.now() - lastSaved > 5000) save(); });
   audio.addEventListener('durationchange', updatePosition);
   audio.addEventListener('playing', () => { loading = false; error = ''; if('audioSession' in navigator){try{navigator.audioSession.type='playback';}catch{}} systemMetadata(); update(); });
   audio.addEventListener('waiting', () => { if (!audio.paused) loading = true; update(); });
-  audio.addEventListener('pause', () => { if(audio.ended)return; loading = false; save(); update(); });
+  audio.addEventListener('pause', () => { if(audio.ended)return; syncTrack(); loading = false; save(); update(); });
   audio.addEventListener('volumechange', () => { save(); update(); });
   audio.addEventListener('error', () => { loading = false; error = 'Le morceau ne se charge pas. Vérifie ta connexion puis réessaie.'; update(); });
   audio.addEventListener('ended', () => { save(); if(repeat){seek(0);playTrack(selected);}else next(); });
   window.addEventListener('pagehide', save);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else updatePosition(); });
+  document.addEventListener('visibilitychange', () => { syncTrack(); if (document.hidden) save(); else {updatePosition();update();} });
   el('play').onclick = () => toggle();
   el('prev').onclick = previous;
   el('next').onclick = next;
   el('seek').oninput = (e) => seek(e.target.value);
   el('volume').oninput = (e) => { audio.volume = Number(e.target.value); };
-  el('repeat').onclick = () => { repeat = !repeat; save(); update(); };
+  el('repeat').onclick = () => { syncTrack();repeat=!repeat;if(track()&&audio.getAttribute('src'))playTrack(selected,!audio.paused);save();update(); };
 
   // Other media take priority only when explicitly played. Merely opening a
   // page must never interrupt the album. Detached vocal players register too.
@@ -243,15 +268,21 @@
 
   let savedTrack=null;
   function setAlbums(extra) {
+    syncTrack();
+    const previousPosition=position();
     const previous=track()?.slug;
     albums=extra.some(a=>a.id==='57')?extra:[window.WC57,...extra];
     const nextAlbum=albums.find(a=>a.tracks.some(t=>t.slug===previous));
     if(previous&&!nextAlbum){
-      pause();selected=-1;pendingSeek=null;album=window.WC57;
+      pause();selected=-1;pendingSeek=null;transport=null;album=window.WC57;
       audio.removeAttribute('src');audio.load();
       safeStore(null);
       if('mediaSession' in navigator)navigator.mediaSession.metadata=null;
-    }else if(nextAlbum){album=nextAlbum;selected=album.tracks.findIndex(t=>t.slug===previous);}
+    }else if(nextAlbum){
+      album=nextAlbum;selected=album.tracks.findIndex(t=>t.slug===previous);
+      // A catalogue downgrade must revoke every buffered, now-locked chapter.
+      if(transport?.chapters.some(c=>!album.tracks.some(t=>t.slug===c.slug))){pause();audio.removeAttribute('src');audio.load();transport=null;pendingSeek=previousPosition;}
+    }
     else if(!previous){album=albums.find(a=>a.id===album.id)||albums[0]||window.WC57;}
     if(!previous&&savedTrack){
       const restored=albums.find(a=>a.tracks.some(t=>t.slug===savedTrack.slug));

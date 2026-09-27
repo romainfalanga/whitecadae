@@ -1,6 +1,8 @@
 {
   "name": "whitecadae",
   "main": "src/index.js",
+  "durable_objects": {"bindings":[{"name":"BRAINSTORM_LIVE","class_name":"BrainstormLive"}]},
+  "migrations": [{"tag":"v1-brainstorm-live","new_sqlite_classes":["BrainstormLive"]}],
   "compatibility_date": "2026-08-01",
   "assets": {
     "directory": "./public",

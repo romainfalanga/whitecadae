@@ -103,6 +103,23 @@ const july={id:'18-juillet-2019',album:'18 juillet 2019',artist:'AA',cover:'/mus
   {slug:'quand-je-vois-je-pense',title:'Quand je vois je pense',src:'/music/18-juillet-2019/quand-je-vois-je-pense.mp3',duration:198},
   {slug:'un-fil-entre-deux-infinis',title:'Un fil entre deux infinis',src:'/music/18-juillet-2019/un-fil-entre-deux-infinis.mp3',duration:198},
 ]};
+
+function continuous57(){const tracks=[full57.tracks[2],full57.tracks[0],full57.tracks[1],full57.tracks[3]];let start=0;const chapters=tracks.map(t=>{const c={slug:t.slug,start,duration:t.duration};start+=t.duration;return c;});return {...full57,tracks,playback:{src:'/music/57/continuous-v1-5.m4a',duration:start,chapters}};}
+test('continuous album crosses chapters and loops natively without play calls, with chapter-relative seeking',async()=>{
+  const f=fixture(),album=continuous57();f.audio.duration=album.playback.duration;f.player.setAlbums([album]);f.player.playTrack('30-vins-divins');await Promise.resolve();
+  assert.equal(f.audio.currentTime,144);assert.equal(f.audio.src,album.playback.src);assert.equal(f.audio.loop,true);const calls=f.audio.calls;
+  f.audio.currentTime=375;f.audio.dispatchEvent(new Event('timeupdate'));assert.equal(f.player.snapshot().slug,'sans-indice-dans-les-des');assert.equal(f.audio.calls,calls);assert.equal(f.elements.get('player-elapsed').textContent,'0:01');
+  f.actions.seekto({seekTime:10});assert.equal(f.audio.currentTime,384);
+  f.audio.currentTime=0;f.audio.dispatchEvent(new Event('timeupdate'));assert.equal(f.player.snapshot().slug,'13h20');assert.equal(f.audio.calls,calls);
+  f.audio.currentTime=755;f.document.hidden=false;f.document.dispatchEvent(new Event('visibilitychange'));assert.equal(f.player.snapshot().slug,'orange');
+});
+test('switching repeat mode retains song position and paused state; downgrade revokes buffered locked chapters',async()=>{
+  const f=fixture(),album=continuous57();f.audio.duration=album.playback.duration;f.player.setAlbums([album]);f.player.playTrack('30-vins-divins');await Promise.resolve();f.audio.currentTime=164;
+  f.elements.get('player-repeat').onclick();await Promise.resolve();assert.equal(f.audio.src,full57.tracks[0].src);assert.equal(f.audio.currentTime,20);assert.equal(f.audio.loop,true);
+  f.player.pause();f.elements.get('player-repeat').onclick();assert.equal(f.audio.paused,true);f.audio.readyState=4;f.audio.dispatchEvent(new Event('loadedmetadata'));assert.equal(f.audio.currentTime,164);
+  f.player.playTrack();await Promise.resolve();f.player.setAlbums([{...full57,tracks:[full57.tracks[0]]}]);assert.equal(f.audio.paused,true);assert.equal(f.audio.src,'');
+  f.player.playTrack();await Promise.resolve();assert.equal(f.audio.src,full57.tracks[0].src);assert.equal(f.audio.currentTime,20);
+});
 test('unlocked EP has its own queue, metadata and repeat; logout revokes playback',async()=>{
   const f=fixture();f.player.playTrack('wanheda');assert.equal(f.audio.calls,0);
   f.player.setAlbums([july]);f.player.toggle('wanheda');await Promise.resolve();

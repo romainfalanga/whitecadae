@@ -2,7 +2,7 @@ window.WCConversation = (() => {
   let cleanup = () => {};
   function leave() { cleanup(); cleanup = () => {}; document.body.classList.remove('conversation-mode','chat-keyboard'); }
   const el = id => document.getElementById('chat-' + id);
-  const tabs = topics => `<nav class="chat-tabs" aria-label="Conversations"><a href="/conversation" data-link ${!topics?'aria-current="page"':''}>Générale</a><a href="/conversation?view=topics" data-link ${topics?'aria-current="page"':''}>Tous les sujets</a></nav>`;
+  const tabs = active => `<nav class="chat-tabs" aria-label="Coopérer"><a href="/conversation" data-link ${active==='general'?'aria-current="page"':''}>Générale</a><a href="/sujets" aria-label="Tous les sujets" data-link ${active==='topic'?'aria-current="page"':''}><span class="chat-tab-prefix">Tous les </span>sujets</a><a href="/projets" aria-label="Tous les projets" data-link ${active==='project'?'aria-current="page"':''}><span class="chat-tab-prefix">Tous les </span>projets</a><a href="/brainstorm" data-link ${active==='brainstorm'?'aria-current="page"':''}>Brainstorm</a></nav>`;
   const readDraft = key => { try { return JSON.parse(sessionStorage.getItem(key) || '{}'); } catch { return {}; } };
   const storeDraft = (key, value) => { try { sessionStorage.setItem(key, JSON.stringify(value)); } catch {} };
 
@@ -31,36 +31,37 @@ window.WCConversation = (() => {
     resize();
   }
 
-  async function directory(epoch, events) {
-    const draftKey = 'wc-topic-draft-' + state.user.id;
+  async function directory(epoch, events, kind='topic') {
+    const project=kind==='project',noun=project?'projet':'sujet',endpoint=project?'projects':'topics',base=project?'/projets/':'/sujets/';
+    const draftKey = 'wc-'+kind+'-draft-' + state.user.id;
     const draft = {title:'', description:'', client_id:crypto.randomUUID(), ...readDraft(draftKey)};
     let allowance = null, topics = [], nextBefore = null, loading = false, creating = false, revision = 0;
-    app.innerHTML = `<section class="chat-shell chat-directory-shell" aria-label="Tous les sujets">
-      <header class="chat-head"><h1>Conversation</h1><span>Tous les sujets</span></header>
-      <div class="chat-toolbar">${tabs(true)}</div>
+    app.innerHTML = `<section class="chat-shell chat-directory-shell" aria-label="Tous les ${noun}s">
+      <header class="chat-head"><h1>Conversation</h1><span>Tous les ${noun}s</span></header>
+      <div class="chat-toolbar">${tabs(kind)}</div>
       <div class="chat-directory">
-        <div class="chat-directory-intro"><div><h2>Les sujets de conversation</h2><p>Rejoins un salon pour échanger autour d’un sujet.</p></div><button class="primary" id="chat-create-toggle" aria-expanded="false" aria-controls="chat-topic-form" hidden>Créer un sujet +</button></div>
+        <div class="chat-directory-intro"><div><h2>${project?'Les projets à construire':'Les sujets de conversation'}</h2><p>${project?'Réfléchir ensemble, trouver de l’aide et passer à l’action.':'Une question, plusieurs regards, une réflexion qui avance.'}</p></div><button class="primary" id="chat-create-toggle" aria-expanded="false" aria-controls="chat-topic-form" hidden>Créer un ${noun} +</button></div>
         <p id="chat-quota" class="chat-quota"></p>
-        <form id="chat-topic-form" class="chat-topic-form" hidden><h3>Nouveau sujet</h3>
-          <label for="chat-title">Titre du sujet</label><input id="chat-title" maxlength="80" required placeholder="De quoi souhaites-tu parler ?" value="${esc(draft.title)}">
+        <form id="chat-topic-form" class="chat-topic-form" hidden><h3>Nouveau ${noun}</h3>
+          <label for="chat-title">${project?'Nom du projet':'Titre du sujet'}</label><input id="chat-title" maxlength="80" required placeholder="${project?'Que souhaites-tu construire ?':'De quoi souhaites-tu parler ?'}" value="${esc(draft.title)}">
           <label for="chat-description">Quelques mots pour commencer <span>(facultatif)</span></label><textarea id="chat-description" maxlength="500" rows="2" placeholder="Présente le sujet aux autres…">${esc(draft.description)}</textarea>
-          <p>Ce salon sera visible dès l’échelon 12. Chaque message gardera l’échelon de son auteur à l’envoi.</p>
-          <div class="chat-topic-actions"><button type="submit" class="primary" id="chat-create">Créer le sujet</button><button type="button" id="chat-create-cancel">Annuler</button></div>
+          <p>Cette fiche sera visible dès l’échelon 12. Tu pourras la compléter et y organiser des brainstormings.</p>
+          <div class="chat-topic-actions"><button type="submit" class="primary" id="chat-create">Créer le ${noun}</button><button type="button" id="chat-create-cancel">Annuler</button></div>
           <p id="chat-create-status" role="status"></p>
         </form>
-        <form class="chat-search" id="chat-search-form" hidden><label class="sr-only" for="chat-search">Chercher un sujet</label><input id="chat-search" type="search" maxlength="80" placeholder="Chercher un sujet…"><button type="submit">Chercher</button></form>
-        <p id="chat-status" role="status">Chargement des sujets…</p><div id="chat-topics"></div><button id="chat-more" hidden>Voir d’autres sujets</button>
+        <form class="chat-search" id="chat-search-form" hidden><label class="sr-only" for="chat-search">Chercher un ${noun}</label><input id="chat-search" type="search" maxlength="80" placeholder="Chercher un ${noun}…"><button type="submit">Chercher</button></form>
+        <p id="chat-status" role="status">Chargement…</p><div id="chat-topics"></div><button id="chat-more" hidden>Voir d’autres ${noun}s</button>
       </div></section>`;
     const save = () => { draft.title = el('title').value; draft.description = el('description').value; storeDraft(draftKey, draft); };
     fitViewport(events, save);
     function controls() {
       const remaining = allowance.limit - allowance.used;
-      el('quota').textContent = `${allowance.used} sujet${allowance.used>1?'s':''} créé${allowance.used>1?'s':''} sur ${allowance.limit}. ` + (allowance.nextLevel ? `Un emplacement supplémentaire à l’échelon ${allowance.nextLevel}.` : 'Tes trois emplacements sont débloqués.');
+      el('quota').textContent = `${allowance.used} ${noun}${allowance.used>1?'s':''} créé${allowance.used>1?'s':''} sur ${allowance.limit}. ` + (allowance.nextLevel ? `Un emplacement supplémentaire à l’échelon ${allowance.nextLevel}.` : 'Tes trois emplacements sont débloqués.');
       el('create-toggle').hidden = false; el('create-toggle').disabled = remaining <= 0;
       if (remaining <= 0) { el('topic-form').hidden = true; el('create-toggle').setAttribute('aria-expanded','false'); }
     }
     function render() {
-      el('topics').innerHTML = topics.length ? topics.map(t=>`<a class="chat-topic-card" href="/conversation?topic=${t.id}" data-link><div><h3>${esc(t.title)}</h3>${t.description?`<p>${esc(t.description)}</p>`:''}<span>Créé par ${esc(t.username)} · échelon ${t.created_echelon}</span></div><span class="chat-topic-arrow" aria-hidden="true">→</span></a>`).join('') : '<div class="chat-empty"><span aria-hidden="true">◇</span><p>Aucun sujet '+(el('search').value.trim()?'ne correspond à ta recherche.':'pour le moment.')+'</p></div>';
+      el('topics').innerHTML = topics.length ? topics.map(t=>`<a class="chat-topic-card" href="${base}${t.id}" data-link><div><h3>${esc(t.title)}</h3>${t.description?`<p>${esc(t.description)}</p>`:''}<span>Créé par ${esc(t.username)} · échelon ${t.created_echelon}</span></div><span class="chat-topic-arrow" aria-hidden="true">→</span></a>`).join('') : '<div class="chat-empty"><span aria-hidden="true">◇</span><p>Aucun '+noun+' '+(el('search').value.trim()?'ne correspond à ta recherche.':'pour le moment.')+'</p></div>';
       el('more').hidden = !nextBefore;
     }
     async function load(more = false) {
@@ -68,7 +69,7 @@ window.WCConversation = (() => {
       const token = ++revision; loading = true; el('more').disabled = true;
       try {
         const query = new URLSearchParams({q:el('search').value.trim(), ...(more?{before:nextBefore}:{})});
-        const result = await api('/api/conversation/topics?' + query);
+        const result = await api('/api/conversation/'+endpoint+'?' + query);
         if (stale(epoch) || token !== revision) return;
         topics = more ? [...topics,...result.topics] : result.topics; nextBefore = result.nextBefore; allowance = result.allowance;
         controls(); render(); el('search-form').hidden = false; el('status').textContent = '';
@@ -76,7 +77,7 @@ window.WCConversation = (() => {
         if (stale(epoch) || token !== revision) return;
         el('status').textContent = error.message;
         // Locked users never receive room titles or creator information.
-        if (!allowance) el('quota').textContent = 'Un premier sujet à l’échelon 12, un deuxième au 18, un troisième au 23.';
+        if (!allowance) el('quota').textContent = 'Un premier '+noun+' à l’échelon 12, un deuxième au 18, un troisième au 23.';
       } finally { if (!stale(epoch) && token === revision) { loading = false; el('more').disabled = false; } }
     }
     function toggle(open) {
@@ -93,10 +94,10 @@ window.WCConversation = (() => {
       event.preventDefault(); if (creating) return;
       save(); creating = true; el('create').disabled = true; el('create-status').textContent = 'Création…';
       try {
-        const result = await api('/api/conversation/topics', {method:'POST', body:draft});
+        const result = await api('/api/conversation/'+endpoint, {method:'POST', body:draft});
         if (stale(epoch)) return;
         el('title').value = ''; el('description').value = ''; draft.client_id = crypto.randomUUID(); save();
-        navigate('/conversation?topic=' + result.id);
+        navigate(base + result.id);
       } catch (error) { if (!stale(epoch)) { el('create-status').textContent = error.message; load(); } }
       finally { creating = false; if (!stale(epoch)) el('create').disabled = false; }
     };
@@ -107,16 +108,17 @@ window.WCConversation = (() => {
     leave();
     const epoch = newEpoch(), events = new AbortController(), params = new URLSearchParams(location.search);
     document.title = 'Conversation · White Cadae'; document.body.classList.add('conversation-mode');
-    if (params.get('view') === 'topics') return directory(epoch, events);
+    if (params.get('view') === 'topics'||location.pathname==='/sujets') return directory(epoch, events);
+    if (params.get('view') === 'projects'||location.pathname==='/projets') return directory(epoch, events,'project');
     const topic = params.get('topic');
     const filter = {mode:['exact','min','max','historique'].includes(params.get('mode'))?params.get('mode'):'tout', niveau:params.get('niveau')||'2'};
     let data = {messages:[], echelon:null, readCeiling:2, nextBefore:null}, revision = 0, loading = false, sending = false, available = false;
     const draftKey = 'wc-conversation-draft-' + state.user.id + (topic?'-topic-'+topic:'');
     const draft = {body:'', ...readDraft(draftKey)};
     const query = extras => new URLSearchParams({...filter,...(topic?{topic}:{}),...extras}).toString();
-    app.innerHTML = `<section class="chat-shell" aria-label="${topic?'Discussion du sujet':'Conversation générale'}">
+    app.innerHTML = `<section class="chat-shell ${topic?'chat-room-chat':''}" aria-label="${topic?'Discussion du sujet':'Conversation générale'}">
       <header class="chat-head"><h1 id="chat-heading">${topic?'Sujet de conversation':'Conversation générale'}</h1><span id="chat-context">${topic?'Chargement…':'Un espace commun'}</span></header>
-      <div class="chat-toolbar">${tabs(!!topic)}<button id="chat-level-button" aria-expanded="false" aria-controls="chat-levels" aria-label="Filtrer les messages par échelon">Filtrer <span id="chat-level-label"></span> ⌄</button>
+      <div class="chat-toolbar">${tabs(topic?'topic':'general')}<button id="chat-level-button" aria-expanded="false" aria-controls="chat-levels" aria-label="Filtrer les messages par échelon">Filtrer <span id="chat-level-label"></span> ⌄</button>
         <div id="chat-levels" class="chat-popover" hidden><p class="chat-filter-hint">Afficher les messages selon leur échelon d’accès.</p><div class="chat-chips" role="group" aria-label="Mode du filtre"><button data-mode="tout">Tous mes accès</button><button data-mode="max">Jusqu’à</button><button data-mode="exact">Exactement</button><button data-mode="min">À partir de</button></div><div id="chat-level-options" class="chat-number-buttons" aria-label="Choisir un échelon"></div><button id="chat-level-close" class="link-btn">Fermer</button></div>
       </div>
       <div class="chat-stream"><div id="chat-topic-intro" hidden></div><button id="chat-older" hidden>Messages précédents ↑</button><div id="chat-messages" role="log" aria-label="Messages"><p class="chat-empty">Chargement de la conversation…</p></div><button id="chat-new" hidden>Nouveaux messages ↓</button></div>
@@ -158,9 +160,10 @@ window.WCConversation = (() => {
           available = true;
           if (next.topic) {
             document.title = next.topic.title + ' · Conversation'; el('heading').textContent = next.topic.title;
-            el('context').textContent = 'Salon · dès l’échelon 12';
+            el('context').innerHTML = `<a href="/${next.topic.kind==='project'?'projets':'sujets'}/${next.topic.id}" data-link>Voir la fiche</a>`;
+            app.querySelectorAll('.chat-tabs a').forEach(a=>{if(a.getAttribute('href')===(next.topic.kind==='project'?'/projets':'/sujets'))a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
             el('topic-intro').hidden = false;
-            el('topic-intro').innerHTML = `<p>${esc(next.topic.description)}</p><small>Un sujet de ${authorLink(next.topic.username)}</small>`;
+            el('topic-intro').innerHTML = `<small><a href="/${next.topic.kind==='project'?'projets':'sujets'}/${next.topic.id}" data-link>Voir la fiche du ${next.topic.kind==='project'?'projet':'sujet'}</a> · ${authorLink(next.topic.username)}</small>`;
           }
           controls(); render(kind==='replace'?'bottom':kind==='older'?'older':next.messages.length?'new':'keep');
           extras.after = next.nextAfter;
@@ -205,5 +208,5 @@ window.WCConversation = (() => {
     controls(); grow(); await load();
     if (!stale(epoch)) pageTimer = setInterval(()=>{if(!document.hidden)load('poll');},7000);
   }
-  return {page,leave};
+  return {page,leave,nav:tabs};
 })();
