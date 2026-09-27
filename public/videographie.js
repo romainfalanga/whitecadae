@@ -3,7 +3,8 @@ window.WCVideographie = (() => {
   const leave=()=>{cleanup();cleanup=()=>{};};
   const categories=[['univers','Univers'],['philosophie','Philosophiques'],['psychologie','Psychologiques'],['projets','Projets'],['idees','Idées']];
   const label=id=>categories.find(c=>c[0]===id)?.[1]||id;
-  const options=(ceiling,current=9)=>Array.from({length:Math.max(1,ceiling-8)},(_,i)=>`<option value="${i+9}" ${i+9===current?'selected':''}>Échelon ${i+9}</option>`).join('');
+  let minimumLevel=12;
+  const options=(ceiling,current=minimumLevel)=>Array.from({length:Math.max(1,ceiling-minimumLevel+1)},(_,i)=>{const level=i+minimumLevel;return `<option value="${level}" ${level===Math.max(minimumLevel,current)?'selected':''}>Échelon ${level}</option>`;}).join('');
   const problem=error=>`<div class="vg-notice" role="status">${esc(error.message)}</div>`;
   function scope(){
     leave();const epoch=newEpoch(),controller=new AbortController(),disposers=[];
@@ -22,12 +23,12 @@ window.WCVideographie = (() => {
     app.innerHTML=`<section class="vg-page"><header class="vg-header"><div><h1>Vidéographie</h1><p>Des réflexions à partager. Des voix pour avancer ensemble.</p></div><button id="vg-add" disabled>＋ Ajouter une vidéo</button></header>
       <div id="vg-publish" hidden></div><nav class="vg-filters chat-chips" aria-label="Catégories"><button data-category="tout" aria-pressed="true">Tout</button>${categories.map(([id,title])=>`<button data-category="${id}" aria-pressed="false">${title}</button>`).join('')}</nav>
       <p id="vg-status" role="status">Chargement…</p><div class="vg-grid" id="vg-grid"></div><button id="vg-more" class="vg-more" hidden>Voir plus de vidéos</button></section>`;
-    const q=s=>app.querySelector(s);let category='tout',next=null,revision=0,loading=false,formReady=false,ceiling=9,uploads=false;
+    const q=s=>app.querySelector(s);let category='tout',next=null,revision=0,loading=false,formReady=false,ceiling=minimumLevel,uploads=false;
     async function load(append=false){
       if(append&&loading)return;const turn=++revision;loading=true;q('#vg-status').textContent='Chargement…';
       try{
         const data=await api('/api/videographies?category='+category+(append&&next?'&before='+next:''),{signal:life.signal});if(!life.current()||turn!==revision)return;
-        ceiling=data.echelon;uploads=data.uploads;next=data.nextBefore;q('#vg-add').disabled=false;
+        ceiling=data.echelon;minimumLevel=data.minimum_echelon||minimumLevel;uploads=data.uploads;next=data.nextBefore;q('#vg-add').disabled=false;
         const html=data.posts.map(p=>`<article class="vg-card"><a href="/videographie/video/${p.id}" data-link class="vg-card-link"><div class="vg-card-cover" aria-hidden="true"><span>▶</span><small>${esc(label(p.category))}</small></div><div class="vg-card-content"><span class="vg-eyebrow">Échelon ${p.min_echelon}</span><h2>${esc(p.title)}</h2>${p.description?`<p>${esc(p.description)}</p>`:''}<footer><span>${esc(p.username)}</span><span>${p.comments} réponse${p.comments>1?'s':''}</span></footer></div></a></article>`).join('');
         if(append)q('#vg-grid').insertAdjacentHTML('beforeend',html);else q('#vg-grid').innerHTML=html;
         q('#vg-more').hidden=!next;q('#vg-status').textContent=q('#vg-grid').children.length?'':'Aucune vidéo dans cette catégorie pour le moment. Partage la première réflexion.';
@@ -90,7 +91,7 @@ window.WCVideographie = (() => {
     const life=scope();app.innerHTML='<section class="vg-page"><p>Chargement de la vidéo…</p></section>';
     let data;
     try{data=await api('/api/videographies/'+id,{signal:life.signal});}catch(error){if(life.current())app.innerHTML=`<section class="vg-page"><a href="/videographie" data-link>← Vidéographie</a>${problem(error)}</section>`;return;}
-    if(!life.current())return;const p=data.post;document.title=p.title+' — White Cadae';
+    if(!life.current())return;minimumLevel=data.minimum_echelon||minimumLevel;const p=data.post;document.title=p.title+' — White Cadae';
     app.innerHTML=`<section class="vg-page vg-detail"><a href="/videographie" data-link class="vg-back">← Vidéographie</a><div class="vg-detail-layout"><article class="vg-original"><div class="vg-video">${p.youtube_id?`<iframe src="https://www.youtube-nocookie.com/embed/${esc(p.youtube_id)}" title="${esc(p.title)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`:`<video controls playsinline preload="metadata" src="${esc(p.media_url)}"></video>`}</div>
       <div class="vg-post-meta"><span>${esc(label(p.category))}</span><span>Échelon ${p.min_echelon}</span></div><h1>${esc(p.title)}</h1><div class="vg-byline">${authorLink(p.username)} · ${esc(formatDate(p.created_at))}</div>${p.description?`<p class="vg-description">${esc(p.description)}</p>`:''}
       ${p.editable?'<div class="vg-actions"><button id="vg-edit-post" class="link-btn">Modifier la vidéo</button><button id="vg-delete-post" class="link-btn">Supprimer</button></div><div id="vg-post-editor" hidden></div>':''}</article>

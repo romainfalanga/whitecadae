@@ -2054,6 +2054,7 @@ async function gateArbre(request, env, kind) {
   const def = ARBRE_KINDS[kind];
   const { vu, refus } = await requireEchelon(request, env, def.echelon(), def.cle);
   if (refus) return { refus };
+  if (!vu.access.videographie) return { refus: json({ error: 'Ce n’est pas encore ouvert.', locked: 'videographie' }, 403) };
   if (!vu.user) return { refus: json({ error: 'Connexion requise.' }, 401) };
   await ensureHautesTables(env);
   return { vu };

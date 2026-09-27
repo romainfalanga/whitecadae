@@ -2,7 +2,7 @@ import {gameLevel,accessLevel} from './echelon.js';
 import {RELEASES,canListen} from './music-catalogue.js';
 
 export const CONVERSATION_LEVEL=2;
-export const VIDEO_LEVEL=9;
+export const VIDEO_LEVEL=12;
 export function contentAccess(user,rows=[]){
   const level=gameLevel(rows),legacy=accessLevel(rows),admin=!!user?.is_admin;
   return {level,legacy,admin,

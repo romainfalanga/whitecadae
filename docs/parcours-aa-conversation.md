@@ -9,12 +9,15 @@ Le départ est à l’échelon 1. Chaque réponse complète fait gagner un éche
 | 3 | Sans indices dans les dés (57) et ses signes |
 | 4 | 13h20 (57) et son signe |
 | 5 | Orange (57) et AA |
-| 6 | La matière dense (114) ; Wanheda (18 juillet 2019, accès conservé) |
-| 7 | Les probabilités (114) ; Quand je vois je pense (18 juillet 2019, accès conservé) |
-| 8 | Fais Mieux (114) ; Un fil entre deux infinis (18 juillet 2019, accès conservé) |
-| 9 | Vidéographie |
+| 6 | La matière danse (114) |
+| 7 | Les probabilités (114) |
+| 8 | Fais Mieux (114) |
+| 9 | Wanheda (18 juillet 2019) |
+| 10 | Quand je vois je pense (18 juillet 2019) |
+| 11 | Un fil entre deux infinis (18 juillet 2019) |
+| 12 | Vidéographie |
 
-L’ordre de la page Musiques est 57, 114, puis 18 juillet 2019. Les albums ne débloquent jamais leurs morceaux en bloc. 57 et 114 portent le nom d’artiste Vulpis. Les seuils de 18 juillet 2019 restent individuels aux échelons 6, 7 et 8, faute de nouvelle attribution demandée pour ces titres.
+L’ordre de la page Musiques est 57, 114, puis 18 juillet 2019. Les albums ne débloquent jamais leurs morceaux en bloc. 57 et 114 portent le nom d’artiste Vulpis. Les morceaux de 18 juillet 2019 se débloquent individuellement aux échelons 9, 10 et 11. Vidéographie et ses médias exigent désormais l’échelon 12. La pochette de 114 fournie par l’artiste est utilisée par le catalogue, le lecteur et ses métadonnées système. Le titre est La matière danse ; l’identifiant historique des paroles reste stable pour préserver les liens.
 
 ## Signes
 

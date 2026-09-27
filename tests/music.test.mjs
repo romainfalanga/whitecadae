@@ -7,6 +7,8 @@ import {ALBUM57,JULY,FAIS_MIEUX,RELEASES} from '../src/music-catalogue.js';
 import {NODES} from '../src/echelon.js';
 
 test('every gated track opens with its lyrics, cover and direct audio at its own threshold',async()=>{
+  assert.deepEqual(FAIS_MIEUX.tracks.map(t=>[t.title,t.minLevel]),[['La matière danse',6],['Les probabilités',7],['Fais Mieux',8]]);
+  assert.deepEqual(JULY.tracks.map(t=>[t.title,t.minLevel]),[['Wanheda',9],['Quand je vois je pense',10],['Un fil entre deux infinis',11]]);
   const db=new DatabaseSync(':memory:');
   db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
   db.exec(`INSERT INTO albums(id,title,slug,position) VALUES(1,'18 juillet 2019','18-juillet-2019',1),(2,'57','57',2),(4,'Fais mieux','114',4);

@@ -4,7 +4,7 @@ import {buildOrange} from '../src/orange-access.js';
 import {NODES} from '../src/echelon.js';
 import worker from '../src/index.js';
 const ids=NODES.flatMap(n=>n.answers.map(a=>a.id));
-const expected=[[1,'music-30-vins-divins'],[2,'conversation'],[3,'music-sans-indice-dans-les-des'],[4,'music-13h20'],[5,'music-orange'],[6,'music-la-matiere-dense'],[6,'music-wanheda'],[7,'music-les-probabilites'],[7,'music-quand-je-vois-je-pense'],[8,'music-fais-mieux'],[8,'music-un-fil-entre-deux-infinis'],[9,'videographie']];
+const expected=[[1,'music-30-vins-divins'],[2,'conversation'],[3,'music-sans-indice-dans-les-des'],[4,'music-13h20'],[5,'music-orange'],[6,'music-la-matiere-dense'],[7,'music-les-probabilites'],[8,'music-fais-mieux'],[9,'music-wanheda'],[10,'music-quand-je-vois-je-pense'],[11,'music-un-fil-entre-deux-infinis'],[12,'videographie']];
 test('welcome shows earned discoveries in level order, without invented narrative or locked links',()=>{
   for(let level=1;level<=20;level++){
     const result=buildOrange(ids.slice(0,level-1).map(riddle_id=>({riddle_id,solved_at:'now'})),{id:1});

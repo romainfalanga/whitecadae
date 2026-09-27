@@ -1,5 +1,6 @@
 import {gameRows} from './echelon-api.js';
 import {gameLevel,MAX_GAME_LEVEL} from './echelon.js';
+import {VIDEO_LEVEL} from './content-access.js';
 
 export const VIDEO_CATEGORIES = [
   {id:'univers',label:'Univers'}, {id:'philosophie',label:'Philosophiques'},
@@ -91,7 +92,7 @@ export async function handleVideographie(request,env,{getUser,json}) {
   const user=await getUser(request,env);
   if(!user)return json({error:'Connexion requise.'},401);
   const level=gameLevel(await gameRows(env,user.id)),ceiling=user.is_admin?MAX_GAME_LEVEL:level;
-  if(!user.is_admin&&level<9)return json({error:'La Vidéographie s’ouvre à l’échelon 9.'},403);
+  if(!user.is_admin&&level<VIDEO_LEVEL)return json({error:`La Vidéographie s’ouvre à l’échelon ${VIDEO_LEVEL}.`},403);
   if(!['GET','HEAD'].includes(method)&&request.headers.get('Origin')&&request.headers.get('Origin')!==url.origin)return json({error:'Origine refusée.'},403);
   await ensureVideoTables(env);
   const one=(sql,...args)=>env.DB.prepare(sql).bind(...args).first();
@@ -99,7 +100,7 @@ export async function handleVideographie(request,env,{getUser,json}) {
   const all=async(sql,...args)=>(await env.DB.prepare(sql).bind(...args).all()).results||[];
   const error=(message,status=400)=>json({error:message},status);
   const post=async id=>{const p=await one('SELECT p.*,u.username FROM vg_posts p JOIN users u ON u.id=p.user_id WHERE p.id=?1 AND p.deleted_at IS NULL',id);return p&&(user.is_admin||p.min_echelon+(p.echelon_version===2?1:0)<=level)?p:null;};
-  const threshold=p=>p.min_echelon+(p.echelon_version===2?1:0);
+  const threshold=p=>Math.max(VIDEO_LEVEL,p.min_echelon+(p.echelon_version===2?1:0));
   const present=p=>({id:p.id,title:p.title,description:p.description,category:p.category,min_echelon:threshold(p),username:p.username,created_at:p.created_at,youtube_id:p.youtube_id,media_url:p.media_id?'/api/vg-media/'+p.media_id:null,editable:!!(user.is_admin||p.user_id===user.id),comments:p.comments||0});
   const ownedMedia=async(id,kind)=>{const m=await one('SELECT * FROM vg_media WHERE id=?1 AND user_id=?2 AND kind=?3 AND state=?4',id,user.id,kind,'ready');return m;};
   let match;
@@ -112,14 +113,14 @@ export async function handleVideographie(request,env,{getUser,json}) {
       FROM vg_posts p JOIN users u ON u.id=p.user_id WHERE p.deleted_at IS NULL AND (?1=1 OR p.min_echelon+CASE WHEN p.echelon_version=2 THEN 1 ELSE 0 END<=?2)
       AND (?3='tout' OR p.category=?3) AND (?4=0 OR p.id<?4) ORDER BY p.id DESC LIMIT 25`,user.is_admin?1:0,level,category,before);
     const posts=rows.slice(0,24);
-    return json({posts:posts.map(present),nextBefore:rows.length>24?posts.at(-1).id:null,categories:VIDEO_CATEGORIES,echelon:ceiling,uploads:!!env.MEDIA,limits:{videoBytes:VIDEO_LIMIT,audioBytes:AUDIO_LIMIT,videoSeconds:600,audioSeconds:180}});
+    return json({posts:posts.map(present),nextBefore:rows.length>24?posts.at(-1).id:null,categories:VIDEO_CATEGORIES,echelon:ceiling,minimum_echelon:VIDEO_LEVEL,uploads:!!env.MEDIA,limits:{videoBytes:VIDEO_LIMIT,audioBytes:AUDIO_LIMIT,videoSeconds:600,audioSeconds:180}});
   }
   if(path==='/api/videographies'&&method==='POST'){
     const b=await readBody(request);if(!b)return error('Publication invalide.');
     const title=String(b.title||'').trim(),description=String(b.description||'').trim(),minimum=b.min_echelon;
     if(!title||title.length>160||description.length>4000)return error('Un titre de 160 caractères et une description de 4 000 caractères au maximum.');
     if(!VIDEO_CATEGORIES.some(c=>c.id===b.category))return error('Choisis une catégorie.');
-    if(!Number.isInteger(minimum)||minimum<9||minimum>ceiling)return error('Cet échelon de visibilité n’est pas disponible.');
+    if(!Number.isInteger(minimum)||minimum<VIDEO_LEVEL||minimum>ceiling)return error('Cet échelon de visibilité n’est pas disponible.');
     if(!/^[\w-]{16,80}$/.test(b.client_id||''))return error('Identifiant de publication invalide.');
     const prior=await one('SELECT id FROM vg_posts WHERE user_id=?1 AND client_id=?2',user.id,b.client_id);if(prior)return json({id:prior.id},200);
     const yt=b.url?youtubeId(b.url):null,media=b.media_id?await ownedMedia(b.media_id,'video'):null;
@@ -132,14 +133,14 @@ export async function handleVideographie(request,env,{getUser,json}) {
   }
   if((match=path.match(/^\/api\/videographies\/(\d+)$/))){
     const p=await post(Number(match[1]));if(!p)return error('Vidéo introuvable.',404);
-    if(method==='GET')return json({post:present(p),echelon:ceiling,categories:VIDEO_CATEGORIES,uploads:!!env.MEDIA});
+    if(method==='GET')return json({post:present(p),echelon:ceiling,minimum_echelon:VIDEO_LEVEL,categories:VIDEO_CATEGORIES,uploads:!!env.MEDIA});
     if(p.user_id!==user.id&&!user.is_admin)return error('Vidéo introuvable.',404);
     if(method==='DELETE'){await run("UPDATE vg_posts SET deleted_at=datetime('now') WHERE id=?1",p.id);return json({ok:true});}
     if(method==='PATCH'){
       const b=await readBody(request);if(!b)return error('Modification invalide.');
       const title=String(b.title||'').trim(),description=String(b.description||'').trim(),minimum=b.min_echelon;
       if(!title||title.length>160||description.length>4000||!VIDEO_CATEGORIES.some(c=>c.id===b.category))return error('Vérifie le titre, la description et la catégorie.');
-      if(!Number.isInteger(minimum)||minimum<9||minimum>ceiling)return error('Échelon invalide.');
+      if(!Number.isInteger(minimum)||minimum<VIDEO_LEVEL||minimum>ceiling)return error('Échelon invalide.');
       if(minimum<threshold(p)&&(await one('SELECT count(*) AS n FROM vg_comments WHERE post_id=?1',p.id)).n)return error('L’échelon ne peut pas être abaissé après les premières réponses, pour conserver leur audience.');
       await run("UPDATE vg_posts SET title=?1,description=?2,category=?3,min_echelon=?4,echelon_version=3,updated_at=datetime('now') WHERE id=?5",title,description,b.category,minimum,p.id);return json({ok:true});
     }

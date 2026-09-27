@@ -8,12 +8,12 @@ import {fixture} from './community-fixture.mjs';
 
 test('community video enforces thresholds, ownership, media access and reply audiences',async()=>{
   const f=fixture();
-  async function call(path,{level=12,method='GET',body,bytes,headers={}}={}){
+  async function call(path,{level=16,method='GET',body,bytes,headers={}}={}){
     const response=await worker.fetch(new Request('https://test.local'+path,{method,headers:{...(level!==null?{Cookie:'wc_session=qa'+level}:{}),...(body?{'Content-Type':'application/json'}:{}),...headers},...(['GET','HEAD'].includes(method)?{}:{body:bytes||JSON.stringify(body||{})})}),f.env);
     const buffer=await response.arrayBuffer();let data;try{data=JSON.parse(new TextDecoder().decode(buffer));}catch{data={};}return {status:response.status,headers:response.headers,bytes:new Uint8Array(buffer),...data};
   }
-  const post=(extra={})=>({title:'Ma réflexion',description:'Pour en discuter.',category:'univers',min_echelon:12,url:'https://youtu.be/abcdefghijk',client_id:crypto.randomUUID(),...extra});
-  async function media(kind='audio',level=12){
+  const post=(extra={})=>({title:'Ma réflexion',description:'Pour en discuter.',category:'univers',min_echelon:16,url:'https://youtu.be/abcdefghijk',client_id:crypto.randomUUID(),...extra});
+  async function media(kind='audio',level=16){
     const mime=kind==='audio'?'audio/wav':'video/mp4',bytes=new Uint8Array([0,1,2,3,4,5,6,7]);
     const ticket=await call('/api/vg-media',{level,method:'POST',body:{kind,mime,size:bytes.length,duration:1}});assert.equal(ticket.status,201);
     const path='/api/vg-media/'+ticket.id;
@@ -21,19 +21,23 @@ test('community video enforces thresholds, ownership, media access and reply aud
     return ticket.id;
   }
   assert.equal((await call('/api/videographies',{level:null})).status,401);
-  assert.equal((await call('/api/videographies',{level:8})).status,403);
-  assert.equal((await call('/api/videographies',{level:9})).categories.length,5);
-  for(const min_echelon of [8,13,'9',9.5])assert.equal((await call('/api/videographies',{method:'POST',body:post({min_echelon})})).status,400);
+  for(const level of [8,9,10,11]){
+    for(const path of ['/api/videographies','/api/videographies/1','/api/videographies/1/comments','/api/vg-media/unknown','/api/videographie/rythme','/api/arbres?kind=video'])assert.equal((await call(path,{level})).status,403);
+    assert.equal((await call('/api/vg-media',{level,method:'POST',body:{}})).status,403);
+  }
+  assert.equal((await call('/api/videographies',{level:12})).minimum_echelon,12);
+  assert.equal((await call('/api/videographies',{level:12})).categories.length,5);
+  for(const min_echelon of [11,17,'12',12.5])assert.equal((await call('/api/videographies',{method:'POST',body:post({min_echelon})})).status,400);
   assert.equal((await call('/api/videographies',{method:'POST',body:post(),headers:{Origin:'https://evil.test'}})).status,403);
   const publication=post(),created=await call('/api/videographies',{method:'POST',body:publication});assert.equal(created.status,201);assert.ok(created.id);
   assert.equal((await call('/api/videographies',{method:'POST',body:publication})).id,created.id);
   const path='/api/videographies/'+created.id;
-  for(const url of [path,path+'/comments'])assert.equal((await call(url,{level:9})).status,404);
-  assert.equal((await call('/api/videographies',{level:9})).posts.length,0);
+  for(const url of [path,path+'/comments'])assert.equal((await call(url,{level:12})).status,404);
+  assert.equal((await call('/api/videographies',{level:12})).posts.length,0);
   assert.equal((await call(path,{level:25,method:'DELETE'})).status,404);
   assert.equal((await call(path,{level:99})).status,200);
   const vid=await media('video');const filePost=await call('/api/videographies',{method:'POST',body:post({url:null,media_id:vid})});assert.equal(filePost.status,201);
-  assert.equal((await call('/api/vg-media/'+vid,{level:9})).status,404);
+  assert.equal((await call('/api/vg-media/'+vid,{level:12})).status,404);
   assert.equal((await call('/api/vg-media/'+vid,{method:'DELETE'})).status,409);
   assert.equal((await call('/api/vg-media/'+vid,{level:null})).status,401);
   const range=await call('/api/vg-media/'+vid,{headers:{Range:'bytes=2-4'}});assert.equal(range.status,206);assert.deepEqual([...range.bytes],[2,3,4]);assert.match(range.headers.get('Cache-Control'),/no-store/);
@@ -48,12 +52,12 @@ test('community video enforces thresholds, ownership, media access and reply aud
   assert.equal((await call(path+'/comments',{method:'POST',body:{...comment,words:[]}})).status,400);
   const first=await call(path+'/comments',{method:'POST',body:comment});assert.equal(first.status,201);assert.ok(first.id);
   assert.equal((await call(path+'/comments',{method:'POST',body:comment})).id,first.id);
-  assert.equal((await call('/api/vg-media/'+vocal,{level:9})).status,404);
+  assert.equal((await call('/api/vg-media/'+vocal,{level:12})).status,404);
   assert.equal((await call('/api/vg-media/'+vocal,{level:25})).status,200);
   const secondMedia=await media('audio',25),child={body:'Merci.',words:[{m:'Merci.',d:0,f:1}],media_id:secondMedia,parent_id:first.id,client_id:crypto.randomUUID()};
   assert.equal((await call('/api/videographies/'+filePost.id+'/comments',{level:25,method:'POST',body:child})).status,400);
   const second=await call(path+'/comments',{level:25,method:'POST',body:child});assert.equal(second.status,201);
-  assert.equal((await call(path,{method:'PATCH',body:post({min_echelon:9})})).status,400);
+  assert.equal((await call(path,{method:'PATCH',body:post({min_echelon:12})})).status,400);
   assert.equal((await call('/api/vg-comments/'+first.id,{level:25,method:'PATCH',body:{body:'Piraté',words:[]}})).status,404);
   assert.equal((await call('/api/vg-comments/'+first.id,{method:'PATCH',body:{body:'Bonsoir à tous.',words:[{m:'Bonsoir',d:0,f:.33},{m:'à',d:.33,f:.67},{m:'tous.',d:.67,f:1}]}})).status,200);
   assert.equal((await call('/api/vg-comments/'+first.id,{method:'DELETE'})).status,200);
@@ -116,7 +120,7 @@ test('removed conversation themes migrate without broadening historical or curre
 
 test('upload streams without a Content-Length are checked, recover after failure and retain exact bytes',async()=>{
   const f=fixture();
-  const call=(path,method,body,headers={})=>worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session=qa9',...headers},body}),f.env);
+  const call=(path,method,body,headers={})=>worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session=qa12',...headers},body}),f.env);
   const ticket=await(await call('/api/vg-media','POST',JSON.stringify({kind:'video',mime:'video/webm',size:8,duration:1}),{'Content-Type':'application/json'})).json();
   const upload=bytes=>call(ticket.upload_url,'PUT',new Uint8Array(bytes),{'Content-Type':'video/webm'});
   assert.equal((await upload([1,2,3,4])).status,503);
@@ -124,21 +128,24 @@ test('upload streams without a Content-Length are checked, recover after failure
   assert.equal((await upload([0,1,2,3,4,5,6,7,8])).status,503);
   assert.equal(f.objects.size,0);
   assert.equal((await upload([0,1,2,3,4,5,6,7])).status,200);
-  const published=await call('/api/videographies','POST',JSON.stringify({title:'Uploaded',category:'univers',min_echelon:9,media_id:ticket.id,client_id:crypto.randomUUID()}),{'Content-Type':'application/json'});
+  const published=await call('/api/videographies','POST',JSON.stringify({title:'Uploaded',category:'univers',min_echelon:12,media_id:ticket.id,client_id:crypto.randomUUID()}),{'Content-Type':'application/json'});
   assert.equal(published.status,201);
-  const replay=await worker.fetch(new Request('https://test.local/api/vg-media/'+ticket.id,{headers:{Cookie:'wc_session=qa9'}}),f.env);
+  const replay=await worker.fetch(new Request('https://test.local/api/vg-media/'+ticket.id,{headers:{Cookie:'wc_session=qa12'}}),f.env);
   assert.deepEqual([...new Uint8Array(await replay.arrayBuffer())],[0,1,2,3,4,5,6,7]);
   f.sql.close();
 });
 
-test('existing video thresholds keep the same earned-answer audience after the starting-level change',async()=>{
+test('existing video audiences stay protected and no video is accessible before level 12',async()=>{
   const f=fixture();
   const call=async(level,path='/api/videographies')=>worker.fetch(new Request('https://test.local'+path,{headers:{Cookie:'wc_session=qa'+level}}),f.env);
-  await call(9);
-  f.sql.prepare("INSERT INTO vg_posts(id,user_id,title,category,min_echelon,youtube_id,client_id) VALUES(1,13,'Existing video','univers',9,'abcdefghijk','existing-version-two')").run();
-  assert.deepEqual((await(await call(9)).json()).posts,[]);
-  assert.equal((await call(9,'/api/videographies/1')).status,404);
-  const tenth=await(await call(10)).json();assert.equal(tenth.posts.length,1);assert.equal(tenth.posts[0].min_echelon,10);
-  assert.equal((await call(10,'/api/videographies/1')).status,200);
+  await call(12);
+  f.sql.prepare("INSERT INTO vg_posts(id,user_id,title,category,min_echelon,youtube_id,client_id) VALUES(1,13,'Existing private video','univers',12,'abcdefghijk','existing-version-two')").run();
+  assert.deepEqual((await(await call(12)).json()).posts,[]);
+  assert.equal((await call(12,'/api/videographies/1')).status,404);
+  const thirteenth=await(await call(13)).json();assert.equal(thirteenth.posts.length,1);assert.equal(thirteenth.posts[0].min_echelon,13);
+  assert.equal((await call(13,'/api/videographies/1')).status,200);
+  f.sql.prepare("INSERT INTO vg_posts(id,user_id,title,category,min_echelon,youtube_id,client_id,echelon_version) VALUES(2,13,'Previously open at 9','univers',9,'abcdefghijk','existing-version-three',3)").run();
+  assert.equal((await call(11,'/api/videographies/2')).status,403);
+  const older=await(await call(12,'/api/videographies/2')).json();assert.equal(older.post.min_echelon,12);assert.equal(older.minimum_echelon,12);
   f.sql.close();
 });
