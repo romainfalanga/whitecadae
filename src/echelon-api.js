@@ -1,17 +1,19 @@
-import {buildGameState,progress,getGameNode,isVisible,isPlayable,SHARE,boardSources} from './echelon.js';
+import {buildGameState,progress,progressLevel,getGameNode,isVisible,isPlayable,SHARE,boardSources} from './echelon.js';
 import {matchNode} from './enigmas57.js';
 import {validDraft,hasTwoSevens,validateConstruction} from './echelon-workshop.js';
 import {buildJourney} from './journey.js';
 import {newlyOpened} from './content-access.js';
 
-let ready=false;
+const ready=new WeakMap();
 export async function ensureGameTables(env){
-  if(ready)return;
-  await env.DB.batch([
+  if(ready.has(env.DB))return ready.get(env.DB);
+  const pending=env.DB.batch([
     env.DB.prepare("CREATE TABLE IF NOT EXISTS riddle_progress (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,riddle_id TEXT NOT NULL,hints_used INTEGER NOT NULL DEFAULT 0,revealed INTEGER NOT NULL DEFAULT 0,solved_at TEXT,updated_at TEXT NOT NULL DEFAULT (datetime('now')),PRIMARY KEY(user_id,riddle_id))"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS echelon_drafts (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,board_id TEXT NOT NULL,draft TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL DEFAULT (datetime('now')),PRIMARY KEY(user_id,board_id))"),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS echelon_attempts (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,next_at INTEGER NOT NULL DEFAULT 0,failures INTEGER NOT NULL DEFAULT 0)')
-  ]);ready=true;
+  ]);
+  ready.set(env.DB,pending);
+  try{await pending;}catch(error){ready.delete(env.DB);throw error;}
 }
 export async function gameRows(env,id){if(!id)return [];await ensureGameTables(env);return (await env.DB.prepare('SELECT riddle_id, solved_at FROM riddle_progress WHERE user_id = ?1').bind(id).all()).results||[];}
 async function saveIds(env,id,ids){
@@ -82,5 +84,5 @@ export async function handleEchelon(request,env,path,{getUser,json}){
   await saveIds(env,id,ids);
   await env.DB.prepare('UPDATE echelon_attempts SET next_at=0,failures=0 WHERE user_id=?1').bind(id).run();
   const state=await stateFor(env,id);
-  return json({ok:true,gained:Math.max(0,state.echelon-p.solved.size),opened:newlyOpened(rows,await gameRows(env,id),user),echo:prise.echo||[],state});
+  return json({ok:true,gained:Math.max(0,state.echelon-progressLevel(p)),opened:newlyOpened(rows,await gameRows(env,id),user),echo:prise.echo||[],state});
 }

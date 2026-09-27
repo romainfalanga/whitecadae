@@ -1,4 +1,4 @@
-import {NODES, gameLevel, accessLevel} from './echelon.js';
+import {MAX_GAME_LEVEL, gameLevel, accessLevel} from './echelon.js';
 import {gameRows} from './echelon-api.js';
 import {contentAccess,CONVERSATION_LEVEL} from './content-access.js';
 
@@ -13,7 +13,7 @@ export function conversationAccess(user, rows = []) {
   return {
     echelon,
     // The author can address every currently authored rung, without a fixed cap.
-    ceiling: user?.is_admin ? NODES.reduce((sum, n) => sum + n.answers.length, 0) : echelon,
+    ceiling: user?.is_admin ? MAX_GAME_LEVEL : echelon,
     legacy,
     readable: contentAccess(user,rows).conversation,
   };
@@ -63,14 +63,14 @@ export async function handleConversation(request, env, {getUser, json}) {
     if(!['tout','historique'].includes(mode)&&level>access.ceiling)return json({error:'Cet échelon n’est pas encore atteint.'},403);
     // Historical thresholds retain their original audience. They must never be
     // reinterpreted as the much faster new score, which would expose messages.
-    const {results} = await env.DB.prepare(`SELECT m.id, m.body, m.min_echelon, m.echelon_version, m.theme, m.created_at, u.username
+    const {results} = await env.DB.prepare(`SELECT m.id, m.body, (m.min_echelon+CASE WHEN m.echelon_version=2 THEN 1 ELSE 0 END) AS min_echelon, m.echelon_version, m.theme, m.created_at, u.username
       FROM conversation_messages m JOIN users u ON u.id = m.user_id
-      WHERE (?1 = 1 OR (m.echelon_version = 2 AND m.min_echelon <= ?2)
+      WHERE (?1 = 1 OR (m.echelon_version >= 2 AND m.min_echelon+CASE WHEN m.echelon_version=2 THEN 1 ELSE 0 END <= ?2)
         OR (m.echelon_version = 1 AND m.min_echelon <= ?3))
         AND (?4='tout' OR m.theme=?4)
         AND (?5='tout' OR (?5='historique' AND m.echelon_version=1)
-          OR (m.echelon_version=2 AND ((?5='exact' AND m.min_echelon=?6)
-            OR (?5='min' AND m.min_echelon>=?6) OR (?5='max' AND m.min_echelon<=?6))))
+          OR (m.echelon_version>=2 AND ((?5='exact' AND m.min_echelon+CASE WHEN m.echelon_version=2 THEN 1 ELSE 0 END=?6)
+            OR (?5='min' AND m.min_echelon+CASE WHEN m.echelon_version=2 THEN 1 ELSE 0 END>=?6) OR (?5='max' AND m.min_echelon+CASE WHEN m.echelon_version=2 THEN 1 ELSE 0 END<=?6))))
         AND (?7=0 OR m.id<?7)
         AND (?8=0 OR m.id>?8)
       ORDER BY m.id ${after?'ASC':'DESC'} LIMIT 101`).bind(user.is_admin ? 1 : 0, access.echelon, access.legacy,theme,mode,level,before,after).all();
@@ -89,7 +89,7 @@ export async function handleConversation(request, env, {getUser, json}) {
   if(!THEMES.some(t=>t.id===theme))return json({error:'Thème inconnu.'},400);
   if (!Number.isInteger(minimum) || minimum < CONVERSATION_LEVEL) return json({error:'Échelon invalide.'}, 400);
   if (minimum > access.ceiling) return json({error:'Cet échelon n’est pas encore atteint.'}, 403);
-  const result = await env.DB.prepare('INSERT INTO conversation_messages (user_id, body, min_echelon, echelon_version, theme) VALUES (?1, ?2, ?3, 2, ?4)')
+  const result = await env.DB.prepare('INSERT INTO conversation_messages (user_id, body, min_echelon, echelon_version, theme) VALUES (?1, ?2, ?3, 3, ?4)')
     .bind(user.id, texte, minimum,theme).run();
   return json({ok:true, id:result.meta.last_row_id}, 201);
 }

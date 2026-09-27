@@ -418,6 +418,7 @@ function motsDe(value) {
 export function matchNode(node, answer, solved, parties = new Map()) {
   const { nets, bruts } = motsDe(answer);
   if (!nets.length || nets.length > MAX_MOTS) return null;
+  const maxWindow=Math.min(MAX_MOTS,Math.max(MAX_FENETRE,...node.answers.flatMap(a=>[...a.moteur.exactes.keys()].map(form=>form.split(' ').length))));
 
   // l'état de chaque réponse du nœud : ce qui est déjà tenu, ce qui vient
   // d'être gagné, et la première partie encore recevable (l'ordre compte)
@@ -437,7 +438,7 @@ export function matchNode(node, answer, solved, parties = new Map()) {
   while (i < nets.length) {
     let pris = 0;
     // la plus longue lecture d'abord : « 12 arc anges » avant « 12 »
-    for (let len = Math.min(MAX_FENETRE, nets.length - i); len >= 1 && !pris; len--) {
+    for (let len = Math.min(maxWindow, nets.length - i); len >= 1 && !pris; len--) {
       const avecEspaces = nets.slice(i, i + len).join(' ');
       const collee = avecEspaces.replace(/ /g, '');
       // d'abord ce qui fait gagner du terrain, ensuite ce qui est déjà vert

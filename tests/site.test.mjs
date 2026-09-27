@@ -37,7 +37,7 @@ test('catalogue updates preserve existing lyrics and add Meta moi exactly once',
     assert.equal(response.status,200);
     const data=await response.json();
     assert.equal(data.albums.find(a=>a.id===4),undefined);
-    assert.equal(db.prepare('SELECT title FROM albums WHERE id=4').get().title,'Fais Mieux');
+    assert.equal(db.prepare('SELECT title FROM albums WHERE id=4').get().title,'114');
     assert.equal(data.albums.find(a=>a.id===9).title,'114');
     assert.deepEqual(db.prepare('SELECT id FROM songs WHERE album_id=4 ORDER BY track_number').all().map(s=>s.id),[13,14,15]);
     assert.equal(db.prepare('SELECT count(*) AS n FROM lyric_lines WHERE song_id=15').get().n,1);
@@ -79,10 +79,10 @@ test('Meta moi content insertion preserves a pre-existing version of the song', 
 test('MP3 serving handles bounded, open, suffix and invalid byte ranges', async () => {
   const env={ASSETS:{async fetch(){return new Response(new Uint8Array([0,1,2,3,4,5,6,7,8,9]),{headers:{'Content-Type':'audio/mpeg','Content-Length':'10','ETag':'"test"'}});}}};
   for (const [range,status,expected] of [['bytes=2-4',206,[2,3,4]],['bytes=7-',206,[7,8,9]],['bytes=-2',206,[8,9]],['bytes=9-99',206,[9]],['bytes=10-',416,[]],['bytes=4-2',416,[]],['bytes=-0',416,[]]]) {
-    const res=await worker.fetch(new Request('https://test.local/music/57/orange.mp3',{headers:{Range:range}}),env);
+    const res=await worker.fetch(new Request('https://test.local/music/57/30-vins-divins.mp3',{headers:{Range:range}}),env);
     assert.equal(res.status,status,range); assert.deepEqual([...new Uint8Array(await res.arrayBuffer())],expected);
   }
-  const res=await worker.fetch(new Request('https://test.local/music/57/orange.mp3',{headers:{Range:'bytes=1-2','If-Range':'"old"'}}),env);
+  const res=await worker.fetch(new Request('https://test.local/music/57/30-vins-divins.mp3',{headers:{Range:'bytes=1-2','If-Range':'"old"'}}),env);
   assert.equal(res.status,200);assert.equal((await res.arrayBuffer()).byteLength,10);
 });
 
@@ -117,8 +117,8 @@ test('removed spaces reject old clients while video and conversation routes stay
 
 test('lyrics API only reads the public song and ordered lyric lines', async () => {
   const queries=[];
-  const env={DB:{prepare(sql){queries.push(sql);return {bind(){return this;},async first(){return {id:1,title:'Orange',slug:'orange'};},async all(){return {results:[{id:1,line_number:1,text:'Test'}]};}};}}};
-  const res=await worker.fetch(new Request('https://test.local/api/songs/orange'),env);
+  const env={DB:{prepare(sql){queries.push(sql);return {bind(){return this;},async first(){return {id:1,title:'30 vins divins',slug:'30-vins-divins'};},async all(){return {results:[{id:1,line_number:1,text:'Test'}]};}};}}};
+  const res=await worker.fetch(new Request('https://test.local/api/songs/30-vins-divins'),env);
   assert.equal(res.status,200); assert.deepEqual(Object.keys(await res.json()),['song','lines']);
   assert.equal(queries.length,2); assert.ok(queries[1].includes('ORDER BY line_number'));
   assert.ok(queries.every(q=>!/(annotations|sessions|essays)/.test(q)));
@@ -129,7 +129,7 @@ test('service worker leaves audio, Range requests and API responses out of its c
   const self={location:{origin:'https://test.local'},addEventListener:(k,v)=>handlers[k]=v};
   const context=vm.createContext({self,URL,Response,fetch:async()=>new Response('partial',{status:206}),caches:{open:async()=>({put:async()=>{writes++;}})}});
   vm.runInContext(readFileSync(new URL('../public/sw.js',import.meta.url),'utf8'),context);
-  for(const [p,headers,destination] of [['/music/57/orange.mp3',{},'audio'],['/other.mp3',{range:'bytes=0-100'},'']]) {
+  for(const [p,headers,destination] of [['/music/57/30-vins-divins.mp3',{},'audio'],['/other.mp3',{range:'bytes=0-100'},'']]) {
     let intercepted=false;
     handlers.fetch({request:{url:`https://test.local${p}`,method:'GET',headers:new Headers(headers),destination},respondWith(){intercepted=true;}});
     assert.equal(intercepted,false);

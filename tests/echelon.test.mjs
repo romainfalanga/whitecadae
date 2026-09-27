@@ -17,47 +17,45 @@ const orange=[op('join',op('add',src('a'),part('b',0)),op('sub',part('b',1),shar
 const draft=items=>({version:1,items,selected:[]});
 
 test('one completed answer is one rung; old duplicates merge, retired history preserves access',()=>{
-  assert.equal(gameLevel(rows()),0);
-  assert.equal(gameLevel(rows('eg-02-1','eg-02-2','eg-02-1.p0')),2);
-  assert.equal(gameLevel(rows('eg-06-1.p0')),0);
-  assert.equal(gameLevel(rows('eg-06-1.p0','eg-06-1.p1')),1);
-  assert.equal(gameLevel(rows('n-a-2','n-k-2','n-b-1','eg-01-1')),4);
-  assert.equal(gameLevel(rows('eg-07-1')),1);
+  assert.equal(gameLevel(rows()),1);
+  assert.equal(gameLevel(rows('eg-02-1','eg-02-2','eg-02-1.p0')),3);
+  assert.equal(gameLevel(rows('eg-06-1.p0')),1);
+  assert.equal(gameLevel(rows('eg-06-1.p0','eg-06-1.p1')),2);
+  assert.equal(gameLevel(rows('n-a-2','n-k-2','n-b-1','eg-01-1')),5);
+  assert.equal(gameLevel(rows('eg-07-1')),2);
   assert.ok(!progress(rows('eg-07-1')).solved.has('eg-01-1'));
   assert.ok(progress(rows('n-b-1')).solved.has('eg-07-1'));
-  assert.equal(gameLevel(rows('n-e-1','n-f-1',SHARE)),0);
+  assert.equal(gameLevel(rows('n-e-1','n-f-1',SHARE)),1);
   const history=rows(...OLD.flatMap(n=>n.answers.map(a=>a.id)));
   assert.ok(accessLevel(history)>=echelonOf(progresOf(history.map(r=>r.riddle_id)).solved));
   assert.equal(progress(rows('n-a-2.p0')).solved.has('eg-01-1'),true);
 });
 
-test('initial territory omits future pages and answers; visibility differs from playability',()=>{
+test('signs appear only with their song, even if an old client marked them seen',()=>{
   const start=buildGameState([]);
-  assert.deepEqual(start.nodes.map(n=>n.id),['n-0','eg-01','eg-02','n-g']);
-  assert.equal(start.nodes[0].title,'');
-  assert.equal(start.nodes[0].locked,false);
-  assert.equal(start.nodes[0].total,null);
-  assert.equal(start.nodes[0].visual,null);
-  assert.doesNotMatch(JSON.stringify(start),/Devincix|Katikas|Katikias|La porte/);
-  assert.doesNotMatch(JSON.stringify(start),/Horloge|2031|Jésus|Dieu|VALD|33|eg-13|eg-10/);
-  const after=buildGameState(rows('eg-02-1'));
-  assert.equal(after.nodes.find(n=>n.id==='eg-05').locked,true);
-  assert.equal(after.nodes.find(n=>n.id==='n-c').locked,true);
-  assert.equal(buildGameState(rows('eg-02-1','eg-02-2')).nodes.find(n=>n.id==='eg-05').locked,false);
-  const seen=buildGameState(rows('@eg/seen/eg-05'));
-  assert.equal(seen.nodes.find(n=>n.id==='eg-05').locked,true);
+  assert.equal(start.echelon,1);
+  assert.deepEqual(start.nodes.map(n=>n.id),['eg-14','n-a','n-h','eg-02','eg-01','n-w','eg-06']);
+  assert.ok(start.nodes.every(n=>n.music==='30-vins-divins'&&!n.locked));
+  assert.doesNotMatch(JSON.stringify(start),/Devincix|Katikas|Horloge|Jésus|Dieu|VALD|apôtres|eg-13|eg-10/);
+  assert.deepEqual(buildGameState(rows('eg-02-1','@eg/seen/n-g')).nodes.map(n=>n.id),start.nodes.map(n=>n.id));
+  const third=buildGameState(rows('eg-02-1','eg-02-2'));
+  assert.deepEqual(third.nodes.filter(n=>n.music==='sans-indice-dans-les-des').map(n=>n.id),['n-g','n-c','n-b','eg-03','n-k']);
+  assert.ok(!third.nodes.some(n=>n.id==='n-e'||n.id==='eg-15'));
+  assert.ok(buildGameState(rows('eg-02-1','eg-02-2','eg-01-1')).nodes.some(n=>n.id==='n-e'));
+  assert.ok(buildGameState(rows('eg-02-1','eg-02-2','eg-01-1','n-h-2')).nodes.some(n=>n.id==='eg-15'));
   assert.equal(gameProfile(rows('eg-13-1','eg-02-2'),[]).enigmes.length,1);
 });
 
-test('Horloge alone opens the workshop; details alone does not; Orange has two stages',()=>{
-  const horloge=buildGameState(rows('eg-01-1','eg-03-1'));
-  assert.ok(horloge.pages.some(n=>n.id==='eg-10'));
-  assert.equal(horloge.nodes.find(n=>n.id==='eg-11').locked,false);
-  assert.equal(horloge.nodes.find(n=>n.id==='eg-12').locked,false);
-  assert.ok(!horloge.pages.some(n=>n.id==='eg-13'));
-  assert.ok(!buildGameState(rows('eg-01-1','eg-03-2')).pages.some(n=>n.id==='eg-10'));
-  assert.equal(buildGameState(rows('eg-03-1',SHARE)).nodes.find(n=>n.id==='eg-13').locked,true);
-  assert.equal(buildGameState(rows('eg-03-1','eg-12-1')).nodes.find(n=>n.id==='eg-13').locked,false);
+test('Horloge requires its password, while workshops also require their songs',()=>{
+  const base=['eg-02-1','eg-02-2'];
+  for(const extra of [[],['eg-03-2'],['@eg/seen/eg-10']])assert.ok(!buildGameState(rows(...base,...extra)).pages.some(n=>n.id==='eg-10'));
+  const clock=buildGameState(rows(...base,'eg-03-1'));
+  assert.ok(clock.pages.some(n=>n.id==='eg-10'));
+  for(const id of ['eg-11','eg-12'])assert.equal(clock.nodes.find(n=>n.id===id).locked,false);
+  assert.ok(!clock.pages.some(n=>n.id==='eg-13'));
+  assert.ok(!buildGameState(rows('eg-03-1',SHARE)).pages.some(n=>n.id==='eg-13'));
+  assert.equal(buildGameState(rows(...base,'eg-03-1','eg-01-1',SHARE)).nodes.find(n=>n.id==='eg-13').locked,true);
+  assert.equal(buildGameState(rows(...base,'eg-03-1','eg-12-1')).nodes.find(n=>n.id==='eg-13').locked,false);
 });
 
 test('every authored answer is reachable without relying on removed puzzles',()=>{
@@ -65,7 +63,7 @@ test('every authored answer is reachable without relying on removed puzzles',()=
   for(let round=0;round<20;round++)for(const n of NODES){
     if(isPlayable(n,progress(rows(...found))))for(const a of n.answers)if(!found.includes(a.id))found.push(a.id);
   }
-  assert.equal(found.length,25);
+  assert.equal(found.length,NODES.reduce((n,node)=>n+node.answers.length,0));
   const state=buildGameState(rows(...found));
   assert.deepEqual([...new Set(state.pages.map(p=>p.href.split('#')[0]))].sort(),['/echelon','/echelon/horloge']);
   assert.ok(state.pages.every(p=>['riddle','workshop','clock'].includes(p.kind)));
@@ -80,13 +78,18 @@ test('M=M and named answers accept accents, equal signs and partial discovery',(
   assert.ok(matchNode(n,'mécanisme = matière',new Set()).prises.some(p=>p.id==='eg-06-1'&&p.complet));
   assert.ok(matchNode(n,'méta-moi = moi',new Set()).prises.some(p=>p.id==='eg-06-2'&&p.complet));
   assert.ok(matchNode(n,'mecanisme',new Set()).prises.some(p=>!p.complet));
-  assert.ok(matchNode(NODES.find(n=>n.id==='eg-05'),'expansion harmonieuse',new Set()).prises[0].complet);
   const needle=NODES.find(n=>n.id==='eg-03');
   assert.equal(needle.answers[1].label,'Détails');
   assert.ok(matchNode(needle,'details',new Set()).prises[0].complet);
-  assert.equal(buildGameState(rows('eg-03-2')).nodes.find(n=>n.id==='eg-03').found[0].label,'Détails');
-  const door=NODES.find(n=>n.id==='n-0');
-  for(const word of ['devincix','Katikas'])assert.ok(matchNode(door,word,new Set()).prises[0].complet);
+  assert.equal(buildGameState(rows('eg-02-1','eg-03-2')).nodes.find(n=>n.id==='eg-03').found[0].label,'Détails');
+  assert.ok(!NODES.some(n=>n.id==='n-0'));
+  assert.equal(gameLevel(rows('n-0-1','n-0-3')),3);
+  const beast=NODES.find(n=>n.id==='n-h');
+  for(const [text,id]of [['dix cornes','n-h-2'],['deux cornes','n-h-3'],['Prends la bête à 2 cornes','n-h-3'],['Prends la bête à dix cornes','n-h-2']]){
+    const result=matchNode(beast,text,new Set());
+    assert.ok(result.prises.some(p=>p.id===id&&p.complet),text);
+    assert.ok(!result.prises.some(p=>p.id!==id&&p.complet),text);
+  }
 });
 
 test('the two numeric formulas independently accept the same date and preserve earned rungs',()=>{
@@ -95,10 +98,10 @@ test('the two numeric formulas independently accept the same date and preserve e
     for(const text of ['25 décembre','25/12'])assert.ok(matchNode(n,text,new Set()).prises[0].complet);
     assert.ok(!matchNode(n,'Jésus',new Set())?.prises?.length);
   }
-  assert.equal(gameLevel(rows('n-c-1')),1);
-  assert.equal(gameLevel(rows('n-c-1','eg-14-1')),2);
-  assert.equal(gameLevel(rows('n-c-1','eg-04-1')),2);
-  assert.equal(gameLevel(rows('eg-04-1.p0','eg-04-1','eg-14-1')),1);
+  assert.equal(gameLevel(rows('n-c-1')),2);
+  assert.equal(gameLevel(rows('n-c-1','eg-14-1')),3);
+  assert.equal(gameLevel(rows('n-c-1','eg-04-1')),3);
+  assert.equal(gameLevel(rows('eg-04-1.p0','eg-04-1','eg-14-1')),2);
   assert.ok(!progress(rows('n-c-1')).solved.has('eg-14-1'));
 });
 
@@ -109,11 +112,11 @@ test('AA, apostles and repeated signs remain independent; corrected history keep
   assert.deepEqual(seven.answers.map(a=>a.label),['Galaxie','Signe']);
   for(const text of ['12 apôtres','douze apotres'])assert.ok(matchNode(fiftySeven,text,new Set()).prises[0].complet);
   assert.ok(!matchNode(fiftySeven,'archanges',new Set())?.prises?.length);
-  assert.equal(gameLevel(rows('n-a-4')),1);
-  assert.equal(gameLevel(rows('n-a-4.p0','n-a-4.p1','n-a-4.p2')),1);
-  assert.equal(gameLevel(rows('n-a-4.p0','n-a-4.p1')),0);
+  assert.equal(gameLevel(rows('n-a-4')),2);
+  assert.equal(gameLevel(rows('n-a-4.p0','n-a-4.p1','n-a-4.p2')),2);
+  assert.equal(gameLevel(rows('n-a-4.p0','n-a-4.p1')),1);
   assert.deepEqual([...progress(rows('n-a-4.p0','n-a-4.p1')).parts.get('eg-16-1')],[0]);
-  assert.equal(gameLevel(rows('n-a-4','eg-16-1')),1);
+  assert.equal(gameLevel(rows('n-a-4','eg-16-1')),2);
   const signs=progress(rows('eg-16-2','eg-17-1'));
   assert.equal(signs.solved.size,2);assert.ok(!signs.solved.has('eg-01-1'));
   const full=NODES.flatMap(n=>n.answers.map(a=>a.id));
@@ -164,21 +167,22 @@ test('API handles permission boundaries, points, migrations and draft conflicts'
   await ensureGameTables(env);
   assert.equal((await call('/api/echelon/guess',{id:'eg-13',roots:orange})).status,404);
   assert.equal((await call('/api/echelon/guess',{id:'eg-02',answer:'Dieu'})).gained,1);
-  assert.equal((await call('/api/echelon/guess',{id:'eg-05',answer:'Expansion harmonieuse'})).status,403);
+  assert.equal((await call('/api/echelon/guess',{id:'n-g',answer:'666'})).status,404);
+  assert.equal((await call('/api/echelon/guess',{id:'n-0',answer:'Devincix'})).status,404);
   assert.equal((await call('/api/echelon/guess',{id:'eg-02',answer:'Dieu'})).gained,0);
   assert.equal((await call('/api/echelon/guess',{id:'eg-02',answer:'VALD'})).gained,1);
-  assert.equal((await call('/api/echelon/guess',{id:'eg-05',answer:'expansion'})).gained,0);
-  assert.equal((await call('/api/echelon/guess',{id:'eg-05',answer:'harmonieuse'})).gained,1);
+  assert.equal((await call('/api/echelon/guess',{id:'n-h',answer:'dix'})).gained,0);
+  assert.equal((await call('/api/echelon/guess',{id:'n-h',answer:'cornes'})).gained,1);
   assert.equal((await call('/api/echelon/guess',{id:'eg-01',answer:'Signe'})).gained,1);
   const clock=await call('/api/echelon/guess',{id:'eg-03',answer:'horloge'});
   assert.equal(clock.gained,1);
-  assert.deepEqual(clock.opened.map(item=>item.id),['music-fais-mieux']);
+  assert.deepEqual(clock.opened.map(item=>item.id),['music-la-matiere-dense','music-wanheda']);
   assert.ok(clock.state.pages.some(p=>p.id==='eg-10'));
   assert.equal((await call('/api/echelon/draft/eg-13')).status,404);
   // Discovery and duplication can occur before the first autosave completes.
   const firstSave=await call('/api/echelon/draft/eg-12',{revision:0,draft:draft([...sevens,src('b'),share(src('b'))])});
   assert.equal(firstSave.status,200);assert.equal(firstSave.revision,1);
-  assert.equal(firstSave.state.echelon,5);assert.equal(firstSave.state.capabilities.share,true);
+  assert.equal(firstSave.state.echelon,6);assert.equal(firstSave.state.capabilities.share,true);
   assert.equal((await call('/api/echelon/draft/eg-13')).status,403);
   assert.equal((await call('/api/echelon/draft/eg-12',{revision:0,draft:draft(pair)})).status,409);
   assert.equal((await call('/api/echelon/draft/eg-12',{revision:1,draft:draft(pair)})).revision,2);
@@ -199,6 +203,6 @@ test('retired reset cannot erase progress; public Worker exposes only starting t
   const res=await worker.fetch(new Request('https://test.local/api/57/progress',{method:'DELETE'}),{});
   assert.equal(res.status,410);
   const anon=await worker.fetch(new Request('https://test.local/api/echelon'),{});
-  assert.equal(anon.status,200);assert.equal((await anon.json()).nodes.length,4);
+  assert.equal(anon.status,200);assert.equal((await anon.json()).nodes.length,7);
   assert.equal((await worker.fetch(new Request('https://test.local/api/echelon/map'),{})).status,401);
 });

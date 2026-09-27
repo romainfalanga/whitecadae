@@ -737,7 +737,7 @@ async function me(request, env) {
     user: user ? { ...user, is_admin: !!user.is_admin, voix } : null,
     access,
     echelon: Number.isFinite(echelon) ? echelon : ECHELON_114,
-    gameEchelon: user ? gameLevel(await gameRows(env, user.id)) : 0,
+    gameEchelon: user ? gameLevel(await gameRows(env, user.id)) : 1,
     attenteMs: 0,
   });
 }
@@ -814,7 +814,7 @@ async function listAlbums(env, request) {
   // Apply the targeted, idempotent catalogue migration through the existing
   // database binding; no extra account-wide D1 permission is needed.
   if (!cataloguesRenamed.has(env.DB)) {
-    await env.DB.prepare(`UPDATE albums SET title = 'Fais Mieux'
+    await env.DB.prepare(`UPDATE albums SET title = '114'
       WHERE slug IN ('114','fais-mieux') AND title IN ('114','Fais mieux','Fais Mieux')
         AND EXISTS (SELECT 1 FROM songs WHERE album_id = albums.id AND slug = 'fais-mieux')`).run();
     cataloguesRenamed.add(env.DB);

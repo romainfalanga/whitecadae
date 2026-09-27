@@ -19,7 +19,7 @@ window.WCVideographie = (() => {
   function formBody(form){const data=new FormData(form);return {title:data.get('title'),description:data.get('description'),category:data.get('category'),min_echelon:Number(data.get('min_echelon'))};}
   async function feed(){
     const life=scope();document.title='Vidéographie — White Cadae';
-    app.innerHTML=`<section class="vg-page"><header class="vg-header"><div><h1>Vidéographie</h1><p>Des réflexions à partager. Des voix pour avancer ensemble.</p></div><button id="vg-add">＋ Ajouter une vidéo</button></header>
+    app.innerHTML=`<section class="vg-page"><header class="vg-header"><div><h1>Vidéographie</h1><p>Des réflexions à partager. Des voix pour avancer ensemble.</p></div><button id="vg-add" disabled>＋ Ajouter une vidéo</button></header>
       <div id="vg-publish" hidden></div><nav class="vg-filters chat-chips" aria-label="Catégories"><button data-category="tout" aria-pressed="true">Tout</button>${categories.map(([id,title])=>`<button data-category="${id}" aria-pressed="false">${title}</button>`).join('')}</nav>
       <p id="vg-status" role="status">Chargement…</p><div class="vg-grid" id="vg-grid"></div><button id="vg-more" class="vg-more" hidden>Voir plus de vidéos</button></section>`;
     const q=s=>app.querySelector(s);let category='tout',next=null,revision=0,loading=false,formReady=false,ceiling=9,uploads=false;
@@ -27,7 +27,7 @@ window.WCVideographie = (() => {
       if(append&&loading)return;const turn=++revision;loading=true;q('#vg-status').textContent='Chargement…';
       try{
         const data=await api('/api/videographies?category='+category+(append&&next?'&before='+next:''),{signal:life.signal});if(!life.current()||turn!==revision)return;
-        ceiling=data.echelon;uploads=data.uploads;next=data.nextBefore;
+        ceiling=data.echelon;uploads=data.uploads;next=data.nextBefore;q('#vg-add').disabled=false;
         const html=data.posts.map(p=>`<article class="vg-card"><a href="/videographie/video/${p.id}" data-link class="vg-card-link"><div class="vg-card-cover" aria-hidden="true"><span>▶</span><small>${esc(label(p.category))}</small></div><div class="vg-card-content"><span class="vg-eyebrow">Échelon ${p.min_echelon}</span><h2>${esc(p.title)}</h2>${p.description?`<p>${esc(p.description)}</p>`:''}<footer><span>${esc(p.username)}</span><span>${p.comments} réponse${p.comments>1?'s':''}</span></footer></div></a></article>`).join('');
         if(append)q('#vg-grid').insertAdjacentHTML('beforeend',html);else q('#vg-grid').innerHTML=html;
         q('#vg-more').hidden=!next;q('#vg-status').textContent=q('#vg-grid').children.length?'':'Aucune vidéo dans cette catégorie pour le moment. Partage la première réflexion.';
@@ -50,7 +50,7 @@ window.WCVideographie = (() => {
     let mode=uploads?'file':'link',file=null,fileUrl=null,duration=0,ticket=null,uploaded=false,busy=false,clientId=draft.client_id||crypto.randomUUID();
     panel.innerHTML=`<form class="vg-form"><h2>Partager une vidéo</h2>${fields(ceiling,draft)}<div class="chat-chips vg-source" aria-label="Source de la vidéo">${uploads?'<button type="button" data-source="file" aria-pressed="true">Fichier vidéo</button>':''}<button type="button" data-source="link" aria-pressed="${!uploads}">Lien YouTube</button></div>
       <label class="vg-file" ${uploads?'':'hidden'}>Choisir une vidéo<input type="file" accept="video/mp4,video/webm,video/quicktime"><small>10 minutes · 80 Mo maximum</small></label>
-      <label class="vg-link" ${uploads?'hidden':''}>Lien YouTube<input name="url" type="url" placeholder="https://www.youtube.com/watch?v=…" value="${esc(draft.url||'')}"></label><video class="vg-upload-preview" controls playsinline hidden></video>
+      <label class="vg-link" ${uploads?'hidden':''}>Lien YouTube<input name="url" type="url" ${uploads?'disabled':''} placeholder="https://www.youtube.com/watch?v=…" value="${esc(draft.url||'')}"></label><video class="vg-upload-preview" controls playsinline hidden></video>
       <p class="vg-form-status" role="status"></p><button type="submit">Publier la vidéo</button></form>`;
     const form=panel.querySelector('form'),q=s=>form.querySelector(s),status=q('.vg-form-status');
     const save=()=>{try{sessionStorage.setItem(key,JSON.stringify({...formBody(form),url:form.elements.url.value,client_id:clientId}));}catch{}};
@@ -58,15 +58,17 @@ window.WCVideographie = (() => {
     life.dispose(()=>{save();q('video').pause();if(fileUrl)URL.revokeObjectURL(fileUrl);});
     q('.vg-source').onclick=event=>{
       const button=event.target.closest('[data-source]');if(!button||busy)return;mode=button.dataset.source;
-      q('.vg-source').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));q('.vg-file').hidden=mode!=='file';q('.vg-link').hidden=mode!=='link';q('video').hidden=mode!=='file'||!file;q('video').pause();status.textContent='';
+      q('.vg-source').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));q('.vg-file').hidden=mode!=='file';q('.vg-link').hidden=mode!=='link';form.elements.url.disabled=mode!=='link';q('video').hidden=mode!=='file'||!file;q('video').pause();status.textContent='';
     };
     q('[type=file]').onchange=async event=>{
       const chosen=event.target.files[0];if(!chosen||busy)return;
       if(ticket)api('/api/vg-media/'+ticket,{method:'DELETE'}).catch(()=>{});ticket=null;uploaded=false;duration=0;file=null;
       if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=null;
       if(chosen.size>80*1024*1024){status.textContent='Cette vidéo dépasse 80 Mo.';q('video').hidden=true;return;}
-      file=chosen;fileUrl=URL.createObjectURL(file);const preview=q('video');preview.hidden=false;preview.src=fileUrl;
-      preview.onloadedmetadata=()=>{duration=preview.duration;status.textContent=Number.isFinite(duration)&&duration>0&&duration<=600?'Vidéo prête · '+mmss(duration):'Choisis une vidéo de dix minutes maximum.';};
+      file=chosen;status.textContent='Lecture du fichier…';fileUrl=URL.createObjectURL(file);const preview=q('video');preview.hidden=false;preview.src=fileUrl;
+      const inspect=()=>{duration=preview.duration;if(Number.isFinite(duration)&&duration>0)status.textContent=duration<=600?'Vidéo prête · '+mmss(duration):'Choisis une vidéo de dix minutes maximum.';};
+      preview.onloadedmetadata=()=>{inspect();if(!Number.isFinite(duration)){preview.currentTime=1e10;preview.ontimeupdate=()=>{inspect();if(Number.isFinite(duration)){preview.ontimeupdate=null;preview.currentTime=0;}};}};
+      preview.ondurationchange=inspect;
       preview.onerror=()=>{duration=0;status.textContent='Ce fichier ne peut pas être lu ici. Essaie une vidéo MP4 ou WebM compatible.';};
       preview.onplay=()=>WCPlayer.pause();preview.load();
     };
@@ -74,14 +76,14 @@ window.WCVideographie = (() => {
       event.preventDefault();if(busy)return;
       if(mode==='file'&&(!file||!Number.isFinite(duration)||duration<=0||duration>600)){status.textContent='Choisis une vidéo lisible de dix minutes maximum.';return;}
       if(mode==='link'&&!form.elements.url.value.trim()){status.textContent='Ajoute un lien YouTube.';return;}
-      busy=true;q('[type=submit]').disabled=true;save();
+      busy=true;q('[type=submit]').disabled=true;q('[type=file]').disabled=true;status.textContent='Envoi de la vidéo…';save();
       try{
         if(mode==='file'&&!uploaded){ticket=await WCVocal.upload(file,'video',duration,{id:ticket,onTicket:id=>ticket=id,onProgress:p=>status.textContent='Envoi de la vidéo · '+p+' %',signal:life.signal});uploaded=true;}
         status.textContent='Publication…';
         const result=await api('/api/videographies',{method:'POST',body:{...formBody(form),client_id:clientId,...(mode==='file'?{media_id:ticket}:{url:form.elements.url.value.trim()})}});
         if(!life.current())return;sessionStorage.removeItem(key);clientId=crypto.randomUUID();form.reset();navigate('/videographie/video/'+result.id);
       }catch(error){if(life.current())status.textContent=error.message;}
-      finally{busy=false;if(life.current())q('[type=submit]').disabled=false;}
+      finally{busy=false;if(life.current()){q('[type=submit]').disabled=false;q('[type=file]').disabled=false;}}
     };
   }
   async function detail(id){

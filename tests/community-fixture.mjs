@@ -8,7 +8,7 @@ export function fixture(){
   for(const level of [0,2,3,5,6,8,9,10,12,16,25,99]){
     const id=level+1;sql.prepare('INSERT INTO users(id,email,username,password_hash,is_admin) VALUES(?,?,?,?,?)').run(id,`qa${level}@local.test`,`QA${level}`,'unused',level===99?1:0);
     sql.prepare('INSERT INTO sessions(token,user_id,expires_at) VALUES(?,?,?)').run('qa'+level,id,'2099-01-01');
-    for(const riddle of ids.slice(0,level===99?0:level))sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(id,riddle,'2026-09-26');
+    for(const riddle of ids.slice(0,level===99?0:Math.max(0,level-1)))sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(id,riddle,'2026-09-26');
   }
   function prepare(query,args=[]){const params=()=>Object.fromEntries(args.map((v,i)=>[String(i+1),v]));return {bind(...a){return prepare(query,a)},async first(){return sql.prepare(query).get(params())||null},async all(){return {results:sql.prepare(query).all(params())}},async run(){const r=sql.prepare(query).run(params());return {meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}}}};}
   const objects=new Map();let calls=0;

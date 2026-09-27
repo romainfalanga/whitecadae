@@ -1,6 +1,6 @@
 # Accueil Orange et espaces communautaires
 
-L’accueil reprend les trois paragraphes d’origine, sans récit ajouté. Il affiche uniquement les accès acquis, dans cet ordre : Conversation (2), La matière danse (3), Les probabilités (4), Fais Mieux (5), Wanheda (6), Quand je vois je pense (7), Un fil entre deux infinis (8), Vidéographie (9).
+L’accueil conserve les trois paragraphes, adaptés à 57 (quatre morceaux) et 114 (trois morceaux). Les accès acquis apparaissent ensuite dans l’ordre des échelons. La grille actuelle, les signes et le lecteur sont documentés dans parcours-aa-conversation.md.
 
 Conversation conserve un fil commun et deux thèmes : Général et Indice. Les anciennes publications Interprétations et Idées deviennent Général, sans modifier leur seuil ni leur version de permissions. Les filtres de lecture sont indépendants des options de publication. Le formulaire reste à l’écran, et le fil défile entre les filtres et le formulaire.
 

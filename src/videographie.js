@@ -1,5 +1,5 @@
 import {gameRows} from './echelon-api.js';
-import {gameLevel,NODES} from './echelon.js';
+import {gameLevel,MAX_GAME_LEVEL} from './echelon.js';
 
 export const VIDEO_CATEGORIES = [
   {id:'univers',label:'Univers'}, {id:'philosophie',label:'Philosophiques'},
@@ -9,7 +9,7 @@ const VIDEO_LIMIT=80*1024*1024, AUDIO_LIMIT=8*1024*1024;
 const ready=new WeakMap();
 export async function ensureVideoTables(env) {
   if(ready.has(env.DB))return ready.get(env.DB);
-  const pending=env.DB.batch([
+  const pending=(async()=>{await env.DB.batch([
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS vg_media (
       id TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),kind TEXT NOT NULL,mime TEXT NOT NULL,
       size INTEGER NOT NULL,duration REAL NOT NULL,object_key TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending',
@@ -32,6 +32,12 @@ export async function ensureVideoTables(env) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_vg_comments_post ON vg_comments(post_id,id)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_vg_media_user ON vg_media(user_id,created_at)'),
   ]);
+  const columns=await env.DB.prepare('PRAGMA table_info(vg_posts)').all();
+  if(!columns.results.some(c=>c.name==='echelon_version')){
+    try{await env.DB.prepare('ALTER TABLE vg_posts ADD COLUMN echelon_version INTEGER NOT NULL DEFAULT 2').run();}
+    catch(error){if(!(await env.DB.prepare('PRAGMA table_info(vg_posts)').all()).results.some(c=>c.name==='echelon_version'))throw error;}
+  }
+  })();
   ready.set(env.DB,pending);
   try{await pending;}catch(error){ready.delete(env.DB);throw error;}
 }
@@ -84,7 +90,7 @@ export async function handleVideographie(request,env,{getUser,json}) {
   const url=new URL(request.url),path=url.pathname,method=request.method;
   const user=await getUser(request,env);
   if(!user)return json({error:'Connexion requise.'},401);
-  const level=gameLevel(await gameRows(env,user.id)),ceiling=user.is_admin?NODES.reduce((n,x)=>n+x.answers.length,0):level;
+  const level=gameLevel(await gameRows(env,user.id)),ceiling=user.is_admin?MAX_GAME_LEVEL:level;
   if(!user.is_admin&&level<9)return json({error:'La Vidéographie s’ouvre à l’échelon 9.'},403);
   if(!['GET','HEAD'].includes(method)&&request.headers.get('Origin')&&request.headers.get('Origin')!==url.origin)return json({error:'Origine refusée.'},403);
   await ensureVideoTables(env);
@@ -92,8 +98,9 @@ export async function handleVideographie(request,env,{getUser,json}) {
   const run=(sql,...args)=>env.DB.prepare(sql).bind(...args).run();
   const all=async(sql,...args)=>(await env.DB.prepare(sql).bind(...args).all()).results||[];
   const error=(message,status=400)=>json({error:message},status);
-  const post=async id=>{const p=await one('SELECT p.*,u.username FROM vg_posts p JOIN users u ON u.id=p.user_id WHERE p.id=?1 AND p.deleted_at IS NULL',id);return p&&(user.is_admin||p.min_echelon<=level)?p:null;};
-  const present=p=>({id:p.id,title:p.title,description:p.description,category:p.category,min_echelon:p.min_echelon,username:p.username,created_at:p.created_at,youtube_id:p.youtube_id,media_url:p.media_id?'/api/vg-media/'+p.media_id:null,editable:!!(user.is_admin||p.user_id===user.id),comments:p.comments||0});
+  const post=async id=>{const p=await one('SELECT p.*,u.username FROM vg_posts p JOIN users u ON u.id=p.user_id WHERE p.id=?1 AND p.deleted_at IS NULL',id);return p&&(user.is_admin||p.min_echelon+(p.echelon_version===2?1:0)<=level)?p:null;};
+  const threshold=p=>p.min_echelon+(p.echelon_version===2?1:0);
+  const present=p=>({id:p.id,title:p.title,description:p.description,category:p.category,min_echelon:threshold(p),username:p.username,created_at:p.created_at,youtube_id:p.youtube_id,media_url:p.media_id?'/api/vg-media/'+p.media_id:null,editable:!!(user.is_admin||p.user_id===user.id),comments:p.comments||0});
   const ownedMedia=async(id,kind)=>{const m=await one('SELECT * FROM vg_media WHERE id=?1 AND user_id=?2 AND kind=?3 AND state=?4',id,user.id,kind,'ready');return m;};
   let match;
 
@@ -102,7 +109,7 @@ export async function handleVideographie(request,env,{getUser,json}) {
     if(category!=='tout'&&!VIDEO_CATEGORIES.some(c=>c.id===category))return error('Catégorie inconnue.');
     if(!Number.isSafeInteger(before)||before<0)return error('Pagination invalide.');
     const rows=await all(`SELECT p.*,u.username,(SELECT count(*) FROM vg_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comments
-      FROM vg_posts p JOIN users u ON u.id=p.user_id WHERE p.deleted_at IS NULL AND (?1=1 OR p.min_echelon<=?2)
+      FROM vg_posts p JOIN users u ON u.id=p.user_id WHERE p.deleted_at IS NULL AND (?1=1 OR p.min_echelon+CASE WHEN p.echelon_version=2 THEN 1 ELSE 0 END<=?2)
       AND (?3='tout' OR p.category=?3) AND (?4=0 OR p.id<?4) ORDER BY p.id DESC LIMIT 25`,user.is_admin?1:0,level,category,before);
     const posts=rows.slice(0,24);
     return json({posts:posts.map(present),nextBefore:rows.length>24?posts.at(-1).id:null,categories:VIDEO_CATEGORIES,echelon:ceiling,uploads:!!env.MEDIA,limits:{videoBytes:VIDEO_LIMIT,audioBytes:AUDIO_LIMIT,videoSeconds:600,audioSeconds:180}});
@@ -120,7 +127,7 @@ export async function handleVideographie(request,env,{getUser,json}) {
     if(media&&await one('SELECT id FROM vg_posts WHERE media_id=?1',media.id))return error('Cette vidéo a déjà été publiée.',409);
     const recent=await one("SELECT count(*) AS n FROM vg_posts WHERE user_id=?1 AND created_at>datetime('now','-1 day')",user.id);
     if(recent.n>=10&&!user.is_admin)return error('Tu peux publier dix vidéos par jour. Réessaie demain.',429);
-    const result=await run('INSERT INTO vg_posts(user_id,title,description,category,min_echelon,youtube_id,media_id,client_id) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)',user.id,title,description,b.category,minimum,yt,media?.id||null,b.client_id);
+    const result=await run('INSERT INTO vg_posts(user_id,title,description,category,min_echelon,youtube_id,media_id,client_id,echelon_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,3)',user.id,title,description,b.category,minimum,yt,media?.id||null,b.client_id);
     return json({id:result.meta.last_row_id},201);
   }
   if((match=path.match(/^\/api\/videographies\/(\d+)$/))){
@@ -133,8 +140,8 @@ export async function handleVideographie(request,env,{getUser,json}) {
       const title=String(b.title||'').trim(),description=String(b.description||'').trim(),minimum=b.min_echelon;
       if(!title||title.length>160||description.length>4000||!VIDEO_CATEGORIES.some(c=>c.id===b.category))return error('Vérifie le titre, la description et la catégorie.');
       if(!Number.isInteger(minimum)||minimum<9||minimum>ceiling)return error('Échelon invalide.');
-      if(minimum<p.min_echelon&&(await one('SELECT count(*) AS n FROM vg_comments WHERE post_id=?1',p.id)).n)return error('L’échelon ne peut pas être abaissé après les premières réponses, pour conserver leur audience.');
-      await run("UPDATE vg_posts SET title=?1,description=?2,category=?3,min_echelon=?4,updated_at=datetime('now') WHERE id=?5",title,description,b.category,minimum,p.id);return json({ok:true});
+      if(minimum<threshold(p)&&(await one('SELECT count(*) AS n FROM vg_comments WHERE post_id=?1',p.id)).n)return error('L’échelon ne peut pas être abaissé après les premières réponses, pour conserver leur audience.');
+      await run("UPDATE vg_posts SET title=?1,description=?2,category=?3,min_echelon=?4,echelon_version=3,updated_at=datetime('now') WHERE id=?5",title,description,b.category,minimum,p.id);return json({ok:true});
     }
   }
   if((match=path.match(/^\/api\/videographies\/(\d+)\/comments$/))){
@@ -209,15 +216,30 @@ export async function handleVideographie(request,env,{getUser,json}) {
     if(route[2]==='upload'&&method==='PUT'){
       if(m.user_id!==user.id)return error('Média introuvable.',404);
       if(m.state==='ready')return json({id:m.id,ready:true});
-      if(Number(request.headers.get('Content-Length'))!==m.size||String(request.headers.get('Content-Type')).split(';')[0].toLowerCase()!==m.mime)return error('Le fichier ne correspond pas à l’envoi préparé.');
+      const declaredSize=request.headers.get('Content-Length');
+      if(!request.body||(declaredSize!==null&&Number(declaredSize)!==m.size)||String(request.headers.get('Content-Type')).split(';')[0].toLowerCase()!==m.mime)return error('Le fichier ne correspond pas à l’envoi préparé.');
       const claimed=await run("UPDATE vg_media SET state='uploading',upload_started_at=unixepoch() WHERE id=?1 AND (state='pending' OR (state='uploading' AND upload_started_at<unixepoch()-600))",m.id);
       if(!claimed.meta.changes)return error('Un envoi est déjà en cours.',409);
       try{
-        const stored=await env.MEDIA.put(m.object_key,request.body,{httpMetadata:{contentType:m.mime}});
+        // R2 needs a stream with a known length. Browsers can omit Content-Length
+        // on streamed requests, so use the validated ticket and enforce its size.
+        let received=0;
+        const stream=typeof FixedLengthStream==='function'?new FixedLengthStream(m.size):new TransformStream({
+          transform(chunk,controller){received+=chunk.byteLength;if(received>m.size)throw new Error('Unexpected upload size');controller.enqueue(chunk);},
+          flush(){if(received!==m.size)throw new Error('Unexpected upload size');},
+        });
+        const [stored]=await Promise.all([
+          env.MEDIA.put(m.object_key,stream.readable,{httpMetadata:{contentType:m.mime}}),
+          request.body.pipeTo(stream.writable),
+        ]);
         if(stored.size!==m.size)throw new Error('Unexpected upload size');
         await run("UPDATE vg_media SET state='ready' WHERE id=?1",m.id);
         return json({id:m.id,ready:true});
-      }catch(error){await run("UPDATE vg_media SET state='pending' WHERE id=?1",m.id);throw error;}
+      }catch{
+        await env.MEDIA.delete(m.object_key).catch(()=>{});
+        await run("UPDATE vg_media SET state='pending' WHERE id=?1",m.id);
+        return error('L’envoi n’a pas abouti. Vérifie ta connexion et réessaie.',503);
+      }
     }
     if(route[2]==='transcribe'&&method==='POST'){
       if(m.user_id!==user.id||m.kind!=='audio'||m.state!=='ready')return error('Enregistrement introuvable.',404);
@@ -239,9 +261,9 @@ export async function handleVideographie(request,env,{getUser,json}) {
     }
     if(!route[2]&&['GET','HEAD'].includes(method)&&m.state==='ready'){
       const p=await one('SELECT * FROM vg_posts WHERE media_id=?1',m.id);
-      const c=await one('SELECT c.deleted_at,p.min_echelon,p.deleted_at AS post_deleted FROM vg_comments c JOIN vg_posts p ON p.id=c.post_id WHERE c.media_id=?1',m.id);
+      const c=await one('SELECT c.deleted_at,p.min_echelon,p.echelon_version,p.deleted_at AS post_deleted FROM vg_comments c JOIN vg_posts p ON p.id=c.post_id WHERE c.media_id=?1',m.id);
       if(p?.deleted_at||c?.deleted_at||c?.post_deleted)return error('Média introuvable.',404);
-      const required=p?.min_echelon??c?.min_echelon;
+      const required=p?threshold(p):c?threshold(c):undefined;
       if(required!==undefined?(!user.is_admin&&level<required):m.user_id!==user.id)return error('Média introuvable.',404);
       const head=await env.MEDIA.head(m.object_key);if(!head)return error('Média introuvable.',404);
       const range=rangeOf(request.headers.get('Range'),head.size);

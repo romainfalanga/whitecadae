@@ -92,7 +92,7 @@ test('failed transcription retains audio, allows bounded retries, and pagination
   await f.env.MEDIA.put('sample',new Uint8Array([1,2,3,4]));
   for(let i=0;i<3;i++)assert.equal((await call('/api/vg-media/sample/transcribe','POST',{})).status,503);
   assert.equal((await call('/api/vg-media/sample/transcribe','POST',{})).status,429);assert.equal(failures,3);assert.ok(await f.env.MEDIA.head('sample'));
-  f.sql.prepare("INSERT INTO vg_posts(id,user_id,title,category,min_echelon,youtube_id,client_id) VALUES(1,13,'Thread','idees',12,'abcdefghijk','pagination-thread')").run();
+  f.sql.prepare("INSERT INTO vg_posts(id,user_id,title,category,min_echelon,youtube_id,client_id,echelon_version) VALUES(1,13,'Thread','idees',12,'abcdefghijk','pagination-thread',3)").run();
   const insert=f.sql.prepare("INSERT INTO vg_comments(id,post_id,parent_id,user_id,body,words,client_id) VALUES(?,1,?,13,'Transcript','[]',?)");
   for(let i=1;i<=205;i++)insert.run(i,i===1?null:i-1,'comment-'+i);
   const first=await call('/api/videographies/1/comments');assert.equal(first.comments.length,100);assert.equal(first.nextAfter,100);
@@ -106,8 +106,39 @@ test('removed conversation themes migrate without broadening historical or curre
   const f=fixture();
   f.sql.exec("INSERT INTO conversation_messages(user_id,body,min_echelon,echelon_version,theme) VALUES(13,'Old private',6,1,'interpretations'),(13,'Current private',12,2,'idees'),(13,'Common',2,2,'idees')");
   const call=async level=>{const r=await worker.fetch(new Request('https://test.local/api/conversation',{headers:{Cookie:'wc_session=qa'+level}}),f.env);return r.json();};
-  const low=await call(2);assert.deepEqual(low.messages.map(m=>m.body),['Common']);assert.equal(low.messages[0].theme,'general');
-  const high=await call(12);assert.ok(high.messages.some(m=>m.body==='Current private'));assert.ok(!high.messages.some(m=>m.body==='Old private'));
+  const low=await call(2);assert.deepEqual(low.messages,[]);
+  const third=await call(3);assert.deepEqual(third.messages.map(m=>m.body),['Common']);assert.equal(third.messages[0].theme,'general');assert.equal(third.messages[0].min_echelon,3);
+  const high=await call(12);assert.ok(!high.messages.some(m=>m.body==='Current private'));assert.ok(!high.messages.some(m=>m.body==='Old private'));
+  assert.ok((await call(16)).messages.some(m=>m.body==='Current private'&&m.min_echelon===13));
   const old=f.sql.prepare("SELECT min_echelon,echelon_version,theme FROM conversation_messages WHERE body='Old private'").get();assert.equal(old.min_echelon,6);assert.equal(old.echelon_version,1);assert.equal(old.theme,'general');
+  f.sql.close();
+});
+
+test('upload streams without a Content-Length are checked, recover after failure and retain exact bytes',async()=>{
+  const f=fixture();
+  const call=(path,method,body,headers={})=>worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session=qa9',...headers},body}),f.env);
+  const ticket=await(await call('/api/vg-media','POST',JSON.stringify({kind:'video',mime:'video/webm',size:8,duration:1}),{'Content-Type':'application/json'})).json();
+  const upload=bytes=>call(ticket.upload_url,'PUT',new Uint8Array(bytes),{'Content-Type':'video/webm'});
+  assert.equal((await upload([1,2,3,4])).status,503);
+  assert.equal(f.sql.prepare('SELECT state FROM vg_media WHERE id=?').get(ticket.id).state,'pending');
+  assert.equal((await upload([0,1,2,3,4,5,6,7,8])).status,503);
+  assert.equal(f.objects.size,0);
+  assert.equal((await upload([0,1,2,3,4,5,6,7])).status,200);
+  const published=await call('/api/videographies','POST',JSON.stringify({title:'Uploaded',category:'univers',min_echelon:9,media_id:ticket.id,client_id:crypto.randomUUID()}),{'Content-Type':'application/json'});
+  assert.equal(published.status,201);
+  const replay=await worker.fetch(new Request('https://test.local/api/vg-media/'+ticket.id,{headers:{Cookie:'wc_session=qa9'}}),f.env);
+  assert.deepEqual([...new Uint8Array(await replay.arrayBuffer())],[0,1,2,3,4,5,6,7]);
+  f.sql.close();
+});
+
+test('existing video thresholds keep the same earned-answer audience after the starting-level change',async()=>{
+  const f=fixture();
+  const call=async(level,path='/api/videographies')=>worker.fetch(new Request('https://test.local'+path,{headers:{Cookie:'wc_session=qa'+level}}),f.env);
+  await call(9);
+  f.sql.prepare("INSERT INTO vg_posts(id,user_id,title,category,min_echelon,youtube_id,client_id) VALUES(1,13,'Existing video','univers',9,'abcdefghijk','existing-version-two')").run();
+  assert.deepEqual((await(await call(9)).json()).posts,[]);
+  assert.equal((await call(9,'/api/videographies/1')).status,404);
+  const tenth=await(await call(10)).json();assert.equal(tenth.posts.length,1);assert.equal(tenth.posts[0].min_echelon,10);
+  assert.equal((await call(10,'/api/videographies/1')).status,200);
   f.sql.close();
 });

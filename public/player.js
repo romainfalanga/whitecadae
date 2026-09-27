@@ -5,8 +5,11 @@
   let album = window.WC57;
   const audio = document.getElementById('music-audio');
   const root = document.getElementById('music-player');
-  const key = 'wc_music_57_v1';
+  const key = 'wc_music_progressive_v2';
   const icon = window.WCIcon;
+  audio.preload = 'auto';
+  audio.setAttribute('playsinline','');
+  audio.setAttribute('webkit-playsinline','');
   let selected = -1;
   let repeat = false;
   let pendingSeek = null;
@@ -46,7 +49,7 @@
       </div>
       <div class="player-extras">
         <a class="player-icon" id="player-lyrics" data-link aria-label="Lire les paroles du morceau">${icon('book')}</a>
-        <button type="button" class="player-icon" id="player-repeat" aria-label="Répéter l’album" aria-pressed="false">${icon('repeat')}</button>
+        <button type="button" class="player-icon" id="player-repeat" aria-label="Répétition de l’album — activer la répétition du morceau" aria-pressed="false">${icon('repeat')}</button>
         <label class="player-volume">${icon('volume')}<span class="sr-only">Volume</span><input id="player-volume" type="range" min="0" max="1" step="0.05" value="1"></label>
       </div>
     </div>
@@ -78,7 +81,8 @@
   function update() {
     root.hidden = !track();
     document.body.classList.toggle('with-player', !!track());
-    if (!track()) return;
+    if (!track()) { resize(); signal(); return; }
+    audio.loop = repeat || album.tracks.length === 1;
     el('title').textContent = track().title;
     el('album').textContent = `${album.artist} · ${album.album}`;
     el('art').innerHTML = album.cover ? `<img src="${album.cover}" alt="" width="52" height="52">` : '<span class="player-date" aria-hidden="true">18<br>07</span>';
@@ -86,7 +90,9 @@
     el('lyrics').href = `/chanson/${track().slug}`;
     el('play').innerHTML = icon(active() ? 'pause' : 'play');
     el('play').setAttribute('aria-label', active() ? 'Mettre en pause' : error ? 'Réessayer la lecture' : 'Lire');
-    el('next').disabled = selected === album.tracks.length - 1 && !repeat;
+    el('next').disabled = false;
+    el('repeat').innerHTML = icon(repeat ? 'repeatOne' : 'repeat');
+    el('repeat').setAttribute('aria-label',repeat?'Répétition du morceau — revenir à la répétition de l’album':'Répétition de l’album — répéter seulement ce morceau');
     el('repeat').setAttribute('aria-pressed', String(repeat));
     el('volume').value = String(audio.volume);
     root.classList.toggle('is-playing', !audio.paused);
@@ -182,7 +188,7 @@
   }
   function next() {
     if (selected + 1 < album.tracks.length) playTrack(selected + 1);
-    else if (repeat) playTrack(0);
+    else if (album.tracks.length) playTrack(0);
   }
   function previous() {
     if (audio.currentTime > 3 || selected === 0) { seek(0); return; }
@@ -198,12 +204,12 @@
   });
   audio.addEventListener('timeupdate', () => { updatePosition(); if (Date.now() - lastSaved > 5000) save(); });
   audio.addEventListener('durationchange', updatePosition);
-  audio.addEventListener('playing', () => { loading = false; error = ''; update(); });
+  audio.addEventListener('playing', () => { loading = false; error = ''; if('audioSession' in navigator){try{navigator.audioSession.type='playback';}catch{}} systemMetadata(); update(); });
   audio.addEventListener('waiting', () => { if (!audio.paused) loading = true; update(); });
-  audio.addEventListener('pause', () => { loading = false; save(); update(); });
+  audio.addEventListener('pause', () => { if(audio.ended)return; loading = false; save(); update(); });
   audio.addEventListener('volumechange', () => { save(); update(); });
   audio.addEventListener('error', () => { loading = false; error = 'Le morceau ne se charge pas. Vérifie ta connexion puis réessaie.'; update(); });
-  audio.addEventListener('ended', () => { save(); next(); update(); });
+  audio.addEventListener('ended', () => { save(); if(repeat){seek(0);playTrack(selected);}else next(); });
   window.addEventListener('pagehide', save);
   document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else updatePosition(); });
   el('play').onclick = () => toggle();
@@ -238,14 +244,15 @@
   let savedTrack=null;
   function setAlbums(extra) {
     const previous=track()?.slug;
-    albums=[window.WC57,...extra];
+    albums=extra.some(a=>a.id==='57')?extra:[window.WC57,...extra];
     const nextAlbum=albums.find(a=>a.tracks.some(t=>t.slug===previous));
     if(previous&&!nextAlbum){
       pause();selected=-1;pendingSeek=null;album=window.WC57;
       audio.removeAttribute('src');audio.load();
       safeStore(null);
       if('mediaSession' in navigator)navigator.mediaSession.metadata=null;
-    }else if(nextAlbum)album=nextAlbum;
+    }else if(nextAlbum){album=nextAlbum;selected=album.tracks.findIndex(t=>t.slug===previous);}
+    else if(!previous){album=albums.find(a=>a.id===album.id)||albums[0]||window.WC57;}
     if(!previous&&savedTrack){
       const restored=albums.find(a=>a.tracks.some(t=>t.slug===savedTrack.slug));
       if(restored){album=restored;selected=album.tracks.findIndex(t=>t.slug===savedTrack.slug);pendingSeek=Math.max(0,Math.min(Number(savedTrack.position)||0,track().duration-.1));}
@@ -260,12 +267,12 @@
     beforeRecording() { pause(); if ('audioSession' in navigator) { try { navigator.audioSession.type = 'auto'; } catch {} } },
   });
   try {
-    const saved = JSON.parse(localStorage.getItem(key) || 'null');
+    const saved = JSON.parse(localStorage.getItem(key) || localStorage.getItem('wc_music_57_v1') || 'null');
     if (saved) {
       savedTrack=saved;
       selected = album.tracks.findIndex((t) => t.slug === saved.slug);
       if (selected >= 0) pendingSeek = Math.max(0, Math.min(Number(saved.position) || 0, track().duration - 0.1));
-      repeat = saved.repeat === true;
+      repeat = !!localStorage.getItem(key) && saved.repeat === true;
       if (Number.isFinite(saved.volume)) audio.volume = Math.max(0, Math.min(saved.volume, 1));
     }
   } catch { /* storage is optional */ }

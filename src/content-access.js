@@ -16,7 +16,6 @@ export function buildOpenings(rows=[],user={}){
   const access=contentAccess(user,rows);
   const items=[
     {id:'home',title:'Escape Game Orange',description:'L’histoire et le point de départ du jeu.',level:0,open:true,href:'/'},
-    {id:'music-57',title:'57',description:'Les quatre morceaux de Vulpis, dans Musiques.',level:0,open:true,href:'/musique#album-57'},
     {id:'lyrics',title:'Paroles',description:'Lire les textes des morceaux auxquels tu as accès.',level:0,open:true,href:'/paroles'},
     {id:'echelons',title:'Échelons',description:'Proposer les signes et conserver les découvertes sur ton compte.',level:0,open:true,href:'/echelon'},
     {id:'profile',title:'Mon profil et mon arborescence',description:'Suivre tes découvertes et les chemins qui s’ouvrent.',level:0,open:true,href:user.username?'/membre/'+encodeURIComponent(user.username):'/parcours'},

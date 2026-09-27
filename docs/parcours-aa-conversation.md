@@ -1,63 +1,47 @@
-# Parcours, ouvertures et conversations — septembre 2026
+# Progression et espaces communautaires — état du 27 septembre 2026
 
-## Intention et déroulé
+Le départ est à l’échelon 1. Chaque réponse complète fait gagner un échelon ; une partie de réponse seule ne rapporte pas de point. Les identifiants des anciennes découvertes restent enregistrés. Les réponses retirées conservent leurs points historiques, sans rester proposées.
 
-Le jeu invite à rapprocher plusieurs lectures, extérioriser une idée et observer sa propre manière de penser. Les textes de *Wanheda*, *Quand je vois je pense* et *Un fil entre deux infinis* donnent la place aux images mentales, aux mouvements, aux connexions et à leur expression. Ils sont découverts successivement, sans page narrative AA intermédiaire.
+| Échelon | Nouveau contenu |
+| --- | --- |
+| 1 | 30 vins divins (57) et ses signes |
+| 2 | Conversation |
+| 3 | Sans indices dans les dés (57) et ses signes |
+| 4 | 13h20 (57) et son signe |
+| 5 | Orange (57) et AA |
+| 6 | La matière dense (114) ; Wanheda (18 juillet 2019, accès conservé) |
+| 7 | Les probabilités (114) ; Quand je vois je pense (18 juillet 2019, accès conservé) |
+| 8 | Fais Mieux (114) ; Un fil entre deux infinis (18 juillet 2019, accès conservé) |
+| 9 | Vidéographie |
 
-1. Corriger les réponses et préserver chaque découverte enregistrée.
-2. Retirer la page narrative AA et son bouton ; conserver l’énigme et ses découvertes. Distribuer les trois morceaux et leurs paroles aux échelons 5, 6 et 7.
-3. Construire la carte à partir des règles de visibilité et d’accès du jeu, sans second catalogue ni plafond annoncé. Ajouter une vue des ouvertures par échelon, calculée à partir des permissions réelles.
-4. Croiser les conversations par intention et niveau d’accès, tout en préservant les anciens messages.
-5. Vérifier les migrations, permissions et interactions avant de publier sur le Worker existant.
+L’ordre de la page Musiques est 57, 114, puis 18 juillet 2019. Les albums ne débloquent jamais leurs morceaux en bloc. 57 et 114 portent le nom d’artiste Vulpis. Les seuils de 18 juillet 2019 restent individuels aux échelons 6, 7 et 8, faute de nouvelle attribution demandée pour ces titres.
 
-## Signes et ouvertures
+## Signes
 
-- Une réponse complète vaut un échelon. Les fragments ne donnent pas de point.
-- Départ : porte sans indice, Aigle, XEU, Sans indices dans les dés.
-- Aigle ouvre Aiguille et fait apparaître Trompettes. Horloge dans Aiguille ouvre le laboratoire ; Détails seul ne le fait pas.
-- Une réponse de XEU révèle Mélange-les… ; ses deux réponses permettent de la résoudre. Cette lecture mène à M = M, accessible dès quatre échelons.
-- 5 vins divins apparaît dès un échelon, jouable à deux. White Cadae et 30 vins divins apparaissent à deux. Les deux dates révèlent 57 et le rendent jouable à six.
-- 57 demande 12 apôtres et Signe. La première réponse révèle 7, jouable à huit, qui demande Galaxie et Signe. Sans indices dans les dés sépare toujours ces deux énigmes dans la liste, même pour une ancienne sauvegarde.
-- AA apparaît et s’ouvre à cinq échelons. Sa réponse est Andromédien autiste.
-- Les autres dépendances existantes, notamment 13h20, restent inchangées.
-- Dans Horloge, la découverte du partage révèle le dernier tableau verrouillé ; résoudre les durées centrales permet de le jouer. Les tableaux restent dans une seule page.
+- 30 vins divins : 30 vins divins, 57, Prends la bête, XEU, Aigle, White Cadae, M = M.
+- Sans indices dans les dés : Sans indices dans les dés, 5 vins divins, Trompettes, Aiguille, 7.
+- 13h20 : 13h20.
+- Orange : AA.
+- Prends la bête accepte dix cornes et deux cornes comme deux réponses distinctes, y compris écrites en chiffres ou précédées de « Prends la bête à ».
+- Devincix et Katikas ne sont plus proposés ni acceptés. Mélange-les… est retiré de la liste active pour respecter les signes demandés au départ ; ses anciens points restent acquis.
+- Horloge exige la réponse Horloge dans Aiguille. Détails ou une ancienne trace de visite ne suffisent pas. Les ateliers exigent également l’accès à leurs morceaux. Le dernier tableau conserve sa dépendance au tableau central.
 
-Ces seuils conservent plusieurs pistes en parallèle et des énigmes grisées compréhensibles. Aucun nombre fixe ne prétend être la fin du jeu : l’horizon est le score actuel augmenté des réponses restantes dans les énigmes visibles et dénombrées. La porte garde un nombre inconnu.
+## Accès et affichage
 
-## Carte personnelle
+Les règles du serveur alimentent les catalogues, paroles, fichiers MP3, pochettes, corpus, ouvertures de l’accueil et carte personnelle. La session navigateur ne reçoit que les morceaux accessibles. Les requêtes directes vers les fichiers et textes verrouillés sont refusées.
 
-`buildJourney` consomme le même état filtré que la page Échelons. Les liens sont déduits des règles `requires` et `reveal`; Horloge représente le passage vers ses tableaux. Les conditions par échelon figurent sur chaque carte. La recherche ignore les accents ; les filtres éclairent les cartes concernées sans masquer leurs relations. Le panneau de détail montre uniquement les réponses déjà trouvées, le nombre de lectures incomplètes, les conditions connues et les chemins visibles reliés.
+L’accueil conserve ses trois paragraphes, avec quatre morceaux dans 57 et trois dans 114, puis les liens déjà acquis dans l’ordre des échelons. Les paroles quittent le menu principal et restent accessibles depuis chaque morceau et le lecteur. La carte du profil garde le défilement natif de la page et les détails attachés à chaque piste.
 
-La carte est accessible uniquement pour son propre compte. Les profils publics conservent leur filtrage selon le territoire du visiteur. Aucune réponse future, condition secrète ou liste exhaustive des énigmes n’est envoyée au navigateur. Le réseau, les vues et les données de progression restent les mêmes sur ordinateur et mobile ; la carte défile dans son propre cadre et le détail passe sous elle sur petit écran.
+## Lecteur
 
-## Ouvertures par échelon
+Une seule balise audio native persiste entre les pages. L’album disponible tourne en boucle par défaut ; l’icône avec 1 active la boucle native du morceau. Un album réduit à un seul titre utilise aussi la boucle native. Les boutons système et les métadonnées sont reliés à Media Session ; la session audio demande le mode playback. Aucun changement de visibilité ne met la musique en pause. Les médias vocaux prennent la priorité uniquement sur une action de lecture ou d’enregistrement.
 
-Une seconde vue du parcours présente les espaces et les contenus sur une ligne de progression. Elle est accessible depuis le profil et par l’onglet Mes paliers. Les espaces du départ sont suivis de Conversation à 2, Wanheda à 5, Quand je vois je pense à 6, Un fil entre deux infinis à 7, puis Vidéographie à 9. Fais Mieux prolonge la progression avec La matière danse à 10, Les probabilités à 12 et Fais Mieux à 14. Les textes passent de l’observation des mécanismes à l’orientation des possibles, puis à l’amélioration personnelle ; les échelons intermédiaires laissent le temps d’explorer. Chaque morceau ouvre son audio et ses paroles en même temps. Le 9 correspond au rang historique 4 de Vidéographie pour un nouveau joueur ; les droits déjà acquis restent conservés et sont signalés.
+## Conversation et vidéo
 
-Tous les joueurs voient chaque échelon depuis le départ jusqu’à leur position actuelle, y compris les intervalles sans nouveau contenu. Un repère « Tu es ici », un saut vers le palier actuel et le détail des accès gagnés permettent de se situer. Le prochain contenu apparaît en gris, sans lien actif ; les contenus plus lointains restent cachés. Le compte auteur voit tous les paliers de contenu prévus. Une réponse qui ouvre un contenu affiche son titre et un lien ; un échelon sans contenu reste visible dans la frise. Aucun compteur de signes n’inclut ces contenus et aucun plafond final du jeu n’est annoncé. Horloge reste une ouverture par découverte, affichée uniquement lorsque ce chemin est connu.
+Conversation conserve un fil général avec les filtres Tout, Général et Indice. Le formulaire reste adjacent au lecteur. La saisie ne dépasse pas 72 pixels ; avec le clavier ouvert, le titre et le lecteur se masquent visuellement pour laisser de la place au fil, sans arrêter la musique.
 
-Les seuils des morceaux sont définis une seule fois dans `music-catalogue.js`, puis partagés par le catalogue, les paroles, les fichiers audio, la pochette, le corpus et les archives du profil. Le lecteur reçoit seulement les pistes autorisées et garde une file dans leur ordre. La vue des espaces s’appuie sur `content-access.js`, également utilisé pour les permissions de Conversation et Vidéographie. Aucune migration de progression ni réinitialisation de données n’est nécessaire.
+Les anciens messages version 1 gardent leur règle historique. Les anciens messages et vidéos version 2 ajoutent un à leur seuil lors de la lecture : le nouveau point initial ne rend pas leurs discussions privées accessibles plus tôt. Les nouvelles publications utilisent la version 3 et les nouveaux échelons directement.
 
-## Conservation des données
+Vidéographie accepte des vidéos MP4, WebM et QuickTime lisibles par le navigateur, ou des liens YouTube. Le formulaire attend ses permissions avant de s’ouvrir. Un ancien champ de lien invalide ne bloque pas l’import fichier. Les fichiers sans type déclaré sont reconnus par leur extension ; les WebM dont la durée arrive tard sont pris en charge. Le flux vers R2 reçoit une taille fixe et vérifiée, y compris sans en-tête Content-Length. Un échec laisse l’envoi réessayable.
 
-Les identifiants existants et les lignes de progression ne sont ni supprimés ni réécrits. Les réponses Signe de 57 et 7 retrouvent chacune leur crédit. Le crédit Aigle accordé dans la version précédente reste acquis. Les nouvelles réponses Signe restent indépendantes.
-
-La correction 12 archanges → 12 apôtres conserve un ancien échelon complet. Une réponse historique incomplète transfère uniquement le fragment 12, jamais arc ou ange. Les fragments et la réponse complète ne se cumulent pas en plusieurs échelons.
-
-## Conversation
-
-Chaque message porte un thème : Général pour échanger librement, Indices pour laisser une piste sans révéler la solution, Interprétations pour argumenter une lecture, Idées pour développer et essayer une proposition. Le formulaire donne une courte invitation adaptée au thème. Aucune restriction automatique des propos ou promesse de détection des spoilers n’est ajoutée.
-
-Un panneau regroupe les thèmes et un réglage d’échelon dépliable. La sélection courante et le nombre de messages chargés sont toujours résumés, avec remise à zéro. Les thèmes passent sur deux colonnes sur mobile, les contrôles et le formulaire restent de pleine largeur. Le filtre Tout réunit les thèmes ; chaque thème se croise avec les niveaux exact, minimal, maximal ou les messages historiques. Le serveur applique d’abord les droits, le thème et le niveau, puis la pagination. Un thème ne permet jamais de contourner un seuil d’échelon. Les anciens messages conservent `echelon_version=1` et sont classés Général ; les nouveaux utilisent le score actuel et `echelon_version=2`.
-
-La colonne `theme` est ajoutée de façon additive et idempotente au premier accès autorisé. Les réponses privées utilisent `Cache-Control: no-store`. Le service worker ne met en cache aucune API.
-
-## Validation
-
-Les tests couvrent les réponses indépendantes, le transfert historique, les accès de 0 à 14 et chaque frontière de morceau, les files de lecture partielles, les ouvertures par étape, la vue auteur, la progression complète possible, la carte partielle et ses liens, les thèmes croisés avec les niveaux, la pagination et la conservation des audiences historiques. Les essais dans le navigateur vérifient le profil, les deux vues du parcours, leurs liens et les déblocages sur ordinateur et mobile. Les messages et comptes d’essai restent dans la base locale.
-
-## Audio Fais Mieux
-
-La pochette PNG fournie est conservée. Les WAV originaux restent intacts ; trois MP3 stéréo 256 kbit/s sont servis par le lecteur. Les probabilités : retrait des 9 600 premiers échantillons (0,2 seconde à 48 kHz), qui contenaient une impulsion initiale suivie de silence ; fondu d’entrée de 3 ms et de sortie de 150 ms dans la queue du morceau. Le master nettoyé contient exactement 4 464 000 échantillons stéréo, soit 93 secondes. Le MP3 utilise les informations de délai et de remplissage LAME/Xing. La durée du catalogue est 93 s et l’affichage est vérifié avec les métadonnées réelles du navigateur.
-
-L’URL historique des paroles `la-matiere-dense` est conservée afin de garder les références existantes ; le titre affiché est La matière danse. Le titre d’album Fais Mieux est appliqué à l’album existant sans recréer ses morceaux ni leurs lignes de paroles.
+Les réponses vocales conservent la voix enregistrée, les filtres audio, la transcription modifiable, les minutages et la lecture des réponses en chaîne. La lecture des fichiers est authentifiée et prend en charge les plages d’octets. Aucun fichier n’est rendu public par le bucket R2.

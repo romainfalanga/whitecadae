@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {handleConversation, conversationAccess} from '../src/conversation.js';
 import {ensureGameTables} from '../src/echelon-api.js';
-import {NODES} from '../src/echelon.js';
+import {NODES,MAX_GAME_LEVEL} from '../src/echelon.js';
 import {NODES as OLD} from '../src/enigmas57.js';
 
 const sql=new DatabaseSync(':memory:');
@@ -22,10 +22,10 @@ test('conversation uses every actual rung, rejects unauthorized levels and prese
   await ensureGameTables(env);
   const ids=NODES.flatMap(n=>n.answers.map(a=>a.id));
   const put=(user,id)=>sql.prepare("INSERT OR IGNORE INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,CURRENT_TIMESTAMP)").run(user,id);
-  ids.slice(0,10).forEach(id=>put(1,id));
-  ['eg-02-1','eg-02-2'].forEach(id=>put(2,id));
+  ids.slice(0,9).forEach(id=>put(1,id));
+  ['eg-02-1'].forEach(id=>put(2,id));
   OLD.flatMap(n=>n.answers.map(a=>a.id)).forEach(id=>put(4,id));
-  assert.equal(conversationAccess(low,['eg-02-1','eg-02-2'].map(riddle_id=>({riddle_id,solved_at:'now'}))).readable,true);
+  assert.equal(conversationAccess(low,['eg-02-1'].map(riddle_id=>({riddle_id,solved_at:'now'}))).readable,true);
   assert.equal((await call(null)).status,401);
   assert.equal((await call({id:3})).status,403);
   assert.equal((await call(high,{body:'At ten',min_echelon:10})).status,201);
@@ -34,14 +34,14 @@ test('conversation uses every actual rung, rejects unauthorized levels and prese
   assert.equal((await call(low,{body:'At two',min_echelon:2})).status,201);
   const highView=await call(high);
   assert.equal(highView.echelon,10);
-  assert.ok(highView.messages.some(m=>m.body==='At ten'&&m.echelon_version===2));
+  assert.ok(highView.messages.some(m=>m.body==='At ten'&&m.echelon_version===3));
   assert.ok(!highView.messages.some(m=>m.body==='Historic private'));
   assert.ok(highView.messages.some(m=>m.body==='Historic common'&&m.echelon_version===1));
   const lowView=await call(low);
   assert.equal(lowView.echelon,2);
   assert.deepEqual(lowView.messages.map(m=>m.body),['At two']);
   assert.ok((await call(history)).messages.some(m=>m.body==='Historic private'));
-  const maximum=ids.length;
+  const maximum=MAX_GAME_LEVEL;
   assert.equal((await call(admin)).echelon,maximum);
   assert.equal((await call(admin,{body:'Highest authored rung',min_echelon:maximum})).status,201);
   assert.equal((await call(admin,{body:'Future',min_echelon:maximum+1})).status,403);
@@ -63,7 +63,7 @@ test('conversation uses every actual rung, rejects unauthorized levels and prese
   assert.deepEqual((await call(high,null,'?theme=indices&mode=historique')).messages,[]);
   assert.deepEqual((await call(history,null,'?theme=general&mode=historique')).messages.map(m=>m.body),['Historic private','Historic common']);
   // Filtering happens before pagination, not on a truncated all-themes window.
-  const insert=sql.prepare('INSERT INTO conversation_messages(user_id,body,min_echelon,echelon_version,theme) VALUES(1,?,2,2,?)');
+  const insert=sql.prepare('INSERT INTO conversation_messages(user_id,body,min_echelon,echelon_version,theme) VALUES(1,?,2,3,?)');
   for(let i=0;i<205;i++)insert.run('Hint '+i,'indices');
   for(let i=0;i<110;i++)insert.run('General '+i,'general');
   const first=await call(low,null,'?theme=indices');assert.equal(first.messages.length,100);assert.equal(first.messages.at(-1).body,'Hint 204');

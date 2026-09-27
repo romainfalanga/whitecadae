@@ -30,6 +30,10 @@ window.WCVocal = (() => {
     });
   }
   async function upload(blob,kind,duration,{id,onTicket,onProgress,signal}={}) {
+    let mime=blob.type.toLowerCase();
+    if(!mime||mime==='application/octet-stream')mime=({mp4:'video/mp4',m4v:'video/mp4',mov:'video/quicktime',webm:kind+'/webm',wav:'audio/wav',m4a:'audio/mp4',ogg:'audio/ogg'})[blob.name?.split('.').at(-1)?.toLowerCase()]||mime;
+    if(mime==='video/x-m4v')mime='video/mp4';
+    if(mime!==blob.type)blob=new Blob([blob],{type:mime});
     if(!id){const ticket=await api('/api/vg-media',{method:'POST',body:{kind,mime:blob.type,size:blob.size,duration}});id=ticket.id;onTicket?.(id);}
     if(signal?.aborted)throw new DOMException('Envoi annulé','AbortError');
     await new Promise((resolve,reject)=>{

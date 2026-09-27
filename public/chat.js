@@ -1,6 +1,6 @@
 window.WCConversation = (() => {
   let cleanup = () => {};
-  function leave() { cleanup(); cleanup = () => {}; document.body.classList.remove('conversation-mode'); }
+  function leave() { cleanup(); cleanup = () => {}; document.body.classList.remove('conversation-mode','chat-keyboard'); }
   async function page() {
     leave();
     const epoch = newEpoch(), events = new AbortController();
@@ -27,12 +27,17 @@ window.WCConversation = (() => {
       </form></section>`;
     const el = id => document.getElementById('chat-' + id), stream = app.querySelector('.chat-stream');
     const saveDraft = () => { draft.body = el('body').value; try { sessionStorage.setItem(draftKey, JSON.stringify(draft)); } catch {} };
+    let largestViewport=window.visualViewport?.height||innerHeight;
     const resize = () => {
       const viewport = window.visualViewport;
-      const bottom = (viewport?.height || innerHeight) + (viewport?.offsetTop || 0);
+      const height=viewport?.height||innerHeight;largestViewport=Math.max(largestViewport,height);
+      const focused=document.activeElement===el('body');
+      const keyboard=focused && (Math.max(innerHeight,largestViewport)-height>140);
+      document.body.classList.toggle('chat-keyboard',keyboard);
+      const bottom = height + (viewport?.offsetTop || 0);
       const player = document.getElementById('music-player');
-      const playerHeight = player && !player.hidden ? player.getBoundingClientRect().height + 12 : 0;
-      app.style.setProperty('--chat-height', Math.max(220, bottom - app.getBoundingClientRect().top - playerHeight - 12) + 'px');
+      const playerHeight = player && !player.hidden && !keyboard ? player.getBoundingClientRect().height : 0;
+      app.style.setProperty('--chat-height', Math.max(0, bottom - app.getBoundingClientRect().top - playerHeight) + 'px');
     };
     const observer = new ResizeObserver(resize);
     observer.observe(document.querySelector('.site-header')); observer.observe(document.getElementById('music-player'));
@@ -40,7 +45,7 @@ window.WCConversation = (() => {
     window.visualViewport?.addEventListener('resize', resize, {signal:events.signal});
     window.visualViewport?.addEventListener('scroll', resize, {signal:events.signal});
     cleanup = () => { saveDraft(); events.abort(); observer.disconnect(); };
-    function grow() { el('body').style.height = 'auto'; el('body').style.height = Math.min(110, el('body').scrollHeight) + 'px'; }
+    function grow() { el('body').style.height = '0px'; el('body').style.height = Math.min(72, el('body').scrollHeight) + 'px'; }
     function controls() {
       app.querySelectorAll('[data-filter]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.filter === filter.theme)));
       app.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === filter.mode)));
@@ -98,6 +103,7 @@ window.WCConversation = (() => {
     el('new').onclick=()=>{stream.scrollTop=stream.scrollHeight;el('new').hidden=true;};
     stream.addEventListener('scroll',()=>{if(bottom())el('new').hidden=true;},{signal:events.signal});
     el('body').oninput=()=>{grow();saveDraft();};
+    el('body').onfocus=resize;el('body').onblur=resize;
     el('body').onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();el('form').requestSubmit();}};
     el('form').onsubmit=async event=>{
       event.preventDefault(); if(sending||!el('body').value.trim())return;

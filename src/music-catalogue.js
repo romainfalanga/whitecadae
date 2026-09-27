@@ -1,5 +1,14 @@
 import {ensureMetaMoi} from './meta-moi.js';
 
+export const ALBUM57={
+  id:'57',album:'57',artist:'Vulpis',cover:'/music/57/cover.png',coverType:'image/png',lyricAlbums:['57'],
+  tracks:[
+    {slug:'30-vins-divins',title:'30 vins divins',src:'/music/57/30-vins-divins.mp3',duration:230.374,minLevel:1},
+    {slug:'sans-indice-dans-les-des',title:'Sans indices dans les dés',src:'/music/57/sans-indices-dans-les-des.mp3',duration:224.808,minLevel:3},
+    {slug:'13h20',title:'13h20',src:'/music/57/13h20.mp3',duration:144.456,minLevel:4},
+    {slug:'orange',title:'Orange',src:'/music/57/orange.mp3',duration:159.373,minLevel:5},
+  ],
+};
 export const JULY = {
   id:'18-juillet-2019', album:'18 juillet 2019', artist:'AA', cover:'/music/18-juillet-2019/cover.jpeg', coverType:'image/jpeg', lyricAlbums:['18-juillet-2019'],
   tracks:[
@@ -9,15 +18,15 @@ export const JULY = {
   ],
 };
 export const FAIS_MIEUX = {
-  id:'fais-mieux',album:'Fais Mieux',artist:'White Cadae',cover:'/music/fais-mieux/cover.png',coverType:'image/png',lyricAlbums:['114','fais-mieux'],
+  id:'fais-mieux',album:'114',artist:'Vulpis',cover:'/music/fais-mieux/cover.png',coverType:'image/png',lyricAlbums:['114','fais-mieux'],
   tracks:[
     // Preserve the existing lyric URL and its references; only the display title is used in the UI.
-    {slug:'la-matiere-dense',title:'La matière danse',src:'/music/fais-mieux/la-matiere-danse.mp3',duration:78.653854,minLevel:3},
-    {slug:'les-probabilites',title:'Les probabilités',src:'/music/fais-mieux/les-probabilites.mp3',duration:93,minLevel:4},
-    {slug:'fais-mieux',title:'Fais Mieux',src:'/music/fais-mieux/fais-mieux.mp3',duration:80.149271,minLevel:5},
+    {slug:'la-matiere-dense',title:'La matière dense',src:'/music/fais-mieux/la-matiere-danse.mp3',duration:78.653854,minLevel:6},
+    {slug:'les-probabilites',title:'Les probabilités',src:'/music/fais-mieux/les-probabilites.mp3',duration:93,minLevel:7},
+    {slug:'fais-mieux',title:'Fais Mieux',src:'/music/fais-mieux/fais-mieux.mp3',duration:80.149271,minLevel:8},
   ],
 };
-export const RELEASES=[JULY,FAIS_MIEUX];
+export const RELEASES=[ALBUM57,FAIS_MIEUX,JULY];
 export const gatedTrack=slug=>RELEASES.flatMap(album=>album.tracks).find(track=>track.slug===slug);
 export const gatedAlbum=slug=>RELEASES.find(album=>album.lyricAlbums.includes(slug));
 export const retiredSong = slug => ['ma-folie','rendors-toi'].includes(slug);
