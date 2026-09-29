@@ -118,7 +118,7 @@ export function buildGameState(rows=[]) {
       requirements:{level:n.min>progressLevel(p)?n.min:null,pages:deps}});
   }
   if(has(p,'eg-03-1'))pages.push({id:'eg-10',kind:'clock',title:'Horloge',source:'Horloge',visual:'clock',locked:false});
-  for(const page of pages)page.href=page.kind==='clock'?'/echelon/horloge':page.kind==='workshop'?`/echelon/horloge#${page.id}`:`/echelon#${page.id}`;
+  for(const page of pages)page.href=page.kind==='clock'?'/signes/horloge':page.kind==='workshop'?`/signes/horloge#${page.id}`:`/signes#${page.id}`;
   const echelon=progressLevel(p);
   return {echelon,continuation:gameContinuation(echelon),pages,nodes:pages.filter(n=>['riddle','workshop'].includes(n.kind)),capabilities:has(p,'eg-03-1')?{share:true}:{}};
 }

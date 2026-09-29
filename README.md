@@ -1,137 +1,70 @@
 # White Cadae — Escape Game Orange
 
-La conversation générale et les sujets suivent désormais les [règles du 27 septembre 2026](docs/conversation-topics.md) : salons à 12, emplacements supplémentaires à 18 et 23, et échelon enregistré automatiquement à chaque envoi. Vidéographie est retirée du menu et des déblocages.
+Application JavaScript sans framework : Cloudflare Worker, assets statiques, D1 et lecteur audio natif persistant.
 
-Le site s’ouvre sur **Escape Game Orange** (`/`) : l’histoire de Vulpis, l’album **57** et les signes à retrouver dans ses quatre morceaux.
+## Pages et progression
 
-- **Musiques** (`/musique`, ancien `/57` redirigé vers l’album 57) : 13h20, 30 vins divins, Sans indices dans les dés, Orange. L’EP **18 juillet 2019** se révèle morceau par morceau : **Wanheda à 5**, **Quand je vois je pense à 6**, **Un fil entre deux infinis à 7**. Les MP3 et la pochette originale fournis sont conservés sans conversion. La pochette s’affiche sur la page, dans le lecteur et dans les commandes système dès l’échelon 5.
-- **Paroles** (`/paroles`) : les sorties les plus récentes en premier, avec **Meta moi** en tête. Les paroles de 18 juillet 2019 suivent les seuils individuels 5, 6 et 7 de leurs morceaux. Ma folie et Rendors-toi sont retirés du catalogue public, sans effacer les données historiques. Les liens `/chanson/:slug` sont conservés ; `/interpretations` et `/fil` redirigent vers les paroles.
-- **Échelons** (`/echelon`) : toutes les énigmes et leurs champs sur une page, sans catégories ; seul le laboratoire Horloge possède une page distincte. Chaque réponse complète distincte rapporte un échelon. La connexion conserve la page demandée.
+- `/` : présentation et musiques déjà découvertes.
+- `/musique` : albums 57, 114 et 18 juillet 2019, déblocage morceau par morceau.
+- `/signes` : propositions de signes, anciennement `/echelon`.
+- `/signes/horloge` : tableaux de construction, uniquement après la découverte de L’horloge.
+- `/echelon` : parcours de 33 échelons, pseudo et photo modifiables, membres strictement en dessous du visiteur.
+- `/chanson/:slug` : paroles accessibles depuis le lecteur selon les droits du morceau.
 
-Le lecteur natif est placé hors du contenu remplacé par la navigation. Il apparaît à la première lecture, propose lecture/pause, précédent/suivant, déplacement dans le morceau, volume sur ordinateur et répétition de l’album. Il enchaîne les titres de l’EP sélectionné dans l’ordre puis s’arrête, sauf si la répétition est activée. La position est conservée localement ; un rechargement ne relance jamais la musique automatiquement. Les métadonnées système suivent l’EP actif.
+Le menu comprend Escape Game Orange, Musiques, Signes et Échelon. Les anciens liens d’énigmes et d’Horloge redirigent vers Signes. `/parcours` et les anciens profils redirigent vers la nouvelle page Échelon. Les API historiques `/api/echelon` et `/api/57` restent des alias du jeu pour les anciens clients ; le nouveau client utilise `/api/signes`.
 
-Les seuils individuels de **18 juillet 2019** et **Fais Mieux** sont contrôlés côté serveur pour le catalogue musical, les paroles, le corpus historique, les archives du profil et chaque requête audio, y compris les plages d’octets. Le lecteur ne reçoit et n’enchaîne que les pistes autorisées. Les réponses protégées ne sont pas mises en cache ; le service worker ne conserve aucun audio ni aucune API. La déconnexion retire les EP réservés du lecteur et décharge son audio. L’administrateur conserve son accès de gestion.
+Le départ est à 1. Les 32 réponses distinctes actives permettent d’atteindre 33. Les fragments, répétitions et réponses retirées n’ajoutent aucun point. Le catalogue serveur `src/echelon.js` définit la progression ; les réponses non trouvées ne sont pas transmises. À 33, le même composant « Échelon 33 / Rejoindre » apparaît sur l’accueil et Signes. Son adresse de destination reste côté serveur avant ce seuil.
 
-Les signes **5 vins divins** et **30 vins divins** possèdent chacun leur champ et une seule réponse complète : « 25 décembre », également acceptée sous la forme « 25/12 ». Chacun rapporte un échelon. L’ancien crédit de la seconde réponse numérique est transféré à la seconde formule pour préserver le score et les accès existants ; les nouvelles propositions « Jésus » ne sont plus acceptées ici.
+| Échelon | Morceau |
+| --- | --- |
+| 1 | 30 vins divins |
+| 2 | Sans indices dans les dés |
+| 3 | 13h20 |
+| 4 | Orange |
+| 5 | La matière danse |
+| 6 | Les probabilités |
+| 7 | Fais Mieux |
+| 8 | Wanheda |
+| 9 | Quand je vois je pense |
+| 10 | Un fil entre deux infinis |
 
-Media Session fournit titres, pochette et commandes système. L’audio reste actif quand la page devient invisible et utilise la session `playback` quand elle est disponible. **Le verrouillage réel d’un iPhone/Android doit être testé sur ces appareils** : un navigateur ou un système qui ferme/suspend l’onglet ne peut pas être contraint par le site. Aucun mode hors ligne de l’album n’est annoncé. Le service worker ignore les fichiers audio et les requêtes Range, et ne stocke jamais les réponses partielles 206.
+L’ordre d’écoute de 57 est 13h20, 30 vins divins, Sans indices dans les dés, Orange. Les variantes audio continues ne contiennent que les pistes accessibles à leur seuil. Le lecteur passe de chapitre en chapitre dans le même fichier pour limiter les interruptions lorsque le téléphone est verrouillé. Le service worker ne met jamais en cache les médias protégés ni les API.
 
-Les nouveaux POST/PUT/PATCH d’interprétations, références, connexions et essais renvoient 410. Les anciennes contributions restent en base et dans les archives privées de leur auteur. Les anciens identifiants de progression sont conservés. Deux tables additives enregistrent les brouillons et les tentatives du nouveau jeu ; aucune ligne historique n’est supprimée. **Ne pas réimporter les paroles ni réinitialiser D1 lors du déploiement.**
+## Roadmap
 
-## Vérifications de cette évolution
+`src/roadmap.js` filtre les noms, photos et listes côté serveur : pas de membres au même échelon ou au-dessus, même pour un administrateur. La liste charge 24 membres par page avec un curseur, les aperçus au plus 3 par échelon. Aucune adresse email, réponse ou information de session ne figure dans ces listes.
 
-`npm test` couvre le lecteur (ordre, fin, répétition, reprise, commandes système, médias concurrents), la fermeture des anciennes écritures, l’API de paroles et les exclusions du service worker. Les essais de navigation, de rendu responsive et de lecture réelle se font dans le navigateur avec une base D1 locale.
+`roadmap_levels` est un index dérivé, jamais une seconde source de progression. Des triggers invalident sa révision après les découvertes. Une écriture conditionnelle empêche qu’un calcul ancien remplace une progression plus récente ; les lignes périmées sont exclues des lectures. Incrémenter `SCORE_VERSION` dans `src/roadmap-levels.js` si le calcul des signes change. La migration `0033_roadmap.sql` est additive et appliquée automatiquement si nécessaire.
 
-Avant la publication : `npx wrangler deploy --dry-run`. Pour publier sur le Worker existant : `npx wrangler deploy`, avec une session Cloudflare autorisée. Les migrations additives `0027_echelon.sql` et `0028_conversation_echelons.sql` sont également appliquées à la volée, sans réimport de données. Ne pas rejouer un `ALTER TABLE` manuel après son application automatique. Publier avec `--keep-vars` sur le Worker existant.
+L’interface utilise 33 étapes HTML et du CSS statique : pas de canvas, animation permanente, interrogation périodique ou bibliothèque graphique. Les photos sont recadrées à 256 pixels avant envoi ; l’API contrôle format, signature et taille, puis les sert sans cache public.
 
-## Échelons
+## Espaces retirés
 
-Le champ sans indice est disponible dès le départ, en première position, sans titre ni compteur de réponses. Seul M = M (infini avec deux M) possède un visuel, lisible sur ordinateur et mobile. XEU est présenté sans image. « Détails » conserve le même identifiant de découverte qu’auparavant.
+Conversation, sujets, projets, Brainstorm, Vidéographie et anciennes contributions en écriture sont fermés. Leurs API renvoient 410. Aucune messagerie n’est ajoutée à la roadmap. Le binding historique Durable Object reste déclaré pour la compatibilité du déploiement ; sa classe refuse les connexions.
 
-Le catalogue et les réponses vivent exclusivement dans `src/echelon.js`. `src/echelon-api.js` ne transmet que les pages déjà découvertes ; visibilité et permission de répondre sont vérifiées séparément côté serveur. Un ancien lien API `/api/57` utilise le même état filtré. L’ancien endpoint de remise à zéro est retiré pour préserver les droits historiques.
+## Développement et publication
 
-Chaque réponse complète distincte vaut un échelon, y compris lorsqu’une même page contient plusieurs réponses. Le départ est à zéro. Les fragments et les étapes intermédiaires ne rapportent aucun point. Aucun plafond ni inventaire des pages futures n’est transmis au navigateur. **57** accepte « 12 apôtres » et « Signe » ; **7** accepte « Galaxie » et « Signe ». Ces réponses sont indépendantes d’Aigle et de Trompettes. Les découvertes historiques retrouvent leurs signes et conservent le crédit Aigle déjà accordé. Une ancienne réponse complète « 12 archanges » conserve son échelon sous la lecture corrigée ; seul le fragment numérique 12 est transféré lorsqu’elle était incomplète. Les énigmes aux réponses communes sont espacées, y compris au fil des déblocages. Les catégories et pages d’observation ajoutées sont retirées ; les réponses retirées restent dans l’historique mais ne comptent plus dans le nouveau jeu.
-
-### Arborescence, ouvertures et conversation
-
-À partir de cinq réponses complètes, l’énigme **AA** apparaît dans Échelons et accepte « Andromédien autiste ». La page narrative AA et son bouton d’accueil sont retirés. L’ancien lien `/aa` revient à l’accueil ; les anciennes API du récit renvoient 410 sans servir son texte.
-
-Le profil personnel ouvre **Mon arborescence** (`/parcours`). La vue **Signes et énigmes** représente les dépendances réelles et les états résolu, partiel, disponible et verrouillé. Les filtres et la recherche mettent en lumière les pistes ; chaque carte explique ses conditions d’accès et mène à son champ dans Échelons ou au laboratoire Horloge. Le nombre d’échelons envisageables est calculé sur le territoire actuellement visible ; la porte reste non dénombrée. La carte et son API ne donnent jamais l’inventaire futur ni les réponses non trouvées.
-
-Les ouvertures sont centralisées dans `src/content-access.js` et utilisent les mêmes seuils que les API : Conversation à 2, les morceaux de 57 à 1/3/4/5, ceux de 114 à 6/7/8, ceux de 18 juillet 2019 à 9/10/11, puis les sujets à 12 et les emplacements supplémentaires à 18/23. Vidéographie ne figure plus parmi les ouvertures. L'accueil affiche uniquement les ressources déjà découvertes. Horloge reste soumis à sa propre réponse, indépendamment du score.
-
-La navigation de Conversation propose **Générale** et **Tous les sujets**. Les anciennes catégories rejoignent la discussion générale avec leur audience conservée. Les sujets sont visibles dès l'échelon 12 ; chaque compte peut en créer un à 12, deux au total à 18 et trois à 23. Les filtres de lecture et la pagination sont appliqués sur le serveur avant la limite de 100 messages. Les migrations additives sont appliquées automatiquement après contrôle des colonnes existantes ; ne pas les rejouer manuellement sur une base déjà migrée.
-
-La réponse Horloge ouvre immédiatement le laboratoire unique `/echelon/horloge`. Tous les tableaux de durées y sont réunis, avec des brouillons indépendants. Les anciennes URLs d’énigmes, de lectures et de galeries ramènent à `/echelon` ; les anciennes URLs de tableaux ramènent à Horloge. Aucun texte d’indice ni bouton de superposition n’est affiché. Les constructions utilisent des arbres d’opérations et l’origine de chaque chiffre, validés côté serveur dans `src/echelon-workshop.js`. Former deux sept distincts active immédiatement « Dupliquer », même avant la fin de la sauvegarde ; aucun échelon n’est gagné à cette étape. Le bouton cible le dernier nombre sélectionné, même si un autre est encore sélectionné. Le 50 puis le 2 peuvent servir chacun deux fois, avec contrôle de leur provenance côté serveur. Les résultats numériques seuls ne suffisent pas à valider une construction. La lecture symbolique du premier tableau reste une clé propre à l’œuvre.
-
-Les tableaux sont manipulables au toucher et au clavier, avec annulation, rétablissement et reprise des durées. Les brouillons sont conservés sur l’appareil et sur le compte. Un numéro de révision empêche un appareil d’écraser silencieusement l’autre. Le serveur réserve atomiquement les tentatives et ralentit les erreurs répétées.
-
-`src/enigmas57.js` conserve le catalogue historique uniquement pour traduire les anciennes découvertes, préserver les droits aux espaces privés et partager le moteur de reconnaissance. Les autres espaces privés conservent leur rang d’accès historique. La conversation utilise directement le nombre de réponses complètes du nouveau jeu, sans plafond fixé à sept. Les profils filtrent leurs découvertes selon ce que leur visiteur peut déjà connaître.
-
-Les tests couvrent la migration des découvertes, les permissions, les constructions, le score, la concurrence des brouillons, le lecteur et les fonctions conservées. Aucune base de production n’est réinitialisée.
-
-### Pages conservées et espaces retirés
-
-La page porte le nom **Échelons** dans le menu, les titres et les liens. Son adresse `/echelon` reste stable pour conserver les liens et les brouillons existants. Le compteur individuel reste « Échelon N ».
-
-L’album anciennement nommé « 114 » est renommé **Fais Mieux**, comme son morceau. La migration ciblée `0029_album_fais_mieux.sql` modifie uniquement le titre de l’album existant (id 4), en conservant ses trois morceaux et leurs paroles. Le Worker maintient le titre Fais Mieux à la première lecture du catalogue via sa connexion D1 existante, sans recréer les morceaux ni les paroles.
-
-Pense Mieux, Carré d’As, Brainstorm et la page 114 sont retirés du menu et du routage. Leurs anciens liens affichent une page supprimée ; leurs endpoints dédiés renvoient 410. Le moteur partagé des réflexions refuse les contenus de type `pensee`, tout en conservant ceux de Vidéographie. Les données historiques ne sont pas effacées. Vidéographie et ses récapitulatifs restent accessibles selon les droits existants, en attendant leur évolution.
-
-La **Conversation** s'ouvre à l'échelon 2. Chaque nouveau message enregistre automatiquement l'échelon réel de son auteur au moment de l'envoi et reste visible à partir de ce seuil, même si son auteur progresse ensuite. Aucun choix d'audience n'est proposé. Les sujets utilisent la même règle pour leurs messages.
-
-La colonne `echelon_version` distingue les rangs historiques (1), l'ancien compteur démarrant à zéro (2), les audiences choisies (3) et les échelons enregistrés automatiquement (4). Les anciens seuils conservent leur signification et ne sont pas présentés comme l'échelon réel de l'auteur. L'API vérifie les permissions à chaque lecture et écriture ; elle ignore tout seuil fourni par un ancien client lors de la publication. Les tests SQLite couvrent aussi les quotas atomiques, les relances et la séparation entre salons.
-
-## Architecture
-
-- **Cloudflare Workers** : une seule application qui sert l'API (`/api/*`)
-  et le site statique (`public/`), sans framework ni étape de build.
-- **Cloudflare D1** (SQLite serverless) : comptes, sessions, albums,
-  chansons, paroles, annotations, connexions, progression du jeu de la
-  page 57. Schéma dans `schema.sql`, migrations dans `migrations/`.
-- **Authentification** : mots de passe hachés (PBKDF2‑SHA256, 100 000
-  itérations), sessions par cookie `HttpOnly`/`Secure` valables 30 jours.
-
-Le compte créé avec l'email listé dans `ADMIN_EMAILS` (`wrangler.jsonc`)
-devient automatiquement **administrateur** : il accède à la page
-`/admin` pour créer les albums/singles, les chansons, et coller les textes.
-
-## Déploiement
-
-Prérequis : un compte Cloudflare et Node.js.
-
-```bash
+```sh
 npm install
-
-# 1. Créer la base D1 (si elle n'existe pas déjà)
-npx wrangler d1 create whitecadae-db
-#    → reporter le database_id retourné dans wrangler.jsonc
-
-# 2. Appliquer le schéma et les données initiales (album « 18 juillet 2019 »)
-npm run db:schema
-npm run db:seed
-
-# 3. Déployer
-npx wrangler deploy
+npm test
+npx wrangler dev
+npx wrangler deploy --dry-run --experimental-provision=false
+npx wrangler deploy --experimental-provision=false
 ```
 
-Sur une base **déjà en service**, `npm run db:schema` suffit à créer les
-tables ajoutées depuis (tout est en `CREATE TABLE IF NOT EXISTS`, les
-tables existantes ne sont pas touchées). On peut aussi n'appliquer que la
-dernière migration :
+`schema.sql` et `seed.sql` servent à créer une base locale neuve. **Ne pas rejouer les seeds ni les anciennes migrations de renommage sur la production.** Le catalogue maintient ses données ciblées sans effacer les paroles. Les déploiements normaux ne suppriment aucun compte.
 
-```bash
-npx wrangler d1 execute whitecadae-db --remote --file=./migrations/0009_signes57.sql
+Comptes : PBKDF2-SHA256, cookies HttpOnly/Secure/SameSite et limitation des tentatives. Les emails de `ADMIN_EMAILS` reçoivent les droits d’administration lors de l’inscription. Les administrateurs peuvent écouter les morceaux mais ne contournent pas la progression de la roadmap ni le seuil final.
+
+## Suppression exceptionnelle des comptes
+
+Cette opération est distincte de la publication et doit être explicitement autorisée. Exporter D1 avec une connexion disposant des droits D1, conserver la sauvegarde **hors du dépôt**, puis préparer et répéter la suppression sur cette copie :
+
+```sh
+npx wrangler d1 export whitecadae-db --remote --output=/private/backup.sql
+node scripts/account-reset-plan.mjs /private/backup.sql /private/reset-plan
 ```
 
-Pour le développement local :
+Ce script est exclusivement local : il ne contacte pas la production. Il refuse les tables non classées, contrôle les références, répète la suppression dans une transaction annulée, vérifie que le catalogue reste identique et conserve la séquence des identifiants. L’opérateur doit aussi inventorier et sauvegarder les éventuels médias personnels R2, puis vérifier les comptes, sessions, brouillons, historiques et tables retirées après exécution. Aucun reset ne doit être réalisé sans export vérifié. Ne jamais effacer les fichiers audio du site.
 
-```bash
-npm run db:local   # crée la base locale
-npm run dev        # http://localhost:8787
-```
-
-## Contenu initial
-
-L'album **18 juillet 2019** est pré-rempli avec cinq titres :
-*Wanheda*, *Quand je vois je pense*, *Ma folie*,
-*Un fil entre deux infinis*, *Rendors-toi*.
-Les paroles s'ajoutent depuis la page **Administration** (une ligne par
-vers, une ligne vide entre les strophes).
-
-**Meta moi** figure en tête de la page Paroles, sous son propre titre.
-La migration additive `0031-meta-moi-single` le rattache à une sortie simple
-en dernière position du catalogue chronologique, sans toucher aux paroles.
-Son texte fourni par l’artiste est conservé dans
-`src/meta-moi.js`. Le Worker ajoute ce morceau et ses paroles une seule
-fois via sa connexion D1 existante, à la première ouverture du catalogue
-ou du morceau. Une transaction et un marqueur durable empêchent les
-doublons et préservent les modifications ultérieures faites en administration.
-
-> ⚠ Remplacer les paroles d'une chanson supprime les explications déjà
-> attachées à ses anciennes phrases et mots (les explications portant sur
-> la chanson entière sont conservées).
-
-### Musique progressive et coopération
-
-La progression actuelle, les sujets, les projets, les séances Brainstorm et la configuration du vocal sont documentés dans [docs/cooperation.md](docs/cooperation.md). L’album 114 s’ouvre aux échelons 6, 7 et 8, suivi de 18 juillet 2019 aux échelons 9, 10 et 11. Les sujets et projets ont des quotas indépendants aux échelons 12, 18 et 23.
+Voir `docs/roadmap-audit.md` pour les contrôles et les limites de validation de cette évolution.

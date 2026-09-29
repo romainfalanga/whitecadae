@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_admin INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   -- Photo de profil : recadrée/compressée côté client, stockée en base et
-  -- servie via /api/users/:username/avatar.
+  -- servie via /api/roadmap/avatar/:id.
   avatar_data TEXT,
   avatar_mime TEXT
 );
@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS essay_links (
 
 CREATE INDEX IF NOT EXISTS idx_essay_links_essay ON essay_links(essay_id);
 
--- Progression d'un membre sur les signes de l'EP 57 (page /echelon). Une ligne par
+-- Progression d'un membre sur les signes de l'EP 57 (page /signes). Une ligne par
 -- signe rencontré : elle existe dès le premier indice demandé, et solved_at se
 -- remplit quand le signe est trouvé (ou révélé, auquel cas revealed = 1). Les
 -- réponses ne sont pas en base : elles vivent dans src/echelon.js (historique : src/enigmas57.js).
@@ -397,3 +397,25 @@ CREATE TABLE IF NOT EXISTS community_brainstorm_messages (
 CREATE INDEX IF NOT EXISTS idx_community_sessions ON community_brainstorms(starts_at,id);
 CREATE INDEX IF NOT EXISTS idx_community_actions_room ON community_actions(room_id,id);
 CREATE INDEX IF NOT EXISTS idx_community_messages_room ON community_brainstorm_messages(brainstorm_id,id);
+
+-- Index dérivé de progression : les signes restent la source de vérité.
+CREATE TABLE IF NOT EXISTS roadmap_revisions(user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,revision INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS roadmap_levels(user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 33),revision INTEGER NOT NULL,score_version INTEGER NOT NULL);
+
+CREATE INDEX IF NOT EXISTS idx_roadmap_levels ON roadmap_levels(level,user_id);
+
+CREATE TRIGGER IF NOT EXISTS roadmap_progress_insert AFTER INSERT ON riddle_progress
+    WHEN NEW.solved_at IS NOT NULL
+    BEGIN INSERT INTO roadmap_revisions(user_id,revision) SELECT NEW.user_id,1 WHERE EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id)
+    ON CONFLICT(user_id) DO UPDATE SET revision=revision+1; END;
+
+CREATE TRIGGER IF NOT EXISTS roadmap_progress_update AFTER UPDATE ON riddle_progress
+    WHEN OLD.solved_at IS NOT NEW.solved_at
+    BEGIN INSERT INTO roadmap_revisions(user_id,revision) SELECT NEW.user_id,1 WHERE EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id)
+    ON CONFLICT(user_id) DO UPDATE SET revision=revision+1; END;
+
+CREATE TRIGGER IF NOT EXISTS roadmap_progress_delete AFTER DELETE ON riddle_progress
+    WHEN OLD.solved_at IS NOT NULL
+    BEGIN INSERT INTO roadmap_revisions(user_id,revision) SELECT OLD.user_id,1 WHERE EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+    ON CONFLICT(user_id) DO UPDATE SET revision=revision+1; END;

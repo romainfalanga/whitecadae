@@ -40,7 +40,7 @@ function safeUrl(url) {
 
 function continuationMarkup(item) {
   if (!item) return '';
-  return `<section class="game-continuation" aria-label="La suite de l’escape game"><span class="eyebrow">Échelon ${esc(item.level)}</span><p>${esc(item.message)}</p><a href="${esc(safeUrl(item.href))}" target="_blank" rel="noopener noreferrer">${esc(item.label)}<span class="sr-only"> (nouvel onglet)</span></a></section>`;
+  return `<section class="game-continuation" aria-label="Échelon ${esc(item.level)}"><a class="game-gate" href="${esc(safeUrl(item.href))}" target="_blank" rel="noopener noreferrer"><span class="gate-orbit" aria-hidden="true"></span><span class="gate-title">Échelon <strong>${esc(item.level)}</strong></span><span class="gate-action">Rejoindre <span aria-hidden="true">↗</span></span><span class="sr-only"> (nouvel onglet)</span></a></section>`;
 }
 
 function tokens(text) {
@@ -144,32 +144,38 @@ function coupePageTimer() {
 async function route() {
   if (window.WCGame) WCGame.leave();
   if (window.WCJourney) WCJourney.leave();
+  if (window.WCRoadmap) WCRoadmap.leave();
   window.scrollTo(0, 0);
   closeNav();
   coupePageTimer();
   // le dock d'une application ne suit pas hors de chez elle
   document.body.classList.remove('avec-dock');
-  const path = location.pathname;
+  const path = location.pathname.replace(/\/+$/,'') || '/';
   newEpoch();
   document.title = 'White Cadae';
   renderNav();
   let m;
   if (path === '/' || path === '') return pageOrange();
   if (path === '/aa' || path === '/aa/') return navigate('/',true);
-  if (path === '/parcours') return WCJourney.page();
+  if (path === '/parcours') return navigate('/echelon',true);
   if (path === '/escape-game-orange') return navigate('/', true);
   if (path === '/57') return navigate('/musique#album-57', true);
   if (path === '/musique') return pageMusique();
   if (path === '/paroles') return pageParoles();
   if (path === '/interpretations' || path === '/fil') return navigate('/paroles', true);
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
-  if (path === '/echelon' || path === '/echelon/horloge') return WCGame.page();
+  if (path === '/signes' || path === '/signes/horloge') return WCGame.page();
+  if (path === '/echelon') {
+    if(/^#(?:eg-|n-)[a-z0-9-]+$/.test(location.hash))return navigate('/signes'+location.hash,true);
+    return WCRoadmap.page();
+  }
+  if (path === '/echelon/horloge') return navigate('/signes/horloge'+location.hash,true);
   // Old bookmarks converge on the two game pages; no puzzle subpages remain.
-  if ((m = path.match(/^\/echelon\/enigme\/([a-z0-9-]+)$/))) return navigate('/echelon#' + m[1], true);
-  if ((m = path.match(/^\/echelon\/atelier\/(eg-1[0-3])$/))) return navigate('/echelon/horloge' + (m[1] === 'eg-10' ? '' : '#' + m[1]), true);
-  if (/^\/echelon\/(lecture|galerie)\/[a-z0-9-]+$/.test(path)) return navigate('/echelon', true);
+  if ((m = path.match(/^\/echelon\/enigme\/([a-z0-9-]+)$/))) return navigate('/signes#' + m[1], true);
+  if ((m = path.match(/^\/echelon\/atelier\/(eg-\d+)$/))) return navigate('/signes/horloge' + (m[1] === 'eg-10' ? '' : '#' + m[1]), true);
+  if (/^\/echelon\/(lecture|galerie)\/[a-z0-9-]+$/.test(path)) return navigate('/signes', true);
   if (/^\/(conversation|sujets|projets|brainstorm|videographie|reflexion|arbre|pense-mieux|carre-d-as|societe|114|game-master-orange)(?:\/|$)/.test(path)) {
-    app.innerHTML = '<h1>Cette page a été supprimée</h1><p><a href="/echelon" data-link>Retrouver Échelons</a></p>';
+    app.innerHTML = '<h1>Cette page a été supprimée</h1><p><a href="/signes" data-link>Retrouver les signes</a></p>';
     return;
   }
   if (path === '/connexion') return pageLogin();
@@ -182,9 +188,9 @@ async function route() {
 }
 
 function renderNav() {
-  const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musiques</a>', '<a href="/echelon" data-link>Échelons</a>'];
+  const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musiques</a>', '<a href="/signes" data-link>Signes</a>', '<a href="/echelon" data-link>Échelon</a>'];
   nav.innerHTML = liens.join('\n       ');
-  nav.querySelectorAll('a').forEach((a) => { if ((a.getAttribute('href') === location.pathname || (a.getAttribute('href') === '/echelon' && location.pathname.startsWith('/echelon/')))) a.setAttribute('aria-current', 'page'); });
+  nav.querySelectorAll('a').forEach((a) => { if ((a.getAttribute('href') === location.pathname || (a.getAttribute('href') === '/signes' && location.pathname.startsWith('/signes/')))) a.setAttribute('aria-current', 'page'); });
 
 }
 
@@ -258,10 +264,9 @@ async function refreshSession() {
 
 function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
-  if(value==='/parcours?view=ouvertures')return '/#mon-palier';
-  if(value==='/parcours'||value==='/#mon-palier')return value;
-  if (value === '57' || value === 'echelon') return '/echelon';
-  return /^\/echelon(?:\/horloge|\/(?:enigme|lecture|galerie|atelier)\/[a-z0-9-]+)?(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
+  if(value==='57')return '/signes';
+  if(value==='echelon'||value==='/parcours')return '/echelon';
+  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 
 function pageLogin() {
@@ -345,7 +350,7 @@ async function pageSong(slug) {
       ${track ? '' : '<a class="back-link" href="/paroles" data-link>← Toutes les paroles</a>'}
       <p class="eyebrow">${esc(song.album_title || 'White Cadae')} · Paroles</p>
       <h1>${esc(song.title)}</h1>
-      ${track ? `<div class="lyrics-actions"><button class="orange-button" data-play-track="${esc(track.slug)}">${WCIcon('play')} Écouter le morceau</button><a href="/echelon" data-link>Proposer un signe ${WCIcon('arrow')}</a></div>` : ''}
+      ${track ? `<div class="lyrics-actions"><button class="orange-button" data-play-track="${esc(track.slug)}">${WCIcon('play')} Écouter le morceau</button><a href="/signes" data-link>Proposer un signe ${WCIcon('arrow')}</a></div>` : ''}
       <div class="lyrics-readable">${lines.length ? lines.map((l) => l.text ? `<p>${esc(l.text)}</p>` : '<div class="lyrics-break" aria-hidden="true"></div>').join('') : '<p>Les paroles de ce morceau seront bientôt disponibles.</p>'}</div>
       ${track ? `<a class="back-link" href="/musique#album-${esc(track.albumId)}" data-link>Retrouver l’album ${esc(track.album)} →</a>` : ''}
     </article>`;

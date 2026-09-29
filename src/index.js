@@ -9,6 +9,7 @@ import { gameLevel, accessLevel } from './echelon.js';
 import {RELEASES,retiredSong,gatedTrack,gatedAlbum,visibleSong,canListen,musicAlbums,ensureMusicCatalogue,continuousTrack} from './music-catalogue.js';
 import {contentAccess} from './content-access.js';
 import {buildOrange} from './orange-access.js';
+import {handleRoadmap} from './roadmap.js';
 export {BrainstormLive} from './brainstorm-live.js';
 
 const SESSION_COOKIE = 'wc_session';
@@ -161,6 +162,8 @@ async function handleApi(request, env, url) {
   };
 
   let p;
+  if(path==='/api/roadmap'||path.startsWith('/api/roadmap/'))return handleRoadmap(request,env,url,{getUser,json});
+  if(path==='/api/signes'||path.startsWith('/api/signes/'))return handleEchelon(request,env,path.replace(/^\/api\/signes/,'/api/echelon'),{getUser,json});
 
   // Retired spaces remain stored, but no client can read, write or join them.
   if (/^\/api\/(conversation|community|videographies|videographie|vg-media|vg-comments|arbres|branches|vocal|voix)(?:\/|$)/.test(path)) {
@@ -197,8 +200,8 @@ async function handleApi(request, env, url) {
   if (route('POST', '/api/logout')) return logout(request, env);
   if (route('GET', '/api/me')) return me(request, env);
 
-  // Legacy avatar URLs remain available without restoring a profile page.
-  if ((p = route('GET', '/api/users/:username/avatar'))) return getAvatar(env, p[0]);
+  // Member photos use the same visibility checks as the roadmap.
+  if (route('GET', '/api/users/:username/avatar')) return json({error:'Cette adresse a été retirée.'},410);
 
   // Profiles have been retired; existing accounts keep their game progress.
   if (/^\/api\/users\/[^/]+$/.test(path)) return json({error:'La page profil a été retirée.'},410);
@@ -267,7 +270,11 @@ function json(data, status = 200, headers = {}) {
 
 async function readJson(request) {
   try {
-    return await request.json();
+    if(!request.body)return null;
+    const reader=request.body.getReader(),chunks=[];let size=0;
+    for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>2_000_000){await reader.cancel();return null;}chunks.push(value);}
+    const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return null;
   }
@@ -640,7 +647,7 @@ async function register(request, env) {
   if (password.length < 8) return json({ error: 'Le mot de passe doit faire au moins 8 caractères.' }, 400);
 
   const existing = await env.DB.prepare(
-    'SELECT id, email, username FROM users WHERE email = ?1 OR username = ?2'
+    'SELECT id, email, username FROM users WHERE email = ?1 OR username = ?2 COLLATE NOCASE'
   ).bind(email, username).first();
   if (existing) {
     return json({ error: existing.email === email ? 'Un compte existe déjà avec cet email.' : 'Ce pseudo est déjà pris.' }, 409);
@@ -651,8 +658,9 @@ async function register(request, env) {
   const passwordHash = await hashPassword(password);
 
   const result = await env.DB.prepare(
-    'INSERT INTO users (email, username, password_hash, is_admin) VALUES (?1, ?2, ?3, ?4)'
+    'INSERT INTO users (email, username, password_hash, is_admin) SELECT ?1, ?2, ?3, ?4 WHERE NOT EXISTS(SELECT 1 FROM users WHERE email=?1 OR username=?2 COLLATE NOCASE)'
   ).bind(email, username, passwordHash, isAdmin).run();
+  if(!result.meta.changes)return json({error:'Cet email ou ce pseudo est déjà utilisé.'},409);
 
   const userId = result.meta.last_row_id;
   return openSession(env, { id: userId, email, username, is_admin: isAdmin });
@@ -1149,7 +1157,8 @@ async function updateUsername(request, env) {
   ).bind(username, user.id).first();
   if (existing) return json({ error: 'Ce pseudo est déjà pris.' }, 409);
 
-  await env.DB.prepare('UPDATE users SET username = ?1 WHERE id = ?2').bind(username, user.id).run();
+  const result=await env.DB.prepare('UPDATE users SET username = ?1 WHERE id = ?2 AND NOT EXISTS(SELECT 1 FROM users WHERE username=?1 COLLATE NOCASE AND id<>?2)').bind(username, user.id).run();
+  if(!result.meta.changes)return json({error:'Ce pseudo est déjà pris.'},409);
   return json({ ok: true, username });
 }
 
@@ -1190,25 +1199,17 @@ async function updateAvatar(request, env) {
   const m = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,([a-zA-Z0-9+/=]+)$/);
   if (!m) return json({ error: 'Image invalide.' }, 400);
   const [, mime, base64] = m;
-  if (base64.length > 1_500_000) return json({ error: 'Image trop lourde.' }, 400);
+  if (base64.length > 350_000) return json({ error: 'Image trop lourde.' }, 400);
+  let bytes;
+  try{bytes=Uint8Array.from(atob(base64),c=>c.charCodeAt(0));}catch{return json({error:'Image invalide.'},400);}
+  const signature=(offset,values)=>values.every((value,i)=>bytes[offset+i]===value);
+  const valid=bytes.length>=12&&(mime==='image/jpeg'?signature(0,[255,216,255]):mime==='image/png'?signature(0,[137,80,78,71,13,10,26,10]):signature(0,[82,73,70,70])&&signature(8,[87,69,66,80]));
+  if(!valid)return json({error:'Image invalide.'},400);
 
   await env.DB.prepare(
     'UPDATE users SET avatar_data = ?1, avatar_mime = ?2 WHERE id = ?3'
   ).bind(base64, mime, user.id).run();
   return json({ ok: true });
-}
-
-async function getAvatar(env, username) {
-  const user = await env.DB.prepare(
-    'SELECT avatar_data, avatar_mime FROM users WHERE username = ?1 COLLATE NOCASE'
-  ).bind(username).first();
-  if (!user || !user.avatar_data) return new Response('', { status: 404 });
-  return new Response(fromBase64(user.avatar_data), {
-    headers: {
-      'Content-Type': user.avatar_mime || 'image/jpeg',
-      'Cache-Control': 'public, max-age=600',
-    },
-  });
 }
 
 /* -------------------------------------- historique de progression et droits privés */

@@ -14,7 +14,7 @@ test('retired realtime connections close without deleting stored data',async()=>
   let closed=0;const room=new BrainstormLive({getWebSockets:()=>[{close(){closed++;}}]});
   assert.equal(closed,1);assert.equal((await room.fetch()).status,410);
 });
-test('the three-link menu and header have no profile or account control',()=>{
+test('the four-link menu separates Signes from Échelon without a profile page',()=>{
   const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
   const js=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
   const nav=js.slice(js.indexOf('function renderNav()'),js.indexOf('/* ---',js.indexOf('function renderNav()')));
@@ -22,7 +22,7 @@ test('the three-link menu and header have no profile or account control',()=>{
   assert.doesNotMatch(nav,/Mon profil|Conversation|Tous les projets/);
   assert.doesNotMatch(html,/account-access|nav-settings/);
   assert.doesNotMatch(js,/account-access|pageProfile|openSettings|Mon profil/);
-  assert.match(nav,/>Musiques</);assert.match(nav,/>Échelons</);
+  assert.match(nav,/>Musiques</);assert.match(nav,/>Signes</);assert.match(nav,/>Échelon</);
 });
 
 test('the removed profile API does not expose member information',async()=>{

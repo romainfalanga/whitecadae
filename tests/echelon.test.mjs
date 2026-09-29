@@ -87,7 +87,7 @@ test('every authored answer is reachable without relying on removed puzzles',()=
   }
   assert.equal(found.length,NODES.reduce((n,node)=>n+node.answers.length,0));
   const state=buildGameState(rows(...found));
-  assert.deepEqual([...new Set(state.pages.map(p=>p.href.split('#')[0]))].sort(),['/echelon','/echelon/horloge']);
+  assert.deepEqual([...new Set(state.pages.map(p=>p.href.split('#')[0]))].sort(),['/signes','/signes/horloge']);
   assert.ok(state.pages.every(p=>['riddle','workshop','clock'].includes(p.kind)));
   assert.ok(state.pages.every(p=>!('group' in p)&&!('quotes' in p)&&!('related' in p)));
   assert.deepEqual(state.nodes.filter(p=>p.visual).map(p=>p.id),['eg-06']);

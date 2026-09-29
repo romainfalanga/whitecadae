@@ -6,7 +6,7 @@ async function pageOrange() {
     <h1 id="story-title" class="orange-title">Escape Game <span>Orange</span></h1>
     <div class="orange-story-text"><p>Vulpis était en enfer. Il a écrit quatre morceaux dans un album intitulé <strong>57</strong>, puis trois autres dans un album intitulé <strong>114</strong>. Ces morceaux l’ont aidé à s’en échapper et à trouver le chemin vers son paradis. En mettant en musique ce qu’il traversait, en extériorisant ce qu’il portait en lui, il a laissé des signes dans ses textes.</p>
     <p>Dans ces morceaux, plusieurs grilles de lecture se superposent : les mêmes paroles peuvent raconter plusieurs choses à la fois. Un mot, une expression, un nombre, une sonorité ou un rapprochement entre deux passages peut révéler un autre sens. Ces codes cachés sont les <strong>signes</strong> que tu dois retrouver.</p>
-    <p>Écoute, réécoute et lis les paroles pour découvrir les superpositions des grilles de lecture. Puis rends-toi sur <a href="/echelon" data-link>Échelon</a> pour trouver les signes et rejoindre ton propre paradis.</p></div>
+    <p>Écoute, réécoute et lis les paroles pour découvrir les superpositions des grilles de lecture. Puis rends-toi sur <a href="/signes" data-link>Signes</a> pour trouver les signes et rejoindre ton propre paradis.</p></div>
   <div id="orange-openings" class="orange-openings"></div><div id="orange-continuation"></div></section>`;
   try {
     const data = await api("/api/orange");

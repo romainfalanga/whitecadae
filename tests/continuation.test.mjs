@@ -8,7 +8,7 @@ import {fixture} from './community-fixture.mjs';
 test('the Discord continuation begins at exactly 33 and remains available thereafter',()=>{
   for(let level=1;level<33;level++)assert.equal(gameContinuation(level),null);
   for(const level of [undefined,null,NaN,Infinity,'33',32.5])assert.equal(gameContinuation(level),null);
-  const expected={level:33,message:'Bien joué. La suite t’attend.',label:'Rejoindre le Discord',href:'https://discord.gg/y83ewhS49'};
+  const expected={level:33,label:'Rejoindre',href:'https://discord.gg/y83ewhS49'};
   assert.deepEqual(gameContinuation(33),expected);
   assert.deepEqual(gameContinuation(34),expected);
 });

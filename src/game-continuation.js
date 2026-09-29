@@ -4,8 +4,7 @@ export function gameContinuation(level) {
   if (!Number.isInteger(level) || level < 33) return null;
   return {
     level: 33,
-    message: 'Bien joué. La suite t’attend.',
-    label: 'Rejoindre le Discord',
+    label: 'Rejoindre',
     href: 'https://discord.gg/y83ewhS49',
   };
 }
