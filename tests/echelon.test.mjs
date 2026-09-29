@@ -87,6 +87,7 @@ test('M=M and named answers accept accents, equal signs and partial discovery',(
   assert.ok(!NODES.some(n=>n.id==='n-0'));
   assert.equal(gameLevel(rows('n-0-1','n-0-3')),3);
   const beast=NODES.find(n=>n.id==='n-h');
+  assert.equal(beast.source,'Prends la bête à');
   for(const [text,id]of [['dix cornes','n-h-2'],['deux cornes','n-h-3'],['Prends la bête à 2 cornes','n-h-3'],['Prends la bête à dix cornes','n-h-2']]){
     const result=matchNode(beast,text,new Set());
     assert.ok(result.prises.some(p=>p.id===id&&p.complet),text);
@@ -109,6 +110,7 @@ test('the two numeric formulas independently accept the same date and preserve e
 
 test('AA, apostles and repeated signs remain independent; corrected history keeps earned rungs',()=>{
   const aa=NODES.find(n=>n.id==='eg-15'),fiftySeven=NODES.find(n=>n.id==='n-a'),seven=NODES.find(n=>n.id==='n-k');
+  assert.equal(aa.answers[0].label,'Andromédien Autiste');
   for(const text of ['Andromédien autiste','andromedien autiste'])assert.ok(matchNode(aa,text,new Set()).prises[0].complet);
   assert.deepEqual(fiftySeven.answers.map(a=>a.label),['12 apôtres','Signes']);
   assert.deepEqual(seven.answers.map(a=>a.label),['Galaxies','Signes']);

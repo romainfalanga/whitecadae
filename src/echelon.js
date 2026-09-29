@@ -21,7 +21,7 @@ export const NODES = [
   ...onSong('30-vins-divins',1,[
     {id:'eg-14',source:'30 vins divins',answers:[...legacy('n-c').answers.map(a=>({...a,id:'eg-14-1'})),a('eg-14-2','Jésus')]},
     {id:'n-a',source:'57',answers:[answer('eg-16-1','12 apôtres',[['12','douze'],['apôtres','apotre']]),a('eg-16-2','Signes',['signe'])]},
-    {id:'n-h',source:'Prends la bête A',answers:[horns('n-h-2','10','dix'),horns('n-h-3','2','deux')]},
+    {id:'n-h',source:'Prends la bête à',answers:[horns('n-h-2','10','dix'),horns('n-h-3','2','deux')]},
     {id:'eg-02',source:'XEU',answers:[a('eg-02-1','Dieu'),a('eg-02-2','VALD')]},
     {id:'eg-01',source:'Aigle',answers:[a('eg-01-1','Signe',['signes'])]},
     {...legacy('n-w'),visual:'line'},
@@ -38,7 +38,7 @@ export const NODES = [
     {...legacy('n-k',['n-k-1']),answers:[a('n-k-1','Galaxies',['galaxie']),a('eg-17-1','Signes',['signe'])]},
   ]),
   ...onSong('13h20',3,[legacy('n-e',['n-e-2'])]),
-  ...onSong('orange',4,[{id:'eg-15',source:'AA',answers:[answer('eg-15-1','Andromédien autiste',[['Andromédien'],['autiste']])]}]),
+  ...onSong('orange',4,[{id:'eg-15',source:'AA',answers:[answer('eg-15-1','Andromédien Autiste',[['Andromédien'],['Autiste']])]}]),
   {id:'eg-11',source:'2:24',subtitle:'13h20',music:'13h20',min:3,kind:'workshop',board:'first',requires:['eg-03-1'],answers:[a('eg-11-1','24 décembre · 24 / 12')]},
   {id:'eg-12',source:'3:50 ↔ 3:44',subtitle:'30 vins divins · Sans indices dans les dés',music:'sans-indice-dans-les-des',min:2,kind:'workshop',board:'pair',requires:['eg-03-1'],answers:[a('eg-12-1','2 × 57')]},
   {id:'eg-13',source:'2:39',subtitle:'Orange',music:'orange',min:4,kind:'workshop',board:'last',requires:['eg-03-1'],answers:[a('eg-13-1','57')]},

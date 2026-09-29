@@ -95,5 +95,3 @@ body.with-player #install-banner { bottom:calc(var(--player-height) + 1rem); }
   .lyrics-readable { font-size:1.03rem;line-height:1.9; }
 }
 @media(prefers-reduced-motion:reduce) { .music-album *,#music-player * { scroll-behavior:auto;transition:none;animation:none; } }
-
-.account-access{flex:none;display:flex;align-items:center}.account-button{display:grid;place-items:center;width:42px;height:42px;border:1px solid var(--border);border-radius:50%;background:transparent;color:var(--text);font-size:1.6rem;text-decoration:none;cursor:pointer}.account-button:focus-visible{outline:2px solid var(--orange);outline-offset:3px}@media(max-width:700px){.account-access{order:1}.nav-toggle{order:2}.site-header{gap:.65rem}.site-header .brand{margin-right:auto}}

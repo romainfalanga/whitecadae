@@ -5,10 +5,9 @@ import {
   ECHELON_114,
 } from './enigmas57.js';
 import { handleEchelon, gameRows } from './echelon-api.js';
-import { gameLevel, accessLevel, gameProfile } from './echelon.js';
+import { gameLevel, accessLevel } from './echelon.js';
 import {RELEASES,retiredSong,gatedTrack,gatedAlbum,visibleSong,canListen,musicAlbums,ensureMusicCatalogue,continuousTrack} from './music-catalogue.js';
 import {contentAccess} from './content-access.js';
-import {buildJourney} from './journey.js';
 import {buildOrange} from './orange-access.js';
 export {BrainstormLive} from './brainstorm-live.js';
 
@@ -198,13 +197,11 @@ async function handleApi(request, env, url) {
   if (route('POST', '/api/logout')) return logout(request, env);
   if (route('GET', '/api/me')) return me(request, env);
 
-  // --- l'avatar n'est barré par rien : il s'affiche jusque dans le menu
+  // Legacy avatar URLs remain available without restoring a profile page.
   if ((p = route('GET', '/api/users/:username/avatar'))) return getAvatar(env, p[0]);
 
-  // --- le profil est public : on y lit l'échelon d'un membre et les énigmes
-  //     qu'il a percées. Ce qu'il a écrit, lui, reste soumis à l'accès de
-  //     celui qui regarde (voir getProfile).
-  if ((p = route('GET', '/api/users/:username'))) return getProfile(env, request, p[0]);
+  // Profiles have been retired; existing accounts keep their game progress.
+  if (/^\/api\/users\/[^/]+$/.test(path)) return json({error:'La page profil a été retirée.'},410);
 
   // The retired reset must not erase historical access rights.
   if (route('DELETE', '/api/57/progress')) return json({ error: 'Cette ancienne fonction a été retirée.' }, 410);
@@ -833,137 +830,6 @@ async function getSong(env, request, slug) {
   ).bind(song.id).all()).results;
 
   return json({ song, lines });
-}
-
-/* ----------------------------------------------------- profils & le livre */
-
-// Profil public d'un membre : ses contributions assemblées morceau par
-// morceau, dans l'ordre des albums puis des morceaux puis de la position
-// dans le texte. Un visiteur ne voit que ce que le membre a publié ; le
-// membre lui-même voit aussi ses brouillons en attente de publication.
-// Le profil se lit sans rien avoir trouvé : l'échelon d'un membre et les
-// énigmes qu'il a percées sont publics. Ce qu'il a ÉCRIT, en revanche, suit
-// l'accès de celui qui regarde : on ne contourne pas les portes par ici.
-async function getProfile(env, request, username) {
-  await ensureReferenceColumns(env);
-  const user = await env.DB.prepare(
-    'SELECT id, username, created_at, is_admin FROM users WHERE username = ?1 COLLATE NOCASE'
-  ).bind(username).first();
-  if (!user) return json({ error: 'Membre introuvable.' }, 404);
-
-  const viewer = await getUser(request, env);
-  const isOwner = viewer && viewer.id === user.id ? 1 : 0;
-
-  // La part publique : l'échelon, et les énigmes trouvées telles que celui
-  // qui regarde a le droit de les nommer.
-  const jeu = gameProfile(await gameRows(env, user.id), await gameRows(env, viewer?.id));
-
-  const annotations = (await env.DB.prepare(
-    `SELECT a.id, a.target_type, a.content, a.created_at, a.updated_at, a.is_published, a.grid_number,
-            a.line_id, a.word_start, a.word_end, a.end_line_id,
-            s.id AS song_id, s.title AS song_title, s.slug AS song_slug,
-            s.track_number, s.duration_seconds,
-            COALESCE(al.position, 999) AS album_position, al.title AS album_title,
-            l.text AS line_text, l.line_number,
-            le.text AS end_line_text
-       FROM annotations a
-       JOIN songs s ON s.id = a.song_id
-       LEFT JOIN albums al ON al.id = s.album_id
-       LEFT JOIN lyric_lines l ON l.id = a.line_id
-       LEFT JOIN lyric_lines le ON le.id = a.end_line_id
-      WHERE a.user_id = ?1 AND ?2 = 1
-      ORDER BY album_position, s.track_number,
-               CASE WHEN a.line_id IS NULL THEN 0 ELSE 1 END,
-               COALESCE(l.line_number, 0), COALESCE(a.word_start, -1), a.created_at`
-  ).bind(user.id, isOwner).all()).results;
-
-  const refs = (await env.DB.prepare(
-    `SELECT r.id, r.annotation_id, r.label, r.artist, r.note,
-            r.ref_song_id, rs.slug AS ref_song_slug
-       FROM annotation_references r
-       LEFT JOIN songs rs ON rs.id = r.ref_song_id
-      WHERE r.annotation_id IN (SELECT id FROM annotations WHERE user_id = ?1)
-      ORDER BY r.annotation_id, r.position`
-  ).bind(user.id).all()).results;
-  for (const a of annotations) a.references = refs.filter((r) => r.annotation_id === a.id);
-
-  const essays = (await env.DB.prepare(
-    `SELECT e.id, e.content, e.created_at, e.updated_at, e.is_published,
-            s.id AS song_id, s.title AS song_title, s.slug AS song_slug, s.track_number,
-            COALESCE(al.position, 999) AS album_position, al.title AS album_title
-       FROM essays e
-       JOIN songs s ON s.id = e.song_id
-       LEFT JOIN albums al ON al.id = s.album_id
-      WHERE e.user_id = ?1 AND ?2 = 1
-      ORDER BY album_position, s.track_number, e.created_at`
-  ).bind(user.id, isOwner).all()).results;
-  const essayLinks = (await env.DB.prepare(
-    `SELECT el.essay_id, el.note,
-            el.from_word_start, el.from_word_end, el.to_word_start, el.to_word_end,
-            lf.text AS from_text, sf.title AS from_song_title, sf.slug AS from_song_slug,
-            lt.text AS to_text, st.title AS to_song_title, st.slug AS to_song_slug
-       FROM essay_links el
-       JOIN lyric_lines lf ON lf.id = el.from_line_id
-       JOIN songs sf ON sf.id = lf.song_id
-       JOIN lyric_lines lt ON lt.id = el.to_line_id
-       JOIN songs st ON st.id = lt.song_id
-      WHERE el.essay_id IN (SELECT id FROM essays WHERE user_id = ?1)
-      ORDER BY el.essay_id, el.position`
-  ).bind(user.id).all()).results;
-  for (const e of essays) e.links = essayLinks.filter((l) => l.essay_id === e.id);
-
-  // Les références autonomes posées par ce membre : le passage visé vit dans
-  // un morceau, la référence elle-même pointe soit vers un autre passage,
-  // soit vers une œuvre extérieure.
-  await ensurePassageRefTable(env);
-  const passageRefs = (await env.DB.prepare(
-    `SELECT pr.id, pr.kind, pr.label, pr.artist, pr.note, pr.created_at,
-            pr.target_type, pr.word_start, pr.word_end,
-            s.title AS song_title, s.slug AS song_slug,
-            l.text AS line_text, le.text AS end_line_text,
-            rs.slug AS ref_song_slug
-       FROM passage_references pr
-       JOIN songs s ON s.id = pr.song_id
-       LEFT JOIN lyric_lines l ON l.id = pr.line_id
-       LEFT JOIN lyric_lines le ON le.id = pr.end_line_id
-       LEFT JOIN songs rs ON rs.id = pr.ref_song_id
-      WHERE pr.user_id = ?1 AND ?2 = 1
-      ORDER BY pr.created_at DESC`
-  ).bind(user.id, isOwner).all()).results;
-
-  const connections = (await env.DB.prepare(
-    `SELECT c.id, c.explanation, c.created_at,
-            sa.title AS song_a_title, sa.slug AS song_a_slug,
-            sb.title AS song_b_title, sb.slug AS song_b_slug
-       FROM song_connections c
-       JOIN songs sa ON sa.id = c.song_a_id
-       JOIN songs sb ON sb.id = c.song_b_id
-      WHERE c.user_id = ?1 AND ?2 = 1 ORDER BY c.created_at`
-  ).bind(user.id, isOwner).all()).results;
-
-  /* Les compteurs disent ce que ce membre a fait, sans rien en montrer :
-     ses interprétations sont sa mémoire. */
-  const stats = await env.DB.prepare(
-    `SELECT
-       (SELECT COUNT(*) FROM annotations WHERE user_id = ?1) AS annotations,
-       (SELECT COUNT(*) FROM essays WHERE user_id = ?1) AS essays,
-       (SELECT COUNT(*) FROM song_connections WHERE user_id = ?1) AS connections`
-  ).bind(user.id).first();
-
-  const unlocked=await listeningAccess(request,env);
-  const visible=slug=>!slug||visibleSong({slug},unlocked);
-  const allowedAnnotations=annotations.filter(a=>visible(a.song_slug));
-  for(const a of allowedAnnotations)a.references=a.references.filter(r=>visible(r.ref_song_slug));
-  const allowedEssays=essays.filter(e=>visible(e.song_slug));
-  for(const e of allowedEssays)e.links=e.links.filter(l=>visible(l.from_song_slug)&&visible(l.to_song_slug));
-  return json({
-    user: { username: user.username, created_at: user.created_at, is_admin: !!user.is_admin },
-    jeu,
-    ...(isOwner?{journey:buildJourney(await gameRows(env,user.id),user).summary}:{}),
-    stats, annotations:allowedAnnotations, essays:allowedEssays,
-    passageRefs:passageRefs.filter(p=>visible(p.song_slug)&&visible(p.ref_song_slug)),
-    connections:connections.filter(c=>visible(c.song_a_slug)&&visible(c.song_b_slug)),
-  });
 }
 
 /* ------------------------------------------------------------ annotations */

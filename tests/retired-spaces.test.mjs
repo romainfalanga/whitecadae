@@ -14,11 +14,20 @@ test('retired realtime connections close without deleting stored data',async()=>
   let closed=0;const room=new BrainstormLive({getWebSockets:()=>[{close(){closed++;}}]});
   assert.equal(closed,1);assert.equal((await room.fetch()).status,410);
 });
-test('menu and loaded assets contain only music, game, and a separate account control',()=>{
+test('the three-link menu and header have no profile or account control',()=>{
   const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
   const js=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
   const nav=js.slice(js.indexOf('function renderNav()'),js.indexOf('/* ---',js.indexOf('function renderNav()')));
   for(const old of ['chat.js','community.js','vocal.js','videographie.js','cooperation.css'])assert.ok(!html.includes(old));
   assert.doesNotMatch(nav,/Mon profil|Conversation|Tous les projets/);
-  assert.match(nav,/account-access/);assert.match(nav,/>Musique</);assert.match(nav,/>Échelon</);
+  assert.doesNotMatch(html,/account-access|nav-settings/);
+  assert.doesNotMatch(js,/account-access|pageProfile|openSettings|Mon profil/);
+  assert.match(nav,/>Musique</);assert.match(nav,/>Échelon</);
+});
+
+test('the removed profile API does not expose member information',async()=>{
+  const env=new Proxy({},{get(){throw Error('Profile data must stay untouched');}});
+  const res=await worker.fetch(new Request('https://test.local/api/users/member'),env);
+  assert.equal(res.status,410);
+  assert.match(res.headers.get('Cache-Control'),/no-store/);
 });

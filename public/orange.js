@@ -6,12 +6,12 @@ async function pageOrange() {
     <h1 id="story-title" class="orange-title">Escape Game <span>Orange</span></h1>
     <div class="orange-story-text"><p>Vulpis était en enfer. Il a écrit quatre morceaux dans un album intitulé <strong>57</strong>, puis trois autres dans un album intitulé <strong>114</strong>. Ces morceaux l’ont aidé à s’en échapper et à trouver le chemin vers son paradis. En mettant en musique ce qu’il traversait, en extériorisant ce qu’il portait en lui, il a laissé des signes dans ses textes.</p>
     <p>Dans ces morceaux, plusieurs grilles de lecture se superposent : les mêmes paroles peuvent raconter plusieurs choses à la fois. Un mot, une expression, un nombre, une sonorité ou un rapprochement entre deux passages peut révéler un autre sens. Ces codes cachés sont les <strong>signes</strong> que tu dois retrouver.</p>
-    <p>Écoute, réécoute et lis les paroles. Fais dialoguer les morceaux pour découvrir les différentes lectures qu’ils contiennent. Puis rends-toi sur la <a href="/echelon" data-link>page Échelons</a> pour proposer les signes que tu as trouvés et progresser dans l’escape game.</p></div>
+    <p>Écoute, réécoute et lis les paroles. Fais dialoguer les morceaux pour découvrir les différentes lectures qu’ils contiennent. Puis rends-toi sur la page <a href="/echelon" data-link>Échelon</a> pour trouver les signes et rejoindre ton propre paradis.</p></div>
   <div id="orange-openings" class="orange-openings"></div></section>`;
   try {
     const data = await api("/api/orange");
     if (stale(epoch)) return;
-    document.getElementById("orange-openings").innerHTML = data.openings.map(item => `<div class="orange-opening"><span>Échelon ${item.level}</span><a href="${esc(item.href)}" data-link>${esc(item.title)}</a>${item.lyricsHref ? `<a class="opening-lyrics" href="${esc(item.lyricsHref)}" data-link>Paroles</a>` : ""}</div>`).join("");
+    document.getElementById("orange-openings").innerHTML = data.openings.map(item => `<div class="orange-opening"><span>Échelon ${item.level}</span><a href="${esc(item.href)}" data-link>${esc(item.title)}</a>${item.lyricsHref ? `<a class="opening-lyrics" href="${esc(item.lyricsHref)}" data-link>Paroles</a>` : ""}${item.paragraph?`<p class="orange-opening-story">${esc(item.paragraph)}</p>`:""}</div>`).join("");
   } catch { /* The original welcome remains readable if access loading fails. */ }
 }
 
@@ -32,7 +32,7 @@ async function pageMusique() {
       <a class="track-lyrics" href="/chanson/${t.slug}" data-link aria-label="Lire les paroles de ${esc(t.title)}">${WCIcon('book')}<span>Paroles</span></a>
       <span class="track-duration">${mmss(Math.floor(t.duration))}</span>
     </li>`).join('')}</ol>
-  </div></section>`).join('')}<p class="album-game-link"><a href="/echelon" data-link>Le jeu se poursuit dans Échelons →</a></p>`;
+  </div></section>`).join('')}`;
   bindMusicButtons();
   if(/^#(?:album|track)-/.test(location.hash))document.getElementById(location.hash.slice(1))?.scrollIntoView();
 }
