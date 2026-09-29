@@ -38,6 +38,11 @@ function safeUrl(url) {
   return /^https?:\/\//i.test(u) ? u : '#';
 }
 
+function continuationMarkup(item) {
+  if (!item) return '';
+  return `<section class="game-continuation" aria-label="La suite de l’escape game"><span class="eyebrow">Échelon ${esc(item.level)}</span><p>${esc(item.message)}</p><a href="${esc(safeUrl(item.href))}" target="_blank" rel="noopener noreferrer">${esc(item.label)}<span class="sr-only"> (nouvel onglet)</span></a></section>`;
+}
+
 function tokens(text) {
   const t = text.trim();
   return t ? t.split(/\s+/) : [];

@@ -2,6 +2,7 @@
 // must never be copied into a browser bundle.
 import { NODES as OLD, compileAnswer, normalize, currentAnswerId as oldId,
   echelonOf as oldLevel, progresOf as oldProgress } from './enigmas57.js';
+import {gameContinuation} from './game-continuation.js';
 
 export const SHARE = '@eg/share';
 const legacy = (id, keep) => ({ ...OLD.find(n => n.id === id), answers: OLD.find(n => n.id === id).answers.filter(a => !keep || keep.includes(a.id)) });
@@ -20,7 +21,7 @@ const horns=(id,number,word)=>answer(id,number+' cornes',[[number,word],['cornes
 export const NODES = [
   ...onSong('30-vins-divins',1,[
     {id:'eg-14',source:'30 vins divins',answers:[...legacy('n-c').answers.map(a=>({...a,id:'eg-14-1'})),a('eg-14-2','Jésus')]},
-    {id:'n-a',source:'57',answers:[answer('eg-16-1','12 apôtres',[['12','douze'],['apôtres','apotre']]),a('eg-16-2','Signes',['signe'])]},
+    {id:'n-a',source:'57',answers:[answer('eg-16-1','12 apôtres',[['12','douze'],['apôtres','apotre']]),a('eg-16-2','Signes',['signe']),a('eg-16-3','Anges',['ange'])]},
     {id:'n-h',source:'Prends la bête à…',answers:[horns('n-h-2','10','dix'),horns('n-h-3','2','deux')]},
     {id:'eg-02',source:'XEU',answers:[a('eg-02-1','Dieu')]},
     {id:'eg-01',source:'Aigle',answers:[a('eg-01-1','Signe',['signes'])]},
@@ -49,10 +50,10 @@ export const NODES = [
   {id:'eg-21',source:'3:18 ↔ 3:18',subtitle:'Quand je vois je pense · Un fil entre deux infinis',music:'un-fil-entre-deux-infinis',min:10,kind:'workshop',board:'infinis',requires:['eg-03-1'],answers:[a('eg-21-1','666')]},
   ...onSong('wanheda',8,[{id:'n-0',source:'En collant nos deux noms sur Instagram, tu en trouveras un troisième et celui d’un endroit.',answers:[a('n-0-1','Devincix'),a('n-0-3','Katikas',['Katikias'])]}]),
 ].map(n=>({...n,kind:n.kind||'riddle',requires:n.requires||[],min:n.min||1}));
-// Retired answers are no longer discoverable. Earned historical points remain.
+// Retired records remain stored, but never add rungs to the current game.
 const retiredAnswers=[['eg-02-2',1],['eg-03-3',1]];
-export const MAX_GAME_LEVEL=1+NODES.reduce((sum,n)=>sum+n.answers.length,0)+retiredAnswers.length;
-export const progressLevel=p=>1+p.solved.size+(p.retired?.size||0);
+export const MAX_GAME_LEVEL=1+NODES.reduce((sum,n)=>sum+n.answers.length,0);
+export const progressLevel=p=>1+p.solved.size;
 const byId = new Map(NODES.map(n=>[n.id,n]));
 const byAnswer = new Map(NODES.flatMap(n=>n.answers.map(a=>[a.id,{a,n}])));
 const merged = {'n-a-2':'eg-01-1','n-k-2':'eg-01-1','n-b-1':'eg-01-1','eg-04-1':'eg-14-1'};
@@ -118,7 +119,8 @@ export function buildGameState(rows=[]) {
   }
   if(has(p,'eg-03-1'))pages.push({id:'eg-10',kind:'clock',title:'Horloge',source:'Horloge',visual:'clock',locked:false});
   for(const page of pages)page.href=page.kind==='clock'?'/echelon/horloge':page.kind==='workshop'?`/echelon/horloge#${page.id}`:`/echelon#${page.id}`;
-  return {echelon:progressLevel(p),pages,nodes:pages.filter(n=>['riddle','workshop'].includes(n.kind)),capabilities:has(p,'eg-03-1')?{share:true}:{}};
+  const echelon=progressLevel(p);
+  return {echelon,continuation:gameContinuation(echelon),pages,nodes:pages.filter(n=>['riddle','workshop'].includes(n.kind)),capabilities:has(p,'eg-03-1')?{share:true}:{}};
 }
 export function gameProfile(rows,viewerRows){const target=progress(rows),visible=new Set(buildGameState(viewerRows).pages.map(n=>n.id));return {echelon:progressLevel(target),enigmes:NODES.filter(n=>visible.has(n.id)).map(n=>({id:n.id,source:n.source,found:n.answers.filter(a=>target.solved.has(a.id)).length,total:n.silent?null:n.answers.length})).filter(n=>n.found)};}
 

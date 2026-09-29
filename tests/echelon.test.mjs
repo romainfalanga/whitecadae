@@ -20,7 +20,7 @@ const date=[src('b'),op('div',share(src('b')),src('a'))];
 
 test('one completed answer is one rung; old duplicates merge, retired history preserves access',()=>{
   assert.equal(gameLevel(rows()),1);
-  assert.equal(gameLevel(rows('eg-02-1','eg-02-2','eg-02-1.p0')),3);
+  assert.equal(gameLevel(rows('eg-02-1','eg-02-2','eg-02-1.p0')),2);
   assert.equal(gameLevel(rows('eg-06-1.p0')),1);
   assert.equal(gameLevel(rows('eg-06-1.p0','eg-06-1.p1')),2);
   assert.equal(gameLevel(rows('n-a-2','n-k-2','n-b-1','eg-01-1')),5);
@@ -33,23 +33,24 @@ test('one completed answer is one rung; old duplicates merge, retired history pr
   assert.equal(progress(rows('n-a-2.p0')).solved.has('eg-01-1'),true);
 });
 
-test('the current route ends at 32; retained retired answers explain levels 33 and 34 without duplicate credit',()=>{
+test('all accounts share the same current ceiling; retired records cannot add levels or a completion bonus',()=>{
   const active=NODES.flatMap(n=>n.answers.map(a=>a.id));
   assert.equal(NODES.length,23);
-  assert.equal(active.length,31);
-  assert.equal(new Set(active).size,31);
-  assert.equal(gameLevel(rows(...active)),32);
+  assert.equal(active.length,32);
+  assert.equal(new Set(active).size,32);
+  assert.equal(gameLevel(rows(...active)),33);
   for(const retired of ['eg-02-2','eg-03-3']){
     const history=rows(...active,retired,retired+'.p0',retired);
     assert.equal(gameLevel(history),33);
-    assert.equal(progress(history).solved.size,31);
+    assert.equal(progress(history).solved.size,32);
     assert.equal(progress(history).retired.size,1);
   }
   const fullHistory=rows(...active,'eg-02-2','eg-02-2.p0','eg-03-3','eg-03-3.p0');
-  assert.equal(gameLevel(fullHistory),34);
-  assert.equal(MAX_GAME_LEVEL,34);
-  // Both historical credits and one current answer still missing also give 33.
-  assert.equal(gameLevel(rows(...active.slice(0,-1),'eg-02-2','eg-03-3')),33);
+  assert.equal(gameLevel(fullHistory),33);
+  assert.equal(MAX_GAME_LEVEL,33);
+  assert.equal(gameLevel(rows(...active.slice(0,-1),'eg-02-2','eg-03-3')),32);
+  assert.deepEqual(buildGameState(fullHistory),buildGameState(rows(...active)));
+  assert.equal(buildGameState(fullHistory).continuation.level,33);
 });
 
 test('signs appear only with their song, even if an old client marked them seen',()=>{
@@ -114,19 +115,19 @@ test('M=M and named answers accept accents, equal signs and partial discovery',(
   }
 });
 
-test('XEU only accepts Dieu; a former VALD discovery preserves its historical rung without being displayed',()=>{
+test('XEU only accepts Dieu; former VALD records do not grant a rung',()=>{
   const xeu=NODES.find(n=>n.id==='eg-02');
   assert.deepEqual(xeu.answers.map(a=>a.label),['Dieu']);
   assert.ok(matchNode(xeu,'dieu',new Set()).prises.some(p=>p.id==='eg-02-1'&&p.complet));
   for(const text of ['VALD','V-A-L-D'])assert.ok(!matchNode(xeu,text,new Set())?.prises?.length);
   const history=rows('eg-02-2','eg-02-2.p0'),state=buildGameState(history);
-  assert.equal(state.echelon,2);
+  assert.equal(state.echelon,1);
   assert.deepEqual(state.nodes.find(n=>n.id==='eg-02').found,[]);
   assert.equal(state.nodes.find(n=>n.id==='eg-02').total,1);
-  assert.equal(gameLevel(rows('eg-02-2.p0')),2);
+  assert.equal(gameLevel(rows('eg-02-2.p0')),1);
 });
 
-test('Aiguille only accepts Horloge and details, while the retired Signe keeps historical progress',()=>{
+test('Aiguille only accepts Horloge and details; its retired Signe grants no rung',()=>{
   const needle=NODES.find(n=>n.id==='eg-03');
   assert.deepEqual(needle.answers.map(a=>a.label),['L’horloge','le détail']);
   for(const text of ['horloge','Horloge',"l'horloge",'L’horloge'])assert.ok(matchNode(needle,text,new Set()).prises.some(p=>p.id==='eg-03-1'&&p.complet),text);
@@ -135,10 +136,10 @@ test('Aiguille only accepts Horloge and details, while the retired Signe keeps h
     assert.ok(matchNode(needle,text,new Set()).prises.some(p=>p.id==='eg-03-2'&&p.complet),text);
   }
   const state=buildGameState(rows('eg-02-1','eg-03-2','eg-03-3'));
-  assert.equal(state.echelon,4);
+  assert.equal(state.echelon,3);
   assert.deepEqual(state.nodes.find(n=>n.id==='eg-03').found.map(a=>a.label),['le détail']);
   assert.equal(state.nodes.find(n=>n.id==='eg-03').total,2);
-  assert.equal(gameLevel(rows('eg-03-3','eg-03-3.p0')),2);
+  assert.equal(gameLevel(rows('eg-03-3','eg-03-3.p0')),1);
   assert.ok(!state.pages.some(p=>p.kind==='clock'));
 });
 
@@ -177,9 +178,10 @@ test('AA, apostles and repeated signs remain independent; corrected history keep
   const aa=NODES.find(n=>n.id==='eg-15'),fiftySeven=NODES.find(n=>n.id==='n-a'),seven=NODES.find(n=>n.id==='n-k');
   assert.equal(aa.answers[0].label,'Andromédien Autiste');
   for(const text of ['Andromédien autiste','andromedien autiste'])assert.ok(matchNode(aa,text,new Set()).prises[0].complet);
-  assert.deepEqual(fiftySeven.answers.map(a=>a.label),['12 apôtres','Signes']);
+  assert.deepEqual(fiftySeven.answers.map(a=>a.label),['12 apôtres','Signes','Anges']);
   assert.deepEqual(seven.answers.map(a=>a.label),['Galaxies','Signes']);
   for(const text of ['12 apôtres','douze apotres'])assert.ok(matchNode(fiftySeven,text,new Set()).prises[0].complet);
+  for(const text of ['anges','Anges','ange'])assert.ok(matchNode(fiftySeven,text,new Set()).prises.some(p=>p.id==='eg-16-3'&&p.complet));
   assert.ok(!matchNode(fiftySeven,'archanges',new Set())?.prises?.length);
   assert.equal(gameLevel(rows('n-a-4')),2);
   assert.equal(gameLevel(rows('n-a-4.p0','n-a-4.p1','n-a-4.p2')),2);

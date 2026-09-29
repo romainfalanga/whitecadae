@@ -18,7 +18,7 @@ test('map shows current song signs without exposing their answers',()=>{
   assert.equal(fragment.nodes.find(n=>n.id==='eg-06').status,'partial');
 });
 test('workshop dependencies connect only available songs and the discovered clock',()=>{
-  const base=['eg-02-1','eg-02-2'];
+  const base=['eg-02-1','eg-01-1'];
   assert.ok(!buildJourney(rows(...base)).nodes.some(n=>n.id==='eg-15'));
   const fifth=buildJourney(rows(...base,'n-h-2'));
   assert.equal(fifth.nodes.find(n=>n.id==='eg-15').status,'available');

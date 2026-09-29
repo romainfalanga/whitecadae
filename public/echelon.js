@@ -25,6 +25,8 @@ window.WCGame=(()=>{
   function selectBoard(id){activeBoard=activeBoard===id?null:id;sync();history.replaceState(null,'',activeBoard?'#'+id:location.pathname);if(activeBoard)document.getElementById(id)?.scrollIntoView({block:'start'});}
   function sync(){
     document.querySelectorAll('.eg-level strong').forEach(el=>el.textContent=data.echelon);
+    const continuation=document.getElementById('eg-continuation'),markup=continuationMarkup(data.continuation);
+    if(continuation&&continuation.innerHTML!==markup)continuation.innerHTML=markup;
     const root=document.getElementById('eg-game-content');if(!root)return;
     if(isClock()){
       for(const p of data.nodes.filter(n=>n.kind==='workshop')){
@@ -59,7 +61,7 @@ window.WCGame=(()=>{
   function render(){
     versions.clear();
     if(isClock()&&!pageBy('eg-10')){app.innerHTML='<section class="eg-page"><h1>Ce chemin n’est pas disponible.</h1><a href="/echelon" data-link>Retrouver Échelons →</a></section>';return;}
-    app.innerHTML=`<section class="eg-page">${header()}<div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}<div id="eg-game-content" class="${isClock()?'eg-labs':'eg-entries'}"></div></section>`;
+    app.innerHTML=`<section class="eg-page">${header()}<div id="eg-continuation" aria-live="polite"></div><div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}<div id="eg-game-content" class="${isClock()?'eg-labs':'eg-entries'}"></div></section>`;
     document.title=`${isClock()?'Horloge · ':''}Échelons · White Cadae`;
     sync();
   }
@@ -73,7 +75,9 @@ window.WCGame=(()=>{
       if(result.ok){const input=document.getElementById(`input-${p.id}`);if(input)input.value='';}
       if(top!==undefined){const after=document.getElementById(p.id);if(after&&p.kind==='workshop'&&!pageBy(p.id)?.open){after.scrollIntoView({block:'start'});after.querySelector('h2')?.focus({preventScroll:true});}else if(after)window.scrollBy(0,after.getBoundingClientRect().top-top);}
       const opened=[...(result.opened||[])];
+      const reachedContinuation=!before.continuation&&data.continuation;
       feedback(result.gained?`+${result.gained} ${result.gained>1?'échelons':'échelon'}.${newlyVisible?' Une nouvelle énigme apparaît.':''}`:result.message||'Une partie de ce signe est trouvée.',p.id,opened);
+      if(reachedContinuation)document.getElementById('eg-continuation')?.scrollIntoView({block:'start'});
       if(result.gained){await refreshSession();if(token===serial)renderNav();}
     }catch(err){if(token===serial){feedback(err.message,p.id);if(err.data?.attenteMs&&button){let remaining=Math.ceil(err.data.attenteMs/1000);const label=button.textContent;const timer=setInterval(()=>{if(token!==serial||--remaining<=0){clearInterval(timer);if(token===serial){button.disabled=false;button.textContent=label;}}else button.textContent=`Réessayer dans ${remaining}s`;},1000);timers.push(timer);return;}}}
     finally{if(token===serial)sending=false;}
