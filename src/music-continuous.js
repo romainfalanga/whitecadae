@@ -3,7 +3,7 @@ export const CONTINUOUS = {
   "57": [
     {
       "src": "/music/57/continuous-v1-3.m4a",
-      "minLevel": 3,
+      "minLevel": 2,
       "bytes": 11230397,
       "duration": 455.12027210884355,
       "chapters": [
@@ -21,7 +21,7 @@ export const CONTINUOUS = {
     },
     {
       "src": "/music/57/continuous-v1-4.m4a",
-      "minLevel": 4,
+      "minLevel": 3,
       "bytes": 14792080,
       "duration": 599.5183900226757,
       "chapters": [
@@ -44,7 +44,7 @@ export const CONTINUOUS = {
     },
     {
       "src": "/music/57/continuous-v1-5.m4a",
-      "minLevel": 5,
+      "minLevel": 4,
       "bytes": 18696319,
       "duration": 758.8914512471655,
       "chapters": [
@@ -74,7 +74,7 @@ export const CONTINUOUS = {
   "fais-mieux": [
     {
       "src": "/music/fais-mieux/continuous-v1-7.m4a",
-      "minLevel": 7,
+      "minLevel": 6,
       "bytes": 4276125,
       "duration": 171.65385487528346,
       "chapters": [
@@ -92,7 +92,7 @@ export const CONTINUOUS = {
     },
     {
       "src": "/music/fais-mieux/continuous-v1-8.m4a",
-      "minLevel": 8,
+      "minLevel": 7,
       "bytes": 6254835,
       "duration": 251.80312925170068,
       "chapters": [
@@ -117,7 +117,7 @@ export const CONTINUOUS = {
   "18-juillet-2019": [
     {
       "src": "/music/18-juillet-2019/continuous-v1-10.m4a",
-      "minLevel": 10,
+      "minLevel": 9,
       "bytes": 10659262,
       "duration": 432.85986394557824,
       "chapters": [
@@ -135,7 +135,7 @@ export const CONTINUOUS = {
     },
     {
       "src": "/music/18-juillet-2019/continuous-v1-11.m4a",
-      "minLevel": 11,
+      "minLevel": 10,
       "bytes": 15522788,
       "duration": 631.4198639455782,
       "chapters": [

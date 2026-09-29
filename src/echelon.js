@@ -19,29 +19,33 @@ const onSong=(music,min,nodes)=>nodes.map(n=>({...n,music,min,reveal:null,requir
 const horns=(id,number,word)=>answer(id,number+' cornes',[[number,word],['cornes','corne']],[{idx:[0,1],formes:[normalize('Prends la bête à '+number+' cornes'),normalize('Prends la bête à '+word+' cornes')]}]);
 export const NODES = [
   ...onSong('30-vins-divins',1,[
-    {id:'eg-14',source:'30 vins divins',answers:legacy('n-c').answers.map(a=>({...a,id:'eg-14-1'}))},
-    {id:'n-a',source:'57',answers:[answer('eg-16-1','12 apôtres',[['12','douze'],['apôtres','apotre']]),a('eg-16-2','Signe',['signes'])]},
-    {id:'n-h',source:'Prends la bête',answers:[horns('n-h-2','10','dix'),horns('n-h-3','2','deux')]},
+    {id:'eg-14',source:'30 vins divins',answers:[...legacy('n-c').answers.map(a=>({...a,id:'eg-14-1'})),a('eg-14-2','Jésus')]},
+    {id:'n-a',source:'57',answers:[answer('eg-16-1','12 apôtres',[['12','douze'],['apôtres','apotre']]),a('eg-16-2','Signes',['signe'])]},
+    {id:'n-h',source:'Prends la bête A',answers:[horns('n-h-2','10','dix'),horns('n-h-3','2','deux')]},
     {id:'eg-02',source:'XEU',answers:[a('eg-02-1','Dieu'),a('eg-02-2','VALD')]},
     {id:'eg-01',source:'Aigle',answers:[a('eg-01-1','Signe',['signes'])]},
     {...legacy('n-w'),visual:'line'},
     {id:'eg-06',source:'M = M',visual:'infinity',answers:[
-      {...answer('eg-06-1','Mécanisme = matière',[['Mécanisme','mecanismes'],['matière']]),seps:[' = ']},
-      {...answer('eg-06-2','Méta-moi = moi',[['Méta-moi','meta moi','metamoi'],['moi']]),seps:[' = ']}
+      {...answer('eg-06-1','Mécanisme = Matière',[['Mécanisme','mecanismes'],['Matière']]),seps:[' = ']},
+      {...answer('eg-06-2','Méta-Moi = Moi',[['Méta-Moi','meta moi','metamoi'],['Moi']]),seps:[' = ']}
     ]},
   ]),
-  ...onSong('sans-indice-dans-les-des',3,[
+  ...onSong('sans-indice-dans-les-des',2,[
     {...legacy('n-g'),visual:'dice'},
-    {...legacy('n-c'),source:'5 vins divins'},
+    {...legacy('n-c'),source:'5 vins divins',answers:[...legacy('n-c').answers,a('n-c-2','Jésus')]},
     {...legacy('n-b'),answers:legacy('n-b').answers.map(a=>({...a,id:'eg-07-1'}))},
     {id:'eg-03',source:'Aiguille',answers:[a('eg-03-1','Horloge'),a('eg-03-2','Détails')]},
-    {...legacy('n-k',['n-k-1']),answers:[...legacy('n-k',['n-k-1']).answers,a('eg-17-1','Signe',['signes'])]},
+    {...legacy('n-k',['n-k-1']),answers:[a('n-k-1','Galaxies',['galaxie']),a('eg-17-1','Signes',['signe'])]},
   ]),
-  ...onSong('13h20',4,[legacy('n-e',['n-e-2'])]),
-  ...onSong('orange',5,[{id:'eg-15',source:'AA',answers:[answer('eg-15-1','Andromédien autiste',[['Andromédien'],['autiste']])]}]),
-  {id:'eg-11',source:'2:24',subtitle:'13h20',music:'13h20',min:4,kind:'workshop',board:'first',requires:['eg-03-1'],answers:[answer('eg-11-1','2 Jésus',[['2','deux'],['Jésus']])]},
-  {id:'eg-12',source:'3:50 ↔ 3:44',subtitle:'30 vins divins · Sans indices dans les dés',music:'sans-indice-dans-les-des',min:3,kind:'workshop',board:'pair',requires:['eg-03-1'],answers:[a('eg-12-1','2 × 57')]},
-  {id:'eg-13',source:'2:39',subtitle:'Orange',music:'orange',min:5,kind:'workshop',board:'last',reveal:{milestone:SHARE,any:['eg-12-1']},requires:['eg-03-1','eg-12-1'],answers:[a('eg-13-1','57')]},
+  ...onSong('13h20',3,[legacy('n-e',['n-e-2'])]),
+  ...onSong('orange',4,[{id:'eg-15',source:'AA',answers:[answer('eg-15-1','Andromédien autiste',[['Andromédien'],['autiste']])]}]),
+  {id:'eg-11',source:'2:24',subtitle:'13h20',music:'13h20',min:3,kind:'workshop',board:'first',requires:['eg-03-1'],answers:[a('eg-11-1','24 décembre · 24 / 12')]},
+  {id:'eg-12',source:'3:50 ↔ 3:44',subtitle:'30 vins divins · Sans indices dans les dés',music:'sans-indice-dans-les-des',min:2,kind:'workshop',board:'pair',requires:['eg-03-1'],answers:[a('eg-12-1','2 × 57')]},
+  {id:'eg-13',source:'2:39',subtitle:'Orange',music:'orange',min:4,kind:'workshop',board:'last',requires:['eg-03-1'],answers:[a('eg-13-1','57')]},
+  {id:'eg-18',source:'114',subtitle:'Le deuxième album de Vulpis',music:'la-matiere-dense',min:5,kind:'workshop',board:'album',requires:['eg-03-1'],answers:[a('eg-18-1','57-2')]},
+  {id:'eg-19',source:'18 juillet 2019',subtitle:'La date de l’album',music:'wanheda',min:8,kind:'workshop',board:'date',requires:['eg-03-1'],answers:[a('eg-19-1','57 · 07')]},
+  {id:'eg-20',source:'3:54',subtitle:'Wanheda',music:'wanheda',min:8,kind:'workshop',board:'wanheda',requires:['eg-03-1'],answers:[a('eg-20-1','57')]},
+  {id:'eg-21',source:'3:18 ↔ 3:18',subtitle:'Quand je vois je pense · Un fil entre deux infinis',music:'un-fil-entre-deux-infinis',min:10,kind:'workshop',board:'infinis',requires:['eg-03-1'],answers:[a('eg-21-1','666')]},
 ].map(n=>({...n,kind:n.kind||'riddle',requires:n.requires||[],min:n.min||1}));
 // Retired answers are no longer discoverable. Earned historical points remain.
 const retiredAnswers=[['n-0-1',1],['n-0-3',1],['eg-05-1',2]];
@@ -61,8 +65,10 @@ export function progress(rows=[]) {
   // numeric fragment transfers; arc/ange fragments cannot solve « apôtres ».
   if(previous.has('n-a-4')||[0,1,2].every(i=>previous.has('n-a-4.p'+i)))solved.add('eg-16-1');
   else if(previous.has('n-a-4.p0'))parts.set('eg-16-1',new Set([0]));
+  if(previous.has('eg-11-1.p0')&&previous.has('eg-11-1.p1'))solved.add('eg-11-1');
   for(const r of rows){
     if(!r.solved_at)continue;
+    if(/^eg-11-1\.p\d+$/.test(r.riddle_id))continue;
     if(r.riddle_id.startsWith('@eg/seen/')){seen.add(r.riddle_id.slice(9));continue;}
     if(r.riddle_id===SHARE){milestones.add(SHARE);continue;}
     if(['n-a-2','n-a-2.p0'].includes(r.riddle_id))solved.add('eg-16-2');
@@ -110,12 +116,16 @@ export function buildGameState(rows=[]) {
   }
   if(has(p,'eg-03-1'))pages.push({id:'eg-10',kind:'clock',title:'Horloge',source:'Horloge',visual:'clock',locked:false});
   for(const page of pages)page.href=page.kind==='clock'?'/echelon/horloge':page.kind==='workshop'?`/echelon/horloge#${page.id}`:`/echelon#${page.id}`;
-  return {echelon:progressLevel(p),pages,nodes:pages.filter(n=>['riddle','workshop'].includes(n.kind)),capabilities:has(p,'eg-03-1')?{share:p.milestones.has(SHARE)}:{}};
+  return {echelon:progressLevel(p),pages,nodes:pages.filter(n=>['riddle','workshop'].includes(n.kind)),capabilities:has(p,'eg-03-1')?{share:true}:{}};
 }
 export function gameProfile(rows,viewerRows){const target=progress(rows),visible=new Set(buildGameState(viewerRows).pages.map(n=>n.id));return {echelon:progressLevel(target),enigmes:NODES.filter(n=>visible.has(n.id)).map(n=>({id:n.id,source:n.source,found:n.answers.filter(a=>target.solved.has(a.id)).length,total:n.silent?null:n.answers.length})).filter(n=>n.found)};}
 
 export const boardSources={
   first:[{id:'a',value:2,label:'13h20 · minutes'},{id:'b',value:24,label:'13h20 · secondes'}],
   pair:[{id:'a',value:3,label:'30 vins divins · minutes'},{id:'b',value:50,label:'30 vins divins · secondes'},{id:'c',value:3,label:'Sans indices dans les dés · minutes'},{id:'d',value:44,label:'Sans indices dans les dés · secondes'}],
-  last:[{id:'a',value:2,label:'Orange · minutes'},{id:'b',value:39,label:'Orange · secondes'}]
+  last:[{id:'a',value:2,label:'Orange · minutes'},{id:'b',value:39,label:'Orange · secondes'}],
+  album:[{id:'a',value:114,label:'Nombre de l’album'},{id:'b',value:2,label:'Deuxième album de Vulpis'}],
+  date:[{id:'a',value:18,label:'Jour'},{id:'b',value:20,label:'Année · premier bloc'},{id:'c',value:19,label:'Année · deuxième bloc'},{id:'d',value:7,display:'07',fixed:true,label:'Juillet → 07'}],
+  wanheda:[{id:'a',value:3,label:'Wanheda · minutes'},{id:'b',value:54,label:'Wanheda · secondes'}],
+  infinis:[{id:'a',value:3,label:'Durée commune · minutes'},{id:'b',value:18,label:'Durée commune · secondes'}]
 };

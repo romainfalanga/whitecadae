@@ -2,8 +2,8 @@
 // Stratégie « réseau d'abord » : le site est collaboratif, on ne veut jamais
 // servir de contenu périmé. Le cache sert seulement de filet hors ligne.
 
-const CACHE = 'whitecadae-v25-external-lives';
-const SHELL = ['/', '/styles.css', '/app.js', '/music.css', '/music57.js', '/player.js', '/orange.js', '/echelon.js', '/echelon.css', '/journey.js', '/journey.css', '/story.css', '/chat.js', '/community.css', '/cooperation.css', '/community.js', '/live-player.js', '/vocal.js', '/videographie.js', '/manifest.webmanifest'];
+const CACHE = 'whitecadae-v26-music-workshops';
+const SHELL = ['/', '/styles.css', '/app.js', '/music.css', '/music57.js', '/player.js', '/orange.js', '/echelon.js', '/echelon.css', '/journey.js', '/journey.css', '/story.css', '/workshop-core.js', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

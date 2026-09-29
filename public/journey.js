@@ -21,7 +21,7 @@ window.WCJourney=(()=>{
     const groups=Array.from({length:Math.max(0,...depth.values())+1},(_,i)=>data.nodes.filter(n=>depth.get(n.id)===i));
     let selected=null,filter='all',search='';
     const title=n=>n.title||'La porte';
-    const count=n=>n.kind==='clock'?'Laboratoire':n.total===null?`${n.found.length} signe${n.found.length>1?'s':''} trouvé${n.found.length>1?'s':''}`:`${n.found.length} / ${n.total} signes trouvés`;
+    const count=n=>n.kind==='clock'?'Énigmes Horloge':n.total===null?`${n.found.length} signe${n.found.length>1?'s':''} trouvé${n.found.length>1?'s':''}`:`${n.found.length} / ${n.total} signes trouvés`;
     const normal=s=>s.toLocaleLowerCase('fr').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     const incoming=id=>data.edges.filter(e=>e.to===id);
     const nodeHtml=n=>`<div class="path-item" data-path-item="${n.id}"><button type="button" class="journey-node ${n.status}" id="node-${n.id}" data-map-node="${n.id}" aria-expanded="false" aria-controls="detail-${n.id}"><span class="journey-node-status">${labels[n.status]}</span><strong>${esc(title(n))}</strong><span>${count(n)}</span>${n.minLevel?`<small>Échelon ${n.minLevel}${data.echelon>=n.minLevel?' atteint':' requis'}</small>`:''}<span class="path-origin">${incoming(n.id).length?'Depuis '+[...new Set(incoming(n.id).map(e=>title(byId.get(e.from))))].map(esc).join(' · '):'Point de départ'}</span><span class="path-expand">Voir les pistes et les liens <b aria-hidden="true">＋</b></span></button><section class="journey-detail" id="detail-${n.id}" aria-labelledby="node-${n.id}" hidden></section></div>`;
@@ -50,7 +50,7 @@ window.WCJourney=(()=>{
       selected=closing?null:id;if(closing)return;
       const n=byId.get(id),ins=incoming(id),outs=data.edges.filter(e=>e.from===id),detail=document.getElementById('detail-'+id);
       const jump=(nodeId)=>`<button type="button" class="journey-jump" data-jump="${nodeId}">${esc(title(byId.get(nodeId)))} →</button>`;
-      const condition=edge=>edge.type==='passage'?'Accessible depuis Horloge':edge.type==='discovery'?'Découverte dans le laboratoire':`${edge.found} / ${edge.needed} signe${edge.needed>1?'s':''} requis`;
+      const condition=edge=>edge.type==='passage'?'Accessible depuis Horloge':edge.type==='discovery'?'Découverte dans Horloge':`${edge.found} / ${edge.needed} signe${edge.needed>1?'s':''} requis`;
       detail.innerHTML=`<div><h3>Tes découvertes</h3>${n.found.length?`<ul class="journey-found">${n.found.map(a=>`<li>${esc(a.label)}</li>`).join('')}</ul>`:'<p>Aucun signe complet trouvé sur cette piste.</p>'}${n.partiels.length?`<p>${n.partiels.length} lecture${n.partiels.length>1?'s':''} en cours.</p>`:''}</div><div><h3>Pour y accéder</h3>${n.minLevel?`<p>${data.echelon>=n.minLevel?'✓':'○'} Échelon ${n.minLevel}</p>`:''}${ins.length?`<ul>${ins.map(edge=>`<li>${jump(edge.from)}<small>${condition(edge)}</small></li>`).join('')}</ul>`:'<p>Pas de piste préalable.</p>'}</div>${outs.length?`<div><h3>Chemins reliés</h3><ul>${[...new Set(outs.map(e=>e.to))].map(to=>`<li>${jump(to)}<small>${labels[byId.get(to).status]}</small></li>`).join('')}</ul></div>`:''}<a class="orange-button" href="${esc(n.href)}" data-link>${n.kind==='clock'?'Ouvrir Horloge':n.status==='locked'?'Voir les conditions':n.status==='solved'?'Revoir cette énigme':'Explorer cette piste'}</a>`;
       detail.hidden=false;cards.get(id).setAttribute('aria-expanded','true');cards.get(id).querySelector('.path-expand b').textContent='−';items.get(id).classList.add('is-expanded');
       detail.querySelectorAll('[data-jump]').forEach(button=>button.onclick=()=>{reset();select(button.dataset.jump,true);const target=cards.get(button.dataset.jump);target.scrollIntoView({block:'start',behavior:'auto'});target.focus({preventScroll:true});});
@@ -62,3 +62,4 @@ window.WCJourney=(()=>{
   }
   return {page,leave};
 })();
+

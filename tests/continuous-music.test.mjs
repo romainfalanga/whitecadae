@@ -22,10 +22,10 @@ test('continuous URLs and their byte ranges enforce the song threshold before ac
   for(const path of ['/music//57/continuous-v1-5.m4a','/music/57/unknown.m4a','/music/%2f57/continuous-v1-5.m4a'])assert.equal((await worker.fetch(new Request('https://test.local'+path),f.env)).status,404);
   f.sql.close();
 });
-test('7 (Galaxie and Signe) cannot be read or solved before Sans indices unlocks at 3',async()=>{
-  const f=fixture();for(const level of [0,2]){
+test('7 (Galaxie and Signe) cannot be read or solved before Sans indices unlocks at 2',async()=>{
+  const f=fixture();for(const level of [0]){
     const state=await(await worker.fetch(new Request('https://test.local/api/echelon',{headers:{Cookie:'wc_session=qa'+level}}),f.env)).json();assert.ok(!state.nodes.some(n=>n.id==='n-k'));
     for(const answer of ['Galaxie','Signe']){const res=await worker.fetch(new Request('https://test.local/api/echelon/guess',{method:'POST',headers:{Cookie:'wc_session=qa'+level,'Content-Type':'application/json'},body:JSON.stringify({id:'n-k',answer})}),f.env);assert.equal(res.status,404);}
   }
-  const state=await(await worker.fetch(new Request('https://test.local/api/echelon',{headers:{Cookie:'wc_session=qa3'}}),f.env)).json();assert.ok(state.nodes.some(n=>n.id==='n-k'));f.sql.close();
+  const state=await(await worker.fetch(new Request('https://test.local/api/echelon',{headers:{Cookie:'wc_session=qa2'}}),f.env)).json();assert.ok(state.nodes.some(n=>n.id==='n-k'));f.sql.close();
 });

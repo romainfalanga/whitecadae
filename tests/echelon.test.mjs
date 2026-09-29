@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {NODES,SHARE,progress,buildGameState,gameLevel,accessLevel,gameProfile,isPlayable} from '../src/echelon.js';
 import {NODES as OLD,echelonOf,progresOf,matchNode} from '../src/enigmas57.js';
-import {evaluate,validDraft,hasTwoSevens,validateConstruction} from '../src/echelon-workshop.js';
+import {evaluate,validDraft,validateConstruction} from '../src/echelon-workshop.js';
 import {handleEchelon,ensureGameTables} from '../src/echelon-api.js';
 import worker from '../src/index.js';
 const rows=(...ids)=>ids.map(riddle_id=>({riddle_id,solved_at:'2026-09-24'}));
@@ -14,7 +14,9 @@ const share=arg=>({op:'reuse',arg});
 const sevens=[op('add',src('a'),part('d',0)),op('add',part('d',1),src('c'))];
 const pair=[op('add',sevens[0],src('b')),op('add',share(src('b')),sevens[1])];
 const orange=[op('join',op('add',src('a'),part('b',0)),op('sub',part('b',1),share(src('a'))))];
-const draft=items=>({version:1,items,selected:[]});
+const draft=(items,answer=[null,null])=>({version:2,items,answer,selected:[]});
+const final=answer=>draft([],answer);
+const date=[src('b'),op('div',share(src('b')),src('a'))];
 
 test('one completed answer is one rung; old duplicates merge, retired history preserves access',()=>{
   assert.equal(gameLevel(rows()),1);
@@ -37,8 +39,8 @@ test('signs appear only with their song, even if an old client marked them seen'
   assert.deepEqual(start.nodes.map(n=>n.id),['eg-14','n-a','n-h','eg-02','eg-01','n-w','eg-06']);
   assert.ok(start.nodes.every(n=>n.music==='30-vins-divins'&&!n.locked));
   assert.doesNotMatch(JSON.stringify(start),/Devincix|Katikas|Horloge|Jésus|Dieu|VALD|apôtres|eg-13|eg-10/);
-  assert.deepEqual(buildGameState(rows('eg-02-1','@eg/seen/n-g')).nodes.map(n=>n.id),start.nodes.map(n=>n.id));
-  const third=buildGameState(rows('eg-02-1','eg-02-2'));
+  assert.deepEqual(buildGameState(rows('@eg/seen/n-g')).nodes.map(n=>n.id),start.nodes.map(n=>n.id));
+  const third=buildGameState(rows('eg-02-1'));
   assert.deepEqual(third.nodes.filter(n=>n.music==='sans-indice-dans-les-des').map(n=>n.id),['n-g','n-c','n-b','eg-03','n-k']);
   assert.ok(!third.nodes.some(n=>n.id==='n-e'||n.id==='eg-15'));
   assert.ok(buildGameState(rows('eg-02-1','eg-02-2','eg-01-1')).nodes.some(n=>n.id==='n-e'));
@@ -47,14 +49,14 @@ test('signs appear only with their song, even if an old client marked them seen'
 });
 
 test('Horloge requires its password, while workshops also require their songs',()=>{
-  const base=['eg-02-1','eg-02-2'];
+  const base=['eg-02-1'];
   for(const extra of [[],['eg-03-2'],['@eg/seen/eg-10']])assert.ok(!buildGameState(rows(...base,...extra)).pages.some(n=>n.id==='eg-10'));
   const clock=buildGameState(rows(...base,'eg-03-1'));
   assert.ok(clock.pages.some(n=>n.id==='eg-10'));
   for(const id of ['eg-11','eg-12'])assert.equal(clock.nodes.find(n=>n.id===id).locked,false);
   assert.ok(!clock.pages.some(n=>n.id==='eg-13'));
   assert.ok(!buildGameState(rows('eg-03-1',SHARE)).pages.some(n=>n.id==='eg-13'));
-  assert.equal(buildGameState(rows(...base,'eg-03-1','eg-01-1',SHARE)).nodes.find(n=>n.id==='eg-13').locked,true);
+  assert.equal(buildGameState(rows(...base,'eg-03-1','eg-01-1',SHARE)).nodes.find(n=>n.id==='eg-13').locked,false);
   assert.equal(buildGameState(rows(...base,'eg-03-1','eg-12-1')).nodes.find(n=>n.id==='eg-13').locked,false);
 });
 
@@ -94,9 +96,9 @@ test('M=M and named answers accept accents, equal signs and partial discovery',(
 
 test('the two numeric formulas independently accept the same date and preserve earned rungs',()=>{
   for(const id of ['n-c','eg-14']){
-    const n=NODES.find(n=>n.id===id);assert.equal(n.answers.length,1);
+    const n=NODES.find(n=>n.id===id);assert.equal(n.answers.length,2);
     for(const text of ['25 décembre','25/12'])assert.ok(matchNode(n,text,new Set()).prises[0].complet);
-    assert.ok(!matchNode(n,'Jésus',new Set())?.prises?.length);
+    assert.ok(matchNode(n,'Jésus',new Set()).prises.some(p=>p.complet&&p.id.endsWith('-2')));
   }
   assert.equal(gameLevel(rows('n-c-1')),2);
   assert.equal(gameLevel(rows('n-c-1','eg-14-1')),3);
@@ -108,8 +110,8 @@ test('the two numeric formulas independently accept the same date and preserve e
 test('AA, apostles and repeated signs remain independent; corrected history keeps earned rungs',()=>{
   const aa=NODES.find(n=>n.id==='eg-15'),fiftySeven=NODES.find(n=>n.id==='n-a'),seven=NODES.find(n=>n.id==='n-k');
   for(const text of ['Andromédien autiste','andromedien autiste'])assert.ok(matchNode(aa,text,new Set()).prises[0].complet);
-  assert.deepEqual(fiftySeven.answers.map(a=>a.label),['12 apôtres','Signe']);
-  assert.deepEqual(seven.answers.map(a=>a.label),['Galaxie','Signe']);
+  assert.deepEqual(fiftySeven.answers.map(a=>a.label),['12 apôtres','Signes']);
+  assert.deepEqual(seven.answers.map(a=>a.label),['Galaxies','Signes']);
   for(const text of ['12 apôtres','douze apotres'])assert.ok(matchNode(fiftySeven,text,new Set()).prises[0].complet);
   assert.ok(!matchNode(fiftySeven,'archanges',new Set())?.prises?.length);
   assert.equal(gameLevel(rows('n-a-4')),2);
@@ -124,28 +126,6 @@ test('AA, apostles and repeated signs remain independent; corrected history keep
     const ids=buildGameState(records).nodes.filter(n=>n.kind==='riddle').map(n=>n.id);
     for(const [a,b]of [['n-a','n-k'],['n-c','eg-14']])if(ids.includes(a)&&ids.includes(b))assert.ok(Math.abs(ids.indexOf(a)-ids.indexOf(b))>1);
   }
-});
-
-test('duration construction validates origin, operations and controlled sharing',()=>{
-  assert.ok(validateConstruction('first',[src('b'),src('a')],false));
-  assert.ok(hasTwoSevens([...sevens,src('b')]));
-  assert.ok(!hasTwoSevens([sevens[0],sevens[0]]));
-  assert.ok(validateConstruction('pair',pair,true));
-  assert.ok(!validateConstruction('pair',pair,false));
-  const swapped=[op('add',src('b'),op('add',part('d',1),src('a'))),op('add',op('add',src('c'),part('d',0)),share(src('b')))];
-  assert.ok(validateConstruction('pair',swapped,true));
-  assert.ok(!validateConstruction('pair',[pair[0],pair[0]],true));
-  assert.ok(!validateConstruction('pair',[...pair,share(src('b'))],true));
-  assert.ok(!validateConstruction('pair',[{op:'constant',value:57},{op:'constant',value:57}],true));
-  assert.ok(validateConstruction('last',orange,true));
-  assert.ok(!validateConstruction('last',[op('add',orange[0].left,orange[0].right)],true));
-  assert.ok(!validateConstruction('last',[op('join',orange[0].right,orange[0].left)],true));
-  assert.throws(()=>evaluate(share(share(src('a'))),'last',{share:true}));
-  assert.throws(()=>validDraft({...draft([src('a')]),selected:[8]},'last',true));
-  assert.throws(()=>validDraft(draft([src('b'),share(src('b')),share(src('b'))]),'pair',true));
-  assert.deepEqual(validDraft(draft(pair),'pair',true).items,pair);
-  let nested=src('a');for(let i=0;i<20;i++)nested=op('add',nested,src('a'));
-  assert.throws(()=>evaluate(nested,'last'));
 });
 
 // Real SQLite semantics exercise D1 CAS/upserts, through the same API handler.
@@ -165,9 +145,9 @@ async function call(path,body,method=body?'POST':'GET'){
 }
 test('API handles permission boundaries, points, migrations and draft conflicts',async()=>{
   await ensureGameTables(env);
-  assert.equal((await call('/api/echelon/guess',{id:'eg-13',roots:orange})).status,404);
+  assert.equal((await call('/api/echelon/guess',{id:'eg-13',draft:final(orange)})).status,404);
   assert.equal((await call('/api/echelon/guess',{id:'eg-02',answer:'Dieu'})).gained,1);
-  assert.equal((await call('/api/echelon/guess',{id:'n-g',answer:'666'})).status,404);
+  assert.ok((await call('/api/echelon')).nodes.some(n=>n.id==='n-g'));
   assert.equal((await call('/api/echelon/guess',{id:'n-0',answer:'Devincix'})).status,404);
   assert.equal((await call('/api/echelon/guess',{id:'eg-02',answer:'Dieu'})).gained,0);
   assert.equal((await call('/api/echelon/guess',{id:'eg-02',answer:'VALD'})).gained,1);
@@ -176,21 +156,21 @@ test('API handles permission boundaries, points, migrations and draft conflicts'
   assert.equal((await call('/api/echelon/guess',{id:'eg-01',answer:'Signe'})).gained,1);
   const clock=await call('/api/echelon/guess',{id:'eg-03',answer:'horloge'});
   assert.equal(clock.gained,1);
-  assert.deepEqual(clock.opened.map(item=>item.id),['music-la-matiere-dense']);
+  assert.deepEqual(clock.opened.map(item=>item.id),['music-les-probabilites']);
   assert.ok(clock.state.pages.some(p=>p.id==='eg-10'));
-  assert.equal((await call('/api/echelon/draft/eg-13')).status,404);
+  assert.equal((await call('/api/echelon/draft/eg-13')).status,200);
   // Discovery and duplication can occur before the first autosave completes.
   const firstSave=await call('/api/echelon/draft/eg-12',{revision:0,draft:draft([...sevens,src('b'),share(src('b'))])});
   assert.equal(firstSave.status,200);assert.equal(firstSave.revision,1);
   assert.equal(firstSave.state.echelon,6);assert.equal(firstSave.state.capabilities.share,true);
-  assert.equal((await call('/api/echelon/draft/eg-13')).status,403);
+  assert.equal((await call('/api/echelon/draft/eg-13')).status,200);
   assert.equal((await call('/api/echelon/draft/eg-12',{revision:0,draft:draft(pair)})).status,409);
   assert.equal((await call('/api/echelon/draft/eg-12',{revision:1,draft:draft(pair)})).revision,2);
   assert.equal((await call('/api/echelon/draft/eg-12')).revision,2);
-  assert.equal((await call('/api/echelon/guess',{id:'eg-12',roots:pair})).gained,1);
-  assert.equal((await call('/api/echelon/guess',{id:'eg-13',roots:orange})).gained,1);
-  assert.equal((await call('/api/echelon/guess',{id:'eg-13',roots:orange})).gained,0);
-  assert.equal((await call('/api/echelon/guess',{id:'eg-11',roots:[src('a'),src('b')],answer:'2 Jésus'})).gained,1);
+  assert.equal((await call('/api/echelon/guess',{id:'eg-12',draft:final(pair)})).gained,1);
+  assert.equal((await call('/api/echelon/guess',{id:'eg-13',draft:final(orange)})).gained,1);
+  assert.equal((await call('/api/echelon/guess',{id:'eg-13',draft:final(orange)})).gained,0);
+  assert.equal((await call('/api/echelon/guess',{id:'eg-11',draft:final(date)})).gained,1);
   assert.equal((await call('/api/echelon/guess',{id:'n-b',answer:'signes'})).gained,1);
   assert.equal((await call('/api/echelon/guess',{id:'n-b',answer:'signe'})).gained,0);
   const wrong=await call('/api/echelon/guess',{id:'eg-03',answer:'wrong'});

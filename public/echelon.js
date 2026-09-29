@@ -51,7 +51,7 @@ window.WCGame=(()=>{
   function render(){
     versions.clear();
     if(isClock()&&!pageBy('eg-10')){app.innerHTML='<section class="eg-page"><h1>Ce chemin n’est pas disponible.</h1><a href="/echelon" data-link>Retrouver Échelons →</a></section>';return;}
-    app.innerHTML=`<section class="eg-page">${header()}<div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():'<a class="eg-progress-link" href="/#mon-palier" data-link>Mes contenus disponibles →</a>'}${isClock()?`<div class="eg-durations">${(WCPlayer.getAlbums().find(a=>a.id==='57')?.tracks||[]).map(t=>`<div><span>${e(t.title)}</span><strong>${mmss(Math.floor(t.duration))}</strong><button class="eg-listen" data-play-track="${e(t.slug)}">Écouter</button></div>`).join('')}</div>`:''}<div id="eg-game-content" class="${isClock()?'eg-labs':'eg-entries'}"></div><footer class="eg-footer"><a href="/musique#album-57" data-link>Écouter 57</a><a href="/paroles" data-link>Lire les paroles</a>${isClock()?'<a href="/echelon" data-link>Retour à Échelons</a>':''}</footer></section>`;
+    app.innerHTML=`<section class="eg-page">${header()}<div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():'<a class="eg-progress-link" href="/#mon-palier" data-link>Mes contenus disponibles →</a>'}${isClock()?`<nav class="eg-clock-index" aria-label="Énigmes Horloge">${data.nodes.filter(n=>n.kind==='workshop').map(n=>`<a href="#${e(n.id)}">${e(n.title)}</a>`).join('')}</nav>`:''}<div id="eg-game-content" class="${isClock()?'eg-labs':'eg-entries'}"></div><footer class="eg-footer"><a href="/musique#album-57" data-link>Écouter 57</a><a href="/paroles" data-link>Lire les paroles</a>${isClock()?'<a href="/echelon" data-link>Retour à Échelons</a>':''}</footer></section>`;
     document.title=`${isClock()?'Horloge · ':''}Échelons · White Cadae`;
     sync();if(isClock())bindMusicButtons();
   }
@@ -75,79 +75,127 @@ window.WCGame=(()=>{
   function leave(){if(currentPath){positions.set(currentPath,window.scrollY);currentPath='';}serial++;sending=false;timers.forEach(clearInterval);timers=[];for(const b of boards.values())b.leave();boards.clear();}
 
   function createBoard(p,token){
-    let sources=[],draft=null,revision=0,undo=[],redo=[],timer=null,saving=null,dirty=false,conflict=false,answerText='',dragIndex=null;
-    const owner=state.user?.id;
-    const key=()=>`wc_echelon_draft_${owner}_${p.id}`;
-    const rootId='bench-'+p.id;
-    const mounted=()=>token===serial&&!!document.getElementById(rootId);
-    const scopedFeedback=message=>feedback(message,p.id);
-    const initial=()=>({version:1,items:sources.map(s=>({op:'src',ref:s.id})),selected:[]});
+    let spec,core,draft,revision=0,undo=[],redo=[],timer,saving,dirty=false,conflict=false;
+    const owner=state.user?.id,key=`wc_echelon_draft_${owner}_${p.id}`,rootId='bench-'+p.id;
     const copy=x=>JSON.parse(JSON.stringify(x));
-    const getSource=ref=>sources.find(s=>s.id===ref);
-    function value(x){if(x.op==='src')return getSource(x.ref).value;if(x.op==='part')return +String(getSource(x.ref).value)[x.index];if(x.op==='reuse')return value(x.arg);const a=value(x.left),b=value(x.right);const v=({add:()=>a+b,sub:()=>a-b,mul:()=>a*b,div:()=>{if(!b)throw Error('Division par zéro impossible.');return a/b;},join:()=>{if(a<0||b<0||!Number.isInteger(a)||!Number.isInteger(b))throw Error('Assemble des nombres entiers positifs.');return Number(String(a)+String(b));}}[x.op])();if(!Number.isFinite(v)||Math.abs(v)>999999)throw Error('Ce résultat est trop grand.');return v;}
-    function expression(x){if(x.op==='src'||x.op==='part')return String(value(x));if(x.op==='reuse')return `${expression(x.arg)} ↗`;return `(${expression(x.left)} ${{add:'+',sub:'−',mul:'×',div:'÷',join:'│'}[x.op]} ${expression(x.right)})`;}
-    function origins(x,set=new Set()){if(x.ref)set.add(getSource(x.ref).label);if(x.left)origins(x.left,set);if(x.right)origins(x.right,set);if(x.arg)origins(x.arg,set);return [...set].join(' · ');}
-    function checkUses(items){const counts=new Map(),shared=new Set();function visit(x,reused=false){if(x.op==='src'||x.op==='part'){const digits=x.op==='part'?[x.index]:[...String(getSource(x.ref).value)].map((_,i)=>i);for(const i of digits){const key=x.ref+'.'+i;counts.set(key,(counts.get(key)||0)+1);if(reused)shared.add(key);}return;}if(x.op==='reuse'){if(reused)throw Error('Ce nombre est déjà partagé.');visit(x.arg,true);}else{visit(x.left,reused);visit(x.right,reused);}}items.forEach(x=>visit(x));if([...counts].some(([r,n])=>n>(shared.has(r)?2:1)))throw Error('Un nombre partagé peut servir deux fois.');}
-    function canDuplicate(){
-      if(data.capabilities.share)return true;
-      if(p.board!=='pair'||!draft)return false;
-      const sevens=[];
-      function scan(x){
-        if(x.op==='add'){
-          const pair=[x.left,x.right],three=pair.find(t=>t.op==='src'&&['a','c'].includes(t.ref)),four=pair.find(t=>t.op==='part'&&t.ref==='d');
-          if(three&&four)sevens.push([three.ref,four.index]);
-        }
-        if(x.left)scan(x.left);if(x.right)scan(x.right);if(x.arg)scan(x.arg);
-      }
-      draft.items.forEach(scan);
-      return sevens.some(([ref,index])=>sevens.some(([otherRef,otherIndex])=>ref!==otherRef&&index!==otherIndex));
+    const mounted=()=>token===serial&&!!document.getElementById(rootId);
+    const tell=message=>feedback(message,p.id);
+    const val=x=>core.evaluate(x,spec.sources);
+    const label=x=>core.formatBlock(val(x),spec.format);
+    const source=x=>spec.sources.find(s=>s.id===x.ref);
+    const symbols={add:'+',sub:'−',mul:'×',div:'÷',join:'│',group:'réparti en'};
+    function expression(x){
+      if(x.op==='src'||x.op==='part')return label(x);
+      if(x.op==='reuse')return expression(x.arg)+' (copie)';
+      return `(${expression(x.left)} ${symbols[x.op]} ${expression(x.right)})`;
     }
-    function local(){if(!draft)return;try{localStorage.setItem(key(),JSON.stringify({draft,revision,pending:dirty,updatedAt:Date.now()}));}catch{/* quota: remote draft still works */}}
+    function tree(x){
+      if(x.op==='src'||x.op==='part')return `<li><span>${e(label(x))}</span> <small>${e(source(x).label)}${x.op==='part'?' · chiffre séparé':''}</small></li>`;
+      return `<li><span>${e(label(x))}</span> <small>${x.op==='reuse'?'Dupliquer':e(symbols[x.op])}</small><ul>${x.arg?tree(x.arg):tree(x.left)+tree(x.right)}</ul></li>`;
+    }
+    function local(){try{localStorage.setItem(key,JSON.stringify({draft,revision,pending:dirty,updatedAt:Date.now()}));}catch{}}
     function schedule(){dirty=true;local();clearTimeout(timer);timer=setTimeout(flush,650);}
+    function saveLabel(message){const el=document.getElementById(rootId)?.querySelector('[data-save]');if(el)el.textContent=message;}
     async function flush(){
-      clearTimeout(timer);if(!draft||!dirty||conflict)return;if(saving){await saving;if(dirty&&!conflict)return flush();return;}
+      clearTimeout(timer);if(!draft||!dirty||conflict)return;
+      if(saving){await saving;if(dirty&&!conflict)return flush();return;}
       const snapshot=JSON.stringify(draft);
-      saving=(async()=>{
-      try{const result=await api(`/api/echelon/draft/${p.id}`,{method:'POST',body:{draft:JSON.parse(snapshot),revision}});revision=result.revision;dirty=JSON.stringify(draft)!==snapshot;local();
-        if(mounted()){const newlyShared=!data.capabilities.share&&result.state.capabilities.share;accept(result.state);sync();if(newlyShared){for(const b of boards.values())b.refresh();scopedFeedback('Tu peux maintenant dupliquer un nombre.');}else saveLabel('Brouillon sauvegardé');}
-      }catch(err){if(err.status===409){conflict=true;if(mounted()){paint();scopedFeedback(err.message);}}else if(mounted())saveLabel('Brouillon conservé sur cet appareil');}
-      })();
-      await saving;saving=null;
+      saving=(async()=>{try{
+        const result=await api(`/api/echelon/draft/${p.id}`,{method:'POST',body:{draft:JSON.parse(snapshot),revision}});
+        revision=result.revision;dirty=JSON.stringify(draft)!==snapshot;local();
+        if(mounted()){accept(result.state);sync();saveLabel('Brouillon sauvegardé');}
+      }catch(err){
+        if(err.status===409){conflict=true;if(mounted()){paint();tell(err.message);}}
+        else if(mounted())saveLabel('Brouillon conservé sur cet appareil');
+      }})();await saving;saving=null;
     }
-    function saveLabel(text){const el=document.getElementById(rootId)?.querySelector('[data-save]');if(el)el.textContent=text;}
-    function change(next){undo.push(copy(draft));if(undo.length>35)undo.shift();redo=[];draft=next;paint();schedule();}
-    function calculate(op){try{
-      const unary=['split','detach','reuse'].includes(op);
-      const selected=unary?draft.selected.slice(-1):draft.selected,x=draft.items[selected[0]],y=draft.items[selected[1]];
-      if(!x)throw Error('Sélectionne un nombre.');
-      let output=[];
-      if(op==='split'){if(x.op!=='src'||String(value(x)).length<2)throw Error('Sélectionne un groupe de chiffres de la durée.');output=[...String(value(x))].map((_,index)=>({op:'part',ref:x.ref,index}));}
-      else if(op==='detach'){if(x.op==='reuse')throw Error('Annule le partage pour modifier ce nombre.');else if(x.left)output=[x.left,x.right];else throw Error('Ce nombre est déjà séparé.');}
-      else if(op==='reuse'){if(!canDuplicate())throw Error('Cette possibilité n’est pas encore découverte.');output=[x,{op:'reuse',arg:x}];}
-      else{if(selected.length!==2)throw Error('Choisis deux nombres, dans l’ordre de ton calcul.');output=[{op,left:x,right:y}];value(output[0]);}
-      const items=draft.items.filter((_,i)=>!selected.includes(i)).concat(output);if(items.length>30)throw Error('Détache ou reprends une construction pour faire de la place.');checkUses(items);
-      change({version:1,items,selected:output.length===1?[items.length-1]:[]});
-    }catch(err){scopedFeedback(err.message);}}
-    function paint(){if(!mounted()||!draft)return;const root=document.getElementById(rootId);const active=document.activeElement;const focusKey=root.contains(active)?(active.id?'#'+active.id:active.hasAttribute('data-tile')?'[data-tile="'+active.dataset.tile+'"]':active.hasAttribute('data-op')?'[data-op="'+active.dataset.op+'"]':null):null;root.setAttribute('aria-busy','false');
-      const n=draft.selected.length,selectedNumber=n?value(draft.items[draft.selected.at(-1)]):null;
-      root.innerHTML=`<div class="eg-bench"><div class="eg-bench-top"><p>Relie les nombres. Change de lecture.</p><span data-save role="status">${dirty?'Brouillon local':'Brouillon sauvegardé'}</span></div>${conflict?`<div class="eg-conflict">Un autre appareil a enregistré une version.<button id="eg-remote-${p.id}">Charger sa version</button><button id="eg-local-${p.id}">Garder mon brouillon ici</button></div>`:''}<div class="eg-tiles" aria-label="Nombres et constructions">${draft.items.map((x,i)=>`<button class="eg-tile" data-tile="${i}" draggable="true" aria-pressed="${draft.selected.includes(i)}"><small>${e(origins(x))}</small><strong>${e(Number(value(x).toFixed(5)))}</strong>${x.left||x.op==='reuse'?`<span>${e(expression(x))}</span>`:''}<i>${draft.selected.includes(i)?`${draft.selected.indexOf(i)+1} · sélectionné`:'Sélectionner'}</i></button>`).join('')}</div><div class="eg-tools" aria-label="Opérations">${[['add','+','Additionner'],['sub','−','Soustraire'],['mul','×','Multiplier'],['div','÷','Diviser'],['join','│','Assembler']].map(([op,symbol,label])=>`<button data-op="${op}" ${n!==2?'disabled':''}><span aria-hidden="true">${symbol}</span>${label}</button>`).join('')}<button data-op="split" ${!n?'disabled':''}>Séparer</button><button data-op="detach" ${!n?'disabled':''}>Détacher</button>${p.board!=='first'?`<button data-op="reuse" ${!n||!canDuplicate()?'disabled':''}>Dupliquer${n?' '+e(Number(selectedNumber.toFixed(5))):''}</button>`:''}</div><div class="eg-history"><button id="eg-undo-${p.id}" ${!undo.length?'disabled':''}>↶ Annuler</button><button id="eg-redo-${p.id}" ${!redo.length?'disabled':''}>Rétablir ↷</button><button id="eg-reset-${p.id}">Repartir des durées</button></div><form id="eg-board-answer-${p.id}" class="eg-answer">${p.board==='first'?`<label for="eg-meaning-${p.id}">Quelle lecture vois-tu ?</label><input id="eg-meaning-${p.id}" name="meaning" maxlength="200" autocomplete="off" placeholder="Proposer un signe" value="${e(answerText)}">`:''}<button class="orange-button" type="submit">Valider ma lecture</button></form><p class="eg-bench-note">Sélectionne deux nombres dans l’ordre du calcul. Séparer, détacher et dupliquer agissent sur le dernier nombre sélectionné. │ assemble les chiffres.</p></div>`;
-      root.querySelectorAll('[data-tile]').forEach(el=>{const index=+el.dataset.tile;el.onclick=()=>{const d=copy(draft);d.selected=d.selected.includes(index)?d.selected.filter(i=>i!==index):[...d.selected.slice(-1),index];draft=d;paint();schedule();};el.ondragstart=()=>{dragIndex=index;};el.ondragover=event=>event.preventDefault();el.ondrop=event=>{event.preventDefault();if(dragIndex===null||dragIndex===index)return;const items=copy(draft.items),item=items.splice(dragIndex,1)[0];items.splice(index,0,item);change({version:1,items,selected:[]});dragIndex=null;};});
+    function change(next){
+      core.validDraft(next,spec);undo.push(copy(draft));if(undo.length>35)undo.shift();redo=[];
+      draft=next;paint();schedule();
+    }
+    function action(fn){try{fn();}catch(err){tell(err.message);}}
+    function calculate(op){action(()=>{
+      const unary=['split','detach','reuse','discard'].includes(op);
+      const chosen=unary?draft.selected.slice(-1):draft.selected;
+      const x=draft.items[chosen[0]],y=draft.items[chosen[1]];
+      if(!x)throw Error('Sélectionne un bloc.');
+      let output;
+      if(op==='split'){
+        if(x.op!=='src'||String(val(x).value).length<2)throw Error('Sélectionne un nombre de départ à plusieurs chiffres.');
+        output=[...String(val(x).value)].map((_,index)=>({op:'part',ref:x.ref,index}));
+      }else if(op==='detach'){
+        if(x.op==='reuse')throw Error('Retire cette copie ou annule sa duplication pour la modifier.');
+        if(!x.left)throw Error('Ce bloc est déjà un nombre de départ.');
+        output=[x.left,x.right];
+      }else if(op==='reuse')output=[x,{op:'reuse',arg:copy(x)}];
+      else if(op==='discard')output=[];
+      else{
+        if(chosen.length!==2)throw Error('Sélectionne deux blocs dans l’ordre du calcul.');
+        output=[{op,left:x,right:y}];val(output[0]);
+      }
+      const items=draft.items.filter((_,i)=>!chosen.includes(i)).concat(output);
+      change({...copy(draft),items,selected:output.length===1?[items.length-1]:[]});
+    });}
+    function place(index){action(()=>{
+      if(spec.slots[index].fixed)return;
+      const next=copy(draft);
+      if(next.answer[index]){next.items.push(next.answer[index]);next.answer[index]=null;next.selected=[next.items.length-1];}
+      else{
+        if(next.selected.length!==1)throw Error('Sélectionne un seul bloc à placer dans cette case.');
+        next.answer[index]=next.items.splice(next.selected[0],1)[0];next.selected=[];
+      }
+      change(next);
+    });}
+    function paint(){
+      if(!mounted()||!draft)return;
+      const root=document.getElementById(rootId),active=document.activeElement;
+      const focus=root.contains(active)?active?.dataset?.focus:null;
+      const complete=!pageBy(p.id)?.open,ready=!draft.items.length&&draft.answer.every(Boolean);
+      const n=draft.selected.length,last=n?draft.items[draft.selected.at(-1)]:null;
+      const canDiscard=(()=>{if(!last)return false;try{core.validDraft({...draft,items:draft.items.filter((_,i)=>i!==draft.selected.at(-1)),selected:[]},spec);return true;}catch{return false;}})();
+      root.setAttribute('aria-busy','false');
+      root.innerHTML=`<div class="eg-bench">
+        <ol class="eg-steps" aria-label="Étapes de l’énigme"><li class="${!ready&&!complete?'current':''}">1. Construire</li><li class="${ready&&!complete?'current':''}">2. Placer</li><li class="${complete?'current':''}">3. ${complete?'Trouvé':'Valider'}</li></ol>
+        <p class="eg-instruction">${e(spec.prompt)}</p>
+        <div class="eg-bench-top"><h3>Blocs à manipuler</h3><span data-save role="status">${dirty?'Brouillon local':'Brouillon sauvegardé'}</span></div>
+        ${conflict?`<div class="eg-conflict">Un autre appareil a enregistré une version.<button data-action="remote">Charger sa version</button><button data-action="local">Garder mon brouillon</button></div>`:''}
+        <div class="eg-tiles" aria-label="Blocs à manipuler">${draft.items.map((x,i)=>`<button class="eg-tile" data-tile="${i}" data-focus="tile-${i}" aria-pressed="${draft.selected.includes(i)}"><small>${x.ref?e(source(x).label):x.op==='reuse'?'Copie':e(expression(x))}</small><strong>${e(label(x))}</strong>${val(x).group?`<span>${val(x).group.count} groupes de ${val(x).group.unit}</span>`:''}<i>${draft.selected.includes(i)?`${draft.selected.indexOf(i)+1} · sélectionné`:'Sélectionner'}</i></button>`).join('')||'<p class="eg-work-empty">Tous les blocs sont dans ta réponse.</p>'}</div>
+        <p class="eg-selection" role="status">${n?draft.selected.map(i=>label(draft.items[i])).map(e).join(' puis '):'Choisis deux blocs dans l’ordre du calcul, ou un bloc à transformer.'}</p>
+        <div class="eg-tools" aria-label="Opérations">${[['add','+','Additionner'],['sub','−','Soustraire'],['mul','×','Multiplier'],['div','÷','Diviser'],['join','│','Assembler'],['group','⋮','Répartir']].map(([op,symbol,title])=>`<button data-op="${op}" data-focus="op-${op}" ${n!==2?'disabled':''}><span aria-hidden="true">${symbol}</span>${title}</button>`).join('')}
+          ${[['split','Séparer les chiffres'],['reuse','Dupliquer'],['detach','Détacher'],['discard','Retirer la copie']].map(([op,title])=>`<button data-op="${op}" data-focus="op-${op}" ${!n||(op==='discard'&&!canDiscard)?'disabled':''}>${title}</button>`).join('')}
+        </div>
+        <details class="eg-help"><summary>Comment manipuler les blocs ?</summary><p>Les opérations utilisent les blocs dans l’ordre de sélection. Assembler colle deux nombres. Répartir conserve autant de groupes égaux que le second bloc l’indique. Séparer les chiffres, dupliquer et détacher agissent sur le dernier bloc sélectionné. Une copie peut être retirée si tous ses nombres existent encore ailleurs.</p></details>
+        <div class="eg-final"><h3>Ma réponse</h3><p>${spec.format==='album'?'Le bloc se lit « nombre – numéro d’album ». Le tiret n’est pas une soustraction.':'Sélectionne un bloc, puis touche sa case. Touche un bloc placé pour le reprendre.'}</p>
+          <div class="eg-slots">${spec.slots.map((slot,i)=>`<button class="eg-slot ${draft.answer[i]?'filled':''}" data-slot="${i}" data-focus="slot-${i}" ${slot.fixed?'disabled':''}><span>${e(slot.label)}</span><strong>${draft.answer[i]?e(label(draft.answer[i])):'＋'}</strong><small>${slot.fixed?'Juillet → 07 · déjà converti':draft.answer[i]?(val(draft.answer[i]).group?`${val(draft.answer[i]).group.count} groupes de ${val(draft.answer[i]).group.unit} · Reprendre`:'Reprendre ce bloc'):'Placer le bloc sélectionné'}</small></button>`).join('')}</div>
+          <form data-validate><button class="orange-button" type="submit" ${!ready||conflict||complete?'disabled':''}>${complete?'Lecture trouvée':'Valider ma réponse'}</button><span>${complete?'Cet échelon est acquis.':ready?'Les blocs sont prêts.':draft.items.length?`${draft.items.length} bloc${draft.items.length>1?'s':''} encore à placer ou à réunir.`:'Complète chaque case.'}</span></form>
+        </div>
+        <details class="eg-calculation-tree" ${ready?'open':''}><summary>Mon chemin de calcul</summary><div>${[...draft.items,...draft.answer.filter(Boolean)].map(x=>`<ul>${tree(x)}</ul>`).join('')}</div></details>
+        <div class="eg-history"><button data-action="undo" data-focus="undo" ${!undo.length?'disabled':''}>↶ Annuler</button><button data-action="redo" data-focus="redo" ${!redo.length?'disabled':''}>Rétablir ↷</button><button data-action="reset" data-focus="reset">Repartir du début</button></div>
+      </div>`;
+      root.querySelectorAll('[data-tile]').forEach(el=>el.onclick=()=>{const i=+el.dataset.tile;draft.selected=draft.selected.includes(i)?draft.selected.filter(v=>v!==i):[...draft.selected.slice(-1),i];paint();schedule();});
       root.querySelectorAll('[data-op]').forEach(el=>el.onclick=()=>calculate(el.dataset.op));
-      root.querySelector('#eg-undo-'+p.id).onclick=()=>{redo.push(copy(draft));draft=undo.pop();paint();schedule();};
-      root.querySelector('#eg-redo-'+p.id).onclick=()=>{undo.push(copy(draft));draft=redo.pop();paint();schedule();};
-      root.querySelector('#eg-reset-'+p.id).onclick=()=>change(initial());
-      root.querySelector('#eg-board-answer-'+p.id).onsubmit=async event=>{event.preventDefault();if(p.board==='first')answerText=event.target.elements.meaning.value.trim();await flush();if(!mounted())return;await submit(p,{roots:draft.items,answer:answerText},event.target.querySelector('button'));};
-      const field=root.querySelector('#eg-meaning-'+p.id);if(field)field.oninput=()=>{answerText=field.value;};
-      if(conflict){root.querySelector('#eg-remote-'+p.id).onclick=()=>load(true);root.querySelector('#eg-local-'+p.id).onclick=async()=>{const current=await api(`/api/echelon/draft/${p.id}`);revision=current.revision;conflict=false;dirty=true;paint();flush();};}
-      if(focusKey){const target=root.querySelector(focusKey);if(target&&!target.disabled)target.focus({preventScroll:true});else root.querySelector('[data-tile][aria-pressed="true"]')?.focus({preventScroll:true});}
+      root.querySelectorAll('[data-slot]').forEach(el=>el.onclick=()=>place(+el.dataset.slot));
+      root.querySelectorAll('[data-action]').forEach(el=>el.onclick=async()=>{const a=el.dataset.action;
+        if(a==='reset')change(core.initialDraft(spec));
+        if(a==='undo'){redo.push(copy(draft));draft=undo.pop();paint();schedule();}
+        if(a==='redo'){undo.push(copy(draft));draft=redo.pop();paint();schedule();}
+        if(a==='remote')await load(true);
+        if(a==='local')try{const remote=await api(`/api/echelon/draft/${p.id}`);if(!mounted())return;revision=remote.revision;conflict=false;dirty=true;paint();await flush();}catch(err){tell(err.message);}
+      });
+      root.querySelector('[data-validate]').onsubmit=async event=>{event.preventDefault();await flush();if(!mounted()||conflict)return;await submit(p,{draft:copy(draft)},event.target.querySelector('button'));if(mounted())paint();};
+      if(focus){const target=root.querySelector(`[data-focus="${focus}"]`);if(target&&!target.disabled)target.focus({preventScroll:true});}
     }
     async function load(remoteOnly=false){try{
-      const remote=await api(`/api/echelon/draft/${p.id}`);if(!mounted())return;sources=remote.sources;revision=remote.revision;draft=remote.draft||initial();conflict=false;dirty=false;
-      if(!remoteOnly){try{const saved=JSON.parse(localStorage.getItem(key()));if(saved?.pending){draft=saved.draft;dirty=true;if(saved.revision!==revision)conflict=true;}}catch{/* a corrupt local draft must not break the page */}}
-      try{draft.items.forEach(value);}catch{draft=remote.draft||initial();dirty=false;}
-      undo=[];redo=[];local();paint();if(dirty&&!conflict)flush();
+      const [remote,engine]=await Promise.all([api(`/api/echelon/draft/${p.id}`),import('/workshop-core.js')]);
+      if(!mounted())return;core=engine;spec=remote.spec;revision=remote.revision;draft=remote.draft;conflict=false;dirty=false;
+      if(!remoteOnly){try{
+        const raw=localStorage.getItem(key),saved=JSON.parse(raw);
+        if(saved?.draft?.version===1)localStorage.setItem(key+'_v1_backup',raw);
+        if(saved?.pending){draft=core.migrateDraft(saved.draft,spec);dirty=true;if(saved.revision!==revision)conflict=true;}
+      }catch{tell('Le brouillon distant a été restauré.');}}
+      core.validDraft(draft,spec);undo=[];redo=[];local();paint();if(dirty&&!conflict)flush();
     }catch(err){if(mounted())document.getElementById(rootId).innerHTML=`<p>${e(err.message)}</p><a href="${e(p.href)}" data-link>Réessayer</a>`;}}
-    return {load,refresh:paint,leave(){clearTimeout(timer);local();flush();}};
+    return {load,refresh:paint,leave(){clearTimeout(timer);if(draft){local();flush();}}};
   }
   return {page,leave,clear(){leave();data=null;positions.clear();}};
 })();

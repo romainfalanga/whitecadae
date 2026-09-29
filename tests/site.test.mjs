@@ -94,7 +94,7 @@ test('retired contribution writes return 410 before touching the database', asyn
   }
 });
 
-test('removed spaces reject old clients while video and conversation routes stay available', async () => {
+test('removed spaces reject old clients including video and conversation routes', async () => {
   const env={get DB(){throw new Error('Retired spaces must not access stored data');}};
   for (const path of ['/api/carre','/api/carre/1/conversation','/api/societes/1','/api/brainstorms/2/idees','/api/114']) {
     for (const method of ['GET','POST','PUT','DELETE']) {
@@ -107,9 +107,9 @@ test('removed spaces reject old clients while video and conversation routes stay
   const creation=await worker.fetch(new Request('https://test.local/api/arbres',{method:'POST',body:JSON.stringify({kind:'pensee',title:'Retired'})}),env);
   assert.equal(creation.status,410);
   const video=await worker.fetch(new Request('https://test.local/api/videographie/rythme'),env);
-  assert.equal(video.status,403); // Existing authentication gate, not a removed page.
+  assert.equal(video.status,410); // Existing authentication gate, not a removed page.
   const conversation=await worker.fetch(new Request('https://test.local/api/conversation'),env);
-  assert.equal(conversation.status,401);
+  assert.equal(conversation.status,410);
   const me=await worker.fetch(new Request('https://test.local/api/me'),env);
   const state=await me.json();
   for(const key of ['penseMieux','carre','brainstorm','cent14'])assert.equal(state.access[key],false);

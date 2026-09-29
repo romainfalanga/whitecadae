@@ -1,6 +1,6 @@
-import {buildGameState,progress,progressLevel,getGameNode,isVisible,isPlayable,SHARE,boardSources} from './echelon.js';
+import {buildGameState,progress,progressLevel,getGameNode,isVisible,isPlayable} from './echelon.js';
 import {matchNode} from './enigmas57.js';
-import {validDraft,hasTwoSevens,validateConstruction} from './echelon-workshop.js';
+import {validDraft,validateConstruction,boardSpec,restoreDraft} from './echelon-workshop.js';
 import {buildJourney} from './journey.js';
 import {newlyOpened} from './content-access.js';
 
@@ -10,6 +10,7 @@ export async function ensureGameTables(env){
   const pending=env.DB.batch([
     env.DB.prepare("CREATE TABLE IF NOT EXISTS riddle_progress (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,riddle_id TEXT NOT NULL,hints_used INTEGER NOT NULL DEFAULT 0,revealed INTEGER NOT NULL DEFAULT 0,solved_at TEXT,updated_at TEXT NOT NULL DEFAULT (datetime('now')),PRIMARY KEY(user_id,riddle_id))"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS echelon_drafts (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,board_id TEXT NOT NULL,draft TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL DEFAULT (datetime('now')),PRIMARY KEY(user_id,board_id))"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS echelon_draft_history (user_id INTEGER NOT NULL,board_id TEXT NOT NULL,revision INTEGER NOT NULL,draft TEXT NOT NULL,PRIMARY KEY(user_id,board_id,revision))"),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS echelon_attempts (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,next_at INTEGER NOT NULL DEFAULT 0,failures INTEGER NOT NULL DEFAULT 0)')
   ]);
   ready.set(env.DB,pending);
@@ -41,19 +42,16 @@ export async function handleEchelon(request,env,path,{getUser,json}){
     if(!n||n.kind!=='workshop'||!isVisible(n,p))return json({error:'Page indisponible.'},404);
     if(!isPlayable(n,p))return json({error:'Ce tableau n’est pas encore ouvert.'},403);
     const current=await env.DB.prepare('SELECT draft,revision,updated_at FROM echelon_drafts WHERE user_id=?1 AND board_id=?2').bind(id,n.id).first();
-    if(request.method==='GET')return json({sources:boardSources[n.board],draft:current?JSON.parse(current.draft):null,revision:current?.revision||0});
+    if(request.method==='GET')return json({spec:boardSpec(n.board),draft:restoreDraft(current?JSON.parse(current.draft):null,n.board),revision:current?.revision||0});
     if(request.method!=='POST')return json({error:'Méthode indisponible.'},405);
-    // A single save may contain both the discovery and the duplication. Do not
-    // make the player wait for a previous autosave to unlock the operation.
-    const share=p.milestones.has(SHARE)||(n.board==='pair'&&hasTwoSevens(body.draft?.items));
-    let draft;try{draft=validDraft(body.draft,n.board,share);}catch(e){return json({error:e.message},400);}
+    let draft;try{draft=validDraft(body.draft,n.board);}catch(e){return json({error:e.message},400);}
     if(!Number.isInteger(body.revision)||body.revision<0)return json({error:'Version invalide.'},400);
+    if(current&&JSON.parse(current.draft).version===1)await env.DB.prepare('INSERT OR IGNORE INTO echelon_draft_history(user_id,board_id,revision,draft) VALUES(?1,?2,?3,?4)').bind(id,n.id,current.revision,current.draft).run();
     const result=await env.DB.prepare("INSERT INTO echelon_drafts(user_id,board_id,draft,revision) SELECT ?1,?2,?3,1 WHERE ?4=0 ON CONFLICT(user_id,board_id) DO UPDATE SET draft=excluded.draft,revision=echelon_drafts.revision+1,updated_at=datetime('now') WHERE echelon_drafts.revision=?4").bind(id,n.id,JSON.stringify(draft),body.revision).run();
     // SQLite's INSERT SELECT cannot update a nonzero revision; use a CAS update.
     let changed=result.meta.changes;
     if(body.revision>0){const update=await env.DB.prepare("UPDATE echelon_drafts SET draft=?1,revision=revision+1,updated_at=datetime('now') WHERE user_id=?2 AND board_id=?3 AND revision=?4").bind(JSON.stringify(draft),id,n.id,body.revision).run();changed=update.meta.changes;}
     if(!changed)return json({error:'Un autre appareil a modifié ce tableau. Ton brouillon local est conservé.',conflict:true},409);
-    if(n.board==='pair'&&!p.milestones.has(SHARE)&&hasTwoSevens(draft.items))await saveIds(env,id,[SHARE]);
     return json({revision:body.revision+1,state:await stateFor(env,id)});
   }
   if(request.method!=='POST'||!['/api/echelon/guess','/api/57/guess'].includes(path))return json({error:'Page indisponible.'},404);
@@ -68,9 +66,8 @@ export async function handleEchelon(request,env,path,{getUser,json}){
   if(!claim.meta.changes){const wait=await env.DB.prepare('SELECT next_at FROM echelon_attempts WHERE user_id=?1').bind(id).first();return json({error:'Prends un instant avant de réessayer.',attenteMs:Math.max(0,wait.next_at-now)},429);}
   let prise;
   if(n.kind==='workshop'){
-    const share=p.milestones.has(SHARE)||(n.board==='pair'&&hasTwoSevens(body.roots));
-    const valid=validateConstruction(n.board,body.roots,share);
-    prise=valid?(n.board==='first'?matchNode(n,text,p.solved,p.parts):{prises:[{id:n.answers[0].id,masque:1,complet:true}],echo:[]}):null;
+    const valid=validateConstruction(n.board,body.draft);
+    prise=valid?{prises:[{id:n.answers[0].id,masque:1,complet:true}],echo:[]}:null;
   }else prise=matchNode(n,text,p.solved,p.parts);
   const fresh=prise?.prises||[];
   const known=!!prise?.echo?.length&&prise.echo.every(t=>t.ok);

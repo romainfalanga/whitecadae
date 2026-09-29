@@ -4,6 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {mkdirSync,readFileSync,writeFileSync,appendFileSync,statSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {CONTINUOUS} from '../src/music-continuous.js';
 import {RELEASES} from '../src/music-catalogue.js';
 const binary=process.argv[2],scratch=resolve(process.argv[3]||'../audio-build');
 if(!binary)throw new Error('Supply an FFmpeg executable.');
@@ -24,7 +25,7 @@ for(const album of RELEASES){
     const raw=resolve(scratch,album.id+'-'+level+'.s16');writeFileSync(raw,'');
     let samples=0;const chapters=[];
     for(const track of tracks){const pcm=decoded.get(track.slug);chapters.push({slug:track.slug,start:samples/rate,duration:pcm.samples/rate});appendFileSync(raw,readFileSync(pcm.path));samples+=pcm.samples;}
-    const src='/music/'+album.id+'/continuous-v1-'+level+'.m4a',output=resolve(root,'public'+src);
+    const src=(CONTINUOUS[album.id]||[]).find(v=>v.chapters.map(c=>c.slug).join('|')===tracks.map(t=>t.slug).join('|'))?.src||'/music/'+album.id+'/continuous-v2-'+level+'.m4a',output=resolve(root,'public'+src);
     run(['-f','s16le','-ar',String(rate),'-ac','2','-i',raw,'-c:a','aac','-b:a','192k','-movflags','+faststart','-map_metadata','-1',output]);
     const bytes=statSync(output).size;if(bytes>25*1024*1024)throw new Error('Worker asset exceeds 25 MiB: '+src);
     variants.push({src,minLevel:level,bytes,duration:samples/rate,chapters});

@@ -8,6 +8,7 @@ window.WC57 = Object.freeze({
 
 window.WCIcon = (name) => {
   const paths = {
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/>',
     play: '<path d="m8 5 11 7-11 7z" fill="currentColor" stroke="none"/>',
     pause: '<path d="M8 5v14M16 5v14" stroke-width="4"/>',
     previous: '<path d="M5 5v14M19 5 8 12l11 7z"/>',
