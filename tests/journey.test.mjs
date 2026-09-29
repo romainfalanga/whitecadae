@@ -12,7 +12,7 @@ test('map shows current song signs without exposing their answers',()=>{
   assert.equal(third.nodes.find(n=>n.id==='eg-02').status,'solved');
   assert.equal(third.nodes.find(n=>n.id==='eg-01').status,'solved');
   assert.equal(third.nodes.find(n=>n.id==='eg-03').status,'available');
-  assert.ok(!third.nodes.some(n=>n.id==='eg-05'));
+  assert.equal(third.nodes.find(n=>n.id==='eg-05').status,'available');
   assert.doesNotMatch(JSON.stringify(third),/VALD|Horloge|12 apôtres/);
   const fragment=buildJourney(rows('eg-06-1.p0'));
   assert.equal(fragment.nodes.find(n=>n.id==='eg-06').status,'partial');

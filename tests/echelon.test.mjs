@@ -36,7 +36,7 @@ test('one completed answer is one rung; old duplicates merge, retired history pr
 test('signs appear only with their song, even if an old client marked them seen',()=>{
   const start=buildGameState([]);
   assert.equal(start.echelon,1);
-  assert.deepEqual(start.nodes.map(n=>n.id),['eg-14','n-a','n-h','eg-02','eg-01','n-w','eg-06']);
+  assert.deepEqual(start.nodes.map(n=>n.id),['eg-14','n-a','n-h','eg-02','eg-01','n-w','eg-05','eg-06']);
   assert.ok(start.nodes.every(n=>n.music==='30-vins-divins'&&!n.locked));
   assert.doesNotMatch(JSON.stringify(start),/Devincix|Katikas|Horloge|Jésus|Dieu|VALD|apôtres|eg-13|eg-10/);
   assert.deepEqual(buildGameState(rows('@eg/seen/n-g')).nodes.map(n=>n.id),start.nodes.map(n=>n.id));
@@ -107,18 +107,37 @@ test('XEU only accepts Dieu; a former VALD discovery preserves its historical ru
   assert.equal(gameLevel(rows('eg-02-2.p0')),2);
 });
 
-test('Aiguille accepts singular Signe independently and displays the exact detail label',()=>{
+test('Aiguille only accepts Horloge and details, while the retired Signe keeps historical progress',()=>{
   const needle=NODES.find(n=>n.id==='eg-03');
-  assert.deepEqual(needle.answers.map(a=>a.label),['Horloge','le(s) détail(s)','Signe']);
-  for(const text of ['signe','Signe'])assert.ok(matchNode(needle,text,new Set()).prises.some(p=>p.id==='eg-03-3'&&p.complet));
-  assert.ok(!matchNode(needle,'signes',new Set())?.prises?.length);
+  assert.deepEqual(needle.answers.map(a=>a.label),['Horloge','le(s) détail(s)']);
+  for(const text of ['signe','Signe','signes'])assert.ok(!matchNode(needle,text,new Set())?.prises?.length);
   for(const text of ['le(s) détail(s)','le(s) detail(s)','le détail','les détails','détail','details']){
     assert.ok(matchNode(needle,text,new Set()).prises.some(p=>p.id==='eg-03-2'&&p.complet),text);
   }
   const state=buildGameState(rows('eg-02-1','eg-03-2','eg-03-3'));
   assert.equal(state.echelon,4);
-  assert.deepEqual(state.nodes.find(n=>n.id==='eg-03').found.map(a=>a.label),['le(s) détail(s)','Signe']);
+  assert.deepEqual(state.nodes.find(n=>n.id==='eg-03').found.map(a=>a.label),['le(s) détail(s)']);
+  assert.equal(state.nodes.find(n=>n.id==='eg-03').total,2);
+  assert.equal(gameLevel(rows('eg-03-3','eg-03-3.p0')),2);
   assert.ok(!state.pages.some(p=>p.kind==='clock'));
+});
+
+test('Mélange les is available at echelon 1, accepts the complete phrase, and restores old discoveries exactly once',()=>{
+  const puzzle=NODES.find(n=>n.id==='eg-05'),start=buildGameState().nodes.find(n=>n.id==='eg-05');
+  assert.equal(start.title,'Mélange les');assert.equal(start.total,1);assert.equal(start.locked,false);assert.equal(start.open,true);
+  assert.equal(start.music,'30-vins-divins');assert.deepEqual(start.found,[]);
+  assert.doesNotMatch(JSON.stringify(start),/Expansion|harmonieuse/i);
+  for(const text of ['Expansion harmonieuse','expansions harmonieuses','Mélange les expansions harmonieuses','melange-les expansion harmonieuse']){
+    assert.ok(matchNode(puzzle,text,new Set()).prises.some(p=>p.id==='eg-05-1'&&p.complet),text);
+  }
+  assert.ok(matchNode(puzzle,'expansion',new Set()).prises.every(p=>!p.complet));
+  for(const history of [rows('eg-05-1'),rows('eg-05-1.p0','eg-05-1.p1'),rows('eg-05-1','eg-05-1.p0','eg-05-1.p1')]){
+    const state=buildGameState(history),restored=state.nodes.find(n=>n.id==='eg-05');
+    assert.equal(state.echelon,2);assert.equal(restored.open,false);
+    assert.deepEqual(restored.found,[{id:'eg-05-1',label:'Expansion harmonieuse'}]);
+  }
+  assert.equal(gameLevel(rows('eg-05-1.p0')),1);
+  assert.equal(buildGameState(rows('eg-05-1.p0')).nodes.find(n=>n.id==='eg-05').partiels.length,1);
 });
 
 test('the two numeric formulas independently accept the same date and preserve earned rungs',()=>{
@@ -179,7 +198,8 @@ test('API handles permission boundaries, points, migrations and draft conflicts'
   assert.equal((await call('/api/echelon/guess',{id:'n-0',answer:'Devincix'})).status,404);
   assert.equal((await call('/api/echelon/guess',{id:'eg-02',answer:'Dieu'})).gained,0);
   assert.equal((await call('/api/echelon/guess',{id:'eg-02',answer:'VALD'})).gained,0);
-  assert.equal((await call('/api/echelon/guess',{id:'eg-03',answer:'signe'})).gained,1);
+  assert.equal((await call('/api/echelon/guess',{id:'eg-05',answer:'Expansion harmonieuse'})).gained,1);
+  assert.equal((await call('/api/echelon/guess',{id:'eg-05',answer:'Mélange les expansions harmonieuses'})).gained,0);
   assert.equal((await call('/api/echelon/guess',{id:'n-h',answer:'dix'})).gained,0);
   assert.equal((await call('/api/echelon/guess',{id:'n-h',answer:'cornes'})).gained,1);
   assert.equal((await call('/api/echelon/guess',{id:'eg-01',answer:'Signe'})).gained,1);
@@ -212,6 +232,6 @@ test('retired reset cannot erase progress; public Worker exposes only starting t
   const res=await worker.fetch(new Request('https://test.local/api/57/progress',{method:'DELETE'}),{});
   assert.equal(res.status,410);
   const anon=await worker.fetch(new Request('https://test.local/api/echelon'),{});
-  assert.equal(anon.status,200);assert.equal((await anon.json()).nodes.length,7);
+  assert.equal(anon.status,200);assert.equal((await anon.json()).nodes.length,8);
   assert.equal((await worker.fetch(new Request('https://test.local/api/echelon/map'),{})).status,401);
 });
