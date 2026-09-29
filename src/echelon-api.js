@@ -46,7 +46,7 @@ export async function handleEchelon(request,env,path,{getUser,json}){
     if(request.method!=='POST')return json({error:'Méthode indisponible.'},405);
     let draft;try{draft=validDraft(body.draft,n.board);}catch(e){return json({error:e.message},400);}
     if(!Number.isInteger(body.revision)||body.revision<0)return json({error:'Version invalide.'},400);
-    if(current&&JSON.parse(current.draft).version===1)await env.DB.prepare('INSERT OR IGNORE INTO echelon_draft_history(user_id,board_id,revision,draft) VALUES(?1,?2,?3,?4)').bind(id,n.id,current.revision,current.draft).run();
+    if(current){const saved=JSON.parse(current.draft);if(saved.version===1||saved.answer?.length!==boardSpec(n.board).slots.length)await env.DB.prepare('INSERT OR IGNORE INTO echelon_draft_history(user_id,board_id,revision,draft) VALUES(?1,?2,?3,?4)').bind(id,n.id,current.revision,current.draft).run();}
     const result=await env.DB.prepare("INSERT INTO echelon_drafts(user_id,board_id,draft,revision) SELECT ?1,?2,?3,1 WHERE ?4=0 ON CONFLICT(user_id,board_id) DO UPDATE SET draft=excluded.draft,revision=echelon_drafts.revision+1,updated_at=datetime('now') WHERE echelon_drafts.revision=?4").bind(id,n.id,JSON.stringify(draft),body.revision).run();
     // SQLite's INSERT SELECT cannot update a nonzero revision; use a CAS update.
     let changed=result.meta.changes;

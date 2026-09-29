@@ -62,6 +62,9 @@ export function validDraft(draft,spec){
 // Keep usable old work while adding answer slots; never silently lose a backup.
 export function migrateDraft(old,spec){
   if(!old)return initialDraft(spec);
-  const next=old.version===1?{...old,version:2,answer:spec.slots.map(()=>null)}:old;
+  let next=old.version===1?{...old,version:2,answer:spec.slots.map(()=>null)}:old;
+  // The album now has two slots. Keep the previous construction intact so it
+  // can be reclaimed and edited, without accepting the former single result.
+  if(next.version===2&&spec.id==='album'&&next.answer?.length===1)next={...next,answer:[next.answer[0],null]};
   try{return validDraft(next,spec);}catch{return initialDraft(spec);}
 }

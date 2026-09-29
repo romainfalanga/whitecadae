@@ -90,3 +90,16 @@ test('single-block actions apply directly and cannot destroy the last copy of a 
   const sum=transform(chooseBlock(chooseOperation(chooseBlock(copy,0),'add'),1),spec);
   const detached=transform(sum,spec,'detach');assert.deepEqual(values(detached,spec),['2','24']);
 });
+
+test('114 is solved by preserving a copy of 2, dividing 114, and placing two independent blocks',()=>{
+  const spec=boardSpec('album');let flow=start('album');
+  assert.equal(flow.draft.answer.length,2);
+  flow=transform(chooseBlock(flow,1),spec,'reuse');
+  flow=placeBlock(chooseBlock(flow,2),spec,1);
+  flow=transform(chooseBlock(chooseOperation(chooseBlock(flow,0),'div'),1),spec);
+  assert.deepEqual(values(flow,spec),['57']);
+  assert.ok(!validateConstruction('album',flow.draft));
+  flow=placeBlock(flow,spec,0);
+  assert.ok(validateConstruction('album',flow.draft));
+  assert.ok(!validateConstruction('album',{...flow.draft,answer:flow.draft.answer.toReversed()}));
+});

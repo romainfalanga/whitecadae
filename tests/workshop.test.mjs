@@ -11,7 +11,7 @@ const solutions={
   first:[src('b'),op('div',dup(src('b')),src('a'))],
   pair:[op('add',src('b'),op('add',src('a'),part('d',0))),op('add',dup(src('b')),op('add',src('c'),part('d',1)))],
   last:[op('join',op('add',src('a'),part('b',0)),op('sub',part('b',1),dup(src('a'))))],
-  album:[op('group',src('a'),src('b'))],
+  album:[op('div',src('a'),src('b')),dup(src('b'))],
   date:[op('add',op('add',src('a'),src('b')),src('c')),src('d')],
   wanheda:[op('add',src('a'),src('b'))],
   infinis:[op('group',src('b'),src('a'))],
@@ -41,7 +41,7 @@ test('July is automatically placed and cannot enter a calculation, be changed, s
   assert.ok(validateConstruction('date',final([op('add',src('c'),op('add',src('b'),src('a'))),src('d')])));
 });
 test('grouping carries count and unit, not an arithmetic subtraction or ordinary division',()=>{
-  const album=evaluate(solutions.album[0],'album'),infinis=evaluate(solutions.infinis[0],'infinis');
+  const album=evaluate(op('group',src('a'),src('b')),'album'),infinis=evaluate(solutions.infinis[0],'infinis');
   assert.deepEqual(album.group,{count:2,unit:57});assert.equal(formatBlock(album,'album'),'57-2');
   assert.deepEqual(infinis.group,{count:3,unit:6});assert.equal(formatBlock(infinis),'666');
   assert.ok(!validateConstruction('album',final([op('div',src('a'),src('b'))])));
@@ -58,6 +58,34 @@ test('resource counts and expression budgets reject duplicated, nested and inval
   let expr=src('a');for(let i=0;i<20;i++)expr=op('add',expr,src('a'));
   assert.throws(()=>evaluate(expr,'last'));
   assert.throws(()=>validDraft({...initialDraft(boardSpec('last')),selected:[99]},'last'));
+});
+
+test('114 rejects the old grouped result and migrates existing work without losing the construction',()=>{
+  const grouped=op('group',src('a'),src('b')),old=final([grouped]);
+  assert.ok(!validateConstruction('album',old));
+  assert.ok(!validateConstruction('album',final([grouped,dup(src('b'))])));
+  assert.ok(!validateConstruction('album',final([op('div',src('a'),src('b')),src('b')])));
+  const migrated=restoreDraft(old,'album');
+  assert.deepEqual(migrated,{...old,answer:[grouped,null]});
+  assert.ok(!validateConstruction('album',migrated));
+  const working={version:2,items:[src('b')],selected:[0],answer:[src('a')]};
+  assert.deepEqual(restoreDraft(working,'album'),{...working,answer:[src('a'),null]});
+  assert.equal(gameLevel([{riddle_id:'eg-18-1',solved_at:'now'}]),2);
+});
+
+test('two-slot draft migration archives the exact older saved draft before replacement',async()=>{
+  const f=fixture(),user=26;
+  f.sql.prepare('INSERT OR IGNORE INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(user,'eg-03-1','now');
+  const call=body=>worker.fetch(new Request('https://test.local/api/echelon/draft/eg-18',{method:body?'POST':'GET',headers:{Cookie:'wc_session=qa25','Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),f.env);
+  await call();
+  const old=JSON.stringify(final([op('group',src('a'),src('b'))]));
+  f.sql.prepare('INSERT INTO echelon_drafts(user_id,board_id,draft,revision) VALUES(?,?,?,?)').run(user,'eg-18',old,6);
+  const fetched=await(await call()).json();
+  assert.equal(fetched.revision,6);assert.equal(fetched.draft.answer.length,2);
+  assert.equal(fetched.draft.answer[0].op,'group');assert.equal(fetched.draft.answer[1],null);
+  const saved=await call({draft:fetched.draft,revision:6});assert.equal(saved.status,200);
+  assert.equal(f.sql.prepare('SELECT draft FROM echelon_draft_history WHERE user_id=? AND board_id=? AND revision=6').get(user,'eg-18').draft,old);
+  f.sql.close();
 });
 test('old drafts are migrated and old completed 2 Jesus keeps its rung without crediting a lone old fragment',()=>{
   const legacy={version:1,items:[src('a'),src('b')],selected:[]};
@@ -79,7 +107,7 @@ test('new workshop visibility follows exact song thresholds and always requires 
     insert('eg-03-1');
     for(const [id,min]of [['eg-18',5],['eg-19',8],['eg-20',8],['eg-21',10]]){
       const res=await call('/api/echelon/draft/'+id);assert.equal(res.status,level>=min?200:404,id+' '+level);
-      if(res.status===200){const data=await res.json();assert.ok(data.spec.slots);assert.equal(data.draft.version,2);assert.ok(!('solutions' in data));}
+      if(res.status===200){const data=await res.json();assert.ok(data.spec.slots);assert.equal(data.draft.version,2);assert.ok(!('solutions' in data));assert.ok(!('prompt' in data.spec));}
     }
   }
   f.sql.close();

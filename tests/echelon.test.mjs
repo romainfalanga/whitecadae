@@ -45,12 +45,12 @@ test('signs appear only with their song, even if an old client marked them seen'
   assert.ok(!third.nodes.some(n=>n.id==='n-e'||n.id==='eg-15'));
   assert.ok(buildGameState(rows('eg-02-1','eg-02-2','eg-01-1')).nodes.some(n=>n.id==='n-e'));
   assert.ok(buildGameState(rows('eg-02-1','eg-02-2','eg-01-1','n-h-2')).nodes.some(n=>n.id==='eg-15'));
-  assert.equal(gameProfile(rows('eg-13-1','eg-02-2'),[]).enigmes.length,1);
+  assert.equal(gameProfile(rows('eg-13-1','eg-02-2'),[]).enigmes.length,0);
 });
 
 test('Horloge requires its password, while workshops also require their songs',()=>{
   const base=['eg-02-1'];
-  for(const extra of [[],['eg-03-2'],['@eg/seen/eg-10']])assert.ok(!buildGameState(rows(...base,...extra)).pages.some(n=>n.id==='eg-10'));
+  for(const extra of [[],['eg-03-2'],['eg-03-3'],['@eg/seen/eg-10']])assert.ok(!buildGameState(rows(...base,...extra)).pages.some(n=>n.id==='eg-10'));
   const clock=buildGameState(rows(...base,'eg-03-1'));
   assert.ok(clock.pages.some(n=>n.id==='eg-10'));
   for(const id of ['eg-11','eg-12'])assert.equal(clock.nodes.find(n=>n.id===id).locked,false);
@@ -81,9 +81,9 @@ test('M=M and named answers accept accents, equal signs and partial discovery',(
   assert.ok(matchNode(n,'méta-moi = moi',new Set()).prises.some(p=>p.id==='eg-06-2'&&p.complet));
   assert.ok(matchNode(n,'mecanisme',new Set()).prises.some(p=>!p.complet));
   const needle=NODES.find(n=>n.id==='eg-03');
-  assert.equal(needle.answers[1].label,'Détails');
+  assert.equal(needle.answers[1].label,'le(s) détail(s)');
   assert.ok(matchNode(needle,'details',new Set()).prises[0].complet);
-  assert.equal(buildGameState(rows('eg-02-1','eg-03-2')).nodes.find(n=>n.id==='eg-03').found[0].label,'Détails');
+  assert.equal(buildGameState(rows('eg-02-1','eg-03-2')).nodes.find(n=>n.id==='eg-03').found[0].label,'le(s) détail(s)');
   assert.ok(!NODES.some(n=>n.id==='n-0'));
   assert.equal(gameLevel(rows('n-0-1','n-0-3')),3);
   const beast=NODES.find(n=>n.id==='n-h');
@@ -93,6 +93,32 @@ test('M=M and named answers accept accents, equal signs and partial discovery',(
     assert.ok(result.prises.some(p=>p.id===id&&p.complet),text);
     assert.ok(!result.prises.some(p=>p.id!==id&&p.complet),text);
   }
+});
+
+test('XEU only accepts Dieu; a former VALD discovery preserves its historical rung without being displayed',()=>{
+  const xeu=NODES.find(n=>n.id==='eg-02');
+  assert.deepEqual(xeu.answers.map(a=>a.label),['Dieu']);
+  assert.ok(matchNode(xeu,'dieu',new Set()).prises.some(p=>p.id==='eg-02-1'&&p.complet));
+  for(const text of ['VALD','V-A-L-D'])assert.ok(!matchNode(xeu,text,new Set())?.prises?.length);
+  const history=rows('eg-02-2','eg-02-2.p0'),state=buildGameState(history);
+  assert.equal(state.echelon,2);
+  assert.deepEqual(state.nodes.find(n=>n.id==='eg-02').found,[]);
+  assert.equal(state.nodes.find(n=>n.id==='eg-02').total,1);
+  assert.equal(gameLevel(rows('eg-02-2.p0')),2);
+});
+
+test('Aiguille accepts singular Signe independently and displays the exact detail label',()=>{
+  const needle=NODES.find(n=>n.id==='eg-03');
+  assert.deepEqual(needle.answers.map(a=>a.label),['Horloge','le(s) détail(s)','Signe']);
+  for(const text of ['signe','Signe'])assert.ok(matchNode(needle,text,new Set()).prises.some(p=>p.id==='eg-03-3'&&p.complet));
+  assert.ok(!matchNode(needle,'signes',new Set())?.prises?.length);
+  for(const text of ['le(s) détail(s)','le(s) detail(s)','le détail','les détails','détail','details']){
+    assert.ok(matchNode(needle,text,new Set()).prises.some(p=>p.id==='eg-03-2'&&p.complet),text);
+  }
+  const state=buildGameState(rows('eg-02-1','eg-03-2','eg-03-3'));
+  assert.equal(state.echelon,4);
+  assert.deepEqual(state.nodes.find(n=>n.id==='eg-03').found.map(a=>a.label),['le(s) détail(s)','Signe']);
+  assert.ok(!state.pages.some(p=>p.kind==='clock'));
 });
 
 test('the two numeric formulas independently accept the same date and preserve earned rungs',()=>{
@@ -152,7 +178,8 @@ test('API handles permission boundaries, points, migrations and draft conflicts'
   assert.ok((await call('/api/echelon')).nodes.some(n=>n.id==='n-g'));
   assert.equal((await call('/api/echelon/guess',{id:'n-0',answer:'Devincix'})).status,404);
   assert.equal((await call('/api/echelon/guess',{id:'eg-02',answer:'Dieu'})).gained,0);
-  assert.equal((await call('/api/echelon/guess',{id:'eg-02',answer:'VALD'})).gained,1);
+  assert.equal((await call('/api/echelon/guess',{id:'eg-02',answer:'VALD'})).gained,0);
+  assert.equal((await call('/api/echelon/guess',{id:'eg-03',answer:'signe'})).gained,1);
   assert.equal((await call('/api/echelon/guess',{id:'n-h',answer:'dix'})).gained,0);
   assert.equal((await call('/api/echelon/guess',{id:'n-h',answer:'cornes'})).gained,1);
   assert.equal((await call('/api/echelon/guess',{id:'eg-01',answer:'Signe'})).gained,1);

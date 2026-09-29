@@ -2,7 +2,7 @@
 // Stratégie « réseau d'abord » : le site est collaboratif, on ne veut jamais
 // servir de contenu périmé. Le cache sert seulement de filet hors ligne.
 
-const CACHE = 'whitecadae-v27-guided-clock';
+const CACHE = 'whitecadae-v28-clock-without-hints';
 const SHELL = ['/', '/styles.css', '/app.js', '/music.css', '/music57.js', '/player.js', '/orange.js', '/echelon.js', '/echelon.css', '/journey.js', '/journey.css', '/story.css', '/workshop-core.js', '/workshop-flow.js', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {

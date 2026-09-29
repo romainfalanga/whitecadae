@@ -9,7 +9,7 @@ test('map shows current song signs without exposing their answers',()=>{
   assert.doesNotMatch(JSON.stringify(start),/Andromédien|apôtres|Galaxie|Horloge|Devincix|Katikas/);
   assert.equal(start.summary.horizon,1+start.summary.remaining);
   const third=buildJourney(rows('eg-02-1','eg-01-1'));
-  assert.equal(third.nodes.find(n=>n.id==='eg-02').status,'partial');
+  assert.equal(third.nodes.find(n=>n.id==='eg-02').status,'solved');
   assert.equal(third.nodes.find(n=>n.id==='eg-01').status,'solved');
   assert.equal(third.nodes.find(n=>n.id==='eg-03').status,'available');
   assert.ok(!third.nodes.some(n=>n.id==='eg-05'));

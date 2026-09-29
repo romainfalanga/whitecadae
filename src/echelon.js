@@ -22,7 +22,7 @@ export const NODES = [
     {id:'eg-14',source:'30 vins divins',answers:[...legacy('n-c').answers.map(a=>({...a,id:'eg-14-1'})),a('eg-14-2','Jésus')]},
     {id:'n-a',source:'57',answers:[answer('eg-16-1','12 apôtres',[['12','douze'],['apôtres','apotre']]),a('eg-16-2','Signes',['signe'])]},
     {id:'n-h',source:'Prends la bête à',answers:[horns('n-h-2','10','dix'),horns('n-h-3','2','deux')]},
-    {id:'eg-02',source:'XEU',answers:[a('eg-02-1','Dieu'),a('eg-02-2','VALD')]},
+    {id:'eg-02',source:'XEU',answers:[a('eg-02-1','Dieu')]},
     {id:'eg-01',source:'Aigle',answers:[a('eg-01-1','Signe',['signes'])]},
     {...legacy('n-w'),visual:'line'},
     {id:'eg-06',source:'M = M',visual:'infinity',answers:[
@@ -34,7 +34,7 @@ export const NODES = [
     {...legacy('n-g'),visual:'dice'},
     {...legacy('n-c'),source:'5 vins divins',answers:[...legacy('n-c').answers,a('n-c-2','Jésus')]},
     {...legacy('n-b'),answers:legacy('n-b').answers.map(a=>({...a,id:'eg-07-1'}))},
-    {id:'eg-03',source:'Aiguille',answers:[a('eg-03-1','Horloge'),a('eg-03-2','Détails')]},
+    {id:'eg-03',source:'Aiguille',answers:[a('eg-03-1','Horloge'),a('eg-03-2','le(s) détail(s)',['détail','détails','le détail','les détails']),a('eg-03-3','Signe')]},
     {...legacy('n-k',['n-k-1']),answers:[a('n-k-1','Galaxies',['galaxie']),a('eg-17-1','Signes',['signe'])]},
   ]),
   ...onSong('13h20',3,[legacy('n-e',['n-e-2'])]),
@@ -42,13 +42,13 @@ export const NODES = [
   {id:'eg-11',source:'2:24',subtitle:'13h20',music:'13h20',min:3,kind:'workshop',board:'first',requires:['eg-03-1'],answers:[a('eg-11-1','24 décembre · 24 / 12')]},
   {id:'eg-12',source:'3:50 ↔ 3:44',subtitle:'30 vins divins · Sans indices dans les dés',music:'sans-indice-dans-les-des',min:2,kind:'workshop',board:'pair',requires:['eg-03-1'],answers:[a('eg-12-1','2 × 57')]},
   {id:'eg-13',source:'2:39',subtitle:'Orange',music:'orange',min:4,kind:'workshop',board:'last',requires:['eg-03-1'],answers:[a('eg-13-1','57')]},
-  {id:'eg-18',source:'114',subtitle:'Le deuxième album de Vulpis',music:'la-matiere-dense',min:5,kind:'workshop',board:'album',requires:['eg-03-1'],answers:[a('eg-18-1','57-2')]},
+  {id:'eg-18',source:'114',subtitle:'Vulpis',music:'la-matiere-dense',min:5,kind:'workshop',board:'album',requires:['eg-03-1'],answers:[a('eg-18-1','57 · 2')]},
   {id:'eg-19',source:'18 juillet 2019',subtitle:'La date de l’album',music:'wanheda',min:8,kind:'workshop',board:'date',requires:['eg-03-1'],answers:[a('eg-19-1','57 · 07')]},
   {id:'eg-20',source:'3:54',subtitle:'Wanheda',music:'wanheda',min:8,kind:'workshop',board:'wanheda',requires:['eg-03-1'],answers:[a('eg-20-1','57')]},
   {id:'eg-21',source:'3:18 ↔ 3:18',subtitle:'Quand je vois je pense · Un fil entre deux infinis',music:'un-fil-entre-deux-infinis',min:10,kind:'workshop',board:'infinis',requires:['eg-03-1'],answers:[a('eg-21-1','666')]},
 ].map(n=>({...n,kind:n.kind||'riddle',requires:n.requires||[],min:n.min||1}));
 // Retired answers are no longer discoverable. Earned historical points remain.
-const retiredAnswers=[['n-0-1',1],['n-0-3',1],['eg-05-1',2]];
+const retiredAnswers=[['n-0-1',1],['n-0-3',1],['eg-05-1',2],['eg-02-2',1]];
 export const MAX_GAME_LEVEL=1+NODES.reduce((sum,n)=>sum+n.answers.length,0)+retiredAnswers.length;
 export const progressLevel=p=>1+p.solved.size+(p.retired?.size||0);
 const byId = new Map(NODES.map(n=>[n.id,n]));
@@ -124,7 +124,7 @@ export const boardSources={
   first:[{id:'a',value:2,label:'13h20 · minutes'},{id:'b',value:24,label:'13h20 · secondes'}],
   pair:[{id:'a',value:3,label:'30 vins divins · minutes'},{id:'b',value:50,label:'30 vins divins · secondes'},{id:'c',value:3,label:'Sans indices dans les dés · minutes'},{id:'d',value:44,label:'Sans indices dans les dés · secondes'}],
   last:[{id:'a',value:2,label:'Orange · minutes'},{id:'b',value:39,label:'Orange · secondes'}],
-  album:[{id:'a',value:114,label:'Nombre de l’album'},{id:'b',value:2,label:'Deuxième album de Vulpis'}],
+  album:[{id:'a',value:114,label:'Album'},{id:'b',value:2,label:'Bloc'}],
   date:[{id:'a',value:18,label:'Jour'},{id:'b',value:20,label:'Année · premier bloc'},{id:'c',value:19,label:'Année · deuxième bloc'},{id:'d',value:7,display:'07',fixed:true,label:'Juillet → 07'}],
   wanheda:[{id:'a',value:3,label:'Wanheda · minutes'},{id:'b',value:54,label:'Wanheda · secondes'}],
   infinis:[{id:'a',value:3,label:'Durée commune · minutes'},{id:'b',value:18,label:'Durée commune · secondes'}]
