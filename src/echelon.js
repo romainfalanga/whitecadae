@@ -21,11 +21,11 @@ export const NODES = [
   ...onSong('30-vins-divins',1,[
     {id:'eg-14',source:'30 vins divins',answers:[...legacy('n-c').answers.map(a=>({...a,id:'eg-14-1'})),a('eg-14-2','Jésus')]},
     {id:'n-a',source:'57',answers:[answer('eg-16-1','12 apôtres',[['12','douze'],['apôtres','apotre']]),a('eg-16-2','Signes',['signe'])]},
-    {id:'n-h',source:'Prends la bête à',answers:[horns('n-h-2','10','dix'),horns('n-h-3','2','deux')]},
+    {id:'n-h',source:'Prends la bête à…',answers:[horns('n-h-2','10','dix'),horns('n-h-3','2','deux')]},
     {id:'eg-02',source:'XEU',answers:[a('eg-02-1','Dieu')]},
     {id:'eg-01',source:'Aigle',answers:[a('eg-01-1','Signe',['signes'])]},
     {...legacy('n-w'),visual:'line'},
-    {id:'eg-05',source:'Mélange les',answers:[answer('eg-05-1','Expansions harmonieuses',[['Expansions','expansion'],['harmonieuses','harmonieuse']],[{idx:[0,1],formes:['Mélange les expansion harmonieuse','Mélange les expansions harmonieuses'].map(normalize)}])]},
+    {id:'eg-05',source:'Mélange les…',answers:[answer('eg-05-1','Expansions harmonieuses',[['Expansions','expansion'],['harmonieuses','harmonieuse']],[{idx:[0,1],formes:['Mélange les expansion harmonieuse','Mélange les expansions harmonieuses'].map(normalize)}])]},
     {id:'eg-06',source:'M = M',visual:'infinity',answers:[
       {...answer('eg-06-1','Mécanisme = Matière',[['Mécanisme','mecanismes'],['Matière']]),seps:[' = ']},
       {...answer('eg-06-2','Méta-Moi = Moi',[['Méta-Moi','meta moi','metamoi'],['Moi']]),seps:[' = ']}

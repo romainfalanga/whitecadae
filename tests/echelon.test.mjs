@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {NODES,SHARE,progress,buildGameState,gameLevel,accessLevel,gameProfile,isPlayable} from '../src/echelon.js';
+import {NODES,SHARE,MAX_GAME_LEVEL,progress,buildGameState,gameLevel,accessLevel,gameProfile,isPlayable} from '../src/echelon.js';
 import {NODES as OLD,echelonOf,progresOf,matchNode} from '../src/enigmas57.js';
 import {evaluate,validDraft,validateConstruction} from '../src/echelon-workshop.js';
 import {handleEchelon,ensureGameTables} from '../src/echelon-api.js';
@@ -31,6 +31,25 @@ test('one completed answer is one rung; old duplicates merge, retired history pr
   const history=rows(...OLD.flatMap(n=>n.answers.map(a=>a.id)));
   assert.ok(accessLevel(history)>=echelonOf(progresOf(history.map(r=>r.riddle_id)).solved));
   assert.equal(progress(rows('n-a-2.p0')).solved.has('eg-01-1'),true);
+});
+
+test('the current route ends at 32; retained retired answers explain levels 33 and 34 without duplicate credit',()=>{
+  const active=NODES.flatMap(n=>n.answers.map(a=>a.id));
+  assert.equal(NODES.length,23);
+  assert.equal(active.length,31);
+  assert.equal(new Set(active).size,31);
+  assert.equal(gameLevel(rows(...active)),32);
+  for(const retired of ['eg-02-2','eg-03-3']){
+    const history=rows(...active,retired,retired+'.p0',retired);
+    assert.equal(gameLevel(history),33);
+    assert.equal(progress(history).solved.size,31);
+    assert.equal(progress(history).retired.size,1);
+  }
+  const fullHistory=rows(...active,'eg-02-2','eg-02-2.p0','eg-03-3','eg-03-3.p0');
+  assert.equal(gameLevel(fullHistory),34);
+  assert.equal(MAX_GAME_LEVEL,34);
+  // Both historical credits and one current answer still missing also give 33.
+  assert.equal(gameLevel(rows(...active.slice(0,-1),'eg-02-2','eg-03-3')),33);
 });
 
 test('signs appear only with their song, even if an old client marked them seen',()=>{
@@ -87,7 +106,7 @@ test('M=M and named answers accept accents, equal signs and partial discovery',(
   assert.equal(NODES.find(n=>n.id==='n-0').min,8);
   assert.equal(gameLevel(rows('n-0-1','n-0-3')),3);
   const beast=NODES.find(n=>n.id==='n-h');
-  assert.equal(beast.source,'Prends la bête à');
+  assert.equal(beast.source,'Prends la bête à…');
   for(const [text,id]of [['dix cornes','n-h-2'],['deux cornes','n-h-3'],['Prends la bête à 2 cornes','n-h-3'],['Prends la bête à dix cornes','n-h-2']]){
     const result=matchNode(beast,text,new Set());
     assert.ok(result.prises.some(p=>p.id===id&&p.complet),text);
@@ -125,7 +144,7 @@ test('Aiguille only accepts Horloge and details, while the retired Signe keeps h
 
 test('Mélange les is available at echelon 1, accepts the complete phrase, and restores old discoveries exactly once',()=>{
   const puzzle=NODES.find(n=>n.id==='eg-05'),start=buildGameState().nodes.find(n=>n.id==='eg-05');
-  assert.equal(start.title,'Mélange les');assert.equal(start.total,1);assert.equal(start.locked,false);assert.equal(start.open,true);
+  assert.equal(start.title,'Mélange les…');assert.equal(start.total,1);assert.equal(start.locked,false);assert.equal(start.open,true);
   assert.equal(start.music,'30-vins-divins');assert.deepEqual(start.found,[]);
   assert.doesNotMatch(JSON.stringify(start),/Expansion|harmonieuse/i);
   for(const text of ['Expansion harmonieuse','expansions harmonieuses','Mélange les expansions harmonieuses','melange-les expansion harmonieuse']){
