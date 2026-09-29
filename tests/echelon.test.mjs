@@ -81,10 +81,10 @@ test('M=M and named answers accept accents, equal signs and partial discovery',(
   assert.ok(matchNode(n,'méta-moi = moi',new Set()).prises.some(p=>p.id==='eg-06-2'&&p.complet));
   assert.ok(matchNode(n,'mecanisme',new Set()).prises.some(p=>!p.complet));
   const needle=NODES.find(n=>n.id==='eg-03');
-  assert.equal(needle.answers[1].label,'le(s) détail(s)');
+  assert.equal(needle.answers[1].label,'le détail');
   assert.ok(matchNode(needle,'details',new Set()).prises[0].complet);
-  assert.equal(buildGameState(rows('eg-02-1','eg-03-2')).nodes.find(n=>n.id==='eg-03').found[0].label,'le(s) détail(s)');
-  assert.ok(!NODES.some(n=>n.id==='n-0'));
+  assert.equal(buildGameState(rows('eg-02-1','eg-03-2')).nodes.find(n=>n.id==='eg-03').found[0].label,'le détail');
+  assert.equal(NODES.find(n=>n.id==='n-0').min,8);
   assert.equal(gameLevel(rows('n-0-1','n-0-3')),3);
   const beast=NODES.find(n=>n.id==='n-h');
   assert.equal(beast.source,'Prends la bête à');
@@ -109,14 +109,15 @@ test('XEU only accepts Dieu; a former VALD discovery preserves its historical ru
 
 test('Aiguille only accepts Horloge and details, while the retired Signe keeps historical progress',()=>{
   const needle=NODES.find(n=>n.id==='eg-03');
-  assert.deepEqual(needle.answers.map(a=>a.label),['Horloge','le(s) détail(s)']);
+  assert.deepEqual(needle.answers.map(a=>a.label),['L’horloge','le détail']);
+  for(const text of ['horloge','Horloge',"l'horloge",'L’horloge'])assert.ok(matchNode(needle,text,new Set()).prises.some(p=>p.id==='eg-03-1'&&p.complet),text);
   for(const text of ['signe','Signe','signes'])assert.ok(!matchNode(needle,text,new Set())?.prises?.length);
   for(const text of ['le(s) détail(s)','le(s) detail(s)','le détail','les détails','détail','details']){
     assert.ok(matchNode(needle,text,new Set()).prises.some(p=>p.id==='eg-03-2'&&p.complet),text);
   }
   const state=buildGameState(rows('eg-02-1','eg-03-2','eg-03-3'));
   assert.equal(state.echelon,4);
-  assert.deepEqual(state.nodes.find(n=>n.id==='eg-03').found.map(a=>a.label),['le(s) détail(s)']);
+  assert.deepEqual(state.nodes.find(n=>n.id==='eg-03').found.map(a=>a.label),['le détail']);
   assert.equal(state.nodes.find(n=>n.id==='eg-03').total,2);
   assert.equal(gameLevel(rows('eg-03-3','eg-03-3.p0')),2);
   assert.ok(!state.pages.some(p=>p.kind==='clock'));
@@ -134,7 +135,7 @@ test('Mélange les is available at echelon 1, accepts the complete phrase, and r
   for(const history of [rows('eg-05-1'),rows('eg-05-1.p0','eg-05-1.p1'),rows('eg-05-1','eg-05-1.p0','eg-05-1.p1')]){
     const state=buildGameState(history),restored=state.nodes.find(n=>n.id==='eg-05');
     assert.equal(state.echelon,2);assert.equal(restored.open,false);
-    assert.deepEqual(restored.found,[{id:'eg-05-1',label:'Expansion harmonieuse'}]);
+    assert.deepEqual(restored.found,[{id:'eg-05-1',label:'Expansions harmonieuses'}]);
   }
   assert.equal(gameLevel(rows('eg-05-1.p0')),1);
   assert.equal(buildGameState(rows('eg-05-1.p0')).nodes.find(n=>n.id==='eg-05').partiels.length,1);

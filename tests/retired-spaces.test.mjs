@@ -22,7 +22,7 @@ test('the three-link menu and header have no profile or account control',()=>{
   assert.doesNotMatch(nav,/Mon profil|Conversation|Tous les projets/);
   assert.doesNotMatch(html,/account-access|nav-settings/);
   assert.doesNotMatch(js,/account-access|pageProfile|openSettings|Mon profil/);
-  assert.match(nav,/>Musique</);assert.match(nav,/>Échelon</);
+  assert.match(nav,/>Musiques</);assert.match(nav,/>Échelons</);
 });
 
 test('the removed profile API does not expose member information',async()=>{

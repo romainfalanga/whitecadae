@@ -176,14 +176,8 @@ async function route() {
   app.innerHTML = '<h1>Page introuvable</h1><p><a href="/paroles" data-link>Retour aux paroles</a></p>';
 }
 
-async function logoutFromGame(){
-  await api('/api/logout',{method:'POST'});
-  state.user=null;state.access={interpretations:true};state.echelon=1;
-  WCPlayer.setAlbums([]);oublieAttente();navigate('/echelon');
-}
-
 function renderNav() {
-  const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musique</a>', '<a href="/echelon" data-link>Échelon</a>'];
+  const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musiques</a>', '<a href="/echelon" data-link>Échelons</a>'];
   nav.innerHTML = liens.join('\n       ');
   nav.querySelectorAll('a').forEach((a) => { if ((a.getAttribute('href') === location.pathname || (a.getAttribute('href') === '/echelon' && location.pathname.startsWith('/echelon/')))) a.setAttribute('aria-current', 'page'); });
 

@@ -59,10 +59,9 @@ window.WCGame=(()=>{
   function render(){
     versions.clear();
     if(isClock()&&!pageBy('eg-10')){app.innerHTML='<section class="eg-page"><h1>Ce chemin n’est pas disponible.</h1><a href="/echelon" data-link>Retrouver Échelons →</a></section>';return;}
-    app.innerHTML=`<section class="eg-page">${header()}<div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}<div id="eg-game-content" class="${isClock()?'eg-labs':'eg-entries'}"></div>${isClock()?'':`<footer class="eg-footer"><a href="/musique#album-57" data-link>Écouter 57</a><a href="/paroles" data-link>Lire les paroles</a>${!data.anonyme?'<button class="eg-logout" id="eg-logout">Se déconnecter</button>':''}</footer>`}</section>`;
+    app.innerHTML=`<section class="eg-page">${header()}<div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}<div id="eg-game-content" class="${isClock()?'eg-labs':'eg-entries'}"></div></section>`;
     document.title=`${isClock()?'Horloge · ':''}Échelons · White Cadae`;
     sync();
-    document.getElementById('eg-logout')?.addEventListener('click',async()=>{try{await logoutFromGame();}catch(err){feedback(err.message);}});
   }
   async function submit(p,payload,button){
     if(sending)return;sending=true;const token=serial,before=data,anchor=document.getElementById(p.id),top=anchor?.getBoundingClientRect().top;if(button)button.disabled=true;

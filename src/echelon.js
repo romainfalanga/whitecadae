@@ -25,7 +25,7 @@ export const NODES = [
     {id:'eg-02',source:'XEU',answers:[a('eg-02-1','Dieu')]},
     {id:'eg-01',source:'Aigle',answers:[a('eg-01-1','Signe',['signes'])]},
     {...legacy('n-w'),visual:'line'},
-    {id:'eg-05',source:'Mélange les',answers:[answer('eg-05-1','Expansion harmonieuse',[['Expansion','expansions'],['harmonieuse','harmonieuses']],[{idx:[0,1],formes:['Mélange les expansion harmonieuse','Mélange les expansions harmonieuses'].map(normalize)}])]},
+    {id:'eg-05',source:'Mélange les',answers:[answer('eg-05-1','Expansions harmonieuses',[['Expansions','expansion'],['harmonieuses','harmonieuse']],[{idx:[0,1],formes:['Mélange les expansion harmonieuse','Mélange les expansions harmonieuses'].map(normalize)}])]},
     {id:'eg-06',source:'M = M',visual:'infinity',answers:[
       {...answer('eg-06-1','Mécanisme = Matière',[['Mécanisme','mecanismes'],['Matière']]),seps:[' = ']},
       {...answer('eg-06-2','Méta-Moi = Moi',[['Méta-Moi','meta moi','metamoi'],['Moi']]),seps:[' = ']}
@@ -35,7 +35,7 @@ export const NODES = [
     {...legacy('n-g'),visual:'dice'},
     {...legacy('n-c'),source:'5 vins divins',answers:[...legacy('n-c').answers,a('n-c-2','Jésus')]},
     {...legacy('n-b'),answers:legacy('n-b').answers.map(a=>({...a,id:'eg-07-1'}))},
-    {id:'eg-03',source:'Aiguille',answers:[a('eg-03-1','Horloge'),a('eg-03-2','le(s) détail(s)',['détail','détails','le détail','les détails'])]},
+    {id:'eg-03',source:'Aiguille',answers:[a('eg-03-1','L’horloge',['horloge']),a('eg-03-2','le détail',['détail','détails','les détails','le(s) détail(s)'])]},
     {...legacy('n-k',['n-k-1']),answers:[a('n-k-1','Galaxies',['galaxie']),a('eg-17-1','Signes',['signe'])]},
   ]),
   ...onSong('13h20',3,[legacy('n-e',['n-e-2'])]),
@@ -47,9 +47,10 @@ export const NODES = [
   {id:'eg-19',source:'18 juillet 2019',subtitle:'La date de l’album',music:'wanheda',min:8,kind:'workshop',board:'date',requires:['eg-03-1'],answers:[a('eg-19-1','57 · 07')]},
   {id:'eg-20',source:'3:54',subtitle:'Wanheda',music:'wanheda',min:8,kind:'workshop',board:'wanheda',requires:['eg-03-1'],answers:[a('eg-20-1','57')]},
   {id:'eg-21',source:'3:18 ↔ 3:18',subtitle:'Quand je vois je pense · Un fil entre deux infinis',music:'un-fil-entre-deux-infinis',min:10,kind:'workshop',board:'infinis',requires:['eg-03-1'],answers:[a('eg-21-1','666')]},
+  ...onSong('wanheda',8,[{id:'n-0',source:'En collant nos deux noms sur Instagram, tu en trouveras un troisième et celui d’un endroit.',answers:[a('n-0-1','Devincix'),a('n-0-3','Katikas',['Katikias'])]}]),
 ].map(n=>({...n,kind:n.kind||'riddle',requires:n.requires||[],min:n.min||1}));
 // Retired answers are no longer discoverable. Earned historical points remain.
-const retiredAnswers=[['n-0-1',1],['n-0-3',1],['eg-02-2',1],['eg-03-3',1]];
+const retiredAnswers=[['eg-02-2',1],['eg-03-3',1]];
 export const MAX_GAME_LEVEL=1+NODES.reduce((sum,n)=>sum+n.answers.length,0)+retiredAnswers.length;
 export const progressLevel=p=>1+p.solved.size+(p.retired?.size||0);
 const byId = new Map(NODES.map(n=>[n.id,n]));
