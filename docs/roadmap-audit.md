@@ -1,4 +1,4 @@
-# Audit Signes / Échelon — 29 septembre 2026
+# Audit Signes / Échelon — 30 septembre 2026
 
 ## Périmètre
 
@@ -17,9 +17,17 @@ Revue des routes Worker et SPA, authentification et édition du compte, état ca
 
 ## Validation
 
-Tests Node/SQLite : progression 1–33, anciens signes retirés, réponses répétées, accès Horloge, constructions et brouillons concurrents, seuils musicaux, variantes continues, requêtes Range, lecteur et répétition, retrait des anciens espaces. Tests ajoutés : anonymes, membres strictement inférieurs, pagination, curseurs invalides, absence d’informations privées, invalidation de scores, photos protégées, profil et alias Signes. La préparation de reset est répétée sur une base locale avec contrôle du catalogue, des références et des séquences.
+83 tests Node/SQLite passent : progression 1–33, anciens signes retirés, réponses répétées, accès Horloge, constructions et brouillons concurrents, seuils musicaux, variantes continues, requêtes Range, lecteur et répétition, retrait des anciens espaces. Tests ajoutés : anonymes, membres strictement inférieurs, pagination, curseurs invalides, absence d’informations privées, invalidation de scores, photos protégées, profil, inscription concurrente et alias Signes. La préparation de reset est répétée sur une base locale avec contrôle du catalogue, des références et des séquences.
 
-Navigateur local avec le véritable Worker : rendu à 1440 et 390 pixels, modification/enregistrement/rechargement du pseudo et de la photo, liste des membres, 33 étapes, absence de débordement horizontal, composant final et ancien lien Horloge. Le bloc final et l’accueil emploient exactement le même générateur HTML. Compilation Cloudflare contrôlée avec un dry-run.
+Navigateur local avec le véritable Worker : rendu à 1440, 390 et 320 pixels, modification/enregistrement/rechargement du pseudo et de la photo, déconnexion, liste des membres, 33 étapes, absence de débordement horizontal, transition éclairé/ombre à l’échelon 8, composant final et ancien lien Horloge. Le bloc final et l’accueil emploient exactement le même générateur HTML. Compilation Cloudflare contrôlée avec un dry-run.
+
+## Publication et remise à zéro
+
+Version Worker publiée : `8a0551cc-f1ee-4d25-8b35-60cffccbde21`. Les fichiers publics ont été comparés à leurs copies locales par SHA-256 ; les API publiques Signes et roadmap, les restrictions musicales et les anciens espaces fermés ont été contrôlés sur whitecadae.fr.
+
+Après autorisation explicite de l’accès D1 et de la suppression, export SQL complet sauvegardé hors dépôt, restauré localement et vérifié. 33 comptes ont été supprimés avec leurs progressions, sessions, photos, brouillons, vocaux et anciennes contributions. Le bucket R2 `whitecadae-media` était vide ; les deux anciennes références vidéo étaient des dépôts en attente sans fichier. Le code des anciens Durable Objects n’enregistrait pas de contenu durable ; les WebSockets sont fermés par la classe retirée.
+
+Un compte temporaire a vérifié en production l’inscription à 1, le contrôle musical, la découverte d’un signe, le passage de la roadmap à 2 et la déconnexion. Le compte a ensuite été supprimé par un nettoyage exécuté dans `finally`. Un nouvel export après ce nettoyage confirme zéro compte, zéro session et les 46 tables de données des comptes vides. L’empreinte du catalogue albums/chansons/paroles est identique avant et après. La séquence des comptes est conservée (34 après le test), donc les prochains identifiants ne réutiliseront pas ceux des anciens brouillons locaux.
 
 ## Limites
 
@@ -27,4 +35,4 @@ La visibilité est réévaluée à chaque requête ; elle n’efface pas une inf
 
 Les tests du lecteur vérifient le comportement logiciel, sans constituer une mesure sur tous les modèles de téléphones verrouillés. Aucun appareil iOS physique ni test de charge de grande ampleur n’a été utilisé pour cette évolution.
 
-La suppression de production est une opération séparée : son achèvement doit être prouvé par l’export, les compteurs après suppression et une vérification des sessions. Ce document ne prétend pas qu’elle a eu lieu.
+Les sauvegardes locales demandées restent disponibles hors du dépôt. Elles ne sont pas publiées avec le site.

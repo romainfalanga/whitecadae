@@ -43,6 +43,9 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   if(!backup||!output)throw Error('Usage: node scripts/account-reset-plan.mjs <backup.sql> <private-output-directory>');
   const bytes=readFileSync(backup),db=new DatabaseSync(':memory:');
   try{
+    // D1 exports may put a referencing table before its parent. Restore the
+    // complete snapshot first; the rehearsal below enables and checks keys.
+    db.exec('PRAGMA foreign_keys=OFF');
     db.exec(bytes.toString('utf8'));
     const plan=accountResetPlan(db);mkdirSync(output,{recursive:true});
     writeFileSync(resolve(output,'account-reset.sql'),plan.sql,{flag:'wx'});
