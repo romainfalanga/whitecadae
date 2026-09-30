@@ -1,7 +1,7 @@
 import {gameLevel} from './echelon.js';
 
 // Derived index only. The saved signs remain the source of truth.
-export const SCORE_VERSION=1;
+export const SCORE_VERSION=2;
 export const ROADMAP_SCHEMA=[
   `CREATE TABLE IF NOT EXISTS roadmap_revisions(user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,revision INTEGER NOT NULL DEFAULT 0)`,
   `CREATE TABLE IF NOT EXISTS roadmap_levels(user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 33),revision INTEGER NOT NULL,score_version INTEGER NOT NULL)`,

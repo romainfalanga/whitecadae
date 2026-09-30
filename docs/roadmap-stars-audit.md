@@ -24,6 +24,6 @@ Le composant de connexion anonyme est partagé avec Signes, avec seulement les l
 
 Navigateur local avec le véritable Worker et des comptes fictifs : vues de 1440, 390 et 320 pixels, pas de débordement horizontal, ouverture et fermeture des listes, membres du niveau courant, modification du pseudo et import d’une photo conservés après rechargement, déconnexion, email en lecture seule, présence des champs de mot de passe, composant anonyme et texte d’accueil. Le changement de mot de passe est testé par l’API sur une base locale ; aucun mot de passe d’un utilisateur réel n’est changé. Compilation Cloudflare contrôlée par dry-run.
 
-Les effectifs se rafraîchissent à l’ouverture de la page et les listes à leur ouverture : ce n’est pas un flux temps réel. Les essais de dimensions couvrent les petits écrans, sans prétendre avoir testé tous les appareils physiques.
+Les effectifs se rafraîchissent à l’ouverture de la page et les listes à leur première ouverture sur cette visite : ce n’est pas un flux temps réel. Les essais de dimensions couvrent les petits écrans, sans prétendre avoir testé tous les appareils physiques.
 
 Vérification supplémentaire dans le navigateur : astres texturés sans erreur WebGL, déblocage de Horloge depuis Aiguille et apparition immédiate du lien dans le menu mobile ; navigation fonctionnelle et un seul élément actif dans le menu. La 3D est un rendu fixe calculé à l’apparition, pas une simulation astronomique animée.

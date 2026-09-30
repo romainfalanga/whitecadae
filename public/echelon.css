@@ -17,3 +17,16 @@
 @media(min-width:900px){.eg-studio{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);column-gap:1.5rem;grid-template-areas:"conflict conflict" "status status" "bank answer" "equation answer" "actions answer" "footer footer" "tools tools";align-items:start}.eg-conflict{grid-area:conflict}.eg-flow-status{grid-area:status}.eg-bank{grid-area:bank}.eg-equation{grid-area:equation}.eg-actions,.eg-compute{grid-area:actions}.eg-answer-dock{grid-area:answer;margin:0;padding:0 0 0 1.5rem;border-top:0;border-left:1px solid var(--eg-line)}.eg-studio-footer{grid-area:footer}.eg-secondary-actions{grid-area:tools}}
 
 .eg-equation[hidden]{display:none}
+
+/* A quiet pause stays above the audio player, without covering the last input. */
+.eg-is-paused .eg-page{padding-bottom:6rem}
+.eg-pause{position:fixed;z-index:46;right:max(1rem,calc((100vw - 1120px)/2));bottom:calc(var(--player-height,0px) + .75rem + env(safe-area-inset-bottom));display:flex;align-items:center;gap:.7rem;padding:.65rem .9rem;border:1px solid #c69a5b66;border-radius:9px;background:#201a16;color:#eadac6;box-shadow:0 5px 20px #0004;font-size:.75rem;pointer-events:none}
+.eg-pause[hidden]{display:none}
+.eg-pause time{font-variant-numeric:tabular-nums;font-size:.95rem;color:#ffcc86;min-width:2.25rem;text-align:right}
+.eg-pause-mark{width:14px;height:14px;border:1px solid #d8a360;border-radius:50%;position:relative}
+.eg-pause-mark:after{content:'';position:absolute;left:5px;top:2px;width:3px;height:5px;border-left:1px solid #d8a360;border-bottom:1px solid #d8a360}
+.eg-answer input:disabled{color:var(--eg-dim);border-color:#ffffff14}
+.eg-feedback.is-gain{display:flex;align-items:baseline;gap:.6rem;width:fit-content;max-width:100%;padding:.6rem 1rem .7rem;border:1px solid #f8bd6638;border-radius:8px;background:linear-gradient(110deg,#ff9b2217,#f3c78a05);color:#f7d4a0}
+.eg-gain-number{font:400 2rem/1.1 var(--serif);letter-spacing:-.06em}
+.eg-gain-label{font-size:.75rem;letter-spacing:.12em;text-transform:uppercase}
+@media(max-width:500px){.eg-pause{right:1rem;padding:.6rem .8rem}.eg-feedback.is-gain{margin-block:.8rem}.eg-gain-number{font-size:1.85rem}}

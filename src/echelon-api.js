@@ -5,6 +5,7 @@ import {buildJourney} from './journey.js';
 import {newlyOpened} from './content-access.js';
 
 const ready=new WeakMap();
+export const ATTEMPT_DELAY_MS=33000;
 export async function ensureGameTables(env){
   if(ready.has(env.DB))return ready.get(env.DB);
   const pending=env.DB.batch([
@@ -25,12 +26,19 @@ async function saveIds(env,id,ids){
 async function stateFor(env,id){
   const rows=await gameRows(env,id),state=buildGameState(rows);
   if(id){const existing=new Set(rows.filter(r=>r.solved_at).map(r=>r.riddle_id));await saveIds(env,id,state.pages.map(p=>'@eg/seen/'+p.id).filter(key=>!existing.has(key)));}
-  return {...state,anonyme:!id};
+  return {...state,anonyme:!id,...await attemptStatus(env,id)};
+}
+export async function attemptStatus(env,id){
+  if(!id)return {attenteMs:0};
+  await ensureGameTables(env);
+  const row=await env.DB.prepare('SELECT next_at FROM echelon_attempts WHERE user_id=?1').bind(id).first();
+  return {attenteMs:Math.max(0,(row?.next_at||0)-Date.now())};
 }
 async function bodyOf(request){if(Number(request.headers.get('Content-Length'))>40000)throw new Error('Requête trop grande.');const text=await request.text();if(text.length>40000)throw new Error('Requête trop grande.');return JSON.parse(text);}
 export async function handleEchelon(request,env,path,{getUser,json}){
   const user=await getUser(request,env),id=user?.id;
   if(request.method==='GET'&&(path==='/api/echelon'||path==='/api/57'))return json(await stateFor(env,id));
+  if(request.method==='GET'&&path==='/api/echelon/attempt')return json(await attemptStatus(env,id));
   if(!id)return json({error:'Connecte-toi pour conserver tes découvertes.'},401);
   const rows=await gameRows(env,id),p=progress(rows);
   if(request.method==='GET'&&path==='/api/echelon/map')return json(buildJourney(rows,user));
@@ -58,12 +66,12 @@ export async function handleEchelon(request,env,path,{getUser,json}){
   const n=getGameNode(String(body.id||''));
   if(!n||!isVisible(n,p))return json({error:'Page indisponible.'},404);
   if(!isPlayable(n,p))return json({error:'Cette énigme n’est pas encore ouverte.'},403);
-  if(n.answers.every(a=>p.solved.has(a.id)))return json({ok:true,gained:0,message:'Cette lecture est déjà trouvée.',state:await stateFor(env,id)});
   const text=String(body.answer||'').trim();
   if(text.length>200||(!text&&n.kind!=='workshop'))return json({error:'Propose un signe.'},400);
   const now=Date.now();
-  const claim=await env.DB.prepare('INSERT INTO echelon_attempts(user_id,next_at) VALUES (?1,?2) ON CONFLICT(user_id) DO UPDATE SET next_at=excluded.next_at WHERE echelon_attempts.next_at<=?3').bind(id,now+5000,now).run();
+  const claim=await env.DB.prepare('INSERT INTO echelon_attempts(user_id,next_at) VALUES (?1,?2) ON CONFLICT(user_id) DO UPDATE SET next_at=excluded.next_at WHERE echelon_attempts.next_at<=?3').bind(id,now+ATTEMPT_DELAY_MS,now).run();
   if(!claim.meta.changes){const wait=await env.DB.prepare('SELECT next_at FROM echelon_attempts WHERE user_id=?1').bind(id).first();return json({error:'Prends un instant avant de réessayer.',attenteMs:Math.max(0,wait.next_at-now)},429);}
+  if(n.answers.every(a=>p.solved.has(a.id)))return json({ok:true,gained:0,message:'Cette lecture est déjà trouvée.',state:await stateFor(env,id)});
   let prise;
   if(n.kind==='workshop'){
     const valid=validateConstruction(n.board,body.draft);
@@ -72,14 +80,11 @@ export async function handleEchelon(request,env,path,{getUser,json}){
   const fresh=prise?.prises||[];
   const known=!!prise?.echo?.length&&prise.echo.every(t=>t.ok);
   if(!fresh.length){
-    if(known)await env.DB.prepare('UPDATE echelon_attempts SET next_at=0,failures=0 WHERE user_id=?1').bind(id).run();
-    else await env.DB.prepare('UPDATE echelon_attempts SET failures=failures+1,next_at=?1+CASE WHEN failures>=9 THEN 60000 WHEN failures>=4 THEN 30000 ELSE 500 END WHERE user_id=?2').bind(Date.now(),id).run();
     return json({ok:known,gained:0,message:known?'Cette lecture est déjà trouvée.':n.kind==='workshop'?'Cette construction ne révèle pas encore une nouvelle lecture.':'Cette lecture ne correspond pas encore.',echo:prise?.echo||[],state:await stateFor(env,id)});
   }
   const ids=[];
   for(const v of fresh){const ans=n.answers.find(a=>a.id===v.id);for(let i=0;i<ans.parties.length;i++)if(v.masque&(1<<i))ids.push(v.id+'.p'+i);if(v.complet)ids.push(v.id);}
   await saveIds(env,id,ids);
-  await env.DB.prepare('UPDATE echelon_attempts SET next_at=0,failures=0 WHERE user_id=?1').bind(id).run();
   const state=await stateFor(env,id);
   return json({ok:true,gained:Math.max(0,state.echelon-progressLevel(p)),opened:newlyOpened(rows,await gameRows(env,id),user),echo:prise.echo||[],state});
 }

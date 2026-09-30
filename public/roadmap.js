@@ -7,14 +7,15 @@ function roadmapColors(steps,visibleLevel){
 }
 
 window.WCRoadmap=(()=>{
-  let serial=0,controller=null,activeLevel=null,data=null,photo=null,membersVersion=0;
+  let serial=0,controller=null,data=null,photo=null;
+  const pendingMembers=new Set();
   let colors=new Map();
   let releaseStars=null;
   const e=value=>esc(value??'');
   const initial=name=>[...String(name||'?')][0].toLocaleUpperCase('fr-FR');
   const portrait=(member,small=false)=>`<span class="road-avatar ${small?'is-small':''}" aria-hidden="true"><span>${e(initial(member.username))}</span>${member.avatar?`<img src="${e(member.avatar)}" alt="" width="80" height="80" loading="lazy" decoding="async">`:''}</span>`;
   function bindImages(root=app){root.querySelectorAll('.road-avatar img').forEach(img=>{img.onerror=()=>img.remove();});}
-  function profile(){return `<section class="road-profile" aria-label="Mon compte"><div class="road-identity">${portrait(data.self)}<div><strong id="road-username">${e(data.self.username)}</strong><span>Échelon ${data.echelon}</span></div></div><button id="road-edit" class="road-text-button" aria-expanded="false" aria-controls="road-settings">Modifier mon profil</button>
+  function profile(){return `<section class="road-profile" aria-label="Mon compte"><div class="road-identity">${portrait(data.self)}<div><strong id="road-username">${e(data.self.username)}</strong></div></div><button id="road-edit" class="road-text-button" aria-expanded="false" aria-controls="road-settings">Modifier mon profil</button>
     <div id="road-settings" hidden>
       <form id="road-profile-form"><label for="road-name">Pseudo</label><input id="road-name" value="${e(data.self.username)}" minlength="3" maxlength="30" required autocomplete="nickname"><label class="road-photo-picker" for="road-photo">Changer ma photo<input id="road-photo" type="file" accept="image/jpeg,image/png,image/webp"></label><div id="road-photo-preview"></div><div class="road-form-actions"><button class="orange-button" type="submit">Enregistrer</button><button id="road-cancel" type="button">Annuler</button></div></form>
       <div class="road-credentials"><label for="road-email">Adresse mail</label><input id="road-email" type="email" value="${e(data.self.email)}" readonly aria-describedby="road-email-note"><p id="road-email-note">Cette adresse ne peut pas être modifiée.</p>
@@ -27,32 +28,37 @@ window.WCRoadmap=(()=>{
     return `<li id="palier-${level}" class="road-step ${past?'is-past':current?'is-current':'is-future'} ${visible&&count?'is-populated':''}" style="--star-hue:${hue};--next-hue:${nextHue}" ${current?'aria-current="step"':''}>
       <span class="road-node" aria-hidden="true" ${past||current?`data-stellar="${hue}" data-star-seed="${level}"`:''}><span class="road-sphere"></span></span><div class="road-step-content">
       <div class="road-step-title"><h2>Échelon ${level}</h2>${current?'<span class="road-here">Tu es ici</span>':''}</div>
-      ${visible?(count?`<button class="road-people-toggle" data-members="${level}" aria-expanded="false" aria-controls="members-${level}"><span>${count} personne${count>1?'s':''}<span class="sr-only"> à l’échelon ${level}</span></span><span class="road-plus" aria-hidden="true">＋</span></button>`:'<p class="road-empty">0 personne</p>'):''}
+      ${visible?(count?`<button class="road-people-toggle" data-members="${level}" aria-expanded="false" aria-controls="members-${level}"><span>${count} personne${count>1?'s':''}<span class="sr-only"> à l’échelon ${level}</span></span><span class="road-plus" aria-hidden="true">+</span></button>`:'<p class="road-empty">0 personne</p>'):''}
       ${visible?`<div id="members-${level}" class="road-members" hidden></div>`:''}</div></li>`;
   }
+  function toggleMembers(level){
+    const box=document.getElementById('members-'+level),toggle=app.querySelector(`[data-members="${level}"]`);
+    box.hidden=!box.hidden;
+    toggle.setAttribute('aria-expanded',String(!box.hidden));
+    toggle.querySelector('.road-plus').textContent=box.hidden?'+':'−';
+    if(!box.hidden&&!box.dataset.loaded)showMembers(level);
+  }
   async function showMembers(level,after=0){
-    const token=serial,version=++membersVersion,box=document.getElementById('members-'+level),toggle=app.querySelector(`[data-members="${level}"]`);
-    if(!after){
-      if(activeLevel===level){box.hidden=true;toggle.setAttribute('aria-expanded','false');activeLevel=null;return;}
-      app.querySelectorAll('.road-members').forEach(el=>{el.hidden=true;el.innerHTML='';});
-      app.querySelectorAll('[data-members]').forEach(el=>el.setAttribute('aria-expanded','false'));
-      activeLevel=level;box.hidden=false;toggle.setAttribute('aria-expanded','true');box.innerHTML='<p role="status">Chargement…</p>';
-    }
+    if(pendingMembers.has(level))return;
+    const token=serial,box=document.getElementById('members-'+level);
+    pendingMembers.add(level);
+    if(!after)box.innerHTML='<p role="status">Chargement…</p>';
     const more=box.querySelector('[data-more]');if(more)more.disabled=true;
     try{
       const result=await api(`/api/roadmap/members?level=${level}&after=${after}`,{signal:controller.signal});
-      if(token!==serial||activeLevel!==level||version!==membersVersion)return;
+      if(token!==serial)return;
       if(!after)box.innerHTML='<ul></ul>';
       box.querySelector('ul').insertAdjacentHTML('beforeend',result.members.map(m=>`<li data-member="${m.id}">${portrait(m,true)}<span>${e(m.username)}</span></li>`).join(''));
       box.querySelectorAll('[data-more],.road-member-error').forEach(el=>el.remove());
       if(result.next!==null){box.insertAdjacentHTML('beforeend','<button class="road-text-button" data-more>Voir la suite</button>');box.querySelector('[data-more]').onclick=()=>showMembers(level,result.next);}
       if(!after&&!result.members.length)box.innerHTML='<p>Ce palier est désormais libre.</p>';
+      box.dataset.loaded='true';
       bindImages(box);
-    }catch(err){if(token!==serial||version!==membersVersion||err.name==='AbortError')return;
+    }catch(err){if(token!==serial||err.name==='AbortError')return;
       if(more)more.disabled=false;
-      if(!after){box.innerHTML='<p class="road-member-error" role="status"></p><button class="road-text-button" data-retry>Réessayer</button>';box.querySelector('p').textContent=err.message;box.querySelector('[data-retry]').onclick=()=>{activeLevel=null;showMembers(level);};}
+      if(!after){box.innerHTML='<p class="road-member-error" role="status"></p><button class="road-text-button" data-retry>Réessayer</button>';box.querySelector('p').textContent=err.message;box.querySelector('[data-retry]').onclick=()=>showMembers(level);}
       else{box.querySelector('.road-member-error')?.remove();box.insertAdjacentHTML('beforeend',`<p class="road-member-error" role="status">${e(err.message)}</p>`);}
-    }
+    }finally{if(token===serial)pendingMembers.delete(level);}
   }
   async function preparePhoto(file){
     if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>8*1024*1024)throw Error('Choisis une photo JPG, PNG ou WebP de moins de 8 Mo.');
@@ -117,7 +123,7 @@ window.WCRoadmap=(()=>{
     };
   }
   async function page(){
-    const epoch=newEpoch(),token=++serial;controller=new AbortController();activeLevel=null;photo=null;releaseStars?.();releaseStars=null;
+    const epoch=newEpoch(),token=++serial;controller?.abort();controller=new AbortController();pendingMembers.clear();photo=null;releaseStars?.();releaseStars=null;
     app.innerHTML='<div class="loading">Chargement du parcours…</div>';document.title='Échelons · White Cadae';
     try{
       data=await api('/api/roadmap',{signal:controller.signal});if(token!==serial||stale(epoch))return;
@@ -126,10 +132,10 @@ window.WCRoadmap=(()=>{
         ${data.self?'':accountEntryMarkup('/echelon')}
         <div class="road-layout ${data.self?'':'is-anonymous'}">${data.self?`<aside class="road-sidebar">${profile()}</aside>`:''}
         <ol class="road-line" aria-label="Parcours des 33 échelons">${Array.from({length:data.total},(_,i)=>step(i+1)).join('')}</ol></div></section>`;
-      app.querySelectorAll('[data-members]').forEach(button=>button.onclick=()=>showMembers(Number(button.dataset.members)));
+      app.querySelectorAll('[data-members]').forEach(button=>button.onclick=()=>toggleMembers(Number(button.dataset.members)));
       bindImages();bindProfile();releaseStars=window.WCStellar?.mount(app);
     }catch(err){if(token===serial&&err.name!=='AbortError'&&!stale(epoch)){app.innerHTML=`<h1>Échelons</h1><p role="status">${e(err.message)}</p><button id="road-retry">Réessayer</button>`;document.getElementById('road-retry').onclick=page;}}
   }
-  function leave(){serial++;controller?.abort();controller=null;activeLevel=null;photo=null;releaseStars?.();releaseStars=null;}
+  function leave(){serial++;controller?.abort();controller=null;pendingMembers.clear();photo=null;releaseStars?.();releaseStars=null;}
   return {page,leave};
 })();

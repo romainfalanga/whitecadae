@@ -39,7 +39,7 @@ test('all accounts share the same current ceiling; retired records cannot add le
   assert.equal(active.length,32);
   assert.equal(new Set(active).size,32);
   assert.equal(gameLevel(rows(...active)),33);
-  for(const retired of ['eg-02-2','eg-03-3']){
+  for(const retired of ['eg-02-2','eg-03-3','n-0-3']){
     const history=rows(...active,retired,retired+'.p0',retired);
     assert.equal(gameLevel(history),33);
     assert.equal(progress(history).solved.size,32);
@@ -105,7 +105,7 @@ test('M=M and named answers accept accents, equal signs and partial discovery',(
   assert.ok(matchNode(needle,'details',new Set()).prises[0].complet);
   assert.equal(buildGameState(rows('eg-02-1','eg-03-2')).nodes.find(n=>n.id==='eg-03').found[0].label,'le détail');
   assert.equal(NODES.find(n=>n.id==='n-0').min,8);
-  assert.equal(gameLevel(rows('n-0-1','n-0-3')),3);
+  assert.equal(gameLevel(rows('n-0-1','n-0-3')),2);
   const beast=NODES.find(n=>n.id==='n-h');
   assert.equal(beast.source,'Prends la bête à…');
   for(const [text,id]of [['dix cornes','n-h-2'],['deux cornes','n-h-3'],['Prends la bête à 2 cornes','n-h-3'],['Prends la bête à dix cornes','n-h-2']]){
@@ -178,7 +178,7 @@ test('AA, apostles and repeated signs remain independent; corrected history keep
   const aa=NODES.find(n=>n.id==='eg-15'),fiftySeven=NODES.find(n=>n.id==='n-a'),seven=NODES.find(n=>n.id==='n-k');
   assert.equal(aa.answers[0].label,'Andromédien Autiste');
   for(const text of ['Andromédien autiste','andromedien autiste'])assert.ok(matchNode(aa,text,new Set()).prises[0].complet);
-  assert.deepEqual(fiftySeven.answers.map(a=>a.label),['12 apôtres','Signes','Anges']);
+  assert.deepEqual(fiftySeven.answers.map(a=>a.label),['12 apôtres','Signes','Anges','Expansions harmonieuses']);
   assert.deepEqual(seven.answers.map(a=>a.label),['Galaxies','Signes']);
   for(const text of ['12 apôtres','douze apotres'])assert.ok(matchNode(fiftySeven,text,new Set()).prises[0].complet);
   for(const text of ['anges','Anges','ange'])assert.ok(matchNode(fiftySeven,text,new Set()).prises.some(p=>p.id==='eg-16-3'&&p.complet));
@@ -208,7 +208,9 @@ function prepared(text,args=[]){const q=sql.prepare(text);const parameters=()=>O
 };}
 const env={DB:{prepare:prepared,async batch(statements){sql.exec('BEGIN');try{const out=[];for(const statement of statements)out.push(await statement.run());sql.exec('COMMIT');return out;}catch(e){sql.exec('ROLLBACK');throw e;}}}};
 const deps={getUser:async(_req,passedEnv)=>{assert.equal(passedEnv,env);return {id:1};},json:(body,status=200)=>Response.json(body,{status})};
-async function call(path,body,method=body?'POST':'GET'){
+async function call(path,body,method=body?'POST':'GET',wait=true){
+  // Simulate elapsed time between separate puzzle scenarios. Dedicated tests cover the deadline.
+  if(wait&&path.endsWith('/guess'))sql.exec('UPDATE echelon_attempts SET next_at=0');
   const res=await handleEchelon(new Request('https://test.local'+path,{method,...(body?{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})}),env,path,deps);
   return {status:res.status,...await res.json()};
 }
@@ -246,7 +248,7 @@ test('API handles permission boundaries, points, migrations and draft conflicts'
   assert.equal((await call('/api/echelon/guess',{id:'n-b',answer:'signe'})).gained,0);
   const wrong=await call('/api/echelon/guess',{id:'eg-03',answer:'wrong'});
   assert.equal(wrong.ok,false);
-  assert.equal((await call('/api/echelon/guess',{id:'eg-03',answer:'details'})).status,429);
+  assert.equal((await call('/api/echelon/guess',{id:'eg-03',answer:'details'},'POST',false)).status,429);
   assert.equal((await call('/api/57')).state,undefined);
 });
 

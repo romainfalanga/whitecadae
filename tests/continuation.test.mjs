@@ -26,7 +26,7 @@ test('old and new accounts reach 33 through Anges, exactly once, without retired
       assert.equal(state.echelon,32);assert.equal(state.continuation,null);
       assert.deepEqual(state.nodes.filter(n=>n.open).map(n=>n.id),['n-a']);
       const fiftySeven=state.nodes.find(n=>n.id==='n-a');
-      assert.equal(fiftySeven.total,3);assert.deepEqual(fiftySeven.found.map(a=>a.label),['12 apôtres','Signes']);
+      assert.equal(fiftySeven.total,4);assert.deepEqual(fiftySeven.found.map(a=>a.label),['12 apôtres','Signes','Expansions harmonieuses']);
       const home=await(await request(token,'/api/orange?level=33')).json();
       assert.equal(home.continuation,null);
       assert.doesNotMatch(JSON.stringify({state,home}),/discord|y83ewhS49|La suite t’attend/i);
@@ -36,6 +36,7 @@ test('old and new accounts reach 33 through Anges, exactly once, without retired
       assert.equal(win.gained,1);assert.equal(win.state.echelon,33);
       assert.ok(win.state.nodes.every(n=>!n.open));
       assert.deepEqual(win.state.continuation,gameContinuation(33));
+      f.sql.exec('UPDATE echelon_attempts SET next_at=0');
       const duplicate=await(await request(token,'/api/echelon/guess',{id:'n-a',answer:'ange'})).json();
       assert.equal(duplicate.gained,0);assert.equal(duplicate.state.echelon,33);
       for(const path of ['/api/echelon','/api/orange']){

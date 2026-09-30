@@ -122,7 +122,9 @@ test('API saves final slots, archives legacy drafts, rejects stale saves, and gr
   assert.equal(f.sql.prepare('SELECT count(*) n FROM echelon_draft_history').get().n,1);
   assert.equal((await call('draft/eg-18',{draft:final(solutions.album),revision:3})).status,409);
   for(const [id,board]of [['eg-18','album'],['eg-19','date'],['eg-20','wanheda'],['eg-21','infinis']]){
+    f.sql.exec('UPDATE echelon_attempts SET next_at=0');
     const solved=await call('guess',{id,draft:final(solutions[board])});assert.equal(solved.gained,1,id);
+    f.sql.exec('UPDATE echelon_attempts SET next_at=0');
     assert.equal((await call('guess',{id,draft:final(solutions[board])})).gained,0);
   }
   f.sql.close();

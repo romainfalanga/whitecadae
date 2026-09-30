@@ -15,6 +15,10 @@ Le menu comprend Escape Game Orange, Musiques, Signes et Échelons ; Horloge s�
 
 Le départ est à 1. Les 32 réponses distinctes actives permettent d’atteindre 33. Les fragments, répétitions et réponses retirées n’ajoutent aucun point. Le catalogue serveur `src/echelon.js` définit la progression ; les réponses non trouvées ne sont pas transmises. À 33, le même composant « Échelon 33 / Rejoindre » apparaît sur l’accueil et Signes. Son adresse de destination reste côté serveur avant ce seuil.
 
+Chaque tentative admise dans Signes ou Horloge déclenche une pause commune de 33 secondes, y compris les erreurs, découvertes partielles et répétitions. Une échéance par compte dans `echelon_attempts` est réclamée atomiquement côté serveur ; les alias d’API la partagent. Les requêtes bloquées renvoient 429 et le temps restant sans prolonger la pause. `public/attempt-timer.js` désactive les saisies et manipulations des tableaux, conserve les brouillons et affiche le compte à rebours au-dessus du lecteur. Navigation, rechargement et autres onglets conservent l’échéance ; retour au premier plan et focus relisent le serveur, sans interrogation périodique. Un succès affiche seulement « +1 échelon », sans annoncer les contenus débloqués.
+
+Le signe `n-0-3` (Katikas) est retiré du score, sans suppression de son historique. L’énigme « En nous collant au bon endroit, un troisième apparaîtra. » n’attend que Devincix à partir de l’échelon 8. La nouvelle réponse `eg-16-4`, « Expansions harmonieuses », appartient à 57 et rapporte son propre échelon, indépendamment de « Mélange les… ». `SCORE_VERSION=2` recalcule les index de roadmap antérieurs. Aucun transfert automatique de point ni remise à zéro de compte.
+
 | Échelon | Morceau |
 | --- | --- |
 | 1 | 30 vins divins |
@@ -32,7 +36,7 @@ L’ordre d’écoute de 57 est 13h20, 30 vins divins, Sans indices dans les dé
 
 ## Roadmap
 
-`src/roadmap.js` filtre les compteurs, noms et photos côté serveur : les membres des échelons inférieurs et de l’échelon courant sont visibles, soi-même compris ; les échelons supérieurs restent masqués, même pour un administrateur. Seuls les nombres sont chargés initialement. Un clic ouvre les identités, 24 membres par page avec un curseur. Aucune adresse email, réponse ou information de session ne figure dans ces listes. L’adresse mail du propriétaire du compte est renvoyée uniquement dans `self`, pour son formulaire en lecture seule.
+`src/roadmap.js` filtre les compteurs, noms et photos côté serveur : les membres des échelons inférieurs et de l’échelon courant sont visibles, soi-même compris ; les échelons supérieurs restent masqués, même pour un administrateur. Seuls les nombres sont chargés initialement. Un clic sur le compteur ouvre les identités, 24 membres par page avec un curseur. Les boutons +/− ouvrent et réduisent chaque liste indépendamment ; son contenu reste en mémoire jusqu’à la navigation pour une réouverture immédiate. Aucune adresse email, réponse ou information de session ne figure dans ces listes. L’adresse mail du propriétaire du compte est renvoyée uniquement dans `self`, pour son formulaire en lecture seule.
 
 Les étoiles sont des astres sphériques de plasma. La couleur suit `t = (effectif − minimum) / (maximum − minimum)` parmi les échelons occupés visibles : rouge à 0, exactement orange à 0,5, jaune à 1. La teinte varie continûment sans arrondi ni catégories ; 29 reste proche d’un maximum de 30 et toute la gamme se recalcule si le maximum passe à 90. Une population uniforme reste orange. Les échelons vides sont atténués, la suite reste sombre. Aucun effectif caché n’entre dans le calcul.
 
