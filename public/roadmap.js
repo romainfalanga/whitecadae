@@ -28,21 +28,22 @@ window.WCRoadmap=(()=>{
     return `<li id="palier-${level}" class="road-step ${past?'is-past':current?'is-current':'is-future'} ${visible&&count?'is-populated':''}" style="--star-hue:${hue};--next-hue:${nextHue}" ${current?'aria-current="step"':''}>
       <span class="road-node" aria-hidden="true" ${past||current?`data-stellar="${hue}" data-star-seed="${level}"`:''}><span class="road-sphere"></span></span><div class="road-step-content">
       <div class="road-step-title"><h2>Échelon ${level}</h2>${current?'<span class="road-here">Tu es ici</span>':''}</div>
-      ${visible?(count?`<button class="road-people-toggle" data-members="${level}" aria-expanded="false" aria-controls="members-${level}"><span>${count} personne${count>1?'s':''}<span class="sr-only"> à l’échelon ${level}</span></span><span class="road-plus" aria-hidden="true">+</span></button>`:'<p class="road-empty">0 personne</p>'):''}
-      ${visible?`<div id="members-${level}" class="road-members" hidden></div>`:''}</div></li>`;
+      ${visible?(count?`<button class="road-people-toggle" data-members="${level}" aria-expanded="false" aria-controls="reveal-${level}"><span>${count} personne${count>1?'s':''}<span class="sr-only"> à l’échelon ${level}</span></span><span class="road-plus" aria-hidden="true">+</span></button>`:'<p class="road-empty">0 personne</p>'):''}
+      ${visible?`<div id="reveal-${level}" class="road-members-reveal" aria-hidden="true" inert><div class="road-members-clip"><div id="members-${level}" class="road-members"></div></div></div>`:''}</div></li>`;
   }
   function toggleMembers(level){
     const box=document.getElementById('members-'+level),toggle=app.querySelector(`[data-members="${level}"]`);
-    box.hidden=!box.hidden;
-    toggle.setAttribute('aria-expanded',String(!box.hidden));
-    toggle.querySelector('.road-plus').textContent=box.hidden?'+':'−';
-    if(!box.hidden&&!box.dataset.loaded)showMembers(level);
+    const panel=document.getElementById('reveal-'+level),open=toggle.getAttribute('aria-expanded')!=='true';
+    toggle.setAttribute('aria-expanded',String(open));
+    toggle.querySelector('.road-plus').textContent=open?'−':'+';
+    if(open&&!box.dataset.loaded)showMembers(level);
+    panel.inert=!open;panel.setAttribute('aria-hidden',String(!open));panel.classList.toggle('is-open',open);
   }
   async function showMembers(level,after=0){
     if(pendingMembers.has(level))return;
     const token=serial,box=document.getElementById('members-'+level);
     pendingMembers.add(level);
-    if(!after)box.innerHTML='<p role="status">Chargement…</p>';
+    if(!after){const count=Math.min(24,data.steps.find(s=>s.level===level)?.count||1);box.innerHTML='<span class="sr-only" role="status">Chargement des membres…</span><div class="road-members-placeholder" aria-hidden="true">'+Array.from({length:count},()=>'<span><i></i><b></b></span>').join('')+'</div>';}
     const more=box.querySelector('[data-more]');if(more)more.disabled=true;
     try{
       const result=await api(`/api/roadmap/members?level=${level}&after=${after}`,{signal:controller.signal});
@@ -132,7 +133,10 @@ window.WCRoadmap=(()=>{
         ${data.self?'':accountEntryMarkup('/echelon')}
         <div class="road-layout ${data.self?'':'is-anonymous'}">${data.self?`<aside class="road-sidebar">${profile()}</aside>`:''}
         <ol class="road-line" aria-label="Parcours des 33 échelons">${Array.from({length:data.total},(_,i)=>step(i+1)).join('')}</ol></div></section>`;
-      app.querySelectorAll('[data-members]').forEach(button=>button.onclick=()=>toggleMembers(Number(button.dataset.members)));
+      app.querySelectorAll('[data-members]').forEach(button=>{
+        const level=Number(button.dataset.members),warm=()=>{if(!document.getElementById('members-'+level).dataset.loaded)showMembers(level);};
+        button.onclick=()=>toggleMembers(level);button.onfocus=warm;button.onpointerenter=event=>{if(event.pointerType==='mouse')warm();};
+      });
       bindImages();bindProfile();releaseStars=window.WCStellar?.mount(app);
     }catch(err){if(token===serial&&err.name!=='AbortError'&&!stale(epoch)){app.innerHTML=`<h1>Échelons</h1><p role="status">${e(err.message)}</p><button id="road-retry">Réessayer</button>`;document.getElementById('road-retry').onclick=page;}}
   }

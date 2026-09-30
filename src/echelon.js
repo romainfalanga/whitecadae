@@ -17,18 +17,19 @@ const at = (p, n) => progressLevel(p) >= n;
 const any = (p, ids) => ids.some(id => has(p, id));
 
 const onSong=(music,min,nodes)=>nodes.map(n=>({...n,music,min,reveal:null,requires:[]}));
-const horns=(id,number,word)=>answer(id,number+' cornes',[[number,word],['cornes','corne']],[{idx:[0,1],formes:[normalize('Prends la bête à '+number+' cornes'),normalize('Prends la bête à '+word+' cornes')]}]);
+const horns=(id,number,word)=>answer(id,number+' cornes',[[number,word],['cornes','corne']],[{idx:[0,1],formes:[number,word].flatMap(n=>['corne','cornes'].map(c=>normalize('Prends la bête à '+n+' '+c)))}]);
+const expansionForms=['expansion harmonieuse','expansion harmonieuses','expansions harmonieuse','expansions harmonieuses'];
 export const NODES = [
   ...onSong('30-vins-divins',1,[
     {id:'eg-14',source:'30 vins divins',answers:[...legacy('n-c').answers.map(a=>({...a,id:'eg-14-1'})),a('eg-14-2','Jésus')]},
-    {id:'n-a',source:'57',answers:[answer('eg-16-1','12 apôtres',[['12','douze'],['apôtres','apotre']]),a('eg-16-2','Signes',['signe']),a('eg-16-3','Anges',['ange']),a('eg-16-4','Expansions harmonieuses')]},
+    {id:'n-a',source:'57',answers:[answer('eg-16-1','12 apôtres',[['12','douze'],['apôtres','apotre']]),a('eg-16-2','Signes',['signe']),a('eg-16-3','Anges',['ange']),a('eg-16-4','Expansions harmonieuses',expansionForms)]},
     {id:'n-h',source:'Prends la bête à…',answers:[horns('n-h-2','10','dix'),horns('n-h-3','2','deux')]},
     {id:'eg-02',source:'XEU',answers:[a('eg-02-1','Dieu')]},
     {id:'eg-01',source:'Aigle',answers:[a('eg-01-1','Signe',['signes'])]},
-    {...legacy('n-w'),visual:'line'},
-    {id:'eg-05',source:'Mélange les…',answers:[answer('eg-05-1','Expansions harmonieuses',[['Expansions','expansion'],['harmonieuses','harmonieuse']],[{idx:[0,1],formes:['Mélange les expansion harmonieuse','Mélange les expansions harmonieuses'].map(normalize)}])]},
+    {...legacy('n-w'),answers:[answer('n-w-1','Infini blanc',[['Infini','infinis'],['blanc','blancs']])],visual:'line'},
+    {id:'eg-05',source:'Mélange les…',answers:[answer('eg-05-1','Expansions harmonieuses',[['Expansions','expansion'],['harmonieuses','harmonieuse']],[{idx:[0,1],formes:expansionForms.map(f=>normalize('Mélange les '+f))}])]},
     {id:'eg-06',source:'M = M',visual:'infinity',answers:[
-      {...answer('eg-06-1','Mécanisme = Matière',[['Mécanisme','mecanismes'],['Matière']]),seps:[' = ']},
+      {...answer('eg-06-1','Mécanisme = Matière',[['Mécanisme','mecanismes'],['Matière','matieres']]),seps:[' = ']},
       {...answer('eg-06-2','Méta-Moi = Moi',[['Méta-Moi','meta moi','metamoi'],['Moi']]),seps:[' = ']}
     ]},
   ]),
@@ -40,14 +41,14 @@ export const NODES = [
     {...legacy('n-k',['n-k-1']),answers:[a('n-k-1','Galaxies',['galaxie']),a('eg-17-1','Signes',['signe'])]},
   ]),
   ...onSong('13h20',3,[legacy('n-e',['n-e-2'])]),
-  ...onSong('orange',4,[{id:'eg-15',source:'AA',answers:[answer('eg-15-1','Andromédien Autiste',[['Andromédien'],['Autiste']])]}]),
+  ...onSong('orange',4,[{id:'eg-15',source:'AA',answers:[answer('eg-15-1','Andromédien Autiste',[['Andromédien','andromedienne','andromediens','andromediennes'],['Autiste','autistes']])]}]),
   {id:'eg-11',source:'2:24',subtitle:'13h20',music:'13h20',min:3,kind:'workshop',board:'first',requires:['eg-03-1'],answers:[a('eg-11-1','24 décembre · 24 / 12')]},
-  {id:'eg-12',source:'3:50 ↔ 3:44',subtitle:'30 vins divins · Sans indices dans les dés',music:'sans-indice-dans-les-des',min:2,kind:'workshop',board:'pair',requires:['eg-03-1'],answers:[a('eg-12-1','2 × 57')]},
+  {id:'eg-12',source:'3:50 – 3:44',subtitle:'30 vins divins · Sans indices dans les dés',music:'sans-indice-dans-les-des',min:2,kind:'workshop',board:'pair',requires:['eg-03-1'],answers:[a('eg-12-1','2 × 57')]},
   {id:'eg-13',source:'2:39',subtitle:'Orange',music:'orange',min:4,kind:'workshop',board:'last',requires:['eg-03-1'],answers:[a('eg-13-1','57')]},
   {id:'eg-18',source:'114',subtitle:'Vulpis',music:'la-matiere-dense',min:5,kind:'workshop',board:'album',requires:['eg-03-1'],answers:[a('eg-18-1','57 · 2')]},
   {id:'eg-19',source:'18 juillet 2019',subtitle:'La date de l’album',music:'wanheda',min:8,kind:'workshop',board:'date',requires:['eg-03-1'],answers:[a('eg-19-1','57 · 07')]},
   {id:'eg-20',source:'3:54',subtitle:'Wanheda',music:'wanheda',min:8,kind:'workshop',board:'wanheda',requires:['eg-03-1'],answers:[a('eg-20-1','57')]},
-  {id:'eg-21',source:'3:18 ↔ 3:18',subtitle:'Quand je vois je pense · Un fil entre deux infinis',music:'un-fil-entre-deux-infinis',min:10,kind:'workshop',board:'infinis',requires:['eg-03-1'],answers:[a('eg-21-1','666')]},
+  {id:'eg-21',source:'3:18 – 3:18',subtitle:'Quand je vois je pense · Un fil entre deux infinis',music:'un-fil-entre-deux-infinis',min:10,kind:'workshop',board:'infinis',requires:['eg-03-1'],answers:[a('eg-21-1','666')]},
   ...onSong('wanheda',8,[{id:'n-0',source:'En nous collant au bon endroit, un troisième apparaîtra.',answers:[a('n-0-1','Devincix')]}]),
 ].map(n=>({...n,kind:n.kind||'riddle',requires:n.requires||[],min:n.min||1}));
 // Retired records remain stored, but never add rungs to the current game.

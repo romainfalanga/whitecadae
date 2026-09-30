@@ -4,27 +4,27 @@ window.WCAttemptTimer={mount({root,userId,remainingMs,readStatus}){
   let until=0,timer=null,disposed=false,checking=false,wasBlocked=false,revision=0;
   const seconds=()=>Math.max(0,Math.ceil((until-Date.now())/1000));
   const saved=()=>{try{return Number(localStorage.getItem(key))||0;}catch{return 0;}};
-  function refresh(){
+  function refresh(reconcileControls=true){
     if(disposed)return;
     const left=seconds(),blocked=left>0;
     badge.hidden=!blocked;
     root.classList.toggle('eg-is-paused',blocked);
     const time=badge.querySelector('time'),label='0:'+String(left).padStart(2,'0');
-    if(time.textContent!==label)time.textContent=label;
-    if(blocked){
+    if(time.textContent!==label){time.textContent=label;badge.style.setProperty('--pause-progress',String(left/33*100));}
+    if(blocked&&(reconcileControls||!wasBlocked)){
       for(const el of controls.keys())if(!el.isConnected)controls.delete(el);
       root.querySelectorAll('.eg-answer input,.eg-answer button,.eg-workbench button').forEach(el=>{
         if(!controls.has(el))controls.set(el,el.disabled);
         el.disabled=true;
       });
       if(!wasBlocked)badge.querySelector('[role=status]').textContent='Un délai de 33 secondes sépare chaque essai.';
-    }else{
+    }else if(!blocked){
       for(const [el,disabled] of controls)if(el.isConnected)el.disabled=disabled;
       controls.clear();
       if(timer!==null){clearInterval(timer);timer=null;}
     }
     wasBlocked=blocked;
-    if(blocked&&timer===null&&!document.hidden)timer=setInterval(refresh,250);
+    if(blocked&&timer===null&&!document.hidden)timer=setInterval(()=>refresh(false),250);
   }
   function sync(ms,broadcast=true){
     revision++;

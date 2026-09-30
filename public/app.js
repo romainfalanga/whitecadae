@@ -356,7 +356,7 @@ async function pageSong(slug) {
       ${track ? '' : '<a class="back-link" href="/paroles" data-link>← Toutes les paroles</a>'}
       <p class="eyebrow">${esc(song.album_title || 'White Cadae')} · Paroles</p>
       <h1>${esc(song.title)}</h1>
-      ${track ? `<div class="lyrics-actions"><button class="orange-button" data-play-track="${esc(track.slug)}">${WCIcon('play')} Écouter le morceau</button><a href="/signes" data-link>Proposer un signe ${WCIcon('arrow')}</a></div>` : ''}
+      ${track ? `<div class="lyrics-actions"><button class="orange-button" data-play-track="${esc(track.slug)}">${WCIcon('play')} Écouter le morceau</button></div>` : ''}
       <div class="lyrics-readable">${lines.length ? lines.map((l) => l.text ? `<p>${esc(l.text)}</p>` : '<div class="lyrics-break" aria-hidden="true"></div>').join('') : '<p>Les paroles de ce morceau seront bientôt disponibles.</p>'}</div>
       ${track ? `<a class="back-link" href="/musique#album-${esc(track.albumId)}" data-link>Retrouver l’album ${esc(track.album)} →</a>` : ''}
     </article>`;

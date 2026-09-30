@@ -1,6 +1,6 @@
 /* UI only. The server supplies the discovered territory, never future answers. */
 window.WCGame=(()=>{
-  let data=null,currentPath='',serial=0,pause=null,sending=false;
+  let data=null,currentPath='',serial=0,pause=null,celebration=null,sending=false;
   const boards=new Map();
   let activeBoard=null;
   const positions=new Map();
@@ -16,18 +16,19 @@ window.WCGame=(()=>{
   function login(){return accountEntryMarkup();}
   function header(){return `<header class="eg-header"><div>${isClock()?'<nav class="eg-breadcrumb" aria-label="Fil d’Ariane"><a href="/signes" data-link>Signes</a></nav>':'<p class="eyebrow">Escape Game Orange</p>'}<h1>${isClock()?'Horloge':'Signes'}</h1></div><div class="eg-level" aria-label="Échelon actuel"><span>Échelon</span><strong>${data.echelon}</strong></div></header>`;}
   function locked(p){const r=p.requirements||{},deps=(r.pages||[]).map(d=>pageBy(d.id)).filter(Boolean);return `<p class="eg-lock">Verrouillé${r.level?` · Échelon ${r.level}`:''}${deps.length?` · Termine ${deps.map(link).join(', ')}`:''}</p>`;}
-  function feedback(message,id,gained=0){
+  function feedback(message,id,gained=0,kind='info'){
     const box=(id&&document.querySelector(`#${id} .eg-feedback`))||document.getElementById('eg-feedback');
+    if(gained){if(box){box.classList.remove('is-visible');box.textContent='';}celebration?.show(gained);return;}
     if(!box)return;
-    box.classList.toggle('is-gain',gained>0);
-    if(gained)box.innerHTML=`<span class="eg-gain-number">+${gained}</span> <span class="eg-gain-label">${gained>1?'échelons':'échelon'}</span>`;
-    else box.textContent=message;
+    box.classList.toggle('is-error',kind==='error');
+    box.innerHTML='<span class="eg-feedback-mark" aria-hidden="true"></span><span></span>';
+    box.lastElementChild.textContent=message;
     box.classList.add('is-visible');
   }
   function accept(next){if(data&&next.echelon<data.echelon)return;if(data?.capabilities.share)next.capabilities.share=true;data=next;}
   function found(p){return `<div class="eg-found"><ul>${p.found.map(a=>`<li><span aria-hidden="true">✧</span> ${e(a.label)}</li>`).join('')}${p.partiels.map(v=>`<li class="eg-partial">${v.jetons.map(t=>e(t.sep)+(t.q?'?':`<strong>${e(t.t)}</strong>`)).join('')}</li>`).join('')}</ul>${p.total?`<span>${p.found.length} / ${p.total} ${p.total>1?'signes':'signe'}</span>`:''}</div>`;}
   const notice=()=>'<div class="eg-feedback" role="status" aria-live="polite"></div>';
-  function riddle(p){return `<article id="${e(p.id)}" class="eg-entry ${p.visual?'has-art':''} ${p.locked?'is-locked':''}" ${p.title?`aria-labelledby="title-${e(p.id)}"`:'aria-label="Mot de passe"'} tabindex="-1">${art(p.visual,true)}<div class="eg-entry-main">${p.title?`<h2 id="title-${e(p.id)}" tabindex="-1">${e(p.title)}</h2>`:''}${found(p)}${p.locked?locked(p):p.open?`<form class="eg-answer" data-answer="${e(p.id)}"><label class="sr-only" for="input-${e(p.id)}">${p.title?`Signe pour ${e(p.title)}`:'Mot de passe'}</label><div><input id="input-${e(p.id)}" name="answer" placeholder="${p.title?'Proposer un signe':'Mot de passe'}" maxlength="200" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" required ${data.anonyme?'disabled':''}><button type="submit" class="orange-button" ${data.anonyme?'disabled':''}>Valider</button></div></form>`:'<p class="eg-complete">Tous les signes sont trouvés.</p>'}${p.id==='eg-03'&&pageBy('eg-10')?'<a class="eg-clock-link" href="/signes/horloge" data-link>Ouvrir Horloge →</a>':''}${notice()}</div></article>`;}
+  function riddle(p){return `<article id="${e(p.id)}" class="eg-entry ${p.visual?'has-art':''} ${p.locked?'is-locked':''}" ${p.title?`aria-labelledby="title-${e(p.id)}"`:'aria-label="Mot de passe"'} tabindex="-1">${art(p.visual,true)}<div class="eg-entry-main">${p.title?`<h2 id="title-${e(p.id)}" tabindex="-1">${e(p.title)}</h2>`:''}${found(p)}${p.locked?locked(p):p.open?`<form class="eg-answer" data-answer="${e(p.id)}"><label class="sr-only" for="input-${e(p.id)}">${p.title?`Signe pour ${e(p.title)}`:'Mot de passe'}</label><div><input id="input-${e(p.id)}" name="answer" placeholder="${p.title?'Proposer un signe':'Mot de passe'}" maxlength="200" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" required ${data.anonyme?'disabled':''}><button type="submit" class="orange-button" ${data.anonyme?'disabled':''}>Valider</button></div></form>`:'<p class="eg-complete">Tous les signes sont trouvés.</p>'}${p.id==='eg-03'&&pageBy('eg-10')?'<a class="eg-clock-link" href="/signes/horloge" data-link><span class="eg-clock-emblem" aria-hidden="true"></span><span>Ouvrir Horloge</span><span class="eg-clock-chevron" aria-hidden="true">›</span></a>':''}${notice()}</div></article>`;}
   function lab(p){const solved=!p.open;return `<section id="${e(p.id)}" class="eg-lab ${solved?'is-solved':''}" aria-labelledby="title-${e(p.id)}" data-solved="${solved}"><h2 id="title-${e(p.id)}" tabindex="-1">${solved?`<span>${e(p.title)}</span><span class="eg-solved-label">✓ Résolue</span>`:`<button data-open-board="${e(p.id)}" aria-expanded="false" aria-controls="panel-${e(p.id)}"><span>${e(p.title)}</span><span class="eg-open-label">Ouvrir</span></button>`}</h2><p class="eg-subtitle">${e(p.subtitle)}</p>${notice()}${solved?'':`<div id="panel-${e(p.id)}" class="eg-lab-body" hidden>${p.locked?locked(p):`<div id="bench-${e(p.id)}" class="eg-workbench" aria-busy="true">Chargement…</div>`}</div>`}</section>`;}
   function selectBoard(id){activeBoard=activeBoard===id?null:id;sync();history.replaceState(null,'',activeBoard?'#'+id:location.pathname);if(activeBoard)document.getElementById(id)?.scrollIntoView({block:'start'});}
   function sync(){
@@ -67,9 +68,9 @@ window.WCGame=(()=>{
     pause?.refresh();
   }
   function render(){
-    pause?.dispose();pause=null;versions.clear();
+    pause?.dispose();pause=null;celebration?.dispose();celebration=WCGameFeedback.mount(app);versions.clear();
     if(isClock()&&!pageBy('eg-10')){app.innerHTML='<section class="eg-page"><h1>Ce chemin n’est pas disponible.</h1><a href="/signes" data-link>Retrouver Signes →</a></section>';return;}
-    app.innerHTML=`<section class="eg-page">${header()}<div id="eg-continuation" aria-live="polite"></div><div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}<aside class="eg-pause" hidden aria-label="Délai entre les essais"><span class="eg-pause-mark" aria-hidden="true"></span><span>Prochain essai</span><time aria-live="off">0:33</time><span class="sr-only" role="status"></span></aside><div id="eg-game-content" class="${isClock()?'eg-labs':'eg-entries'}"></div></section>`;
+    app.innerHTML=`<section class="eg-page">${header()}<div id="eg-continuation" aria-live="polite"></div><div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}<aside class="eg-pause" hidden aria-label="Délai entre les essais"><span class="eg-pause-orbit" aria-hidden="true"><svg viewBox="0 0 40 40"><circle class="eg-orbit-track" cx="20" cy="20" r="17"/><circle class="eg-orbit-progress" cx="20" cy="20" r="17" pathLength="100"/><path d="M20 11v9l5 3"/></svg></span><span class="eg-pause-caption">Prochain essai</span><time aria-live="off">0:33</time><span class="sr-only" role="status"></span></aside><div id="eg-game-content" class="${isClock()?'eg-labs':'eg-entries'}"></div></section>`;
     document.title=`${isClock()?'Horloge · ':''}Signes · White Cadae`;
     sync();
     pause=data.anonyme?null:WCAttemptTimer.mount({root:app,userId:state.user.id,remainingMs:data.attenteMs,readStatus:()=>api('/api/signes/attempt')});
@@ -84,14 +85,14 @@ window.WCGame=(()=>{
       accept(result.state);sync();pause?.sync(result.state.attenteMs);
       if(result.ok){const input=document.getElementById(`input-${p.id}`);if(input)input.value='';}
       if(top!==undefined){const after=document.getElementById(p.id);if(after&&p.kind==='workshop'&&!pageBy(p.id)?.open){after.scrollIntoView({block:'start'});after.querySelector('h2')?.focus({preventScroll:true});}else if(after)window.scrollBy(0,after.getBoundingClientRect().top-top);}
-      feedback(result.message||'Une partie de ce signe est trouvée.',p.id,result.gained);
+      feedback(result.message||'Une partie de ce signe est trouvée.',p.id,result.gained,result.ok?'info':'error');
       if(!before.continuation&&data.continuation)document.getElementById('eg-continuation')?.scrollIntoView({block:'start'});
       if(result.gained){await refreshSession();if(token===serial)renderNav();}
-    }catch(err){if(token===serial){feedback(err.message,p.id);if(err.data?.attenteMs!==undefined)pause?.sync(err.data.attenteMs);}}
+    }catch(err){if(token===serial){feedback(err.message,p.id,0,'error');if(err.data?.attenteMs!==undefined)pause?.sync(err.data.attenteMs);}}
     finally{if(token===serial){sending=false;pause?.refresh();}}
   }
   async function page(){const epoch=newEpoch(),token=++serial;currentPath=location.pathname;app.innerHTML='<div class="loading">Chargement…</div>';try{data=await api('/api/signes');if(token!==serial||stale(epoch))return;activeBoard=data.nodes.some(n=>n.id===location.hash.slice(1)&&n.open)?location.hash.slice(1):null;render();const anchor=location.hash.slice(1),y=positions.get(currentPath);if(anchor&&/^[a-z0-9-]+$/.test(anchor))document.getElementById(anchor)?.scrollIntoView();else if(y)requestAnimationFrame(()=>window.scrollTo(0,y));}catch(err){if(token===serial)app.innerHTML=`<h1>Signes</h1><p>${e(err.message)}</p><a href="/signes" data-link>Réessayer</a>`;}}
-  function leave(){if(currentPath){positions.set(currentPath,window.scrollY);currentPath='';}serial++;sending=false;pause?.dispose();pause=null;for(const b of boards.values())b.leave();boards.clear();}
+  function leave(){if(currentPath){positions.set(currentPath,window.scrollY);currentPath='';}serial++;sending=false;celebration?.dispose();celebration=null;pause?.dispose();pause=null;for(const b of boards.values())b.leave();boards.clear();}
 
   function createBoard(p,token){
     let spec,core,logic,flow,draft,revision=0,undo=[],redo=[],timer,saving,dirty=false,conflict=false,disposed=false;

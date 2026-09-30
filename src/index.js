@@ -22,7 +22,8 @@ export default {
     if (url.pathname.startsWith('/music/')) return avecSecurite(await serveMusic(request, env));
     if (url.pathname.startsWith('/api/')) {
       try {
-        return avecSecurite(await handleApi(request, env, url));
+        const refusal=checkWriteOrigin(request,url);
+        return avecSecurite(refusal||await handleApi(request, env, url));
       } catch (err) {
         console.error(err.stack || String(err));
         return avecSecurite(json({ error: 'Erreur interne du serveur.' }, 500));
@@ -107,10 +108,9 @@ async function serveMusic(request, env) {
    Les styles gardent 'unsafe-inline' : trois barres de progression posent leur
    largeur en attribut. C'est sans danger comparé aux scripts.
 
-   Deux origines extérieures sont nécessaires et strictement bornées : le
-   lecteur YouTube des vidéos (`frame-src`), et rien d'autre. `frame-ancestors
-   'none'` interdit en retour de mettre le site dans le cadre de quelqu'un
-   d'autre, donc de faire cliquer un membre à son insu.                      */
+   Les anciennes intégrations externes sont fermées. `frame-src 'none'`
+   interdit les cadres intégrés ; `frame-ancestors 'none'` empêche un autre
+   site d'encadrer celui-ci pour détourner les clics d'un membre.            */
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
@@ -133,8 +133,7 @@ const SECURITE = {
   // sans quoi un fichier déposé par un membre pourrait être deviné exécutable
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  // le micro est ouvert au site lui-même : Pense Mieux s'écrit à la voix.
-  // Tout le reste reste fermé, la caméra comprise.
+  // Les fonctions vocales retirées n'ont plus besoin d'accès au micro.
   'Permissions-Policy': 'geolocation=(), microphone=(), camera=(), payment=(), usb=()',
   // le navigateur garde le site en HTTPS pendant deux ans, sous-domaines compris
   'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
@@ -150,6 +149,14 @@ function avecSecurite(reponse) {
 }
 
 /* ---------------------------------------------------------------- routing */
+
+function checkWriteOrigin(request,url){
+  if(['GET','HEAD','OPTIONS'].includes(request.method))return null;
+  const origin=request.headers.get('Origin'),site=request.headers.get('Sec-Fetch-Site');
+  if((origin&&origin!==url.origin)||site==='cross-site')return json({error:'Origine de requête non autorisée.'},403);
+  if(request.body&&/^\/api\/(signes|echelon|57\/guess|register|login|logout|account|admin)(?:\/|$)/.test(url.pathname)&&!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type')||''))return json({error:'Une requête JSON est requise.'},415);
+  return null;
+}
 
 async function handleApi(request, env, url) {
   const path = url.pathname.replace(/\/+$/, '') || '/api';
@@ -560,9 +567,9 @@ async function deleteReference(request, env, id) {
    jetable, c'est un essai de plus sur les signes du 57 : le minuteur du jeu ne
    tient que par compte, il ne coûte donc rien à qui sait en créer mille.
 
-   Le compteur est tenu par adresse, dans une fenêtre glissante, avec des seuils
-   qu'aucun humain n'atteint. Il ne remplace pas le minuteur du jeu : il enlève
-   le moyen de le contourner en masse.
+   Le compteur est tenu par adresse dans une fenêtre fixe à partir du premier
+   essai. Il complète le minuteur du jeu et limite la création de comptes en
+   masse, sans prétendre empêcher un contournement par plusieurs adresses IP.
 
    L'adresse vient de `CF-Connecting-IP`, que le réseau de Cloudflare pose
    lui-même : elle ne peut pas être forgée par le visiteur, contrairement à
@@ -570,59 +577,33 @@ async function deleteReference(request, env, id) {
    la pose aussi. Le garde-fou sur son absence n'est donc qu'une ceinture de
    plus : sans adresse, on ne saurait de toute façon pas quoi compter.       */
 
-let barrageTableReady = false;
-async function ensureBarrageTable(env) {
-  if (barrageTableReady) return;
-  await env.DB.prepare(
-    `CREATE TABLE IF NOT EXISTS auth_attempts (
-       cle TEXT PRIMARY KEY,
-       compte INTEGER NOT NULL DEFAULT 0,
-       fenetre TEXT NOT NULL DEFAULT (datetime('now'))
-     )`
-  ).run();
-  barrageTableReady = true;
+const barrageTables=new WeakMap();
+async function ensureBarrageTable(env){
+  if(!barrageTables.has(env.DB)){
+    const pending=env.DB.prepare(`CREATE TABLE IF NOT EXISTS auth_attempts (
+      cle TEXT PRIMARY KEY,compte INTEGER NOT NULL DEFAULT 0,fenetre TEXT NOT NULL DEFAULT (datetime('now'))
+    )`).run().catch(error=>{barrageTables.delete(env.DB);throw error;});
+    barrageTables.set(env.DB,pending);
+  }
+  await barrageTables.get(env.DB);
 }
-
-function adresseDe(request) {
-  return request.headers.get('CF-Connecting-IP') || null;
-}
-
-// Renvoie une réponse 429 si le seuil est franchi, sinon null.
-async function barrage(request, env, quoi, max, fenetreSecondes) {
-  const ip = adresseDe(request);
-  if (!ip) return null;
+function adresseDe(request){return request.headers.get('CF-Connecting-IP')||null;}
+// Atomically reserve an attempt before hashing or writing, including simultaneous requests.
+async function barrage(request,env,quoi,max,fenetreSecondes){
+  const ip=adresseDe(request);if(!ip)return null;
   await ensureBarrageTable(env);
-  const row = await env.DB.prepare(
-    `SELECT compte, (julianday('now') - julianday(fenetre)) * 86400 AS age
-       FROM auth_attempts WHERE cle = ?1`
-  ).bind(`${quoi}:${ip}`).first();
-  if (!row || row.age >= fenetreSecondes) return null;
-  if (row.compte < max) return null;
-  const reste = Math.max(1, Math.ceil(fenetreSecondes - row.age));
-  return json(
-    { error: 'Trop de tentatives. Réessayez plus tard.' },
-    429,
-    { 'Retry-After': String(reste) }
-  );
-}
-
-// Incrémente, en repartant de zéro si la fenêtre précédente est écoulée.
-async function noteEssai(request, env, quoi, fenetreSecondes) {
-  const ip = adresseDe(request);
-  if (!ip) return;
-  await ensureBarrageTable(env);
-  await env.DB.prepare(
-    `INSERT INTO auth_attempts (cle, compte, fenetre) VALUES (?1, 1, datetime('now'))
-     ON CONFLICT(cle) DO UPDATE SET
-       compte = CASE WHEN (julianday('now') - julianday(fenetre)) * 86400 >= ?2
-                     THEN 1 ELSE compte + 1 END,
-       fenetre = CASE WHEN (julianday('now') - julianday(fenetre)) * 86400 >= ?2
-                      THEN datetime('now') ELSE fenetre END`
-  ).bind(`${quoi}:${ip}`, fenetreSecondes).run();
-  // ménage opportuniste : une fenêtre d'un jour ne sert plus à rien
-  await env.DB.prepare(
-    `DELETE FROM auth_attempts WHERE julianday('now') - julianday(fenetre) > 1`
-  ).run();
+  const key=`${quoi}:${ip}`;
+  const admitted=await env.DB.prepare(`INSERT INTO auth_attempts(cle,compte,fenetre) VALUES(?1,1,datetime('now'))
+    ON CONFLICT(cle) DO UPDATE SET
+      compte=CASE WHEN (julianday('now')-julianday(fenetre))*86400>=?2 THEN 1 ELSE compte+1 END,
+      fenetre=CASE WHEN (julianday('now')-julianday(fenetre))*86400>=?2 THEN datetime('now') ELSE fenetre END
+    WHERE compte<?3 OR (julianday('now')-julianday(fenetre))*86400>=?2 RETURNING compte`).bind(key,fenetreSecondes,max).first();
+  if(!admitted){
+    const row=await env.DB.prepare("SELECT (julianday('now')-julianday(fenetre))*86400 AS age FROM auth_attempts WHERE cle=?1").bind(key).first();
+    return json({error:'Trop de tentatives. Réessayez plus tard.'},429,{'Retry-After':String(Math.max(1,Math.ceil(fenetreSecondes-(row?.age||0))))});
+  }
+  await env.DB.prepare("DELETE FROM auth_attempts WHERE julianday('now')-julianday(fenetre)>1").run();
+  return null;
 }
 
 // Assez large pour une famille derrière une même adresse, assez étroit pour
@@ -633,7 +614,6 @@ const BARRAGE_INSCRIPTION = { max: 6, fenetre: 60 * 60 };
 async function register(request, env) {
   const stop = await barrage(request, env, 'inscription', BARRAGE_INSCRIPTION.max, BARRAGE_INSCRIPTION.fenetre);
   if (stop) return stop;
-  await noteEssai(request, env, 'inscription', BARRAGE_INSCRIPTION.fenetre);
 
   const body = await readJson(request);
   if (!body) return json({ error: 'Requête invalide.' }, 400);
@@ -644,6 +624,7 @@ async function register(request, env) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: 'Adresse email invalide.' }, 400);
   if (!/^[\p{L}\p{N} _.-]{3,30}$/u.test(username))
     return json({ error: 'Le pseudo doit faire entre 3 et 30 caractères (lettres, chiffres, espaces, . _ -).' }, 400);
+  if (password.length > 1024 || email.length > 254) return json({error:'Identifiants trop longs.'},400);
   if (password.length < 8) return json({ error: 'Le mot de passe doit faire au moins 8 caractères.' }, 400);
 
   const existing = await env.DB.prepare(
@@ -653,8 +634,9 @@ async function register(request, env) {
     return json({ error: existing.email === email ? 'Un compte existe déjà avec cet email.' : 'Ce pseudo est déjà pris.' }, 409);
   }
 
-  const adminEmails = String(env.ADMIN_EMAILS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
-  const isAdmin = adminEmails.includes(email) ? 1 : 0;
+  // An unverified email address cannot confer administrative privileges.
+  // Existing administrators keep their role; new roles are provisioned privately.
+  const isAdmin = 0;
   const passwordHash = await hashPassword(password);
 
   const result = await env.DB.prepare(
@@ -667,8 +649,7 @@ async function register(request, env) {
 }
 
 async function login(request, env) {
-  // On ne compte que les échecs : se connecter souvent n'est pas suspect,
-  // se tromper vingt fois en un quart d'heure l'est.
+  // Count every admitted request so parallel password checks cannot bypass the limit.
   const stop = await barrage(request, env, 'connexion', BARRAGE_CONNEXION.max, BARRAGE_CONNEXION.fenetre);
   if (stop) return stop;
 
@@ -677,11 +658,11 @@ async function login(request, env) {
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
 
+  if(password.length>1024||email.length>254)return json({error:'Identifiants trop longs.'},400);
   const user = await env.DB.prepare(
     'SELECT id, email, username, password_hash, is_admin FROM users WHERE email = ?1'
   ).bind(email).first();
   if (!user || !(await verifyPassword(password, user.password_hash))) {
-    await noteEssai(request, env, 'connexion', BARRAGE_CONNEXION.fenetre);
     return json({ error: 'Email ou mot de passe incorrect.' }, 401);
   }
   return openSession(env, user);
@@ -1168,8 +1149,10 @@ async function updatePassword(request, env) {
   try { user = await requireUser(request, env); } catch (resp) { return resp; }
 
   const body = await readJson(request);
+  const stop=await barrage(request,env,'password:'+user.id,10,900);if(stop)return stop;
   const current = String((body && body.current_password) || '');
   const next = String((body && body.new_password) || '');
+  if(current.length>1024||next.length>1024)return json({error:'Mot de passe trop long.'},400);
   if (next.length < 8) return json({ error: 'Le nouveau mot de passe doit faire au moins 8 caractères.' }, 400);
 
   const row = await env.DB.prepare('SELECT password_hash FROM users WHERE id = ?1').bind(user.id).first();
@@ -1178,7 +1161,8 @@ async function updatePassword(request, env) {
   }
 
   const hash = await hashPassword(next);
-  await env.DB.prepare('UPDATE users SET password_hash = ?1 WHERE id = ?2').bind(hash, user.id).run();
+  const updated=await env.DB.prepare('UPDATE users SET password_hash = ?1 WHERE id = ?2 AND password_hash = ?3').bind(hash,user.id,row.password_hash).run();
+  if(!updated.meta.changes)return json({error:'Le mot de passe a déjà été modifié. Reconnecte-toi avant de réessayer.'},409);
 
   // Changer de mot de passe coupe toutes les autres sessions : si un cookie a
   // fuité, il ne vaut plus rien après ce geste. On garde seulement la session

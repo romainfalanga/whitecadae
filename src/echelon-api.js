@@ -34,7 +34,15 @@ export async function attemptStatus(env,id){
   const row=await env.DB.prepare('SELECT next_at FROM echelon_attempts WHERE user_id=?1').bind(id).first();
   return {attenteMs:Math.max(0,(row?.next_at||0)-Date.now())};
 }
-async function bodyOf(request){if(Number(request.headers.get('Content-Length'))>40000)throw new Error('Requête trop grande.');const text=await request.text();if(text.length>40000)throw new Error('Requête trop grande.');return JSON.parse(text);}
+async function bodyOf(request){
+  if(Number(request.headers.get('Content-Length'))>40000||!request.body)throw Error('Requête invalide.');
+  const reader=request.body.getReader(),chunks=[];let size=0;
+  for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>40000){await reader.cancel();throw Error('Requête trop grande.');}chunks.push(value);}
+  const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+  const body=JSON.parse(new TextDecoder().decode(bytes));
+  if(!body||typeof body!=='object'||Array.isArray(body))throw Error('Requête invalide.');
+  return body;
+}
 export async function handleEchelon(request,env,path,{getUser,json}){
   const user=await getUser(request,env),id=user?.id;
   if(request.method==='GET'&&(path==='/api/echelon'||path==='/api/57'))return json(await stateFor(env,id));
@@ -66,6 +74,7 @@ export async function handleEchelon(request,env,path,{getUser,json}){
   const n=getGameNode(String(body.id||''));
   if(!n||!isVisible(n,p))return json({error:'Page indisponible.'},404);
   if(!isPlayable(n,p))return json({error:'Cette énigme n’est pas encore ouverte.'},403);
+  if(n.kind!=='workshop'&&typeof body.answer!=='string')return json({error:'Propose un signe.'},400);
   const text=String(body.answer||'').trim();
   if(text.length>200||(!text&&n.kind!=='workshop'))return json({error:'Propose un signe.'},400);
   const now=Date.now();
@@ -80,7 +89,7 @@ export async function handleEchelon(request,env,path,{getUser,json}){
   const fresh=prise?.prises||[];
   const known=!!prise?.echo?.length&&prise.echo.every(t=>t.ok);
   if(!fresh.length){
-    return json({ok:known,gained:0,message:known?'Cette lecture est déjà trouvée.':n.kind==='workshop'?'Cette construction ne révèle pas encore une nouvelle lecture.':'Cette lecture ne correspond pas encore.',echo:prise?.echo||[],state:await stateFor(env,id)});
+    return json({ok:known,gained:0,message:known?'Cette lecture est déjà trouvée.':n.kind==='workshop'?'Cette réponse n’est pas encore la bonne.':'Ce signe n’est pas le bon.',echo:prise?.echo||[],state:await stateFor(env,id)});
   }
   const ids=[];
   for(const v of fresh){const ans=n.answers.find(a=>a.id===v.id);for(let i=0;i<ans.parties.length;i++)if(v.masque&(1<<i))ids.push(v.id+'.p'+i);if(v.complet)ids.push(v.id);}
