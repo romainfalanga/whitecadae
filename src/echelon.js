@@ -93,6 +93,7 @@ export function progress(rows=[]) {
   return {solved,parts,seen,milestones,retired};
 }
 export const gameLevel = rows => progressLevel(progress(rows));
+export const clockUnlocked = rows => has(progress(rows),'eg-03-1');
 export function accessLevel(rows) {
   // Historical answers (including retired ones) still protect existing rights.
   // New discoveries progress at the old three-per-rank pace, never at game speed.

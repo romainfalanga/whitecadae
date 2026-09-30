@@ -105,6 +105,18 @@ test('new Signes API and legacy links share scores, guesses and Horloge restrict
   }finally{f.sql.close();}
 });
 
+test('Horloge navigation appears only with its canonical sign, even for an administrator',async()=>{
+  const f=fixture();try{
+    for(const token of ['invalid','qa8','qa99'])assert.equal((await(await request(f,'/api/me',token)).json()).access.horloge,false);
+    const answer=await(await request(f,'/api/signes/guess','qa8','POST',{id:'eg-03',answer:'horloge'})).json();
+    assert.equal(answer.gained,1);
+    assert.ok(answer.state.pages.some(p=>p.kind==='clock'));
+    assert.equal((await(await request(f,'/api/me','qa8')).json()).access.horloge,true);
+    f.sql.prepare("DELETE FROM riddle_progress WHERE user_id=9 AND riddle_id LIKE 'eg-03-1%'").run();
+    assert.equal((await(await request(f,'/api/me','qa8')).json()).access.horloge,false);
+  }finally{f.sql.close();}
+});
+
 test('concurrent registration cannot claim the same nickname with different case',async()=>{
   const f=fixture();try{
     const responses=await Promise.all(['Voyageur','voyageur'].map((username,i)=>request(f,'/api/register','invalid','POST',{email:`new${i}@local.test`,username,password:'local-fixture-only'})));

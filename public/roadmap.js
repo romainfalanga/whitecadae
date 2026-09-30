@@ -1,14 +1,15 @@
 // Compare occupied, visible rungs only: a hidden population must not affect colour.
-// Equal populations share orange; empty rungs keep an unfilled star.
+// Equal populations share orange. Never round: nearby populations keep nearby hues.
 function roadmapColors(steps,visibleLevel){
   const occupied=steps.filter(step=>Number.isInteger(step.level)&&step.level>=1&&step.level<=visibleLevel&&Number.isSafeInteger(step.count)&&step.count>0);
   const counts=occupied.map(step=>step.count),low=Math.min(...counts),high=Math.max(...counts);
-  return new Map(occupied.map(step=>[step.level,low===high?28:Math.round(8+40*(step.count-low)/(high-low))]));
+  return new Map(occupied.map(step=>[step.level,low===high?28:8+40*(step.count-low)/(high-low)]));
 }
 
 window.WCRoadmap=(()=>{
   let serial=0,controller=null,activeLevel=null,data=null,photo=null,membersVersion=0;
   let colors=new Map();
+  let releaseStars=null;
   const e=value=>esc(value??'');
   const initial=name=>[...String(name||'?')][0].toLocaleUpperCase('fr-FR');
   const portrait=(member,small=false)=>`<span class="road-avatar ${small?'is-small':''}" aria-hidden="true"><span>${e(initial(member.username))}</span>${member.avatar?`<img src="${e(member.avatar)}" alt="" width="80" height="80" loading="lazy" decoding="async">`:''}</span>`;
@@ -24,7 +25,7 @@ window.WCRoadmap=(()=>{
     const past=level<data.echelon,current=level===data.echelon,item=data.steps.find(s=>s.level===level),count=item?.count||0;
     const visible=!!data.self&&level<=data.echelon,hue=colors.get(level)??8,nextHue=colors.get(level+1)??8;
     return `<li id="palier-${level}" class="road-step ${past?'is-past':current?'is-current':'is-future'} ${visible&&count?'is-populated':''}" style="--star-hue:${hue};--next-hue:${nextHue}" ${current?'aria-current="step"':''}>
-      <span class="road-node" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path class="road-star" d="M24 4 29.5 17 44 18.5 33 28 36.5 42 24 34.5 11.5 42 15 28 4 18.5 18.5 17Z"/><path class="road-star-facet" d="M24 4V26L4 18.5M24 26 36.5 42"/></svg></span><div class="road-step-content">
+      <span class="road-node" aria-hidden="true" ${past||current?`data-stellar="${hue}" data-star-seed="${level}"`:''}><span class="road-sphere"></span></span><div class="road-step-content">
       <div class="road-step-title"><h2>Échelon ${level}</h2>${current?'<span class="road-here">Tu es ici</span>':''}</div>
       ${visible?(count?`<button class="road-people-toggle" data-members="${level}" aria-expanded="false" aria-controls="members-${level}"><span>${count} personne${count>1?'s':''}<span class="sr-only"> à l’échelon ${level}</span></span><span class="road-plus" aria-hidden="true">＋</span></button>`:'<p class="road-empty">0 personne</p>'):''}
       ${visible?`<div id="members-${level}" class="road-members" hidden></div>`:''}</div></li>`;
@@ -116,7 +117,7 @@ window.WCRoadmap=(()=>{
     };
   }
   async function page(){
-    const epoch=newEpoch(),token=++serial;controller=new AbortController();activeLevel=null;photo=null;
+    const epoch=newEpoch(),token=++serial;controller=new AbortController();activeLevel=null;photo=null;releaseStars?.();releaseStars=null;
     app.innerHTML='<div class="loading">Chargement du parcours…</div>';document.title='Échelons · White Cadae';
     try{
       data=await api('/api/roadmap',{signal:controller.signal});if(token!==serial||stale(epoch))return;
@@ -126,9 +127,9 @@ window.WCRoadmap=(()=>{
         <div class="road-layout ${data.self?'':'is-anonymous'}">${data.self?`<aside class="road-sidebar">${profile()}</aside>`:''}
         <ol class="road-line" aria-label="Parcours des 33 échelons">${Array.from({length:data.total},(_,i)=>step(i+1)).join('')}</ol></div></section>`;
       app.querySelectorAll('[data-members]').forEach(button=>button.onclick=()=>showMembers(Number(button.dataset.members)));
-      bindImages();bindProfile();
+      bindImages();bindProfile();releaseStars=window.WCStellar?.mount(app);
     }catch(err){if(token===serial&&err.name!=='AbortError'&&!stale(epoch)){app.innerHTML=`<h1>Échelons</h1><p role="status">${e(err.message)}</p><button id="road-retry">Réessayer</button>`;document.getElementById('road-retry').onclick=page;}}
   }
-  function leave(){serial++;controller?.abort();controller=null;activeLevel=null;photo=null;}
+  function leave(){serial++;controller?.abort();controller=null;activeLevel=null;photo=null;releaseStars?.();releaseStars=null;}
   return {page,leave};
 })();

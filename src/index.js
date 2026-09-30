@@ -5,7 +5,7 @@ import {
   ECHELON_114,
 } from './enigmas57.js';
 import { handleEchelon, gameRows } from './echelon-api.js';
-import { gameLevel, accessLevel } from './echelon.js';
+import { gameLevel, accessLevel, clockUnlocked } from './echelon.js';
 import {RELEASES,retiredSong,gatedTrack,gatedAlbum,visibleSong,canListen,musicAlbums,ensureMusicCatalogue,continuousTrack} from './music-catalogue.js';
 import {contentAccess} from './content-access.js';
 import {buildOrange} from './orange-access.js';
@@ -713,11 +713,12 @@ async function logout(request, env) {
 // sans attendre l'état du jeu.
 async function me(request, env) {
   const { user, access, echelon } = await viewerAccess(request, env);
+  const rows=user?await gameRows(env,user.id):[];
   return json({
     user: user ? { ...user, is_admin: !!user.is_admin } : null,
-    access,
+    access:{...access,horloge:clockUnlocked(rows)},
     echelon: Number.isFinite(echelon) ? echelon : ECHELON_114,
-    gameEchelon: user ? gameLevel(await gameRows(env, user.id)) : 1,
+    gameEchelon: gameLevel(rows),
     attenteMs: 0,
   });
 }

@@ -42,26 +42,22 @@
 #road-logout { margin-top:.8rem; color:var(--text-dim); }
 .road-page button:disabled { opacity:.5; cursor:wait; }
 
-/* One SVG per rung, static light and a fine connecting thread. No animation loop. */
+/* Emissive spheres: the 3D renderer bakes visible stars once into small images. */
 .road-line { list-style:none; min-width:0; margin:0; padding:0; }
-.road-step { --star-color:hsl(var(--star-hue) 91% 65%); position:relative; display:grid; grid-template-columns:64px minmax(0,1fr); gap:1.6rem; min-height:128px; padding-bottom:2rem; }
-.road-step:before { content:''; position:absolute; left:31.5px; top:55px; bottom:0; width:1px; background:#27252d; }
+.road-step { --star-color:hsl(var(--star-hue) 95% 58%); position:relative; display:grid; grid-template-columns:96px minmax(0,1fr); gap:1.4rem; min-height:148px; padding-bottom:2rem; }
+.road-step:before { content:''; position:absolute; left:47.5px; top:70px; bottom:-22px; width:1px; background:#27252d; }
 .road-step:last-child:before { display:none; }
 .road-step.is-past:before { background:linear-gradient(hsl(var(--star-hue) 55% 42%),hsl(var(--next-hue) 55% 42%)); }
 .road-step.is-current:before { background:linear-gradient(var(--star-color),#27252d 80%); }
-.road-node { position:relative; display:grid; place-items:center; width:64px; height:64px; color:#45404a; }
-.road-node:before { content:''; position:absolute; inset:-15px; pointer-events:none; }
-.road-node svg { position:relative; width:45px; height:45px; overflow:visible; }
-.road-star { fill:var(--bg); stroke:currentColor; stroke-width:.8; stroke-linejoin:round; }
-.road-star-facet { fill:none; stroke:currentColor; stroke-width:.65; opacity:.4; }
-.is-past>.road-node,.is-current>.road-node { color:var(--star-color); }
-.is-populated>.road-node:before { background:radial-gradient(ellipse,hsl(var(--star-hue) 95% 57% / .17),transparent 66%); }
-.is-populated>.road-node .road-star { fill:var(--star-color); stroke:hsl(var(--star-hue) 100% 83%); }
-.is-populated>.road-node .road-star-facet { stroke:#50290b; opacity:.2; }
-.is-current>.road-node:after { content:''; position:absolute; inset:-2px; border:1px solid hsl(var(--star-hue) 70% 65% / .35); border-radius:50%; }
-.is-future>.road-node { color:#36333e; }
-.is-future .road-star-facet { display:none; }
-.road-step-content { min-width:0; padding-top:.65rem; }
+.road-node { position:relative; display:grid; place-items:center; width:96px; height:96px; isolation:isolate; }
+.road-sphere { position:relative; width:52px; height:52px; border-radius:50%; background:radial-gradient(circle at 38% 32%,#3b3540 0%,#19151d 38%,#0d0d10 74%); box-shadow:inset -3px -3px 7px #0009,inset 1px 1px 2px #75616e35; }
+.road-node[data-stellar] .road-sphere { background:radial-gradient(circle at 40% 35%,hsl(var(--star-hue) 100% 78%),hsl(var(--star-hue) 100% 52%) 40%,hsl(var(--star-hue) 88% 29%) 76%,#260a06); box-shadow:0 0 8px hsl(var(--star-hue) 100% 54% / .5),0 0 26px hsl(var(--star-hue) 100% 49% / .18); }
+.road-node img { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.road-node.has-stellar-image .road-sphere { visibility:hidden; }
+.is-past:not(.is-populated)>.road-node { opacity:.45; }
+.is-current>.road-node:after { content:''; position:absolute; width:68px; height:68px; border-radius:50%; box-shadow:0 0 28px hsl(var(--star-hue) 100% 57% / .17); z-index:-1; }
+.is-future .road-sphere { opacity:.6; }
+.road-step-content { min-width:0; padding-top:1.35rem; }
 .road-step-title { display:flex; align-items:center; flex-wrap:wrap; gap:.8rem; }
 .road-step h2 { font:400 1.45rem/1.4 var(--serif); margin:0; color:#e4d8c6; }
 .is-current h2 { color:#fff1d8; }
@@ -86,16 +82,18 @@
   .road-score strong { font-size:2.7rem; }
   .road-score { padding-left:.8rem; }
   .road-line { margin-left:.1rem; }
-  .road-step { gap:1.1rem; min-height:120px; }
+  .road-step { gap:.8rem; min-height:140px; }
   .road-profile form,.road-credentials { max-width:440px; }
   .road-identity .road-avatar { width:48px; height:48px; }
   .road-members { max-width:none; }
 }
 @media(max-width:360px) {
   .road-header h1 { font-size:2.25rem; }
-  .road-step { gap:.8rem; grid-template-columns:56px minmax(0,1fr); }
-  .road-node { width:56px; }
-  .road-step:before { left:27.5px; }
+  .road-step { gap:.65rem; grid-template-columns:80px minmax(0,1fr); }
+  .road-node { width:80px; height:80px; }
+  .road-sphere { width:44px; height:44px; }
+  .road-step:before { left:39.5px; top:60px; bottom:-20px; }
+  .road-step-content { padding-top:.9rem; }
   .road-step-title { gap:.4rem; }
   .road-step h2 { font-size:1.3rem; }
 }

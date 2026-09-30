@@ -8,10 +8,10 @@ Application JavaScript sans framework : Cloudflare Worker, assets statiques, D1 
 - `/musique` : albums 57, 114 et 18 juillet 2019, déblocage morceau par morceau.
 - `/signes` : propositions de signes, anciennement `/echelon`.
 - `/signes/horloge` : tableaux de construction, uniquement après la découverte de L’horloge.
-- `/echelon` : parcours de 33 échelons, pseudo et photo modifiables, membres strictement en dessous du visiteur.
+- `/echelon` : parcours de 33 échelons, réglages du compte et membres jusqu’à l’échelon courant inclus.
 - `/chanson/:slug` : paroles accessibles depuis le lecteur selon les droits du morceau.
 
-Le menu comprend Escape Game Orange, Musiques, Signes et Échelons. Les anciens liens d’énigmes et d’Horloge redirigent vers Signes. `/parcours` et les anciens profils redirigent vers Échelons, dont l’URL reste `/echelon`. Les API historiques `/api/echelon` et `/api/57` restent des alias du jeu pour les anciens clients ; le nouveau client utilise `/api/signes`.
+Le menu comprend Escape Game Orange, Musiques, Signes et Échelons ; Horloge s’ajoute immédiatement après la découverte de L’horloge dans Aiguille. `/api/me` utilise la progression canonique pour cette condition, sans déblocage par niveau ni exception administrateur. Les anciens liens d’énigmes et d’Horloge redirigent vers Signes. `/parcours` et les anciens profils redirigent vers Échelons, dont l’URL reste `/echelon`. Les API historiques `/api/echelon` et `/api/57` restent des alias du jeu pour les anciens clients ; le nouveau client utilise `/api/signes`.
 
 Le départ est à 1. Les 32 réponses distinctes actives permettent d’atteindre 33. Les fragments, répétitions et réponses retirées n’ajoutent aucun point. Le catalogue serveur `src/echelon.js` définit la progression ; les réponses non trouvées ne sont pas transmises. À 33, le même composant « Échelon 33 / Rejoindre » apparaît sur l’accueil et Signes. Son adresse de destination reste côté serveur avant ce seuil.
 
@@ -34,13 +34,13 @@ L’ordre d’écoute de 57 est 13h20, 30 vins divins, Sans indices dans les dé
 
 `src/roadmap.js` filtre les compteurs, noms et photos côté serveur : les membres des échelons inférieurs et de l’échelon courant sont visibles, soi-même compris ; les échelons supérieurs restent masqués, même pour un administrateur. Seuls les nombres sont chargés initialement. Un clic ouvre les identités, 24 membres par page avec un curseur. Aucune adresse email, réponse ou information de session ne figure dans ces listes. L’adresse mail du propriétaire du compte est renvoyée uniquement dans `self`, pour son formulaire en lecture seule.
 
-Les 33 étoiles sont des SVG fixes. Les échelons occupés visibles vont du rouge (population minimale) au jaune (maximale), en passant par l’orange ; les égalités ont la même teinte et une population uniforme reste orange. Les échelons vides ont une étoile évidée, la suite reste sombre. Aucun effectif caché n’entre dans le calcul, aucune animation continue ni interrogation périodique du serveur.
+Les étoiles sont des astres sphériques de plasma. La couleur suit `t = (effectif − minimum) / (maximum − minimum)` parmi les échelons occupés visibles : rouge à 0, exactement orange à 0,5, jaune à 1. La teinte varie continûment sans arrondi ni catégories ; 29 reste proche d’un maximum de 30 et toute la gamme se recalcule si le maximum passe à 90. Une population uniforme reste orange. Les échelons vides sont atténués, la suite reste sombre. Aucun effectif caché n’entre dans le calcul.
 
 La page Échelons réunit pseudo, photo et mot de passe. Le changement de mot de passe exige le mot de passe actuel et déconnecte les autres sessions ; l’adresse mail n’est pas modifiable. Signes et Échelons partagent le même composant de connexion anonyme.
 
 `roadmap_levels` est un index dérivé, jamais une seconde source de progression. Des triggers invalident sa révision après les découvertes. Une écriture conditionnelle empêche qu’un calcul ancien remplace une progression plus récente ; les lignes périmées sont exclues des lectures. Incrémenter `SCORE_VERSION` dans `src/roadmap-levels.js` si le calcul des signes change. La migration `0033_roadmap.sql` est additive et appliquée automatiquement si nécessaire.
 
-L’interface utilise 33 étapes HTML et du CSS statique : pas de canvas, animation permanente, interrogation périodique ou bibliothèque graphique. Les photos sont recadrées à 256 pixels avant envoi ; l’API contrôle format, signature et taille, puis les sert sans cache public.
+`public/stellar.js` projette une sphère 3D et sa texture volumique sur un seul canvas WebGL hors écran, à 192 pixels. Chaque astre visible est calculé une seule fois puis affiché comme petite image WebP ; les variantes identiques sont réutilisées. Le travail se fait par tâches différées près de la zone visible, sans boucle d’animation, interrogation périodique ou bibliothèque graphique. Les ressources sont libérées à la navigation. Un rendu CSS de sphère assure le repli si WebGL est indisponible. Les photos de profil sont recadrées à 256 pixels avant envoi ; l’API contrôle format, signature et taille, puis les sert sans cache public.
 
 ## Espaces retirés
 
