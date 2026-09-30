@@ -1,21 +1,33 @@
+// Compare occupied, visible rungs only: a hidden population must not affect colour.
+// Equal populations share orange; empty rungs keep an unfilled star.
+function roadmapColors(steps,visibleLevel){
+  const occupied=steps.filter(step=>Number.isInteger(step.level)&&step.level>=1&&step.level<=visibleLevel&&Number.isSafeInteger(step.count)&&step.count>0);
+  const counts=occupied.map(step=>step.count),low=Math.min(...counts),high=Math.max(...counts);
+  return new Map(occupied.map(step=>[step.level,low===high?28:Math.round(8+40*(step.count-low)/(high-low))]));
+}
+
 window.WCRoadmap=(()=>{
   let serial=0,controller=null,activeLevel=null,data=null,photo=null,membersVersion=0;
+  let colors=new Map();
   const e=value=>esc(value??'');
   const initial=name=>[...String(name||'?')][0].toLocaleUpperCase('fr-FR');
   const portrait=(member,small=false)=>`<span class="road-avatar ${small?'is-small':''}" aria-hidden="true"><span>${e(initial(member.username))}</span>${member.avatar?`<img src="${e(member.avatar)}" alt="" width="80" height="80" loading="lazy" decoding="async">`:''}</span>`;
   function bindImages(root=app){root.querySelectorAll('.road-avatar img').forEach(img=>{img.onerror=()=>img.remove();});}
-  function profile(){return data.self?`<section class="road-profile" aria-label="Mon profil"><div class="road-identity">${portrait(data.self)}<div><strong id="road-username">${e(data.self.username)}</strong><span>Échelon ${data.echelon}</span></div></div><button id="road-edit" class="road-text-button" aria-expanded="false" aria-controls="road-profile-form">Modifier mon profil</button>
-    <form id="road-profile-form" hidden><label for="road-name">Pseudo</label><input id="road-name" value="${e(data.self.username)}" minlength="3" maxlength="30" required autocomplete="nickname"><label class="road-photo-picker" for="road-photo">Changer ma photo<input id="road-photo" type="file" accept="image/jpeg,image/png,image/webp"></label><div id="road-photo-preview"></div><div class="road-form-actions"><button class="orange-button" type="submit">Enregistrer</button><button id="road-cancel" type="button">Annuler</button></div><button id="road-logout" class="road-text-button" type="button">Se déconnecter</button></form><p id="road-profile-status" role="status" aria-live="polite"></p></section>`:
-    `<section class="road-profile"><p>Garde une trace de ton parcours.</p><a class="orange-button" href="/connexion?retour=%2Fechelon" data-link>Se connecter</a><a class="road-register" href="/inscription?retour=%2Fechelon" data-link>Créer un compte</a></section>`;}
+  function profile(){return `<section class="road-profile" aria-label="Mon compte"><div class="road-identity">${portrait(data.self)}<div><strong id="road-username">${e(data.self.username)}</strong><span>Échelon ${data.echelon}</span></div></div><button id="road-edit" class="road-text-button" aria-expanded="false" aria-controls="road-settings">Modifier mon profil</button>
+    <div id="road-settings" hidden>
+      <form id="road-profile-form"><label for="road-name">Pseudo</label><input id="road-name" value="${e(data.self.username)}" minlength="3" maxlength="30" required autocomplete="nickname"><label class="road-photo-picker" for="road-photo">Changer ma photo<input id="road-photo" type="file" accept="image/jpeg,image/png,image/webp"></label><div id="road-photo-preview"></div><div class="road-form-actions"><button class="orange-button" type="submit">Enregistrer</button><button id="road-cancel" type="button">Annuler</button></div></form>
+      <div class="road-credentials"><label for="road-email">Adresse mail</label><input id="road-email" type="email" value="${e(data.self.email)}" readonly aria-describedby="road-email-note"><p id="road-email-note">Cette adresse ne peut pas être modifiée.</p>
+      <details class="road-security"><summary>Changer mon mot de passe</summary><form id="road-password-form"><input type="hidden" name="username" value="${e(data.self.email)}" autocomplete="username"><label for="road-current-password">Mot de passe actuel</label><input id="road-current-password" type="password" autocomplete="current-password" required><label for="road-new-password">Nouveau mot de passe</label><input id="road-new-password" type="password" autocomplete="new-password" minlength="8" required aria-describedby="road-password-hint"><p id="road-password-hint">8 caractères minimum.</p><label for="road-confirm-password">Confirmer le nouveau mot de passe</label><input id="road-confirm-password" type="password" autocomplete="new-password" minlength="8" required><div class="road-form-actions"><button class="orange-button" type="submit">Modifier le mot de passe</button><button id="road-password-cancel" type="button">Annuler</button></div><p id="road-password-status" role="status" aria-live="polite"></p></form></details></div>
+      <button id="road-logout" class="road-text-button" type="button">Se déconnecter</button>
+    </div><p id="road-profile-status" role="status" aria-live="polite"></p></section>`;}
   function step(level){
     const past=level<data.echelon,current=level===data.echelon,item=data.steps.find(s=>s.level===level),count=item?.count||0;
-    return `<li id="palier-${level}" class="road-step ${past?'is-past':current?'is-current':'is-future'}" ${current?'aria-current="step"':''}>
-      <span class="road-node" aria-hidden="true">${String(level).padStart(2,'0')}</span><div class="road-step-content">
+    const visible=!!data.self&&level<=data.echelon,hue=colors.get(level)??8,nextHue=colors.get(level+1)??8;
+    return `<li id="palier-${level}" class="road-step ${past?'is-past':current?'is-current':'is-future'} ${visible&&count?'is-populated':''}" style="--star-hue:${hue};--next-hue:${nextHue}" ${current?'aria-current="step"':''}>
+      <span class="road-node" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path class="road-star" d="M24 4 29.5 17 44 18.5 33 28 36.5 42 24 34.5 11.5 42 15 28 4 18.5 18.5 17Z"/><path class="road-star-facet" d="M24 4V26L4 18.5M24 26 36.5 42"/></svg></span><div class="road-step-content">
       <div class="road-step-title"><h2>Échelon ${level}</h2>${current?'<span class="road-here">Tu es ici</span>':''}</div>
-      ${current?`<div class="road-current-person">${data.self?`${portrait(data.self,true)}<strong>${e(data.self.username)}</strong>`:'Ton point de départ'}</div>`:
-      past&&count?`<button class="road-people-toggle" data-members="${level}" aria-expanded="false" aria-controls="members-${level}"><span class="road-avatar-stack">${item.members.map(m=>portrait(m,true)).join('')}</span><span>${count} personne${count>1?'s':''}</span><span class="road-plus" aria-hidden="true">＋</span></button>`:
-      `<p class="road-step-note">${past?'Chemin parcouru':'À découvrir'}</p>`}
-      ${past?`<div id="members-${level}" class="road-members" hidden></div>`:''}</div></li>`;
+      ${visible?(count?`<button class="road-people-toggle" data-members="${level}" aria-expanded="false" aria-controls="members-${level}"><span>${count} personne${count>1?'s':''}<span class="sr-only"> à l’échelon ${level}</span></span><span class="road-plus" aria-hidden="true">＋</span></button>`:'<p class="road-empty">0 personne</p>'):''}
+      ${visible?`<div id="members-${level}" class="road-members" hidden></div>`:''}</div></li>`;
   }
   async function showMembers(level,after=0){
     const token=serial,version=++membersVersion,box=document.getElementById('members-'+level),toggle=app.querySelector(`[data-members="${level}"]`);
@@ -30,7 +42,7 @@ window.WCRoadmap=(()=>{
       const result=await api(`/api/roadmap/members?level=${level}&after=${after}`,{signal:controller.signal});
       if(token!==serial||activeLevel!==level||version!==membersVersion)return;
       if(!after)box.innerHTML='<ul></ul>';
-      box.querySelector('ul').insertAdjacentHTML('beforeend',result.members.map(m=>`<li>${portrait(m,true)}<span>${e(m.username)}</span></li>`).join(''));
+      box.querySelector('ul').insertAdjacentHTML('beforeend',result.members.map(m=>`<li data-member="${m.id}">${portrait(m,true)}<span>${e(m.username)}</span></li>`).join(''));
       box.querySelectorAll('[data-more],.road-member-error').forEach(el=>el.remove());
       if(result.next!==null){box.insertAdjacentHTML('beforeend','<button class="road-text-button" data-more>Voir la suite</button>');box.querySelector('[data-more]').onclick=()=>showMembers(level,result.next);}
       if(!after&&!result.members.length)box.innerHTML='<p>Ce palier est désormais libre.</p>';
@@ -53,23 +65,26 @@ window.WCRoadmap=(()=>{
   }
   function bindProfile(){
     if(!data.self)return;
-    const form=document.getElementById('road-profile-form'),edit=document.getElementById('road-edit'),status=document.getElementById('road-profile-status'),token=serial;
+    const settings=document.getElementById('road-settings'),form=document.getElementById('road-profile-form'),edit=document.getElementById('road-edit'),status=document.getElementById('road-profile-status'),token=serial;
+    const passwordForm=document.getElementById('road-password-form'),passwordStatus=document.getElementById('road-password-status'),confirm=document.getElementById('road-confirm-password');
+    const controls=[...settings.querySelectorAll('input,button'),edit];
     let photoVersion=0;
-    const close=()=>{photoVersion++;form.hidden=true;edit.setAttribute('aria-expanded','false');form.reset();photo=null;form.querySelector('[type=submit]').disabled=false;document.getElementById('road-photo-preview').innerHTML='';status.textContent='';};
-    edit.onclick=()=>{if(!form.hidden){close();return;}form.hidden=false;edit.setAttribute('aria-expanded','true');document.getElementById('road-name').focus();};
+    const resetPassword=()=>{passwordForm.reset();confirm.setCustomValidity('');passwordStatus.textContent='';};
+    const close=()=>{photoVersion++;settings.hidden=true;edit.setAttribute('aria-expanded','false');form.reset();photo=null;form.querySelector('[type=submit]').disabled=false;document.getElementById('road-photo-preview').innerHTML='';status.textContent='';resetPassword();settings.querySelector('details').open=false;edit.focus();};
+    edit.onclick=()=>{if(!settings.hidden){close();return;}settings.hidden=false;status.textContent='';edit.setAttribute('aria-expanded','true');document.getElementById('road-name').focus();};
     document.getElementById('road-cancel').onclick=close;
     document.getElementById('road-logout').onclick=async()=>{
-      const controls=[...form.elements,edit];controls.forEach(control=>control.disabled=true);
+      controls.forEach(control=>control.disabled=true);
       try{await api('/api/logout',{method:'POST'});await refreshSession();if(token===serial)navigate('/echelon',true);}
       catch(err){if(token===serial){status.textContent=err.message;controls.forEach(control=>control.disabled=false);}}
     };
-    document.getElementById('road-photo').onchange=async event=>{const file=event.target.files[0],version=++photoVersion;photo=null;if(!file)return;
+    document.getElementById('road-photo').onchange=async event=>{const file=event.target.files[0],version=++photoVersion;photo=null;document.getElementById('road-photo-preview').innerHTML='';if(!file){form.querySelector('[type=submit]').disabled=false;status.textContent='';return;}
       const save=form.querySelector('[type=submit]');save.disabled=true;status.textContent='Préparation de la photo…';
       try{const prepared=await preparePhoto(file);if(token!==serial||version!==photoVersion)return;photo=prepared;document.getElementById('road-photo-preview').innerHTML=`<img src="${prepared}" alt="Aperçu de ma photo" width="80" height="80">`;status.textContent='';}
       catch(err){if(token===serial&&version===photoVersion)status.textContent=err.message;}
       finally{if(token===serial&&version===photoVersion)save.disabled=false;}
     };
-    form.onsubmit=async event=>{event.preventDefault();const save=form.querySelector('[type=submit]');const controls=[...form.elements,edit];controls.forEach(control=>control.disabled=true);status.textContent='Enregistrement…';
+    form.onsubmit=async event=>{event.preventDefault();controls.forEach(control=>control.disabled=true);status.textContent='Enregistrement…';
       try{
         const username=document.getElementById('road-name').value.trim();
         const result=await api('/api/account/username',{method:'PUT',body:{username},signal:controller.signal});
@@ -77,28 +92,42 @@ window.WCRoadmap=(()=>{
         data.self.username=result.username;if(state.user)state.user.username=result.username;
         // Each successful field remains visible even if the other update fails.
         document.getElementById('road-username').textContent=result.username;
-        document.querySelector('.road-current-person strong').textContent=result.username;
         document.getElementById('road-name').defaultValue=result.username;
         if(photo){await api('/api/account/avatar',{method:'POST',body:{data:photo},signal:controller.signal});if(token!==serial)return;data.self.avatar=`/api/roadmap/avatar/${data.self.id}?v=${Date.now()}`;}
         document.querySelector('.road-identity .road-avatar').outerHTML=portrait(data.self);
-        document.querySelector('.road-current-person .road-avatar').outerHTML=portrait(data.self,true);
+        app.querySelectorAll(`[data-member="${data.self.id}"]`).forEach(row=>{row.innerHTML=portrait(data.self,true)+`<span>${e(data.self.username)}</span>`;});
         bindImages();close();status.textContent='Profil mis à jour.';
       }catch(err){if(token===serial&&err.name!=='AbortError')status.textContent=err.message;}
+      finally{if(token===serial){controls.forEach(control=>control.disabled=false);if(settings.hidden)edit.focus();}}
+    };
+    passwordForm.oninput=()=>confirm.setCustomValidity('');
+    document.getElementById('road-password-cancel').onclick=()=>{resetPassword();settings.querySelector('details').open=false;settings.querySelector('summary').focus();};
+    passwordForm.onsubmit=async event=>{
+      event.preventDefault();
+      const next=document.getElementById('road-new-password').value;
+      if(confirm.value!==next){confirm.setCustomValidity('Les deux mots de passe ne correspondent pas.');confirm.reportValidity();return;}
+      controls.forEach(control=>control.disabled=true);passwordStatus.textContent='Modification…';
+      try{
+        await api('/api/account/password',{method:'PUT',body:{current_password:document.getElementById('road-current-password').value,new_password:next},signal:controller.signal});
+        if(token!==serial)return;
+        resetPassword();passwordStatus.textContent='Mot de passe modifié. Les autres sessions ont été déconnectées.';
+      }catch(err){if(token===serial&&err.name!=='AbortError')passwordStatus.textContent=err.message;}
       finally{if(token===serial)controls.forEach(control=>control.disabled=false);}
     };
   }
   async function page(){
     const epoch=newEpoch(),token=++serial;controller=new AbortController();activeLevel=null;photo=null;
-    app.innerHTML='<div class="loading">Chargement du parcours…</div>';document.title='Échelon · White Cadae';
+    app.innerHTML='<div class="loading">Chargement du parcours…</div>';document.title='Échelons · White Cadae';
     try{
       data=await api('/api/roadmap',{signal:controller.signal});if(token!==serial||stale(epoch))return;
-      app.innerHTML=`<section class="road-page"><header class="road-header"><div><p class="eyebrow">Un signe après l’autre</p><h1>Échelon</h1><p class="road-intro">Ton chemin s’éclaire à chaque découverte.</p></div><div class="road-score"><strong>${data.echelon}</strong><span>/ ${data.total}</span></div></header>
-        <div class="road-layout"><aside class="road-sidebar">${profile()}<div class="road-tools"><button id="road-locate">Me situer <span aria-hidden="true">↓</span></button><a href="/signes" data-link>Trouver des signes <span aria-hidden="true">↗</span></a></div><p class="road-caption">Seuls les membres des échelons que tu as dépassés apparaissent sur ton chemin.</p></aside>
+      colors=roadmapColors(data.steps,data.echelon);
+      app.innerHTML=`<section class="road-page"><header class="road-header"><h1>Échelons</h1><div class="road-score" aria-label="Échelon ${data.echelon} sur ${data.total}"><strong>${data.echelon}</strong><span>/ ${data.total}</span></div></header>
+        ${data.self?'':accountEntryMarkup('/echelon')}
+        <div class="road-layout ${data.self?'':'is-anonymous'}">${data.self?`<aside class="road-sidebar">${profile()}</aside>`:''}
         <ol class="road-line" aria-label="Parcours des 33 échelons">${Array.from({length:data.total},(_,i)=>step(i+1)).join('')}</ol></div></section>`;
       app.querySelectorAll('[data-members]').forEach(button=>button.onclick=()=>showMembers(Number(button.dataset.members)));
-      document.getElementById('road-locate').onclick=()=>document.getElementById('palier-'+data.echelon).scrollIntoView({block:'center',behavior:'auto'});
       bindImages();bindProfile();
-    }catch(err){if(token===serial&&err.name!=='AbortError'&&!stale(epoch)){app.innerHTML=`<h1>Échelon</h1><p role="status">${e(err.message)}</p><button id="road-retry">Réessayer</button>`;document.getElementById('road-retry').onclick=page;}}
+    }catch(err){if(token===serial&&err.name!=='AbortError'&&!stale(epoch)){app.innerHTML=`<h1>Échelons</h1><p role="status">${e(err.message)}</p><button id="road-retry">Réessayer</button>`;document.getElementById('road-retry').onclick=page;}}
   }
   function leave(){serial++;controller?.abort();controller=null;activeLevel=null;photo=null;}
   return {page,leave};

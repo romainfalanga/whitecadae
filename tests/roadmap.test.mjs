@@ -13,27 +13,29 @@ test('anonymous roadmap is an empty 33-step journey and reveals no members',asyn
   assert.deepEqual(await res.json(),{echelon:1,total:33,self:null,steps:[]});
 });
 
-test('roadmap contains only strictly lower members, never emails, answers or admin bypass',async()=>{
+test('roadmap counts include the current level, expose only own email and load no member identities',async()=>{
   const f=fixture();try{
     const res=await request(f,'/api/roadmap?level=33');const data=await res.json();
     assert.equal(data.echelon,8);assert.equal(data.self.id,9);
-    const visible=data.steps.flatMap(s=>s.members);
-    assert.ok(data.steps.every(s=>s.level<8));
-    assert.deepEqual(visible.map(m=>m.id),[1,100,3,4,6,7,8]);
-    assert.doesNotMatch(JSON.stringify(data),/email|password|solved_at|eg-|@local/);
-    for(const token of ['qa0','qa99'])assert.deepEqual((await(await request(f,'/api/roadmap',token)).json()).steps,[]);
+    assert.ok(data.steps.every(s=>s.level<=8));
+    assert.deepEqual(data.steps,[{level:1,count:2,members:[]},...[2,3,5,6,7,8].map(level=>({level,count:1,members:[]}))]);
+    assert.equal(data.self.email,'qa8@local.test');
+    assert.doesNotMatch(JSON.stringify(data.steps),/username|avatar|email|password|solved_at|eg-|@local/);
+    for(const token of ['qa0','qa99'])assert.deepEqual((await(await request(f,'/api/roadmap',token)).json()).steps,[{level:1,count:2,members:[]}]);
     assert.equal((await request(f,'/api/roadmap','qa8','POST',{})).status,405);
   }finally{f.sql.close();}
 });
 
-test('members paginate without duplicates and forged levels or cursors cannot disclose peers',async()=>{
+test('members paginate without duplicates and forged levels or cursors cannot disclose future members',async()=>{
   const f=fixture();try{
     for(let i=101;i<=140;i++)f.sql.prepare('INSERT INTO users(id,email,username,password_hash) VALUES(?,?,?,?)').run(i,`m${i}@local.test`,`Member${i}`,'unused');
-    const main=await(await request(f,'/api/roadmap')).json();assert.equal(main.steps[0].count,42);assert.equal(main.steps[0].members.length,3);
+    const main=await(await request(f,'/api/roadmap')).json();assert.equal(main.steps[0].count,42);assert.deepEqual(main.steps[0].members,[]);
     const first=await(await request(f,'/api/roadmap/members?level=1')).json();assert.equal(first.members.length,24);assert.ok(first.next);
     const second=await(await request(f,'/api/roadmap/members?level=1&after='+first.next)).json();assert.equal(second.members.length,18);assert.equal(second.next,null);
     assert.equal(new Set([...first.members,...second.members].map(m=>m.id)).size,42);
-    for(const value of ['8','9','33','-1','1.5','NaN'])assert.equal((await request(f,'/api/roadmap/members?level='+value)).status,403);
+    const current=await(await request(f,'/api/roadmap/members?level=8')).json();assert.deepEqual(current.members.map(m=>m.id),[9]);
+    assert.doesNotMatch(JSON.stringify([...first.members,...current.members]),/email|password|solved_at|@local/);
+    for(const value of ['9','33','-1','1.5','NaN'])assert.equal((await request(f,'/api/roadmap/members?level='+value)).status,403);
     assert.equal((await request(f,'/api/roadmap/members?level=1&after=-1')).status,400);
     assert.equal((await request(f,'/api/roadmap/members?level=1','invalid')).status,401);
   }finally{f.sql.close();}
@@ -61,10 +63,12 @@ test('derived scores track discoveries, retired signs, canonical duplicates and 
   }finally{f.sql.close();}
 });
 
-test('photos require login and live lower-level access, with no public caching',async()=>{
+test('photos require login and live access at or below the viewer, with no public caching',async()=>{
   const f=fixture();try{
     f.sql.prepare("UPDATE users SET avatar_data='aW1hZ2U=',avatar_mime='image/jpeg'").run();
+    for(const answer of NODES.flatMap(n=>n.answers).slice(0,7))add(f,answer.id);
     for(const id of [1,9]){const res=await request(f,'/api/roadmap/avatar/'+id);assert.equal(res.status,200);assert.match(res.headers.get('Cache-Control'),/private, no-store/);}
+    assert.deepEqual((await(await request(f,'/api/roadmap/members?level=8')).json()).members.map(m=>m.id),[1,9]);
     assert.equal((await request(f,'/api/roadmap/avatar/11')).status,404);
     assert.equal((await request(f,'/api/roadmap/avatar/9','invalid')).status,401);
     for(const answer of NODES.flatMap(n=>n.answers))add(f,answer.id);
@@ -78,8 +82,9 @@ test('profile updates validate identity and images and appear immediately on the
     assert.equal((await request(f,'/api/account/username','invalid','PUT',{username:'New name'})).status,401);
     assert.equal((await request(f,'/api/account/username','qa8','PUT',{username:'qa10'})).status,409);
     assert.equal((await request(f,'/api/account/username','qa8','PUT',{username:'<script>'})).status,400);
-    assert.equal((await request(f,'/api/account/username','qa8','PUT',{username:'Nouvel Explorateur'})).status,200);
+    assert.equal((await request(f,'/api/account/username','qa8','PUT',{username:'Nouvel Explorateur',email:'changed@local.test'})).status,200);
     assert.equal((await(await request(f,'/api/roadmap')).json()).self.username,'Nouvel Explorateur');
+    assert.equal((await(await request(f,'/api/roadmap')).json()).self.email,'qa8@local.test');
     assert.equal((await request(f,'/api/account/avatar','qa8','POST',{data:'data:image/png;base64,PHN2Zz48L3N2Zz4='})).status,400);
     const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/nXsAAAAASUVORK5CYII=';
     assert.equal((await request(f,'/api/account/avatar','qa8','POST',{data:png})).status,200);
@@ -107,5 +112,27 @@ test('concurrent registration cannot claim the same nickname with different case
     const success=responses.find(r=>r.status===200),token=/wc_session=([^;]+)/.exec(success.headers.get('Set-Cookie'))[1];
     assert.equal((await(await request(f,'/api/roadmap',token)).json()).echelon,1);
     assert.equal(f.sql.prepare("SELECT count(*) AS n FROM users WHERE username='voyageur' COLLATE NOCASE").get().n,1);
+  }finally{f.sql.close();}
+});
+
+test('changing a password requires the current secret, preserves own session and revokes others',async()=>{
+  const f=fixture();try{
+    const registration=await request(f,'/api/register','invalid','POST',{email:'password@local.test',username:'Password Fixture',password:'before-fixture-only'});
+    assert.equal(registration.status,200);
+    const token=/wc_session=([^;]+)/.exec(registration.headers.get('Set-Cookie'))[1];
+    const user=f.sql.prepare("SELECT * FROM users WHERE email='password@local.test'").get();
+    f.sql.prepare('INSERT INTO sessions(token,user_id,expires_at) VALUES(?,?,?)').run('second-session',user.id,'2099-01-01');
+    const change=body=>request(f,'/api/account/password',token,'PUT',body);
+    assert.equal((await change({current_password:'wrong-secret',new_password:'after-fixture-only'})).status,401);
+    assert.equal((await change({current_password:'before-fixture-only',new_password:'short'})).status,400);
+    assert.equal(f.sql.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id).password_hash,user.password_hash);
+    assert.equal((await request(f,'/api/account/password','invalid','PUT',{new_password:'after-fixture-only'})).status,401);
+    assert.equal((await change({current_password:'before-fixture-only',new_password:'after-fixture-only',email:'forged@local.test'})).status,200);
+    assert.equal((await(await request(f,'/api/roadmap',token)).json()).self.email,'password@local.test');
+    assert.equal((await(await request(f,'/api/roadmap','second-session')).json()).self,null);
+    assert.equal((await change({current_password:'before-fixture-only',new_password:'unused-fixture-only'})).status,401);
+    const login=await request(f,'/api/login','invalid','POST',{email:'password@local.test',password:'after-fixture-only'});
+    assert.equal(login.status,200);
+    assert.equal((await(await request(f,'/api/roadmap','qa8')).json()).self.id,9);
   }finally{f.sql.close();}
 });

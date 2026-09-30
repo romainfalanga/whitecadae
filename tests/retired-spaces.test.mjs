@@ -22,7 +22,7 @@ test('the four-link menu separates Signes from Échelon without a profile page',
   assert.doesNotMatch(nav,/Mon profil|Conversation|Tous les projets/);
   assert.doesNotMatch(html,/account-access|nav-settings/);
   assert.doesNotMatch(js,/account-access|pageProfile|openSettings|Mon profil/);
-  assert.match(nav,/>Musiques</);assert.match(nav,/>Signes</);assert.match(nav,/>Échelon</);
+  assert.match(nav,/>Musiques</);assert.match(nav,/>Signes</);assert.match(nav,/>Échelons</);
 });
 
 test('the removed profile API does not expose member information',async()=>{

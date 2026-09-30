@@ -43,6 +43,11 @@ function continuationMarkup(item) {
   return `<section class="game-continuation" aria-label="Échelon ${esc(item.level)}"><a class="game-gate" href="${esc(safeUrl(item.href))}" target="_blank" rel="noopener noreferrer"><span class="gate-orbit" aria-hidden="true"></span><span class="gate-title">Échelon <strong>${esc(item.level)}</strong></span><span class="gate-action">Rejoindre <span aria-hidden="true">↗</span></span><span class="sr-only"> (nouvel onglet)</span></a></section>`;
 }
 
+function accountEntryMarkup(destination=location.pathname+location.hash) {
+  const query='?retour='+encodeURIComponent(destination);
+  return `<div class="eg-account"><a class="orange-button" href="/connexion${esc(query)}" data-link>Se connecter</a><a href="/inscription${esc(query)}" data-link>Créer un compte</a></div>`;
+}
+
 function tokens(text) {
   const t = text.trim();
   return t ? t.split(/\s+/) : [];
@@ -188,7 +193,7 @@ async function route() {
 }
 
 function renderNav() {
-  const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musiques</a>', '<a href="/signes" data-link>Signes</a>', '<a href="/echelon" data-link>Échelon</a>'];
+  const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musiques</a>', '<a href="/signes" data-link>Signes</a>', '<a href="/echelon" data-link>Échelons</a>'];
   nav.innerHTML = liens.join('\n       ');
   nav.querySelectorAll('a').forEach((a) => { if ((a.getAttribute('href') === location.pathname || (a.getAttribute('href') === '/signes' && location.pathname.startsWith('/signes/')))) a.setAttribute('aria-current', 'page'); });
 

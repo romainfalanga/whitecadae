@@ -11,7 +11,7 @@ Application JavaScript sans framework : Cloudflare Worker, assets statiques, D1 
 - `/echelon` : parcours de 33 échelons, pseudo et photo modifiables, membres strictement en dessous du visiteur.
 - `/chanson/:slug` : paroles accessibles depuis le lecteur selon les droits du morceau.
 
-Le menu comprend Escape Game Orange, Musiques, Signes et Échelon. Les anciens liens d’énigmes et d’Horloge redirigent vers Signes. `/parcours` et les anciens profils redirigent vers la nouvelle page Échelon. Les API historiques `/api/echelon` et `/api/57` restent des alias du jeu pour les anciens clients ; le nouveau client utilise `/api/signes`.
+Le menu comprend Escape Game Orange, Musiques, Signes et Échelons. Les anciens liens d’énigmes et d’Horloge redirigent vers Signes. `/parcours` et les anciens profils redirigent vers Échelons, dont l’URL reste `/echelon`. Les API historiques `/api/echelon` et `/api/57` restent des alias du jeu pour les anciens clients ; le nouveau client utilise `/api/signes`.
 
 Le départ est à 1. Les 32 réponses distinctes actives permettent d’atteindre 33. Les fragments, répétitions et réponses retirées n’ajoutent aucun point. Le catalogue serveur `src/echelon.js` définit la progression ; les réponses non trouvées ne sont pas transmises. À 33, le même composant « Échelon 33 / Rejoindre » apparaît sur l’accueil et Signes. Son adresse de destination reste côté serveur avant ce seuil.
 
@@ -32,7 +32,11 @@ L’ordre d’écoute de 57 est 13h20, 30 vins divins, Sans indices dans les dé
 
 ## Roadmap
 
-`src/roadmap.js` filtre les noms, photos et listes côté serveur : pas de membres au même échelon ou au-dessus, même pour un administrateur. La liste charge 24 membres par page avec un curseur, les aperçus au plus 3 par échelon. Aucune adresse email, réponse ou information de session ne figure dans ces listes.
+`src/roadmap.js` filtre les compteurs, noms et photos côté serveur : les membres des échelons inférieurs et de l’échelon courant sont visibles, soi-même compris ; les échelons supérieurs restent masqués, même pour un administrateur. Seuls les nombres sont chargés initialement. Un clic ouvre les identités, 24 membres par page avec un curseur. Aucune adresse email, réponse ou information de session ne figure dans ces listes. L’adresse mail du propriétaire du compte est renvoyée uniquement dans `self`, pour son formulaire en lecture seule.
+
+Les 33 étoiles sont des SVG fixes. Les échelons occupés visibles vont du rouge (population minimale) au jaune (maximale), en passant par l’orange ; les égalités ont la même teinte et une population uniforme reste orange. Les échelons vides ont une étoile évidée, la suite reste sombre. Aucun effectif caché n’entre dans le calcul, aucune animation continue ni interrogation périodique du serveur.
+
+La page Échelons réunit pseudo, photo et mot de passe. Le changement de mot de passe exige le mot de passe actuel et déconnecte les autres sessions ; l’adresse mail n’est pas modifiable. Signes et Échelons partagent le même composant de connexion anonyme.
 
 `roadmap_levels` est un index dérivé, jamais une seconde source de progression. Des triggers invalident sa révision après les découvertes. Une écriture conditionnelle empêche qu’un calcul ancien remplace une progression plus récente ; les lignes périmées sont exclues des lectures. Incrémenter `SCORE_VERSION` dans `src/roadmap-levels.js` si le calcul des signes change. La migration `0033_roadmap.sql` est additive et appliquée automatiquement si nécessaire.
 
@@ -67,4 +71,4 @@ node scripts/account-reset-plan.mjs /private/backup.sql /private/reset-plan
 
 Ce script est exclusivement local : il ne contacte pas la production. Il refuse les tables non classées, contrôle les références, répète la suppression dans une transaction annulée, vérifie que le catalogue reste identique et conserve la séquence des identifiants. L’opérateur doit aussi inventorier et sauvegarder les éventuels médias personnels R2, puis vérifier les comptes, sessions, brouillons, historiques et tables retirées après exécution. Aucun reset ne doit être réalisé sans export vérifié. Ne jamais effacer les fichiers audio du site.
 
-Voir `docs/roadmap-audit.md` pour les contrôles et les limites de validation de cette évolution.
+Voir `docs/roadmap-stars-audit.md` pour les règles et contrôles actuels, et `docs/roadmap-audit.md` pour l’évolution initiale et la remise à zéro précédente.
