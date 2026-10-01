@@ -21,6 +21,14 @@ const state = {
   access: { interpretations: false },
   echelon: 1, // rang d'accès historique, tenu par le serveur
 };
+const accountChannel=typeof BroadcastChannel==='function'?new BroadcastChannel('wc-account-context'):null;
+let observedAccount;
+accountChannel?.addEventListener('message',event=>{
+  if(event.data?.type!=='account-changed'||event.data.userId===state.user?.id)return;
+  window.WCPrivate?.leave();
+  app.innerHTML='<div class="loading">Le compte connecté a changé…</div>';
+  refreshSession().then(route);
+});
 
 /* ------------------------------------------------------------------ utils */
 
@@ -147,6 +155,7 @@ function coupePageTimer() {
 }
 
 async function route() {
+  window.WCPrivate?.leave();
   if (window.WCGame) WCGame.leave();
   if (window.WCJourney) WCJourney.leave();
   if (window.WCRoadmap) WCRoadmap.leave();
@@ -175,6 +184,15 @@ async function route() {
     return WCRoadmap.page();
   }
   if (path === '/echelon/horloge') return navigate('/signes/horloge'+location.hash,true);
+  if(['/game-master-orange','/arbre-de-vie','/carre-d-as','/signalements'].includes(path)){
+    const epoch=renderEpoch;
+    app.innerHTML='<div class="loading">Chargement…</div>';
+    try{
+      const module=await import('/private-pages.js');
+      if(!stale(epoch)){window.WCPrivate=module;return module.page(path,{app,api,esc,state,navigate,accountEntryMarkup,isCurrent:()=>!stale(epoch)});}
+    }catch(error){if(!stale(epoch))app.innerHTML='<p>Cette page n’a pas pu être chargée. Réessaie lorsque la connexion est revenue.</p>';}
+    return;
+  }
   // Old bookmarks converge on the two game pages; no puzzle subpages remain.
   if ((m = path.match(/^\/echelon\/enigme\/([a-z0-9-]+)$/))) return navigate('/signes#' + m[1], true);
   if ((m = path.match(/^\/echelon\/atelier\/(eg-\d+)$/))) return navigate('/signes/horloge' + (m[1] === 'eg-10' ? '' : '#' + m[1]), true);
@@ -195,6 +213,7 @@ async function route() {
 function renderNav() {
   const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musiques</a>', '<a href="/signes" data-link>Signes</a>', '<a href="/echelon" data-link>Échelons</a>'];
   if(state.user&&state.access.horloge)liens.splice(3,0,'<a href="/signes/horloge" data-link>Horloge</a>');
+  for(const [access,href,title] of [['gameMaster','/game-master-orange','Game Master Orange'],['lifeTree','/arbre-de-vie','Arbre de vie'],['aceSquare','/carre-d-as','Carré d’As']])if(state.user&&state.access[access])liens.push(`<a href="${href}" data-link>${title}</a>`);
   nav.innerHTML = liens.join('\n       ');
   nav.querySelectorAll('a').forEach((a) => { if (a.getAttribute('href') === location.pathname) a.setAttribute('aria-current', 'page'); });
 
@@ -264,6 +283,9 @@ async function refreshSession() {
     state.echelon = 1;
     state.attenteMs = 0;
   }
+  const currentAccount=state.user?.id||null;
+  if(observedAccount!==undefined&&observedAccount!==currentAccount)accountChannel?.postMessage({type:'account-changed',userId:currentAccount});
+  observedAccount=currentAccount;
   try { const music=await api('/api/music');WCPlayer.setAlbums(music.albums); }
   catch { WCPlayer.setAlbums([]); }
 }
@@ -272,7 +294,7 @@ function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
   if(value==='57')return '/signes';
   if(value==='echelon'||value==='/parcours')return '/echelon';
-  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
+  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|arbre-de-vie|carre-d-as)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 
 function pageLogin() {
@@ -385,6 +407,7 @@ async function pageAdmin() {
 
   app.innerHTML = `
     <h1>Administration</h1>
+    <p><a href="/signalements" data-link>Examiner les signalements des carrés</a></p>
     <p class="subtitle">Gérez les albums, les chansons et les textes.</p>
     <div class="admin-grid">
       <section class="admin-card">

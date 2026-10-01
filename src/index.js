@@ -10,6 +10,8 @@ import {RELEASES,retiredSong,gatedTrack,gatedAlbum,visibleSong,canListen,musicAl
 import {contentAccess} from './content-access.js';
 import {buildOrange} from './orange-access.js';
 import {handleRoadmap} from './roadmap.js';
+import {handlePrivate} from './private-api.js';
+import {validAvatar} from './avatar-validation.js';
 export {BrainstormLive} from './brainstorm-live.js';
 
 const SESSION_COOKIE = 'wc_session';
@@ -25,7 +27,9 @@ export default {
         const refusal=checkWriteOrigin(request,url);
         return avecSecurite(refusal||await handleApi(request, env, url));
       } catch (err) {
-        console.error(err.stack || String(err));
+        if(err instanceof Response)return avecSecurite(err);
+        // Never log request bodies, SQL parameters or private narratives.
+        console.error('api_failure',err?.name||'Error');
         return avecSecurite(json({ error: 'Erreur interne du serveur.' }, 500));
       }
     }
@@ -154,7 +158,7 @@ function checkWriteOrigin(request,url){
   if(['GET','HEAD','OPTIONS'].includes(request.method))return null;
   const origin=request.headers.get('Origin'),site=request.headers.get('Sec-Fetch-Site');
   if((origin&&origin!==url.origin)||site==='cross-site')return json({error:'Origine de requête non autorisée.'},403);
-  if(request.body&&/^\/api\/(signes|echelon|57\/guess|register|login|logout|account|admin)(?:\/|$)/.test(url.pathname)&&!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type')||''))return json({error:'Une requête JSON est requise.'},415);
+  if(request.body&&/^\/api\/(signes|echelon|57\/guess|register|login|logout|account|admin|life-tree|ace-circles|private)(?:\/|$)/.test(url.pathname)&&!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type')||''))return json({error:'Une requête JSON est requise.'},415);
   return null;
 }
 
@@ -169,6 +173,7 @@ async function handleApi(request, env, url) {
   };
 
   let p;
+  if(/^\/api\/(game-master-orange|life-tree|ace-circles|private)(?:\/|$)/.test(path))return handlePrivate(request,env,url,{getUser,json});
   if(path==='/api/roadmap'||path.startsWith('/api/roadmap/'))return handleRoadmap(request,env,url,{getUser,json});
   if(path==='/api/signes'||path.startsWith('/api/signes/'))return handleEchelon(request,env,path.replace(/^\/api\/signes/,'/api/echelon'),{getUser,json});
 
@@ -281,7 +286,8 @@ async function readJson(request) {
     const reader=request.body.getReader(),chunks=[];let size=0;
     for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>2_000_000){await reader.cancel();return null;}chunks.push(value);}
     const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
-    return JSON.parse(new TextDecoder().decode(bytes));
+    const data=JSON.parse(new TextDecoder().decode(bytes));
+    return data&&typeof data==='object'&&!Array.isArray(data)?data:null;
   } catch {
     return null;
   }
@@ -348,8 +354,8 @@ async function getUser(request, env) {
   const row = await env.DB.prepare(
     `SELECT u.id, u.email, u.username, u.is_admin
        FROM sessions s JOIN users u ON u.id = s.user_id
-      WHERE s.token = ?1 AND s.expires_at > datetime('now')`
-  ).bind(token).first();
+      WHERE (s.token = ?1 OR s.token = ?2) AND s.auth_version=u.auth_version AND s.expires_at > datetime('now')`
+  ).bind(await sessionDigest(token),token.startsWith('sha256:')?'':token).first();
   return row || null;
 }
 
@@ -589,10 +595,10 @@ async function ensureBarrageTable(env){
 }
 function adresseDe(request){return request.headers.get('CF-Connecting-IP')||null;}
 // Atomically reserve an attempt before hashing or writing, including simultaneous requests.
-async function barrage(request,env,quoi,max,fenetreSecondes){
-  const ip=adresseDe(request);if(!ip)return null;
+async function barrage(request,env,quoi,max,fenetreSecondes,bucket=null){
+  const ip=adresseDe(request);if(!ip&&!bucket)return null;
   await ensureBarrageTable(env);
-  const key=`${quoi}:${ip}`;
+  const key=bucket||`${quoi}:${ip}`;
   const admitted=await env.DB.prepare(`INSERT INTO auth_attempts(cle,compte,fenetre) VALUES(?1,1,datetime('now'))
     ON CONFLICT(cle) DO UPDATE SET
       compte=CASE WHEN (julianday('now')-julianday(fenetre))*86400>=?2 THEN 1 ELSE compte+1 END,
@@ -617,9 +623,10 @@ async function register(request, env) {
 
   const body = await readJson(request);
   if (!body) return json({ error: 'Requête invalide.' }, 400);
-  const email = String(body.email || '').trim().toLowerCase();
-  const username = String(body.username || '').trim();
-  const password = String(body.password || '');
+  if(['email','username','password'].some(key=>typeof body[key]!=='string'))return json({error:'Identifiants invalides.'},400);
+  const email = body.email.trim().toLowerCase();
+  const username = body.username.trim();
+  const password = body.password;
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: 'Adresse email invalide.' }, 400);
   if (!/^[\p{L}\p{N} _.-]{3,30}$/u.test(username))
@@ -645,7 +652,7 @@ async function register(request, env) {
   if(!result.meta.changes)return json({error:'Cet email ou ce pseudo est déjà utilisé.'},409);
 
   const userId = result.meta.last_row_id;
-  return openSession(env, { id: userId, email, username, is_admin: isAdmin });
+  return openSession(env, { id: userId, email, username, is_admin: isAdmin, password_hash:passwordHash,auth_version:0 });
 }
 
 async function login(request, env) {
@@ -655,12 +662,14 @@ async function login(request, env) {
 
   const body = await readJson(request);
   if (!body) return json({ error: 'Requête invalide.' }, 400);
-  const email = String(body.email || '').trim().toLowerCase();
-  const password = String(body.password || '');
+  if(typeof body.email!=='string'||typeof body.password!=='string')return json({error:'Identifiants invalides.'},400);
+  const email = body.email.trim().toLowerCase();
+  const password = body.password;
 
   if(password.length>1024||email.length>254)return json({error:'Identifiants trop longs.'},400);
+  const accountStop=await barrage(request,env,'connexion-compte',20,900,'connexion-compte:'+await sessionDigest(email));if(accountStop)return accountStop;
   const user = await env.DB.prepare(
-    'SELECT id, email, username, password_hash, is_admin FROM users WHERE email = ?1'
+    'SELECT id, email, username, password_hash, auth_version, is_admin FROM users WHERE email = ?1'
   ).bind(email).first();
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     return json({ error: 'Email ou mot de passe incorrect.' }, 401);
@@ -673,9 +682,11 @@ async function openSession(env, user) {
   await env.DB.prepare(`DELETE FROM sessions WHERE expires_at <= datetime('now')`).run();
   const token = newToken();
   const maxAge = SESSION_DAYS * 24 * 3600;
-  await env.DB.prepare(
-    `INSERT INTO sessions (token, user_id, expires_at) VALUES (?1, ?2, datetime('now', '+${SESSION_DAYS} days'))`
-  ).bind(token, user.id).run();
+  const inserted=await env.DB.prepare(
+    `INSERT INTO sessions (token, user_id, expires_at,auth_version)
+     SELECT ?1,id,datetime('now', '+${SESSION_DAYS} days'),auth_version FROM users WHERE id=?2 AND password_hash=?3 AND auth_version=?4`
+  ).bind(await sessionDigest(token), user.id,user.password_hash,user.auth_version).run();
+  if(!inserted.meta.changes)return json({error:'Tes identifiants ont changé. Reconnecte-toi.'},401);
   return json(
     { user: { id: user.id, email: user.email, username: user.username, is_admin: !!user.is_admin } },
     200,
@@ -685,7 +696,7 @@ async function openSession(env, user) {
 
 async function logout(request, env) {
   const token = getCookie(request, SESSION_COOKIE);
-  if (token) await env.DB.prepare('DELETE FROM sessions WHERE token = ?1').bind(token).run();
+  if (token) await env.DB.prepare('DELETE FROM sessions WHERE token = ?1 OR token=?2').bind(await sessionDigest(token),token.startsWith('sha256:')?'':token).run();
   return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
 }
 
@@ -697,7 +708,7 @@ async function me(request, env) {
   const rows=user?await gameRows(env,user.id):[];
   return json({
     user: user ? { ...user, is_admin: !!user.is_admin } : null,
-    access:{...access,horloge:clockUnlocked(rows)},
+    access:{...access,...contentAccess(user,rows),horloge:clockUnlocked(rows)},
     echelon: Number.isFinite(echelon) ? echelon : ECHELON_114,
     gameEchelon: gameLevel(rows),
     attenteMs: 0,
@@ -1150,8 +1161,9 @@ async function updatePassword(request, env) {
 
   const body = await readJson(request);
   const stop=await barrage(request,env,'password:'+user.id,10,900);if(stop)return stop;
-  const current = String((body && body.current_password) || '');
-  const next = String((body && body.new_password) || '');
+  if(!body||typeof body.current_password!=='string'||typeof body.new_password!=='string')return json({error:'Mot de passe invalide.'},400);
+  const current = body.current_password;
+  const next = body.new_password;
   if(current.length>1024||next.length>1024)return json({error:'Mot de passe trop long.'},400);
   if (next.length < 8) return json({ error: 'Le nouveau mot de passe doit faire au moins 8 caractères.' }, 400);
 
@@ -1161,17 +1173,18 @@ async function updatePassword(request, env) {
   }
 
   const hash = await hashPassword(next);
-  const updated=await env.DB.prepare('UPDATE users SET password_hash = ?1 WHERE id = ?2 AND password_hash = ?3').bind(hash,user.id,row.password_hash).run();
-  if(!updated.meta.changes)return json({error:'Le mot de passe a déjà été modifié. Reconnecte-toi avant de réessayer.'},409);
-
-  // Changer de mot de passe coupe toutes les autres sessions : si un cookie a
-  // fuité, il ne vaut plus rien après ce geste. On garde seulement la session
-  // en cours, pour ne pas se déconnecter soi-même.
   const token = getCookie(request, SESSION_COOKIE);
-  await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?1 AND token <> ?2')
-    .bind(user.id, token || '').run();
+  const digest=await sessionDigest(token);
+  const [updated]=await env.DB.batch([
+    env.DB.prepare('UPDATE users SET password_hash=?1,auth_version=auth_version+1 WHERE id=?2 AND password_hash=?3').bind(hash,user.id,row.password_hash),
+    env.DB.prepare('UPDATE sessions SET auth_version=(SELECT auth_version FROM users WHERE id=?1) WHERE user_id=?1 AND (token=?2 OR token=?3) AND EXISTS(SELECT 1 FROM users WHERE id=?1 AND password_hash=?4)').bind(user.id,digest,token,hash),
+    env.DB.prepare('DELETE FROM sessions WHERE user_id=?1 AND token<>?2 AND token<>?3 AND EXISTS(SELECT 1 FROM users WHERE id=?1 AND password_hash=?4)').bind(user.id,digest,token,hash),
+  ]);
+  if(!updated.meta.changes)return json({error:'Le mot de passe a déjà été modifié. Reconnecte-toi avant de réessayer.'},409);
   return json({ ok: true });
 }
+
+async function sessionDigest(token){return 'sha256:'+toHex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)));}
 
 // La photo est recadrée en carré et compressée côté client avant l'envoi :
 // on ne stocke jamais un fichier brut potentiellement lourd.
@@ -1187,9 +1200,7 @@ async function updateAvatar(request, env) {
   if (base64.length > 350_000) return json({ error: 'Image trop lourde.' }, 400);
   let bytes;
   try{bytes=Uint8Array.from(atob(base64),c=>c.charCodeAt(0));}catch{return json({error:'Image invalide.'},400);}
-  const signature=(offset,values)=>values.every((value,i)=>bytes[offset+i]===value);
-  const valid=bytes.length>=12&&(mime==='image/jpeg'?signature(0,[255,216,255]):mime==='image/png'?signature(0,[137,80,78,71,13,10,26,10]):signature(0,[82,73,70,70])&&signature(8,[87,69,66,80]));
-  if(!valid)return json({error:'Image invalide.'},400);
+  if(!validAvatar(bytes,mime))return json({error:'Image invalide ou trop grande.'},400);
 
   await env.DB.prepare(
     'UPDATE users SET avatar_data = ?1, avatar_mime = ?2 WHERE id = ?3'

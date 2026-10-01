@@ -2036,3 +2036,6 @@ body.avec-dock main { padding-bottom: 7rem; }
 :where(a,button,summary,[role=button]){-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 :where(a,button,summary):focus:not(:focus-visible){outline:none}
 :where(a,button,summary):focus-visible{outline:2px solid #e5c184;outline-offset:4px}
+/* The unlocked menu remains usable at intermediate widths and short heights. */
+@media(min-width:701px){.site-nav{gap:.45rem .9rem;justify-content:flex-end;max-width:calc(100% - 210px);font-size:.84rem}}
+@media(max-width:700px){body.nav-open .site-nav{max-height:calc(100dvh - 85px);overflow-y:auto;overscroll-behavior:contain}}

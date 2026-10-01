@@ -5,6 +5,28 @@ import worker from '../src/index.js';
 import {fixture} from './community-fixture.mjs';
 
 const request=(path,body,headers={},method='POST')=>new Request('https://test.local'+path,{method,headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(body)});
+test('an old-password login paused before verification cannot create a session after a password change',async()=>{
+  const f=fixture();try{
+    const created=await worker.fetch(request('/api/register',{email:'race@test.local',username:'RaceTest',password:'old-fixture-password'}),f.env);
+    const token=/wc_session=([^;]+)/.exec(created.headers.get('Set-Cookie'))[1];
+    const stored=f.sql.prepare("SELECT token FROM sessions WHERE user_id=(SELECT id FROM users WHERE email='race@test.local')").get().token;
+    assert.notEqual(stored,token);assert.match(stored,/^sha256:/);
+    let captured,release;const reached=new Promise(r=>captured=r),pause=new Promise(r=>release=r),original=f.env.DB.prepare;
+    f.env.DB.prepare=(sql,args=[])=>{const statement=original(sql);const wrap=q=>({...q,bind(...a){return wrap(q.bind(...a));},async first(){const row=await q.first();if(sql.includes('SELECT id, email, username, password_hash, auth_version, is_admin FROM users WHERE email')){captured();await pause;}return row;}});return wrap(statement);};
+    const pending=worker.fetch(request('/api/login',{email:'race@test.local',password:'old-fixture-password'}),f.env);await reached;
+    const changed=await worker.fetch(request('/api/account/password',{current_password:'old-fixture-password',new_password:'new-fixture-password'},{Cookie:'wc_session='+token},'PUT'),f.env);assert.equal(changed.status,200);release();
+    const stale=await pending;assert.equal(stale.status,401);assert.equal(stale.headers.get('Set-Cookie'),null);
+    const replay=await worker.fetch(new Request('https://test.local/api/me',{headers:{Cookie:'wc_session='+stored}}),f.env);assert.equal((await replay.json()).user,null);
+  }finally{f.sql.close();}
+});
+test('account inputs reject object passwords and avatars reject truncated or excessive containers',async()=>{
+  const f=fixture();try{
+    assert.equal((await worker.fetch(request('/api/register',{email:'object@test.local',username:'ObjectTest',password:{unexpected:true}}),f.env)).status,400);
+    assert.equal((await worker.fetch(request('/api/login',{email:[],password:{}}),f.env)).status,400);
+    const fake=Buffer.from([255,216,255,0,0,0,0,0,0,0,0,0]);
+    assert.equal((await worker.fetch(request('/api/account/avatar',{data:'data:image/jpeg;base64,'+fake.toString('base64')},{Cookie:'wc_session=qa0'}),f.env)).status,400);
+  }finally{f.sql.close();}
+});
 test('foreign origins and non-JSON writes fail before database access',async()=>{
   const env={get DB(){throw Error('Must be rejected before database access');}};
   for(const path of ['/api/signes/guess','/api/echelon/guess','/api/57/guess','/api/account/username','/api/register','/api/login']){

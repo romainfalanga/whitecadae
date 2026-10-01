@@ -31,6 +31,6 @@
   "vars": {
     // Variable historique conservée ; aucune adresse déclarée à l'inscription
     // ne confère de droits. Les rôles administrateur sont provisionnés en privé.
-    "ADMIN_EMAILS": "romainfalanga83@gmail.com"
+    "ADMIN_EMAILS": "romainfalanga83@gmail.com", "PRIVATE_SPACES_ENABLED": "true"
   }
 }

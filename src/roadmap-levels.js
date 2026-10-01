@@ -18,19 +18,27 @@ export async function ensureRoadmapLevels(env){
     ready.set(env.DB,job);
   }
   await ready.get(env.DB);
-  // Fetch only missing/stale scores, in bounded batches. Revision checks prevent
-  // a concurrent answer from being overwritten with an older computed score.
-  for(;;){
+  // Accounts without discoveries can be indexed in one SQL statement, without
+  // a request per account. Historical scores are repaired at most 64 at a time.
+  await env.DB.prepare(`INSERT OR IGNORE INTO roadmap_levels(user_id,level,revision,score_version)
+    SELECT u.id,1,COALESCE(r.revision,0),?1 FROM users u LEFT JOIN roadmap_revisions r ON r.user_id=u.id
+    WHERE NOT EXISTS(SELECT 1 FROM roadmap_levels WHERE user_id=u.id)
+    AND NOT EXISTS(SELECT 1 FROM riddle_progress WHERE user_id=u.id AND solved_at IS NOT NULL)`).bind(SCORE_VERSION).run();
     const {results=[]}=await env.DB.prepare(`SELECT u.id,COALESCE(r.revision,0) AS revision,
       COALESCE((SELECT json_group_array(json_object('riddle_id',p.riddle_id,'solved_at',p.solved_at)) FROM riddle_progress p WHERE p.user_id=u.id AND p.solved_at IS NOT NULL),'[]') AS progress
       FROM users u LEFT JOIN roadmap_revisions r ON r.user_id=u.id LEFT JOIN roadmap_levels l ON l.user_id=u.id
       WHERE l.user_id IS NULL OR l.revision<>COALESCE(r.revision,0) OR l.score_version<>?1 LIMIT 64`).bind(SCORE_VERSION).all();
-    if(!results.length)break;
-    await env.DB.batch(results.map(row=>env.DB.prepare(`INSERT INTO roadmap_levels(user_id,level,revision,score_version)
-      SELECT ?1,?2,?3,?4 WHERE EXISTS(SELECT 1 FROM users WHERE id=?1) AND ?3=COALESCE((SELECT revision FROM roadmap_revisions WHERE user_id=?1),0)
-      ON CONFLICT(user_id) DO UPDATE SET level=excluded.level,revision=excluded.revision,score_version=excluded.score_version`).bind(row.id,gameLevel(JSON.parse(row.progress)),row.revision,SCORE_VERSION)));
-    if(results.length<64)break;
-  }
+    if(results.length){
+      const scores=results.map(row=>({id:row.id,level:gameLevel(JSON.parse(row.progress)),revision:row.revision}));
+      await env.DB.prepare(`INSERT INTO roadmap_levels(user_id,level,revision,score_version)
+        SELECT json_extract(j.value,'$.id'),json_extract(j.value,'$.level'),json_extract(j.value,'$.revision'),?2 FROM json_each(?1) j
+        WHERE EXISTS(SELECT 1 FROM users WHERE id=json_extract(j.value,'$.id'))
+        AND json_extract(j.value,'$.revision')=COALESCE((SELECT revision FROM roadmap_revisions WHERE user_id=json_extract(j.value,'$.id')),0)
+        ON CONFLICT(user_id) DO UPDATE SET level=excluded.level,revision=excluded.revision,score_version=excluded.score_version`).bind(JSON.stringify(scores),SCORE_VERSION).run();
+    }
+    const pending=await env.DB.prepare(`SELECT 1 FROM users u LEFT JOIN roadmap_revisions r ON r.user_id=u.id LEFT JOIN roadmap_levels l ON l.user_id=u.id
+      WHERE l.user_id IS NULL OR l.revision<>COALESCE(r.revision,0) OR l.score_version<>?1 LIMIT 1`).bind(SCORE_VERSION).first();
+    return !pending;
 }
 
 // A row invalidated by a simultaneous discovery is excluded until recomputed.

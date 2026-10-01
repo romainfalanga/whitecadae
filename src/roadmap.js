@@ -9,7 +9,7 @@ export async function handleRoadmap(request,env,url,{getUser,json}){
   const level=user?gameLevel(await gameRows(env,user.id)):1;
   if(path==='/api/roadmap'){
     if(!user)return json({echelon:1,total:MAX_GAME_LEVEL,self:null,steps:[]});
-    await ensureGameTables(env);await ensureRoadmapLevels(env);
+    await ensureGameTables(env);if(!await ensureRoadmapLevels(env))return json({error:'Le parcours se met à jour. Réessaie dans un instant.'},503,{'Retry-After':'1'});
     const self=await env.DB.prepare('SELECT id,username,avatar_data IS NOT NULL AS has_avatar FROM users WHERE id=?1').bind(user.id).first();
     // Counts include the viewer and peers. Identities load only on demand.
     const counts=await env.DB.prepare(`SELECT l.level,count(*) AS count ${CURRENT_SCORES} AND l.level<=?1 GROUP BY l.level ORDER BY l.level`).bind(level).all();
@@ -21,7 +21,7 @@ export async function handleRoadmap(request,env,url,{getUser,json}){
     const selected=Number(url.searchParams.get('level')),after=Number(url.searchParams.get('after')||0);
     if(!Number.isInteger(selected)||selected<1||selected>level)return json({error:'Cet échelon n’est pas visible.'},403);
     if(!Number.isSafeInteger(after)||after<0)return json({error:'Page invalide.'},400);
-    await ensureRoadmapLevels(env);
+    if(!await ensureRoadmapLevels(env))return json({error:'Le parcours se met à jour. Réessaie dans un instant.'},503,{'Retry-After':'1'});
     const {results=[]}=await env.DB.prepare(`SELECT u.id,u.username,u.avatar_data IS NOT NULL AS has_avatar ${CURRENT_SCORES} AND l.level=?1 AND u.id>?2 ORDER BY u.id LIMIT 25`).bind(selected,after).all();
     const members=results.slice(0,24).map(member);
     return json({level:selected,members,next:results.length>24?members.at(-1).id:null});

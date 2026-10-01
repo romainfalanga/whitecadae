@@ -10,9 +10,9 @@ export function fixture(){
     sql.prepare('INSERT INTO sessions(token,user_id,expires_at) VALUES(?,?,?)').run('qa'+level,id,'2099-01-01');
     for(const riddle of ids.slice(0,level===99?0:Math.max(0,level-1)))sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(id,riddle,'2026-09-26');
   }
-  function prepare(query,args=[]){const params=()=>Object.fromEntries(args.map((v,i)=>[String(i+1),v]));return {bind(...a){return prepare(query,a)},async first(){return sql.prepare(query).get(params())||null},async all(){return {results:sql.prepare(query).all(params())}},async run(){const r=sql.prepare(query).run(params());return {meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}}}};}
+  function prepare(query,args=[]){const params=()=>Object.fromEntries(args.map((v,i)=>[String(i+1),v]));const sync=()=>{const r=sql.prepare(query).run(params());return {meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}}};return {bind(...a){return prepare(query,a)},async first(){return sql.prepare(query).get(params())||null},async all(){return {results:sql.prepare(query).all(params())}},async run(){return sync();},sync};}
   const objects=new Map();let calls=0;
-  const env={DB:{prepare,async batch(statements){const out=[];for(const s of statements)out.push(await s.run());return out}},MEDIA:{
+  const env={PRIVATE_SPACES_ENABLED:'true',PRIVATE_DATA_KEYS:JSON.stringify({active:'test',keys:{test:Buffer.alloc(32,7).toString('base64')},index:Buffer.alloc(32,8).toString('base64')}),DB:{prepare,async batch(statements){sql.exec('BEGIN');try{const result=statements.map(s=>s.sync());sql.exec('COMMIT');return result;}catch(e){sql.exec('ROLLBACK');throw e;}}},MEDIA:{
     async put(key,body,options){const data=new Uint8Array(await new Response(body).arrayBuffer());objects.set(key,{data,options});return {size:data.length};},
     async head(key){const object=objects.get(key);return object?{size:object.data.length}:null;},
     async get(key,options){const object=objects.get(key);if(!object)return null;let data=object.data;const range=options?.range;if(range)data=data.slice(range.offset,range.offset+range.length);return {body:data,arrayBuffer:async()=>data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength),size:data.length};},

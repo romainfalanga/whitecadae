@@ -3,7 +3,7 @@ import {RELEASES,canListen} from './music-catalogue.js';
 
 export function contentAccess(user,rows=[]){
   const level=gameLevel(rows),legacy=accessLevel(rows),admin=!!user?.is_admin;
-  return {level,legacy,admin,conversation:false,topics:false,videographie:false};
+  return {level,legacy,admin,gameMaster:!!user&&level>=11,lifeTree:!!user&&level>=18,aceSquare:!!user&&level>=20,conversation:false,topics:false,videographie:false};
 }
 
 // A single schedule drives the home page, rewards and protected media.

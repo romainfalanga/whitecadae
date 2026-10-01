@@ -6,6 +6,14 @@ import {ensureRoadmapLevels,CURRENT_SCORES} from '../src/roadmap-levels.js';
 import {fixture} from './community-fixture.mjs';
 const request=(f,path,token='qa8',method='GET',body)=>worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session='+token,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),f.env);
 const add=(f,id,user=1)=>f.sql.prepare('INSERT OR IGNORE INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(user,id,'now');
+test('ten thousand empty accounts are indexed with bounded SQL calls, not a query per account',async()=>{
+  const f=fixture();try{
+    const insert=f.sql.prepare('INSERT INTO users(email,username,password_hash) VALUES(?,?,?)');f.sql.exec('BEGIN');for(let i=0;i<10000;i++)insert.run(`bulk${i}@local.test`,'Bulk'+i,'unused');f.sql.exec('COMMIT');
+    let statements=0;const original=f.env.DB.prepare;f.env.DB.prepare=(...args)=>{statements++;return original(...args);};
+    assert.equal(await ensureRoadmapLevels(f.env),true);assert.ok(statements<15,`Unexpected SQL count: ${statements}`);
+    assert.equal(f.sql.prepare('SELECT count(*) AS n FROM roadmap_levels').get().n,f.sql.prepare('SELECT count(*) AS n FROM users').get().n);
+  }finally{f.sql.close();}
+});
 
 test('anonymous roadmap is an empty 33-step journey and reveals no members',async()=>{
   const res=await worker.fetch(new Request('https://test.local/api/roadmap'),{});
