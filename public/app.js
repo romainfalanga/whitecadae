@@ -184,7 +184,7 @@ async function route() {
     return WCRoadmap.page();
   }
   if (path === '/echelon/horloge') return navigate('/signes/horloge'+location.hash,true);
-  if(['/game-master-orange','/arbre-de-vie','/carre-d-as','/signalements'].includes(path)){
+  if(['/game-master-orange','/arbre-de-vie','/carre-d-as','/signalements'].includes(path)||/^\/mecanisme(?:\/(?:[1-9]|10))?$/.test(path)){
     const epoch=renderEpoch;
     app.innerHTML='<div class="loading">Chargement…</div>';
     try{
@@ -213,7 +213,7 @@ async function route() {
 function renderNav() {
   const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musiques</a>', '<a href="/signes" data-link>Signes</a>', '<a href="/echelon" data-link>Échelons</a>'];
   if(state.user&&state.access.horloge)liens.splice(3,0,'<a href="/signes/horloge" data-link>Horloge</a>');
-  for(const [access,href,title] of [['gameMaster','/game-master-orange','Game Master Orange'],['lifeTree','/arbre-de-vie','Arbre de vie'],['aceSquare','/carre-d-as','Carré d’As']])if(state.user&&state.access[access])liens.push(`<a href="${href}" data-link>${title}</a>`);
+  for(const [access,href,title] of [['gameMaster','/game-master-orange','Game Master Orange'],['mechanisms','/mecanisme','Mécanisme'],['lifeTree','/arbre-de-vie','Arbre de vie'],['aceSquare','/carre-d-as','Carré d’AS']])if(state.user&&state.access[access])liens.push(`<a href="${href}" data-link>${title}</a>`);
   nav.innerHTML = liens.join('\n       ');
   nav.querySelectorAll('a').forEach((a) => { if (a.getAttribute('href') === location.pathname) a.setAttribute('aria-current', 'page'); });
 
@@ -294,7 +294,7 @@ function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
   if(value==='57')return '/signes';
   if(value==='echelon'||value==='/parcours')return '/echelon';
-  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|arbre-de-vie|carre-d-as)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
+  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|mecanisme(?:\/(?:[1-9]|10))?|arbre-de-vie|carre-d-as)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 
 function pageLogin() {

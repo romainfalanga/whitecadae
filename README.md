@@ -4,17 +4,18 @@ Application JavaScript sans framework : Cloudflare Worker, assets statiques, D1 
 
 ## Pages et progression
 
-- `/` : présentation et musiques déjà découvertes.
+- `/` : présentation, musiques et pages déjà découvertes.
 - `/musique` : albums 57, 114 et 18 juillet 2019, déblocage morceau par morceau.
 - `/signes` : propositions de signes, anciennement `/echelon`.
 - `/signes/horloge` : tableaux de construction, uniquement après la découverte de L’horloge.
 - `/echelon` : parcours de 33 échelons, réglages du compte et membres jusqu’à l’échelon courant inclus.
 - `/chanson/:slug` : paroles accessibles depuis le lecteur selon les droits du morceau.
 - `/game-master-orange` : accompagnement mutuel des joueurs, à l’échelon 11.
+- `/mecanisme` et `/mecanisme/:slot` : dix mécanismes privés et modifiables, à l’échelon 15.
 - `/arbre-de-vie` : chronologie personnelle, impacts et liens, à l’échelon 18.
 - `/carre-d-as` : carré personnel et accompagnements privés, à l’échelon 20.
 
-Ces trois liens apparaissent progressivement dans le menu. L’Arbre de vie reste privé jusqu’à un accord explicite portant sur tout l’arbre. Chaque carré comprend son centre et jusqu’à quatre anges ; chacun peut accompagner jusqu’à quatre autres centres. Les sessions, contrôles d’accès, données chiffrées, migrations et vérifications sont détaillés dans [la documentation des espaces personnels](docs/private-spaces.md).
+Ces quatre liens apparaissent progressivement dans le menu et sur l’accueil. L’Arbre de vie reste privé jusqu’à un accord explicite portant sur tout l’arbre. Chaque carré comprend son centre et jusqu’à quatre AS ; chacun peut accompagner jusqu’à quatre autres centres. L’ajout d’un AS se fait par recherche de pseudo exact, puis acceptation de l’invitation. Les mécanismes ne sont jamais partagés. Les sessions, contrôles d’accès, données chiffrées, migrations et vérifications sont détaillés dans [la documentation des espaces personnels](docs/private-spaces.md).
 
 Le menu comprend Escape Game Orange, Musiques, Signes et Échelons ; Horloge s’ajoute immédiatement après la découverte de L’horloge dans Aiguille. `/api/me` utilise la progression canonique pour cette condition, sans déblocage par niveau ni exception administrateur. Les anciens liens d’énigmes et d’Horloge redirigent vers Signes. `/parcours` et les anciens profils redirigent vers Échelons, dont l’URL reste `/echelon`. Les API historiques `/api/echelon` et `/api/57` restent des alias du jeu pour les anciens clients ; le nouveau client utilise `/api/signes`.
 

@@ -1,4 +1,4 @@
-import {seal,unseal,fail,text,identifier,integer} from './private-data.js';
+import {seal,unseal,fail,text,identifier,integer,limitWrites} from './private-data.js';
 import {NOTICE_VERSION,requireLevel,requireStorage,levelOf,circleAccess,freshAccess,writeGuard,blocked,person} from './private-access.js';
 
 const profileSQL='SELECT id,username,avatar_data IS NOT NULL AS has_avatar FROM users WHERE id=?1';
@@ -45,15 +45,17 @@ export async function aceRoute(request,env,url,user,body,json){
       ON CONFLICT(user_id) DO UPDATE SET listed=excluded.listed,intro=excluded.intro,private_code=CASE WHEN ?5=1 THEN excluded.private_code ELSE private_code END`).bind(user.id,body.listed?1:0,intro,code,body.rotateCode===true?1:0).run();return json({ok:true});
   }
   if(suffix==='/directory'&&method==='GET'){
-    const after=integer(Number(url.searchParams.get('after')||0)),search=text(url.searchParams.get('q')||'',30);
-    const rows=(await env.DB.prepare(`SELECT u.id,u.username,u.avatar_data IS NOT NULL AS has_avatar,p.intro FROM ace_preferences p JOIN users u ON u.id=p.user_id
-      WHERE p.listed=1 AND u.id<>?1 AND u.id>?2 AND instr(lower(u.username),lower(?3))>0
+    const search=text(url.searchParams.get('q')||'',30);
+    if(search.length<3)return json({people:[],next:null});
+    await limitWrites(env,user.id);
+    const rows=(await env.DB.prepare(`SELECT u.id,u.username FROM users u
+      WHERE u.id<>?1 AND u.username=?2 COLLATE NOCASE
       AND (SELECT count(*) FROM ace_memberships WHERE angel_id=u.id)<4
       AND NOT EXISTS(SELECT 1 FROM ace_memberships WHERE owner_id=?1 AND angel_id=u.id)
       AND NOT EXISTS(SELECT 1 FROM ace_invitations WHERE owner_id=?1 AND angel_id=u.id AND state='pending' AND expires_at>datetime('now'))
-      AND NOT EXISTS(SELECT 1 FROM ace_blocks WHERE (user_id=?1 AND blocked_id=u.id) OR (blocked_id=?1 AND user_id=u.id)) ORDER BY u.id LIMIT 21`).bind(user.id,after,search).all()).results;
-    const people=[];for(const row of rows.slice(0,20))if(await levelOf(env,row.id)>=20)people.push({...person(row),intro:(await unseal(env,`intro:${row.id}`,row.intro)).text});
-    return json({people,next:rows.length>20?rows[19].id:null});
+      AND NOT EXISTS(SELECT 1 FROM ace_blocks WHERE (user_id=?1 AND blocked_id=u.id) OR (blocked_id=?1 AND user_id=u.id)) LIMIT 1`).bind(user.id,search).all()).results;
+    const people=[];for(const row of rows)if(await levelOf(env,row.id)>=20)people.push({id:row.id,username:row.username});
+    return json({people,next:null});
   }
   const avatar=/^\/avatar\/(\d+)$/.exec(suffix);
   if(avatar&&method==='GET'){
@@ -70,7 +72,7 @@ export async function aceRoute(request,env,url,user,body,json){
   if(suffix==='/invitations'&&method==='POST'){
     const id=identifier(body.id),direction=body.direction==='request'?'request':'invite';let target;
     if(body.code){const code=text(body.code,64,true);target=await env.DB.prepare('SELECT user_id AS id FROM ace_preferences WHERE private_code=?1').bind(code).first();}
-    else{const targetId=integer(body.target,1);target=await env.DB.prepare('SELECT user_id AS id FROM ace_preferences WHERE user_id=?1 AND listed=1').bind(targetId).first();}
+    else{const targetId=integer(body.target,1);target=await env.DB.prepare('SELECT id FROM users WHERE id=?1').bind(targetId).first();}
     if(!target||target.id===user.id||await blocked(env,user.id,target.id)||await levelOf(env,target.id)<20)fail('Cette mise en relation n’est pas disponible.',404);
     const owner=direction==='invite'?user.id:target.id,angel=direction==='invite'?target.id:user.id;
     if(direction==='invite'&&body.recipientNotice!==true)fail('Confirme les accès que cette personne recevra.');

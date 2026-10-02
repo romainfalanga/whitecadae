@@ -87,10 +87,13 @@ test('drafts accept incomplete dates, remain private under global sharing, and u
    assert.equal((await f.ok('/api/life-tree/drafts')).drafts[0].revision,1);
  }finally{f.sql.close();}
 });
-test('directory is opt-in, paginated and minimal, with contextual avatar and private-code requests',async()=>{
+test('exact username search exposes only an identity, never trees, and contextual avatars remain protected',async()=>{
  const f=setup();try{
    assert.equal((await f.ok('/api/ace-circles/directory')).people.length,0);
-   await preferences(f,202);let p=(await f.ok('/api/ace-circles/directory')).people[0];assert.equal(p.id,202);assert.deepEqual(Object.keys(p).sort(),['avatar','id','intro','username']);
+   assert.equal((await f.ok('/api/ace-circles/directory?q=Ange')).people.length,0);
+   let p=(await f.ok('/api/ace-circles/directory?q=Ange%20202')).people[0];assert.equal(p.id,202);assert.deepEqual(Object.keys(p).sort(),['id','username']);
+   assert.equal((await f.call('/api/life-tree?owner=202')).status,403);
+   await preferences(f,202);
    f.sql.prepare("UPDATE users SET avatar_data='aGVsbG8=',avatar_mime='image/png' WHERE id=202").run();assert.equal((await f.call('/api/ace-circles/avatar/202')).status,200);
    await preferences(f,202,false);assert.equal((await f.call('/api/ace-circles/avatar/202')).status,404);
    const code=(await f.ok('/api/ace-circles',202)).preferences.code;
@@ -151,6 +154,21 @@ test('messages and event activity are idempotent; threaded replies cannot cross 
    await send(f,201,201,{parentId:message.id});assert.equal((await f.ok('/api/ace-circles/201/messages?parent='+message.id,202)).messages.length,1);
    await f.ok('/api/ace-circles/reports',201,'POST',{owner:201,messageId:message.id,reason:'Contenu choisi'});assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ace_reports').get().n,1);
    assert.equal((await f.call('/api/ace-circles/reports',204,'POST',{owner:201,messageId:message.id,reason:'Intrusion'})).status,403);
+ }finally{f.sql.close();}
+});
+
+test('AS access is directed, never transitive between co-members, and pending invitations grant no tree access',async()=>{
+ const f=setup();try{
+  await join(f,201,202);await join(f,201,203);await sharing(f,202);const e=await save(f,202);
+  for(const who of [201,203,204]){
+   assert.equal((await f.call('/api/life-tree?owner=202',who)).status,403);
+   assert.equal((await f.call('/api/life-tree/events/'+e.id+'?owner=202',who)).status,403);
+  }
+  const id=await invite(f,202,203);assert.equal((await f.call('/api/life-tree?owner=202',203)).status,403);
+  await f.ok('/api/ace-circles/invitations/'+id,203,'PUT',{action:'accept'});
+  assert.equal((await f.ok('/api/life-tree?owner=202',203)).events.length,1);
+  await f.ok('/api/ace-circles/members/'+id,203,'DELETE',{});
+  assert.equal((await f.call('/api/life-tree/events/'+e.id+'?owner=202',203)).status,403);
  }finally{f.sql.close();}
 });
 test('delayed message is rejected when a membership is removed during encryption / query preparation',async()=>{

@@ -158,7 +158,7 @@ function checkWriteOrigin(request,url){
   if(['GET','HEAD','OPTIONS'].includes(request.method))return null;
   const origin=request.headers.get('Origin'),site=request.headers.get('Sec-Fetch-Site');
   if((origin&&origin!==url.origin)||site==='cross-site')return json({error:'Origine de requête non autorisée.'},403);
-  if(request.body&&/^\/api\/(signes|echelon|57\/guess|register|login|logout|account|admin|life-tree|ace-circles|private)(?:\/|$)/.test(url.pathname)&&!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type')||''))return json({error:'Une requête JSON est requise.'},415);
+  if(request.body&&/^\/api\/(signes|echelon|57\/guess|register|login|logout|account|admin|mechanisms|life-tree|ace-circles|private)(?:\/|$)/.test(url.pathname)&&!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type')||''))return json({error:'Une requête JSON est requise.'},415);
   return null;
 }
 
@@ -173,7 +173,7 @@ async function handleApi(request, env, url) {
   };
 
   let p;
-  if(/^\/api\/(game-master-orange|life-tree|ace-circles|private)(?:\/|$)/.test(path))return handlePrivate(request,env,url,{getUser,json});
+  if(/^\/api\/(game-master-orange|mechanisms|life-tree|ace-circles|private)(?:\/|$)/.test(path))return handlePrivate(request,env,url,{getUser,json});
   if(path==='/api/roadmap'||path.startsWith('/api/roadmap/'))return handleRoadmap(request,env,url,{getUser,json});
   if(path==='/api/signes'||path.startsWith('/api/signes/'))return handleEchelon(request,env,path.replace(/^\/api\/signes/,'/api/echelon'),{getUser,json});
 

@@ -5,7 +5,7 @@ export const NOTICE_VERSION='2026-10-01';
 export const PRIVATE_NOTICE={version:NOTICE_VERSION,
  purpose:'Cet espace conserve tes récits et réflexions pour te permettre de relire ton parcours. Aucun diagnostic ni analyse automatique n’est effectué.',
  storage:'Les textes sont chiffrés sur le serveur. Les dates, catégories et relations nécessaires au fonctionnement restent des métadonnées protégées. Ce service ne propose pas de chiffrement de bout en bout.',
- sharing:'Ton arbre reste privé. Si tu actives son partage, tes anges actuels et ceux que tu accepteras ensuite verront tout l’arbre enregistré et ses futures mises à jour. Tes brouillons restent privés. Tu peux retirer cet accord à tout moment ; cela ne peut pas effacer ce qu’une personne a déjà lu ou copié.',
+ sharing:'Ton arbre reste privé. Si tu actives son partage, tes AS actuels et ceux que tu accepteras ensuite verront tout l’arbre enregistré et ses futures mises à jour. Tes brouillons restent privés. Tu peux retirer cet accord à tout moment ; cela ne peut pas effacer ce qu’une personne a déjà lu ou copié.',
  retention:'Tu peux exporter ou supprimer tes événements et tes brouillons. Ils sont conservés jusqu’à leur suppression ou celle de ton compte. Les copies de restauration Cloudflare peuvent subsister jusqu’à 30 jours ; elles ne sont pas consultables par les autres membres.',
  care:'Écris seulement ce que tu souhaites conserver ici et limite les informations identifiantes sur des tiers. Les échanges entre membres ne remplacent pas un accompagnement professionnel.'};
 export async function levelOf(env,id){return gameLevel(await gameRows(env,id));}

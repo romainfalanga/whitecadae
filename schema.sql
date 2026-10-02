@@ -525,3 +525,12 @@ CREATE TRIGGER ace_message_removed AFTER DELETE ON ace_messages BEGIN UPDATE ace
 CREATE INDEX idx_ace_reports_pending ON ace_reports(resolved_at,created_at);
 CREATE TRIGGER ace_message_count_added AFTER INSERT ON ace_messages BEGIN UPDATE ace_circles SET message_count=message_count+1 WHERE owner_id=NEW.owner_id; END;
 CREATE TRIGGER ace_message_count_removed AFTER DELETE ON ace_messages BEGIN UPDATE ace_circles SET message_count=MAX(0,message_count-1) WHERE owner_id=OLD.owner_id; END;
+
+CREATE TABLE user_mechanisms (
+  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  slot INTEGER NOT NULL CHECK(slot BETWEEN 1 AND 10),
+  payload TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY(owner_id,slot)
+);
