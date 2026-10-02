@@ -1,5 +1,6 @@
 import {seal,unseal,fail,text,integer} from './private-data.js';
-import {requireLevel,requireStorage} from './private-access.js';
+import {recordTopic} from './circle-topics.js';
+import {requireLevel,requireStorage,circleAccess,freshAccess} from './private-access.js';
 
 const DEFAULTS=[
   {title:'Toujours faire mieux',description:'Faire de l’amélioration un réflexe naturel. Comprendre ce qui façonne ma manière d’être, de penser et d’agir, puis élargir mon regard avec de nouvelles informations. Répéter cette démarche et essayer des ajustements concrets pour que chercher à faire mieux devienne une habitude intuitive.',practice:'Chercher une amélioration concrète à essayer, puis observer ce qu’elle change.',notice:'Ce qui influence mon point de vue et les informations qui me manquent.',anchor:'Une amélioration à la fois.'},
@@ -11,24 +12,29 @@ const context=(owner,slot)=>`mechanism:${owner}:${slot}`;
 async function view(env,user,row,slot){return {slot,revision:row?.revision||0,...(row?await unseal(env,context(user.id,slot),row.payload):DEFAULTS[slot-1]||empty())};}
 
 export async function mechanismsRoute(request,env,url,user,body,json){
-  if(url.searchParams.has('owner')&&url.searchParams.get('owner')!==String(user.id))fail('Ces mécanismes sont privés.',403);
+  const owner=url.searchParams.has('owner')?integer(Number(url.searchParams.get('owner')),1):user.id;
+  let access=null;
+  if(owner!==user.id){if(request.method!=='GET'||url.pathname.endsWith('/export'))fail('Seul l’auteur peut modifier ou exporter ses mécanismes.',403);access=await circleAccess(env,user,owner);if(!access.circle.share_enabled||!access.circle.combined_sharing)fail('Ces mécanismes ne sont pas partagés.',403);}
   const suffix=url.pathname.replace(/^\/api\/mechanisms/,'').replace(/\/$/,''),method=request.method;
-  if(suffix!=='/export')await requireLevel(env,user,15);
+  if(suffix!=='/export')await requireLevel(env,user,12);
   if((suffix===''||suffix==='/export')&&method==='GET'){
-    const rows=(await env.DB.prepare('SELECT * FROM user_mechanisms WHERE owner_id=?1 ORDER BY slot').bind(user.id).all()).results;
-    const mechanisms=await Promise.all(Array.from({length:10},(_,i)=>view(env,user,rows.find(r=>r.slot===i+1),i+1)));
+    const rows=(await env.DB.prepare('SELECT * FROM user_mechanisms WHERE owner_id=?1 ORDER BY slot').bind(owner).all()).results;
+    const mechanisms=await Promise.all(Array.from({length:10},(_,i)=>view(env,{id:owner},rows.find(r=>r.slot===i+1),i+1)));
+    if(access)await freshAccess(env,access,user);
     return json({mechanisms},200,suffix==='/export'?{'Content-Disposition':'attachment; filename="mes-mecanismes.json"'}:{});
   }
   const match=/^\/([1-9]|10)$/.exec(suffix);if(!match)fail('Mécanisme introuvable.',404);
   const slot=Number(match[1]);
-  if(method==='GET')return json({mechanism:await view(env,user,await env.DB.prepare('SELECT * FROM user_mechanisms WHERE owner_id=?1 AND slot=?2').bind(user.id,slot).first(),slot)});
+  if(method==='GET'){const mechanism=await view(env,{id:owner},await env.DB.prepare('SELECT * FROM user_mechanisms WHERE owner_id=?1 AND slot=?2').bind(owner,slot).first(),slot);if(access)await freshAccess(env,access,user);return json({mechanism});}
   if(method==='PUT'){
     await requireStorage(env,user.id);const revision=integer(body.revision),data={};
     for(const [key,max] of [['title',140],['description',6000],['practice',3000],['notice',3000],['anchor',500]])data[key]=text(body[key],max);
     if(!data.title&&Object.values(data).some(Boolean))fail('Donne un nom à ce mécanisme.');
     const payload=await seal(env,context(user.id,slot),data);
-    const result=revision===0?await env.DB.prepare('INSERT OR IGNORE INTO user_mechanisms(owner_id,slot,payload) VALUES(?1,?2,?3)').bind(user.id,slot,payload).run():
-      await env.DB.prepare("UPDATE user_mechanisms SET payload=?3,revision=revision+1,updated_at=datetime('now') WHERE owner_id=?1 AND slot=?2 AND revision=?4").bind(user.id,slot,payload,revision).run();
+    const statement=revision===0?env.DB.prepare('INSERT OR IGNORE INTO user_mechanisms(owner_id,slot,payload) VALUES(?1,?2,?3)').bind(user.id,slot,payload):
+      env.DB.prepare("UPDATE user_mechanisms SET payload=?3,revision=revision+1,updated_at=datetime('now') WHERE owner_id=?1 AND slot=?2 AND revision=?4").bind(user.id,slot,payload,revision);
+    const activity=data.title?recordTopic(env,{owner:user.id,key:'mechanism:'+slot,kind:'mechanism',slot,guard:'EXISTS(SELECT 1 FROM user_mechanisms WHERE owner_id=?1 AND slot=?6 AND payload=?7)',values:[payload]}):env.DB.prepare('DELETE FROM circle_topics WHERE owner_id=?1 AND mechanism_slot=?2 AND EXISTS(SELECT 1 FROM user_mechanisms WHERE owner_id=?1 AND slot=?2 AND payload=?3)').bind(user.id,slot,payload);
+    const [result]=await env.DB.batch([statement,activity]);
     if(!result.meta.changes)fail('Ce mécanisme a changé dans une autre fenêtre. Ta saisie est conservée ; consulte la version enregistrée avant de réessayer.',409);
     return json({mechanism:{slot,revision:revision+1,...data}});
   }

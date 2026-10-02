@@ -19,6 +19,7 @@ const state = {
   user: null,
   // droits aux espaces privés, distincts du compteur du jeu Échelon
   access: { interpretations: false },
+  gameEchelon: 1,
   echelon: 1, // rang d'accès historique, tenu par le serveur
 };
 const accountChannel=typeof BroadcastChannel==='function'?new BroadcastChannel('wc-account-context'):null;
@@ -184,7 +185,8 @@ async function route() {
     return WCRoadmap.page();
   }
   if (path === '/echelon/horloge') return navigate('/signes/horloge'+location.hash,true);
-  if(['/game-master-orange','/arbre-de-vie','/carre-d-as','/signalements'].includes(path)||/^\/mecanisme(?:\/(?:[1-9]|10))?$/.test(path)){
+  if(path==='/arbre-de-vie')return navigate('/matiere'+location.hash,true);
+  if(['/game-master-orange','/matiere','/carre-d-as','/signalements'].includes(path)||/^\/carre-d-as\/fil\/\d+$/.test(path)||/^\/mecanisme(?:\/(?:[1-9]|10))?$/.test(path)){
     const epoch=renderEpoch;
     app.innerHTML='<div class="loading">Chargement…</div>';
     try{
@@ -211,9 +213,10 @@ async function route() {
 }
 
 function renderNav() {
+  const badge=document.getElementById('header-level');if(badge){badge.hidden=!state.user;badge.textContent=state.user?String(state.gameEchelon):'';badge.setAttribute('aria-label','Échelon '+state.gameEchelon);}
   const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musiques</a>', '<a href="/signes" data-link>Signes</a>', '<a href="/echelon" data-link>Échelons</a>'];
   if(state.user&&state.access.horloge)liens.splice(3,0,'<a href="/signes/horloge" data-link>Horloge</a>');
-  for(const [access,href,title] of [['gameMaster','/game-master-orange','Game Master Orange'],['mechanisms','/mecanisme','Mécanismes'],['lifeTree','/arbre-de-vie','Arbre de vie'],['aceSquare','/carre-d-as','Carré d’AS']])if(state.user&&state.access[access])liens.push(`<a href="${href}" data-link>${title}</a>`);
+  for(const [access,href,title] of [['gameMaster','/game-master-orange','Game Master Orange'],['mechanisms','/mecanisme','Mécanismes'],['lifeTree','/matiere','Matière'],['aceSquare','/carre-d-as','Carré d’AS']])if(state.user&&state.access[access])liens.push(`<a href="${href}" data-link>${title}</a>`);
   nav.innerHTML = liens.join('\n       ');
   nav.querySelectorAll('a').forEach((a) => { if (a.getAttribute('href') === location.pathname) a.setAttribute('aria-current', 'page'); });
 
@@ -275,12 +278,14 @@ async function refreshSession() {
     state.user = data.user;
     state.access = data.access || { interpretations: true };
     state.echelon = data.echelon || 1;
+    state.gameEchelon = data.gameEchelon || 1;
     state.attenteMs = data.attenteMs || 0;
   } catch {
     // même injoignable, le serveur n'aurait pas refusé le sol
     state.user = null;
     state.access = { interpretations: true };
     state.echelon = 1;
+    state.gameEchelon = 1;
     state.attenteMs = 0;
   }
   const currentAccount=state.user?.id||null;
@@ -294,7 +299,7 @@ function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
   if(value==='57')return '/signes';
   if(value==='echelon'||value==='/parcours')return '/echelon';
-  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|mecanisme(?:\/(?:[1-9]|10))?|arbre-de-vie|carre-d-as)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
+  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|mecanisme(?:\/(?:[1-9]|10))?|arbre-de-vie|matiere|carre-d-as(?:\/fil\/\d+)?)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 
 function pageLogin() {

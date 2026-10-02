@@ -8,7 +8,7 @@ const expected=['30-vins-divins','sans-indice-dans-les-des','13h20','orange','la
 test('welcome shows earned discoveries in level order, without invented narrative or locked links',()=>{
   for(let level=1;level<=24;level++){
     const result=buildOrange(ids.slice(0,level-1).map(riddle_id=>({riddle_id,solved_at:'now'})),{id:1});
-    assert.deepEqual(result.openings.map(x=>[x.level,x.id]),[...expected,[11,'page-gameMaster'],[15,'page-mechanisms'],[18,'page-lifeTree'],[20,'page-aceSquare']].filter(([n])=>n<=level));
+    assert.deepEqual(result.openings.map(x=>[x.level,x.id]),[...expected,[11,'page-gameMaster'],[12,'page-mechanisms'],[18,'page-lifeTree'],[20,'page-aceSquare']].filter(([n])=>n<=level));
     assert.ok(result.openings.every(x=>x.open&&x.href));assert.equal(result.chapters,undefined);
   }
   assert.deepEqual(buildOrange().openings.map(x=>x.id),['music-30-vins-divins']);

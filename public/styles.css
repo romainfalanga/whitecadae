@@ -2039,3 +2039,9 @@ body.avec-dock main { padding-bottom: 7rem; }
 /* The unlocked menu remains usable at intermediate widths and short heights. */
 @media(min-width:701px){.site-nav{gap:.45rem .9rem;justify-content:flex-end;max-width:calc(100% - 210px);font-size:.84rem}}
 @media(max-width:700px){body.nav-open .site-nav{max-height:calc(100dvh - 85px);overflow-y:auto;overscroll-behavior:contain}}
+
+.header-identity{display:flex;align-items:center;gap:1rem;flex:none}
+.header-level{font:400 2rem/1 var(--serif);color:#f3c57f!important;padding:.15rem 0 .15rem 1rem;border-left:1px solid #6e57363d;font-variant-numeric:tabular-nums;text-decoration:none!important}
+.header-level[hidden]{display:none}
+@media(max-width:700px){.header-identity{gap:.7rem}.header-level{font-size:1.9rem;padding-left:.7rem}}
+@media(max-width:360px){.site-header{padding-inline:1rem;gap:.5rem;flex-wrap:nowrap}.header-identity{gap:.5rem}.header-level{padding-left:.5rem}.nav-toggle{flex:none}}

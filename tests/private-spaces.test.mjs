@@ -27,9 +27,10 @@ function setup(){
 async function preferences(f,id,listed=true){await f.ok('/api/ace-circles/preferences',id,'PUT',{listed,intro:'Je propose mon écoute.'});}
 async function invite(f,owner,angel){await preferences(f,angel);const id=crypto.randomUUID();await f.ok('/api/ace-circles/invitations',owner,'POST',{id,target:angel,recipientNotice:true});return id;}
 async function join(f,owner,angel){const id=await invite(f,owner,angel);await f.ok('/api/ace-circles/invitations/'+id,angel,'PUT',{action:'accept'});return id;}
-async function sharing(f,owner=201,enabled=true){await f.ok('/api/ace-circles/sharing',owner,'PUT',{enabled,consent:enabled});}
+async function sharing(f,owner=201,enabled=true){await f.ok('/api/ace-circles/sharing',owner,'PUT',{enabled,consent:enabled,scope:'matter-and-mechanisms'});}
 async function save(f,owner=201,id=crypto.randomUUID(),extra={}){return (await f.ok('/api/life-tree/events/'+id,owner,'PUT',event(extra))).event;}
-async function send(f,owner,author,extra={}){return f.ok(`/api/ace-circles/${owner}/messages`,author,'POST',{id:crypto.randomUUID(),text:'Un message privé.',...extra});}
+// Seed historical messages to verify their continued privacy after free chat retirement.
+async function send(f,owner,author,extra={}){const key=extra.id||crypto.randomUUID(),payload=await seal(f.env,`message:${owner}:${author}:${key}`,{text:extra.text||'Un message privé.'});f.sql.prepare('INSERT OR IGNORE INTO ace_messages(owner_id,author_id,payload,request_id,event_id,parent_id) VALUES(?,?,?,?,?,?)').run(owner,author,payload,key,extra.eventId||null,extra.parentId||null);return {ok:true};}
 
 test('exact canonical thresholds; no anonymous, legacy or administrator bypass; old routes remain retired',async()=>{
  const f=setup();try{
@@ -137,20 +138,20 @@ test('whole-tree consent, per-membership history, revocation, event threads and 
    await send(f,201,202,{eventId:e.id});await send(f,201,201,{text:'Conversation générale'});
    const before=await f.ok('/api/ace-circles/201/messages',202);assert.equal(before.messages.length,2);const related=before.messages.find(m=>m.eventId);
    await sharing(f,201,false);assert.equal((await f.call('/api/life-tree/events/'+e.id+'?owner=201',202)).status,403);assert.equal((await f.ok('/api/ace-circles/201/messages',202)).messages.length,1);
-   assert.equal((await f.call('/api/ace-circles/201/messages',202,'POST',{id:crypto.randomUUID(),text:'Fuite',parentId:related.id})).status,404);
+   assert.equal((await f.call('/api/ace-circles/201/messages',202,'POST',{id:crypto.randomUUID(),text:'Fuite',parentId:related.id})).status,410);
    await sharing(f);await f.ok('/api/life-tree/events/'+e.id,201,'DELETE',{revision:1});assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ace_messages WHERE event_id=?').get(e.id).n,0);
    await f.ok('/api/ace-circles/members/'+membership,202,'DELETE',{});
    assert.equal((await f.call('/api/ace-circles/201/messages',202)).status,403);assert.equal((await f.call('/api/ace-circles/201/read',202,'PUT',{lastId:999})).status,403);
    f.clearLimits();await join(f,201,202);assert.equal((await f.ok('/api/ace-circles/201/messages',202)).messages.length,0);
  }finally{f.sql.close();}
 });
-test('messages and event activity are idempotent; threaded replies cannot cross circle or history',async()=>{
+test('historical messages stay readable and reportable while free chat writes are retired',async()=>{
  const f=setup();try{
    await join(f,201,202);await join(f,203,202);await sharing(f);const e=await save(f);
-   await save(f,201,e.id,{revision:1});assert.equal(f.sql.prepare("SELECT count(*) AS n FROM ace_messages WHERE kind='event'").get().n,1);
+   await save(f,201,e.id,{revision:1});assert.equal(f.sql.prepare("SELECT count(*) AS n FROM circle_topics WHERE kind='event'").get().n,1);
    const id=crypto.randomUUID();await send(f,201,202,{id,text:'<img src=x onerror=alert(1)>'});await send(f,201,202,{id,text:'<img src=x onerror=alert(1)>'});
-   const rows=(await f.ok('/api/ace-circles/201/messages',202)).messages;assert.equal(rows.length,2);const message=rows.find(m=>m.kind==='message');assert.equal(message.text,'<img src=x onerror=alert(1)>');
-   assert.equal((await f.call('/api/ace-circles/203/messages',202,'POST',{id:crypto.randomUUID(),text:'Wrong circle',parentId:message.id})).status,404);
+   const rows=(await f.ok('/api/ace-circles/201/messages',202)).messages;assert.equal(rows.length,1);const message=rows.find(m=>m.kind==='message');assert.equal(message.text,'<img src=x onerror=alert(1)>');
+   assert.equal((await f.call('/api/ace-circles/203/messages',202,'POST',{id:crypto.randomUUID(),text:'Wrong circle',parentId:message.id})).status,410);
    await send(f,201,201,{parentId:message.id});assert.equal((await f.ok('/api/ace-circles/201/messages?parent='+message.id,202)).messages.length,1);
    await f.ok('/api/ace-circles/reports',201,'POST',{owner:201,messageId:message.id,reason:'Contenu choisi'});assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ace_reports').get().n,1);
    assert.equal((await f.call('/api/ace-circles/reports',204,'POST',{owner:201,messageId:message.id,reason:'Intrusion'})).status,403);
@@ -173,9 +174,9 @@ test('AS access is directed, never transitive between co-members, and pending in
 });
 test('delayed message is rejected when a membership is removed during encryption / query preparation',async()=>{
  const f=setup();try{
-   const membership=await join(f,201,202),original=f.env.DB.prepare;let removed=false;
+   const membership=await join(f,201,202);await sharing(f);await save(f);const topic=f.sql.prepare('SELECT id FROM circle_topics WHERE owner_id=201').get().id,original=f.env.DB.prepare;let removed=false;
    f.env.DB.prepare=(query,...args)=>{if(query.includes('INSERT OR IGNORE INTO ace_messages')&&!removed){removed=true;f.sql.prepare('DELETE FROM ace_memberships WHERE id=?').run(membership);}return original(query,...args);};
-   const r=await f.call('/api/ace-circles/201/messages',202,'POST',{id:crypto.randomUUID(),text:'Too late'});assert.equal(r.status,403);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ace_messages').get().n,0);
+   const r=await f.call('/api/ace-circles/topics/'+topic+'/replies',202,'POST',{id:crypto.randomUUID(),text:'Too late'});assert.equal(r.status,403);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ace_messages').get().n,0);
  }finally{f.sql.close();}
 });
 test('account deletion cascades private data without deleting somebody else’s conversation; loss of level keeps export and erasure',async()=>{

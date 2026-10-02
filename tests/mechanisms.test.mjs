@@ -9,7 +9,7 @@ import {spawnSync} from 'node:child_process';
 
 function setup(){
  const f=fixture(),signs=NODES.flatMap(n=>n.answers.map(a=>a.id));
- for(const [id,level] of [[500,15],[501,14],[502,20]]){
+ for(const [id,level] of [[500,12],[501,11],[502,20]]){
   f.sql.prepare('INSERT INTO users(id,email,username,password_hash) VALUES(?,?,?,?)').run(id,`mechanism${id}@local.test`,`Mechanism ${id}`,'unused');
   f.sql.prepare('INSERT INTO sessions(token,user_id,expires_at) VALUES(?,?,?)').run('mechanism'+id,id,'2099-01-01');
   for(const sign of signs.slice(0,level-1))f.sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(id,sign,'2026-10-01');
@@ -17,7 +17,7 @@ function setup(){
  f.call=async(path,id=500,method='GET',body,headers={})=>{const r=await worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session=mechanism'+id,'X-WC-User':String(id),'Content-Type':'application/json',...headers},...(body?{body:JSON.stringify(body)}:{})}),f.env);return {status:r.status,data:await r.json()};};
  f.agree=()=>f.call('/api/private/consent',500,'POST',{consent:true,version:'2026-10-01'});return f;
 }
-test('mechanisms unlock at 15, contain exactly ten private slots and three editable proposals',async()=>{
+test('mechanisms unlock at 12, contain exactly ten private slots and three editable proposals',async()=>{
  const f=setup();try{
   assert.equal((await f.call('/api/mechanisms',501)).status,403);
   const list=await f.call('/api/mechanisms');assert.equal(list.status,200);assert.equal(list.data.mechanisms.length,10);assert.equal(list.data.mechanisms.filter(m=>m.title).length,3);

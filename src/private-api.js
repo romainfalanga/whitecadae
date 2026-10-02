@@ -28,13 +28,14 @@ export async function handlePrivate(request,env,url,{getUser,json}){
   if(url.pathname==='/api/private/data'&&request.method==='DELETE'){
     if(body.confirm!=='SUPPRIMER')fail('Confirme l’effacement de tes données personnelles.');
     await env.DB.batch([
-      ...['DELETE FROM user_mechanisms WHERE owner_id=?1','DELETE FROM life_events WHERE owner_id=?1','DELETE FROM life_drafts WHERE owner_id=?1','DELETE FROM ace_circles WHERE owner_id=?1','DELETE FROM ace_memberships WHERE angel_id=?1','DELETE FROM ace_messages WHERE author_id=?1','DELETE FROM ace_invitations WHERE angel_id=?1','DELETE FROM ace_preferences WHERE user_id=?1','DELETE FROM ace_reports WHERE reporter_id=?1'].map(sql=>env.DB.prepare(sql).bind(user.id)),
+      ...['DELETE FROM circle_topic_reads WHERE reader_id=?1','DELETE FROM ace_read_markers WHERE reader_id=?1'].map(sql=>env.DB.prepare(sql).bind(user.id)),
+      ...['DELETE FROM circle_topics WHERE owner_id=?1','DELETE FROM user_mechanisms WHERE owner_id=?1','DELETE FROM life_events WHERE owner_id=?1','DELETE FROM life_drafts WHERE owner_id=?1','DELETE FROM ace_circles WHERE owner_id=?1','DELETE FROM ace_memberships WHERE angel_id=?1','DELETE FROM ace_messages WHERE author_id=?1','DELETE FROM ace_invitations WHERE angel_id=?1','DELETE FROM ace_preferences WHERE user_id=?1','DELETE FROM ace_reports WHERE reporter_id=?1'].map(sql=>env.DB.prepare(sql).bind(user.id)),
       env.DB.prepare("INSERT INTO privacy_consents(user_id,purpose,version,granted) VALUES(?1,'storage',?2,0),(?1,'sharing',?2,0)").bind(user.id,NOTICE_VERSION),
     ]);return json({ok:true});
   }
   if(url.pathname==='/api/private/consent'){
     if(request.method==='GET')return json({notice:PRIVATE_NOTICE,consented:await storageConsent(env,user.id)});
-    await requireLevel(env,user,15);
+    await requireLevel(env,user,12);
     if(request.method!=='POST'||body.consent!==true||body.version!==NOTICE_VERSION)fail('Un accord explicite est nécessaire.');
     await env.DB.prepare("INSERT INTO privacy_consents(user_id,purpose,version,granted) VALUES(?1,'storage',?2,1)").bind(user.id,NOTICE_VERSION).run();return json({ok:true});
   }

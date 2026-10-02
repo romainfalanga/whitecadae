@@ -1,5 +1,6 @@
 import {seal,unseal,tagHash,fail,text,identifier,integer} from './private-data.js';
 import {circleAccess,freshAccess,requireStorage,requireLevel} from './private-access.js';
+import {recordTopic} from './circle-topics.js';
 export const EVENT_KINDS=['rencontre','famille','relation','études','travail','santé','changement','réussite','perte','autre'];
 export const EVENT_IMPACTS=['ressource','difficulté','mixte','à explorer'];
 const context=(owner,id)=>`life:${owner}:${id}`;
@@ -12,18 +13,27 @@ function date(value,precision){
   if(!Number.isFinite(parsed.getTime())||parsed.toISOString().slice(0,10)!==full||full<'0001-01-01'||full>new Date().toISOString().slice(0,10))fail('Cette date n’est pas valide.');
   return full;
 }
+export const CREATION_MEDIA=['musique','vidéo','texte','image','autre'];
+function creationLink(value){
+  const raw=text(value,2048);if(!raw)return '';let url;try{url=new URL(raw);}catch{fail('Utilise un lien HTTPS valide.');}
+  if(url.protocol!=='https:'||url.username||url.password||url.hostname==='localhost'||!url.hostname.includes('.'))fail('Utilise un lien HTTPS public sans identifiants.');
+  return url.href;
+}
 function validate(body){
+  const entry_type=body.entryType||'event';if(!['event','creation'].includes(entry_type))fail('Type de contenu invalide.');
+  const creation=entry_type==='creation'?{medium:body.medium,url:creationLink(body.url),work:text(body.work,12000)}:null;
+  if(creation&&(!CREATION_MEDIA.includes(creation.medium)||(!creation.url&&!creation.work)))fail('Ajoute un texte ou un lien à ta création.');
   const precision=body.precision;if(!['day','month','year','period','unknown'].includes(precision))fail('Précise la forme de la date.');
   const sort_date=date(body.date,precision==='period'?'day':precision),end_date=precision==='period'?date(body.endDate,'day'):null;
   if(end_date&&end_date<sort_date)fail('La fin de la période doit suivre son début.');
   if(!EVENT_KINDS.includes(body.kind)||!EVENT_IMPACTS.includes(body.impact))fail('Repère invalide.');
   if(!Array.isArray(body.themes)||body.themes.length>12)fail('Utilise au maximum douze thèmes.');
   const themes=[...new Set(body.themes.map(v=>text(v,60,true)))];
-  return {sort_date,end_date,precision,kind:body.kind,impact:body.impact,payload:{title:text(body.title,140,true),story:text(body.story,8000),feelings:text(body.feelings),understanding:text(body.understanding),resources:text(body.resources),themes}};
+  return {entry_type,sort_date,end_date,precision,kind:body.kind,impact:body.impact,payload:{title:text(body.title,140,true),story:text(body.story,8000),feelings:text(body.feelings),understanding:text(body.understanding),resources:text(body.resources),themes,...(creation?{creation}:{})}};
 }
 function validateDraft(value){
   if(!value||typeof value!=='object'||Array.isArray(value))fail('Brouillon invalide.');
-  const out={};for(const key of ['title','story','feelings','understanding','resources','kind','impact','precision','date','endDate'])out[key]=text(value[key],key==='title'?140:['kind','impact','precision','date','endDate'].includes(key)?40:8000);
+  const out={};for(const key of ['title','story','feelings','understanding','resources','kind','impact','precision','date','endDate','entryType','medium','url','work'])out[key]=text(value[key],key==='title'?140:key==='work'?12000:key==='url'?2048:['kind','impact','precision','date','endDate','entryType','medium','url','work'].includes(key)?40:8000);
   if(!Array.isArray(value.themes)||value.themes.length>12)fail('Utilise au maximum douze thèmes.');out.themes=value.themes.map(t=>text(t,60,true));out.revision=integer(value.revision||0);return {event:out};
 }
 async function unpack(env,row){
@@ -56,7 +66,9 @@ export async function lifeRoute(request,env,url,user,body,json){
   const access=await circleAccess(env,user,owner,true);
   if(method!=='GET'){if(owner!==user.id)fail('Seul l’auteur peut modifier son arbre.',403);await requireStorage(env,user.id);}
   if(!suffix&&method==='GET'){
-    const q=filteredQuery(url,owner),tag=url.searchParams.get('theme');
+    const q=filteredQuery(url,owner),tag=url.searchParams.get('theme'),entryType=url.searchParams.get('entryType');
+    if(entryType){if(!['event','creation'].includes(entryType))fail('Filtre invalide.');q.add('e.entry_type=$',entryType);}
+    if(owner!==user.id&&!access.circle.combined_sharing)q.filters.push("e.entry_type='event'");
     if(tag)q.add('EXISTS(SELECT 1 FROM life_tags t WHERE t.owner_id=e.owner_id AND t.event_id=e.id AND t.tag_hash=$)',await tagHash(env,owner,text(tag,60,true)));
     const after=url.searchParams.get('after');if(after){if(!/^\d{4}-\d{2}-\d{2}\|[a-zA-Z0-9_-]{8,64}$/.test(after))fail('Page invalide.');q.add("(e.sort_date||'|'||e.id)>$",after);}
     const rows=(await env.DB.prepare(`SELECT e.* FROM life_events e WHERE ${q.filters.join(' AND ')} ORDER BY e.sort_date,e.id LIMIT 31`).bind(...q.values).all()).results;
@@ -84,8 +96,8 @@ export async function lifeRoute(request,env,url,user,body,json){
     const id=identifier(match[1]);
     const row=await env.DB.prepare('SELECT * FROM life_events WHERE owner_id=?1 AND id=?2').bind(owner,id).first();
     if(method==='GET'){
-      if(!row)fail('Événement indisponible.',404);
-      const links=(await env.DB.prepare('SELECT source_id,target_id,payload FROM life_links WHERE owner_id=?1 AND (source_id=?2 OR target_id=?2) LIMIT 40').bind(owner,id).all()).results;
+      if(!row||owner!==user.id&&row.entry_type==='creation'&&!access.circle.combined_sharing)fail('Contenu indisponible.',404);
+      const links=(await env.DB.prepare("SELECT source_id,target_id,payload FROM life_links WHERE owner_id=?1 AND (source_id=?2 OR target_id=?2) AND (?3=1 OR (SELECT count(*) FROM life_events WHERE owner_id=?1 AND id IN(source_id,target_id) AND entry_type='event')=2) LIMIT 40").bind(owner,id,owner===user.id||access.circle.combined_sharing?1:0).all()).results;
       const output={event:await unpack(env,row),links:await Promise.all(links.map(async l=>({...l,payload:await unseal(env,`link:${owner}:${l.source_id}:${l.target_id}`,l.payload)})))};
       await freshAccess(env,access,user);return json(output);
     }
@@ -94,19 +106,17 @@ export async function lifeRoute(request,env,url,user,body,json){
       if(!result.meta.changes)fail('Cet événement a changé. Recharge-le avant de le supprimer.',409);return json({ok:true});
     }
     if(method==='PUT'){
-      const event=validate(body),revision=integer(body.revision),payload=await seal(env,context(owner,id),event.payload);
+      const event=validate(body),revision=integer(body.revision);
+      if(row&&event.entry_type!==row.entry_type)fail('Le type de ce contenu ne peut pas être changé.');
+      const payload=await seal(env,context(owner,id),event.payload);
       if(row&&row.revision!==revision)fail('Cet événement a été modifié ailleurs. Ta saisie est conservée : recharge la version enregistrée avant de choisir.',409);
-      const statements=[revision===0?env.DB.prepare(`INSERT OR IGNORE INTO life_events(id,owner_id,sort_date,end_date,precision,kind,impact,payload)
-        SELECT ?1,?2,?3,?4,?5,?6,?7,?8 WHERE (SELECT count(*) FROM life_events WHERE owner_id=?2)<2000`).bind(id,owner,event.sort_date,event.end_date,event.precision,event.kind,event.impact,payload):
+      const statements=[revision===0?env.DB.prepare(`INSERT OR IGNORE INTO life_events(id,owner_id,sort_date,end_date,precision,kind,impact,payload,entry_type)
+        SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9 WHERE (SELECT count(*) FROM life_events WHERE owner_id=?2)<2000`).bind(id,owner,event.sort_date,event.end_date,event.precision,event.kind,event.impact,payload,event.entry_type):
         env.DB.prepare("UPDATE life_events SET sort_date=?3,end_date=?4,precision=?5,kind=?6,impact=?7,payload=?8,revision=revision+1,updated_at=datetime('now') WHERE id=?1 AND owner_id=?2 AND revision=?9").bind(id,owner,event.sort_date,event.end_date,event.precision,event.kind,event.impact,payload,revision)];
       // Payload equality is a per-request CAS marker, including a random nonce.
       statements.push(env.DB.prepare('DELETE FROM life_tags WHERE owner_id=?1 AND event_id=?2 AND EXISTS(SELECT 1 FROM life_events WHERE id=?2 AND payload=?3)').bind(owner,id,payload));
       for(const tag of event.payload.themes)statements.push(env.DB.prepare('INSERT INTO life_tags(owner_id,event_id,tag_hash) SELECT ?1,?2,?3 WHERE EXISTS(SELECT 1 FROM life_events WHERE id=?2 AND owner_id=?1 AND payload=?4)').bind(owner,id,await tagHash(env,owner,tag),payload));
-      // Coalesce rapid changes without copying any narrative into an activity.
-      statements.push(env.DB.prepare(`INSERT INTO ace_messages(owner_id,author_id,event_id,kind,payload,request_id,event_revision)
-        SELECT ?1,?1,?2,'event','',?3,?4 WHERE EXISTS(SELECT 1 FROM ace_circles WHERE owner_id=?1 AND share_enabled=1)
-        AND EXISTS(SELECT 1 FROM life_events WHERE id=?2 AND payload=?5)
-        AND NOT EXISTS(SELECT 1 FROM ace_messages WHERE owner_id=?1 AND event_id=?2 AND kind='event' AND created_at>datetime('now','-5 minutes'))`).bind(owner,id,`event-${id}-${revision+1}`,revision+1,payload));
+      statements.push(recordTopic(env,{owner,key:'event:'+id,kind:event.entry_type,event:id,guard:'EXISTS(SELECT 1 FROM life_events WHERE owner_id=?1 AND id=?4 AND payload=?7)',values:[payload]}));
       const [result]=await env.DB.batch(statements);
       if(!result.meta.changes)fail('Enregistrement non effectué : version modifiée ou limite de 2 000 événements atteinte. Ta saisie reste disponible.',409);
       return json({event:await unpack(env,await env.DB.prepare('SELECT * FROM life_events WHERE owner_id=?1 AND id=?2').bind(owner,id).first())});
@@ -116,10 +126,11 @@ export async function lifeRoute(request,env,url,user,body,json){
     const source=identifier(body.source),target=identifier(body.target);if(source===target)fail('Choisis deux événements différents.');
     if(method==='DELETE'){await env.DB.prepare('DELETE FROM life_links WHERE owner_id=?1 AND source_id=?2 AND target_id=?3').bind(owner,source,target).run();return json({ok:true});}
     const payload=await seal(env,`link:${owner}:${source}:${target}`,{label:text(body.label,200,true)});
-    const result=await env.DB.prepare(`INSERT INTO life_links(owner_id,source_id,target_id,payload)
+    const statement=env.DB.prepare(`INSERT INTO life_links(owner_id,source_id,target_id,payload)
       SELECT ?1,?2,?3,?4 WHERE (SELECT count(*) FROM life_events WHERE owner_id=?1 AND id IN(?2,?3))=2
       AND (SELECT count(*) FROM life_links WHERE owner_id=?1 AND (source_id IN(?2,?3) OR target_id IN(?2,?3)))<40
-      ON CONFLICT(owner_id,source_id,target_id) DO UPDATE SET payload=excluded.payload`).bind(owner,source,target,payload).run();
+      ON CONFLICT(owner_id,source_id,target_id) DO UPDATE SET payload=excluded.payload`).bind(owner,source,target,payload);
+    const [result]=await env.DB.batch([statement,recordTopic(env,{owner,key:'link:'+source+':'+target,kind:'link',event:source,target,guard:'EXISTS(SELECT 1 FROM life_links WHERE owner_id=?1 AND source_id=?4 AND target_id=?5 AND payload=?7)',values:[payload]})]);
     if(!result.meta.changes)fail('Les deux événements doivent appartenir à ton arbre et avoir moins de quarante liens.');return json({ok:true});
   }
   fail('Page introuvable.',404);

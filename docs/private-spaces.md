@@ -2,14 +2,14 @@
 
 ## Accès
 
-Les capacités `gameMaster`, `mechanisms`, `lifeTree` et `aceSquare` sont calculées depuis `gameLevel()` aux seuils 11, 15, 18 et 20. Le rôle administrateur ne contourne jamais les contrôles d’un arbre ou d’un carré. L’ancienne communauté reste fermée. Les interactions de ces espaces ne modifient pas la progression du jeu.
+Les capacités `gameMaster`, `mechanisms`, `lifeTree` et `aceSquare` sont calculées depuis `gameLevel()` aux seuils 11, 12, 18 et 20. `lifeTree` désigne désormais Matière. Le rôle administrateur ne contourne jamais les contrôles d’un arbre ou d’un carré. L’ancienne communauté reste fermée. Les interactions de ces espaces ne modifient pas la progression du jeu.
 
 Chaque relation est orientée : un centre choisit jusqu’à quatre AS ; chaque AS accompagne jusqu’à quatre centres. Les deux quotas reposent sur des emplacements SQL uniques de 1 à 4. Les invitations expirent après sept jours ; au plus seize invitations impliquant le même compte peuvent être créées par jour. Les écritures privées ont un plafond commun de 45 requêtes par minute.
 
 ## Conservation et partage
 
 - Consentement de conservation distinct du consentement de partage. L’information présentée est versionnée dans `privacy_consents`.
-- Arbre privé par défaut. Après accord explicite, tous ses événements enregistrés et leurs évolutions sont visibles aux AS. Les brouillons restent privés.
+- Matière et Mécanismes privés par défaut. Un accord explicite commun ouvre tous les contenus enregistrés et leurs évolutions aux AS acceptés. Les brouillons restent privés. Les anciens accords limités à l’arbre ne sont jamais étendus automatiquement.
 - À son arrivée, un AS voit l’arbre actuel si le partage est actif, et les messages postérieurs à son entrée. Une réadmission commence une nouvelle période.
 - Un retrait ou un blocage invalide les prochains accès. La conversation visible vérifie les droits environ toutes les cinq secondes. L’application masque les contenus lorsque l’onglet passe en arrière-plan, puis contrôle l’identité avant de les réafficher.
 - Arrêter le partage retire les événements, activités et fils associés des vues des AS ; les messages généraux restent accessibles aux membres actifs.
@@ -59,10 +59,24 @@ Références : [D1 et transactions batch](https://developers.cloudflare.com/d1/w
 
 Après les migrations 0034 et 0035 déjà appliquées, sauvegarder et vérifier la restauration avant d’appliquer uniquement `0036_mechanisms.sql`. Elle ajoute une table, sans modifier les comptes, arbres, relations ou signes.
 
-La page Mécanismes contient dix emplacements fixes et privés. Les trois propositions sont servies sans écriture initiale ; une modification consentie est chiffrée avec le propriétaire et le numéro d’emplacement comme contexte. Une sauvegarde concurrente est refusée par version. Vider un emplacement conserve un remplacement vide pour ne pas réintroduire la proposition. L’export et le retrait du consentement couvrent ces données. Elles ne sont jamais incluses dans le partage de l’arbre.
+La page Mécanismes contient dix emplacements fixes, privés jusqu’au partage commun décrit ci-dessous. Les trois propositions sont servies sans écriture initiale ; une modification consentie est chiffrée avec le propriétaire et le numéro d’emplacement comme contexte. Une sauvegarde concurrente est refusée par version. Vider un emplacement conserve un remplacement vide pour ne pas réintroduire la proposition. L’export et le retrait du consentement couvrent ces données.
 
 Le Carré d’AS recherche désormais un pseudo exact, sans annuaire ouvert. La réponse expose uniquement un identifiant et un pseudo éligibles, jamais un arbre, une adresse email ou une présentation. La recherche est limitée par compte ; les invitations, blocages et plafonds restent vérifiés côté serveur. Les anciennes préférences et codes sont conservés en base pour la compatibilité, sans interface d’annuaire.
 
 La saisie des repères utilise des champs jour et année au clavier numérique et une liste de mois, sans calendrier natif. Changer de précision conserve les composantes déjà saisies. Les dates sont contrôlées avant l’envoi et de nouveau côté serveur.
 
-Les conversations utilisent un seul défilement sur mobile, celui du document. Le panneau borné reste réservé aux grands écrans. Le chargement de messages plus anciens conserve la position de lecture ; une mise à jour sans nouveau contenu ne déclenche aucun déplacement. Les raccourcis permettent de rejoindre la saisie puis de revenir au carré. Les blocs de gestion des données ne figurent plus dans Arbre de vie et Mécanismes ; les API privées de gestion et les consentements sont conservés.
+Les discussions dédiées utilisent un seul défilement, celui du document. Le chargement de messages plus anciens conserve la position de lecture ; une mise à jour sans nouveau contenu ne déclenche aucun déplacement. Les blocs de gestion des données ne figurent plus dans Matière et Mécanismes ; les API privées de gestion et les consentements sont conservés.
+
+## Matière et discussions associées — migration 0037
+
+Après sauvegarde et restauration vérifiée, appliquer une seule fois `0037_matter_topics.sql`, après 0036. Elle ajoute les catégories de contenus, le drapeau de partage commun, les discussions et leurs marqueurs de lecture. Les colonnes et valeurs historiques sont conservées. Les anciens échanges liés à un événement rejoignent son fil ; les messages généraux restent consultables dans « Échanges précédents », en lecture seule. L’ancien endpoint d’écriture générale renvoie 410.
+
+Chaque événement, création, lien ou mécanisme enregistré possède un fil durable. Une modification met à jour le contenu et remonte le fil, sans copier ses textes privés dans un historique. Les réponses restent rattachées au même élément. Une suppression retire le fil et ses réponses par clés étrangères ; les brouillons ne génèrent jamais d’activité. Les trois mécanismes proposés ne créent un fil que lorsqu’ils sont enregistrés par leur auteur.
+
+Le partage commun nécessite `enabled`, `consent` et `scope: matter-and-mechanisms`. Les anciens accords continuent d’autoriser les événements historiques, mais ni les créations, ni les mécanismes, ni les nouveaux fils. Un AS doit toujours être accepté, non bloqué et à l’échelon 20. La vérification d’accès est répétée après déchiffrement, et dans la requête d’écriture, pour refuser les opérations retardées après révocation. Aucun administrateur ne dispose d’un accès implicite. Les marqueurs de lecture sont propres à chaque fil et sont également effacés lors du retrait du consentement.
+
+Pagination : 20 discussions et 40 réponses. Le fil d’activité utilise une requête groupée pour les ressources et leurs compteurs ; un numéro de révision évite de déchiffrer les contenus inchangés lors des vérifications périodiques. La synchronisation retire les réponses supprimées même si de nouvelles réponses arrivent simultanément. Le client conserve au maximum dix pages lors de la synchronisation suivante, afin de borner mémoire et paramètres. Les vérifications sont suspendues en arrière-plan.
+
+Les créations acceptent un texte de 12 000 caractères et/ou un lien HTTPS de 2 048 caractères. Les liens sont chiffrés avec le contenu et ouverts seulement sur demande, sans préchargement, récupération serveur ni intégration de lecteur tiers. Aucun hébergement multimédia payant supplémentaire n’est introduit ; les quotas existants de Workers/D1 continuent de s’appliquer. Références pour ces choix : [tarification R2](https://developers.cloudflare.com/r2/pricing/) et [contrôles d’autorisation OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html).
+
+Recette de ce lot : tests automatisés d’isolation, consentement, concurrence, suppression, pagination et restauration ; tests sur Worker/D1 isolés avec comptes fictifs ; vérifications visuelles à 320, 390 et 1365 pixels. Les exports de production, clés de recette et captures sont conservés hors du dépôt.
