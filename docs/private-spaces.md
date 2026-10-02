@@ -13,11 +13,11 @@ Chaque relation est orientée : un centre choisit jusqu’à quatre AS ; chaque 
 - À son arrivée, un AS voit l’arbre actuel si le partage est actif, et les messages postérieurs à son entrée. Une réadmission commence une nouvelle période.
 - Un retrait ou un blocage invalide les prochains accès. La conversation visible vérifie les droits environ toutes les cinq secondes. L’application masque les contenus lorsque l’onglet passe en arrière-plan, puis contrôle l’identité avant de les réafficher.
 - Arrêter le partage retire les événements, activités et fils associés des vues des AS ; les messages généraux restent accessibles aux membres actifs.
-- Supprimer un événement supprime ses liens et les échAS qui lui sont rattachés. L’export est paginé, réservé à l’auteur et n’inclut pas les messages des autres.
+- Supprimer un événement supprime ses liens et les échanges qui lui sont rattachés. L’export est paginé, réservé à l’auteur et n’inclut pas les messages des autres.
 - La commande de retrait du consentement efface les espaces personnels de l’auteur et ses messages, et révoque ses participations. Elle conserve son compte et ses signes.
 - Les signalements transmettent uniquement le message choisi et le motif volontaire. Leur consultation par le gestionnaire se fait dans `/signalements`, depuis `/admin`, sans accès à l’arbre.
 
-Limites : 2 000 événements et 20 brouillons par compte, 12 thèmes par événement, 40 liens autour de deux événements, 20 000 échAS par carré, messages de 4 000 caractères. Pagination : 30 événements, 40 messages, 20 profils. Aucun texte intime dans les API publiques, le cache du service worker ou localStorage.
+Limites : 2 000 événements et 20 brouillons par compte, 12 thèmes par événement, 40 liens autour de deux événements, 20 000 échanges par carré, messages de 4 000 caractères. Pagination : 30 événements, 40 messages, 20 profils. Aucun texte intime dans les API publiques, le cache du service worker ou localStorage.
 
 ## Chiffrement
 
@@ -59,8 +59,10 @@ Références : [D1 et transactions batch](https://developers.cloudflare.com/d1/w
 
 Après les migrations 0034 et 0035 déjà appliquées, sauvegarder et vérifier la restauration avant d’appliquer uniquement `0036_mechanisms.sql`. Elle ajoute une table, sans modifier les comptes, arbres, relations ou signes.
 
-Mécanisme contient dix emplacements fixes et privés. Les trois propositions sont servies sans écriture initiale ; une modification consentie est chiffrée avec le propriétaire et le numéro d’emplacement comme contexte. Une sauvegarde concurrente est refusée par version. Vider un emplacement conserve un remplacement vide pour ne pas réintroduire la proposition. L’export et le retrait du consentement couvrent ces données. Elles ne sont jamais incluses dans le partage de l’arbre.
+La page Mécanismes contient dix emplacements fixes et privés. Les trois propositions sont servies sans écriture initiale ; une modification consentie est chiffrée avec le propriétaire et le numéro d’emplacement comme contexte. Une sauvegarde concurrente est refusée par version. Vider un emplacement conserve un remplacement vide pour ne pas réintroduire la proposition. L’export et le retrait du consentement couvrent ces données. Elles ne sont jamais incluses dans le partage de l’arbre.
 
 Le Carré d’AS recherche désormais un pseudo exact, sans annuaire ouvert. La réponse expose uniquement un identifiant et un pseudo éligibles, jamais un arbre, une adresse email ou une présentation. La recherche est limitée par compte ; les invitations, blocages et plafonds restent vérifiés côté serveur. Les anciennes préférences et codes sont conservés en base pour la compatibilité, sans interface d’annuaire.
 
 La saisie des repères utilise des champs jour et année au clavier numérique et une liste de mois, sans calendrier natif. Changer de précision conserve les composantes déjà saisies. Les dates sont contrôlées avant l’envoi et de nouveau côté serveur.
+
+Les conversations utilisent un seul défilement sur mobile, celui du document. Le panneau borné reste réservé aux grands écrans. Le chargement de messages plus anciens conserve la position de lecture ; une mise à jour sans nouveau contenu ne déclenche aucun déplacement. Les raccourcis permettent de rejoindre la saisie puis de revenir au carré. Les blocs de gestion des données ne figurent plus dans Arbre de vie et Mécanismes ; les API privées de gestion et les consentements sont conservés.

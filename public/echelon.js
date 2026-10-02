@@ -14,7 +14,7 @@ window.WCGame=(()=>{
   const isClock=()=>location.pathname==='/signes/horloge';
   function link(p){const local=p.href.split('#')[0]===location.pathname;return `<a href="${e(local?'#'+p.id:p.href)}" ${local?'':'data-link'}>${e(p.title)}</a>`;}
   function login(){return accountEntryMarkup();}
-  function header(){return `<header class="eg-header"><div>${isClock()?'<nav class="eg-breadcrumb" aria-label="Fil d’Ariane"><a href="/signes" data-link>Signes</a></nav>':'<p class="eyebrow">Escape Game Orange</p>'}<h1>${isClock()?'Horloge':'Signes'}</h1></div><div class="eg-level" aria-label="Échelon actuel"><span>Échelon</span><strong>${data.echelon}</strong></div></header>`;}
+  function header(){return `<header class="eg-header"><div>${isClock()?'<nav class="eg-breadcrumb" aria-label="Fil d’Ariane"><a href="/signes" data-link>Signes</a></nav>':''}<h1>${isClock()?'Horloge':'Signes'}</h1></div>${isClock()?`<div class="eg-level" aria-label="Échelon actuel"><span>Échelon</span><strong>${data.echelon}</strong></div>`:''}</header>`;}
   function locked(p){const r=p.requirements||{},deps=(r.pages||[]).map(d=>pageBy(d.id)).filter(Boolean);return `<p class="eg-lock">Verrouillé${r.level?` · Échelon ${r.level}`:''}${deps.length?` · Termine ${deps.map(link).join(', ')}`:''}</p>`;}
   function feedback(message,id,gained=0,kind='info'){
     const box=(id&&document.querySelector(`#${id} .eg-feedback`))||document.getElementById('eg-feedback');
