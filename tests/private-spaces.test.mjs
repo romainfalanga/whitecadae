@@ -34,7 +34,7 @@ async function send(f,owner,author,extra={}){const key=extra.id||crypto.randomUU
 
 test('exact canonical thresholds; no anonymous, legacy or administrator bypass; old routes remain retired',async()=>{
  const f=setup();try{
-   for(const [path,below,above] of [['/api/game-master-orange',11,12],['/api/life-tree',18,19],['/api/ace-circles',19,201]]){
+   for(const [path,below,above] of [['/api/game-master-orange',11,12],['/api/life-tree',15,16],['/api/ace-circles',18,19]]){
      assert.equal((await f.call(path,0)).status,401);assert.equal((await f.call(path,below)).status,403);assert.equal((await f.call(path,above)).status,200);assert.equal((await f.call(path,100)).status,403);
    }
    const caps=(await f.ok('/api/me',201)).access;assert.ok(caps.gameMaster&&caps.lifeTree&&caps.aceSquare);
@@ -130,14 +130,14 @@ test('reciprocal circles are independent; self, expiry, cancellation, outsiders 
 });
 test('whole-tree consent, per-membership history, revocation, event threads and deletion cover every access path',async()=>{
  const f=setup();try{
-   await f.ok('/api/ace-circles',201,'POST',{});await send(f,201,201,{text:'Avant ton arrivée'});const e=await save(f);
+   await f.ok('/api/ace-circles',201,'POST',{});await send(f,201,201,{text:'Avant ton arrivée'});const e=await save(f,201,crypto.randomUUID(),{entryType:'creation',medium:'vidéo',videoBranch:'self',precision:'day',date:'2020-07-01'});
    const membership=await join(f,201,202);
    assert.equal((await f.ok('/api/ace-circles/201/messages',202)).messages.length,0);assert.equal((await f.call('/api/life-tree?owner=201',202)).status,403);
    await sharing(f);assert.equal((await f.ok('/api/life-tree?owner=201',202)).events[0].id,e.id);
    assert.equal((await f.call('/api/life-tree/events/'+e.id+'?owner=201',202,'PUT',event({revision:1}))).status,403);
    await send(f,201,202,{eventId:e.id});await send(f,201,201,{text:'Conversation générale'});
-   const before=await f.ok('/api/ace-circles/201/messages',202);assert.equal(before.messages.length,2);const related=before.messages.find(m=>m.eventId);
-   await sharing(f,201,false);assert.equal((await f.call('/api/life-tree/events/'+e.id+'?owner=201',202)).status,403);assert.equal((await f.ok('/api/ace-circles/201/messages',202)).messages.length,1);
+   const before=await f.ok('/api/ace-circles/201/messages',202);assert.equal(before.messages.length,0);const related=(await f.ok('/api/ace-circles/201/messages',201)).messages.find(m=>m.eventId);
+   await sharing(f,201,false);assert.equal((await f.call('/api/life-tree/events/'+e.id+'?owner=201',202)).status,403);assert.equal((await f.ok('/api/ace-circles/201/messages',202)).messages.length,0);
    assert.equal((await f.call('/api/ace-circles/201/messages',202,'POST',{id:crypto.randomUUID(),text:'Fuite',parentId:related.id})).status,410);
    await sharing(f);await f.ok('/api/life-tree/events/'+e.id,201,'DELETE',{revision:1});assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ace_messages WHERE event_id=?').get(e.id).n,0);
    await f.ok('/api/ace-circles/members/'+membership,202,'DELETE',{});
@@ -150,9 +150,9 @@ test('historical messages stay readable and reportable while free chat writes ar
    await join(f,201,202);await join(f,203,202);await sharing(f);const e=await save(f);
    await save(f,201,e.id,{revision:1});assert.equal(f.sql.prepare("SELECT count(*) AS n FROM circle_topics WHERE kind='event'").get().n,1);
    const id=crypto.randomUUID();await send(f,201,202,{id,text:'<img src=x onerror=alert(1)>'});await send(f,201,202,{id,text:'<img src=x onerror=alert(1)>'});
-   const rows=(await f.ok('/api/ace-circles/201/messages',202)).messages;assert.equal(rows.length,1);const message=rows.find(m=>m.kind==='message');assert.equal(message.text,'<img src=x onerror=alert(1)>');
+   assert.equal((await f.ok('/api/ace-circles/201/messages',202)).messages.length,0);const rows=(await f.ok('/api/ace-circles/201/messages',201)).messages;assert.equal(rows.length,1);const message=rows.find(m=>m.kind==='message');assert.equal(message.text,'<img src=x onerror=alert(1)>');
    assert.equal((await f.call('/api/ace-circles/203/messages',202,'POST',{id:crypto.randomUUID(),text:'Wrong circle',parentId:message.id})).status,410);
-   await send(f,201,201,{parentId:message.id});assert.equal((await f.ok('/api/ace-circles/201/messages?parent='+message.id,202)).messages.length,1);
+   await send(f,201,201,{parentId:message.id});assert.equal((await f.ok('/api/ace-circles/201/messages?parent='+message.id,201)).messages.length,1);
    await f.ok('/api/ace-circles/reports',201,'POST',{owner:201,messageId:message.id,reason:'Contenu choisi'});assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ace_reports').get().n,1);
    assert.equal((await f.call('/api/ace-circles/reports',204,'POST',{owner:201,messageId:message.id,reason:'Intrusion'})).status,403);
  }finally{f.sql.close();}
@@ -160,7 +160,7 @@ test('historical messages stay readable and reportable while free chat writes ar
 
 test('AS access is directed, never transitive between co-members, and pending invitations grant no tree access',async()=>{
  const f=setup();try{
-  await join(f,201,202);await join(f,201,203);await sharing(f,202);const e=await save(f,202);
+  await join(f,201,202);await join(f,201,203);await sharing(f,202);const e=await save(f,202,crypto.randomUUID(),{entryType:'creation',medium:'vidéo',videoBranch:'self',precision:'day',date:'2020-07-01'});
   for(const who of [201,203,204]){
    assert.equal((await f.call('/api/life-tree?owner=202',who)).status,403);
    assert.equal((await f.call('/api/life-tree/events/'+e.id+'?owner=202',who)).status,403);
@@ -174,7 +174,7 @@ test('AS access is directed, never transitive between co-members, and pending in
 });
 test('delayed message is rejected when a membership is removed during encryption / query preparation',async()=>{
  const f=setup();try{
-   const membership=await join(f,201,202);await sharing(f);await save(f);const topic=f.sql.prepare('SELECT id FROM circle_topics WHERE owner_id=201').get().id,original=f.env.DB.prepare;let removed=false;
+   const membership=await join(f,201,202);await sharing(f);await save(f,201,crypto.randomUUID(),{entryType:'creation',medium:'vidéo',videoBranch:'self',precision:'day',date:'2020-07-01'});const topic=f.sql.prepare('SELECT id FROM circle_topics WHERE owner_id=201').get().id,original=f.env.DB.prepare;let removed=false;
    f.env.DB.prepare=(query,...args)=>{if(query.includes('INSERT OR IGNORE INTO ace_messages')&&!removed){removed=true;f.sql.prepare('DELETE FROM ace_memberships WHERE id=?').run(membership);}return original(query,...args);};
    const r=await f.call('/api/ace-circles/topics/'+topic+'/replies',202,'POST',{id:crypto.randomUUID(),text:'Too late'});assert.equal(r.status,403);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ace_messages').get().n,0);
  }finally{f.sql.close();}

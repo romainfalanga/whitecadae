@@ -704,8 +704,9 @@ async function logout(request, env) {
 // commun à tous les signes du site. L'interface s'y règle dès le chargement,
 // sans attendre l'état du jeu.
 async function me(request, env) {
-  const { user, access, echelon } = await viewerAccess(request, env);
+  const user=await getUser(request,env);
   const rows=user?await gameRows(env,user.id):[];
+  const echelon=user?.is_admin?Infinity:accessLevel(rows),access=activeAccess(echelon);
   return json({
     user: user ? { ...user, is_admin: !!user.is_admin } : null,
     access:{...access,...contentAccess(user,rows),horloge:clockUnlocked(rows)},

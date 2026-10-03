@@ -1,6 +1,7 @@
 import {seal,unseal,fail,text,integer} from './private-data.js';
 import {recordTopic} from './circle-topics.js';
-import {requireLevel,requireStorage,circleAccess,freshAccess} from './private-access.js';
+import {requireLevel,requireStorage} from './private-access.js';
+import {normalizeMechanism,mechanismFields} from '../public/mechanism-model.js';
 
 const DEFAULTS=[
   {title:'Toujours faire mieux',description:'Faire de l’amélioration un réflexe naturel. Comprendre ce qui façonne ma manière d’être, de penser et d’agir, puis élargir mon regard avec de nouvelles informations. Répéter cette démarche et essayer des ajustements concrets pour que chercher à faire mieux devienne une habitude intuitive.',practice:'Chercher une amélioration concrète à essayer, puis observer ce qu’elle change.',notice:'Ce qui influence mon point de vue et les informations qui me manquent.',anchor:'Une amélioration à la fois.'},
@@ -9,27 +10,30 @@ const DEFAULTS=[
 ];
 const empty=()=>({title:'',description:'',practice:'',notice:'',anchor:''});
 const context=(owner,slot)=>`mechanism:${owner}:${slot}`;
-async function view(env,user,row,slot){return {slot,revision:row?.revision||0,...(row?await unseal(env,context(user.id,slot),row.payload):DEFAULTS[slot-1]||empty())};}
+async function view(env,user,row,slot){return {slot,revision:row?.revision||0,...normalizeMechanism(slot,row?await unseal(env,context(user.id,slot),row.payload):DEFAULTS[slot-1]||empty())};}
 
 export async function mechanismsRoute(request,env,url,user,body,json){
   const owner=url.searchParams.has('owner')?integer(Number(url.searchParams.get('owner')),1):user.id;
-  let access=null;
-  if(owner!==user.id){if(request.method!=='GET'||url.pathname.endsWith('/export'))fail('Seul l’auteur peut modifier ou exporter ses mécanismes.',403);access=await circleAccess(env,user,owner);if(!access.circle.share_enabled||!access.circle.combined_sharing)fail('Ces mécanismes ne sont pas partagés.',403);}
+  if(owner!==user.id)fail('Les mécanismes sont personnels.',403);
   const suffix=url.pathname.replace(/^\/api\/mechanisms/,'').replace(/\/$/,''),method=request.method;
   if(suffix!=='/export')await requireLevel(env,user,12);
   if((suffix===''||suffix==='/export')&&method==='GET'){
     const rows=(await env.DB.prepare('SELECT * FROM user_mechanisms WHERE owner_id=?1 ORDER BY slot').bind(owner).all()).results;
     const mechanisms=await Promise.all(Array.from({length:10},(_,i)=>view(env,{id:owner},rows.find(r=>r.slot===i+1),i+1)));
-    if(access)await freshAccess(env,access,user);
     return json({mechanisms},200,suffix==='/export'?{'Content-Disposition':'attachment; filename="mes-mecanismes.json"'}:{});
   }
   const match=/^\/([1-9]|10)$/.exec(suffix);if(!match)fail('Mécanisme introuvable.',404);
   const slot=Number(match[1]);
-  if(method==='GET'){const mechanism=await view(env,{id:owner},await env.DB.prepare('SELECT * FROM user_mechanisms WHERE owner_id=?1 AND slot=?2').bind(owner,slot).first(),slot);if(access)await freshAccess(env,access,user);return json({mechanism});}
+  if(method==='GET'){const mechanism=await view(env,{id:owner},await env.DB.prepare('SELECT * FROM user_mechanisms WHERE owner_id=?1 AND slot=?2').bind(owner,slot).first(),slot);return json({mechanism});}
   if(method==='PUT'){
-    await requireStorage(env,user.id);const revision=integer(body.revision),data={};
-    for(const [key,max] of [['title',140],['description',6000],['practice',3000],['notice',3000],['anchor',500]])data[key]=text(body[key],max);
-    if(!data.title&&Object.values(data).some(Boolean))fail('Donne un nom à ce mécanisme.');
+    await requireStorage(env,user.id);const revision=integer(body.revision);
+    const input={};
+    if(body.format!==undefined&&body.format!==2)fail('Format de mécanisme invalide.');
+    const fields=body.format===2?[['title','Titre',140],...mechanismFields(slot)]:[['title','Titre',140],['description','Description',6000],['practice','Pratique',3000],['notice','Observation',3000],['anchor','Mantra',500]];
+    for(const [key,,max] of fields)input[key]=text(body[key],max);
+    if(body.format===2)input.format=2;
+    const data=normalizeMechanism(slot,input);
+    if(!data.title&&mechanismFields(slot).some(([key])=>data[key]))fail('Donne un nom à ce mécanisme.');
     const payload=await seal(env,context(user.id,slot),data);
     const statement=revision===0?env.DB.prepare('INSERT OR IGNORE INTO user_mechanisms(owner_id,slot,payload) VALUES(?1,?2,?3)').bind(user.id,slot,payload):
       env.DB.prepare("UPDATE user_mechanisms SET payload=?3,revision=revision+1,updated_at=datetime('now') WHERE owner_id=?1 AND slot=?2 AND revision=?4").bind(user.id,slot,payload,revision);

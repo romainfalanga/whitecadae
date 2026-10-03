@@ -1,6 +1,7 @@
 import {seal,unseal,tagHash,fail,text,identifier,integer} from './private-data.js';
 import {circleAccess,freshAccess,requireStorage,requireLevel} from './private-access.js';
 import {recordTopic} from './circle-topics.js';
+import {VIDEO_BRANCHES} from '../public/video-model.js';
 export const EVENT_KINDS=['rencontre','famille','relation','études','travail','santé','changement','réussite','perte','autre'];
 export const EVENT_IMPACTS=['ressource','difficulté','mixte','à explorer'];
 const context=(owner,id)=>`life:${owner}:${id}`;
@@ -21,19 +22,25 @@ function creationLink(value){
 }
 function validate(body){
   const entry_type=body.entryType||'event';if(!['event','creation'].includes(entry_type))fail('Type de contenu invalide.');
+  const video_branch=body.videoBranch||null;
+  if(video_branch&&!VIDEO_BRANCHES.some(([id])=>id===video_branch))fail('Rubrique invalide.');
+  if(video_branch&&(entry_type!=='creation'||body.medium!=='vidéo'||body.url))fail('L’hébergement vidéo n’est pas encore activé.');
+  const video_month=video_branch==='monthly'?String(body.videoMonth||''):null;
+  if(video_branch==='monthly'&&(body.precision!=='month'||body.date!==video_month))fail('Choisis le mois de ce bilan.');
   const creation=entry_type==='creation'?{medium:body.medium,url:creationLink(body.url),work:text(body.work,12000)}:null;
-  if(creation&&(!CREATION_MEDIA.includes(creation.medium)||(!creation.url&&!creation.work)))fail('Ajoute un texte ou un lien à ta création.');
+  if(creation&&(!CREATION_MEDIA.includes(creation.medium)||(!creation.url&&!creation.work&&!video_branch)))fail('Ajoute un texte ou un lien à ta création.');
   const precision=body.precision;if(!['day','month','year','period','unknown'].includes(precision))fail('Précise la forme de la date.');
+  if(video_branch&&precision!==(video_branch==='monthly'?'month':'day'))fail('Choisis une date pour cette vidéo.');
   const sort_date=date(body.date,precision==='period'?'day':precision),end_date=precision==='period'?date(body.endDate,'day'):null;
   if(end_date&&end_date<sort_date)fail('La fin de la période doit suivre son début.');
   if(!EVENT_KINDS.includes(body.kind)||!EVENT_IMPACTS.includes(body.impact))fail('Repère invalide.');
   if(!Array.isArray(body.themes)||body.themes.length>12)fail('Utilise au maximum douze thèmes.');
   const themes=[...new Set(body.themes.map(v=>text(v,60,true)))];
-  return {entry_type,sort_date,end_date,precision,kind:body.kind,impact:body.impact,payload:{title:text(body.title,140,true),story:text(body.story,8000),feelings:text(body.feelings),understanding:text(body.understanding),resources:text(body.resources),themes,...(creation?{creation}:{})}};
+  return {entry_type,video_branch,video_month,sort_date,end_date,precision,kind:body.kind,impact:body.impact,payload:{title:text(body.title,140,true),story:text(body.story,8000),feelings:text(body.feelings),understanding:text(body.understanding),resources:text(body.resources),themes,...(creation?{creation}:{})}};
 }
 function validateDraft(value){
   if(!value||typeof value!=='object'||Array.isArray(value))fail('Brouillon invalide.');
-  const out={};for(const key of ['title','story','feelings','understanding','resources','kind','impact','precision','date','endDate','entryType','medium','url','work'])out[key]=text(value[key],key==='title'?140:key==='work'?12000:key==='url'?2048:['kind','impact','precision','date','endDate','entryType','medium','url','work'].includes(key)?40:8000);
+  const out={};for(const key of ['title','story','feelings','understanding','resources','kind','impact','precision','date','endDate','entryType','medium','url','work','videoBranch','videoMonth'])out[key]=text(value[key],key==='title'?140:key==='work'?12000:key==='url'?2048:['kind','impact','precision','date','endDate','entryType','medium','url','work','videoBranch','videoMonth'].includes(key)?40:8000);
   if(!Array.isArray(value.themes)||value.themes.length>12)fail('Utilise au maximum douze thèmes.');out.themes=value.themes.map(t=>text(t,60,true));out.revision=integer(value.revision||0);return {event:out};
 }
 async function unpack(env,row){
@@ -68,10 +75,14 @@ export async function lifeRoute(request,env,url,user,body,json){
   if(!suffix&&method==='GET'){
     const q=filteredQuery(url,owner),tag=url.searchParams.get('theme'),entryType=url.searchParams.get('entryType');
     if(entryType){if(!['event','creation'].includes(entryType))fail('Filtre invalide.');q.add('e.entry_type=$',entryType);}
-    if(owner!==user.id&&!access.circle.combined_sharing)q.filters.push("e.entry_type='event'");
+    if(owner!==user.id&&(!access.circle.share_enabled||!access.circle.combined_sharing))fail('La Vidéographie n’est pas partagée.',403);
+    const videos=url.searchParams.get('videos')==='1'||owner!==user.id;
+    if(videos)q.filters.push('e.video_branch IS NOT NULL');
+    if(url.searchParams.get('archive')==='1'){if(owner!==user.id)fail('Archives privées.',403);q.filters.push('e.video_branch IS NULL');}
+    const branch=url.searchParams.get('branch');if(branch){if(!VIDEO_BRANCHES.some(([id])=>id===branch))fail('Rubrique invalide.');q.add('e.video_branch=$',branch);}
     if(tag)q.add('EXISTS(SELECT 1 FROM life_tags t WHERE t.owner_id=e.owner_id AND t.event_id=e.id AND t.tag_hash=$)',await tagHash(env,owner,text(tag,60,true)));
-    const after=url.searchParams.get('after');if(after){if(!/^\d{4}-\d{2}-\d{2}\|[a-zA-Z0-9_-]{8,64}$/.test(after))fail('Page invalide.');q.add("(e.sort_date||'|'||e.id)>$",after);}
-    const rows=(await env.DB.prepare(`SELECT e.* FROM life_events e WHERE ${q.filters.join(' AND ')} ORDER BY e.sort_date,e.id LIMIT 31`).bind(...q.values).all()).results;
+    const after=url.searchParams.get('after');if(after){if(!/^\d{4}-\d{2}-\d{2}\|[a-zA-Z0-9_-]{8,64}$/.test(after))fail('Page invalide.');q.add("(e.sort_date||'|'||e.id)"+(videos?'<':'>')+'$',after);}
+    const rows=(await env.DB.prepare(`SELECT e.*,(SELECT id FROM circle_topics WHERE owner_id=e.owner_id AND resource_key='event:'||e.id) AS topic_id FROM life_events e WHERE ${q.filters.join(' AND ')} ORDER BY e.sort_date ${videos?'DESC':'ASC'},e.id ${videos?'DESC':'ASC'} LIMIT 31`).bind(...q.values).all()).results;
     const events=await Promise.all(rows.slice(0,30).map(r=>unpack(env,r)));await freshAccess(env,access,user);
     return json({events,next:rows.length>30?`${events.at(-1).sort_date}|${events.at(-1).id}`:null,owner,editable:owner===user.id,sharing:!!access.circle?.share_enabled,kinds:EVENT_KINDS,impacts:EVENT_IMPACTS});
   }
@@ -94,10 +105,10 @@ export async function lifeRoute(request,env,url,user,body,json){
   const match=/^\/events\/([a-zA-Z0-9_-]+)$/.exec(suffix);
   if(match){
     const id=identifier(match[1]);
-    const row=await env.DB.prepare('SELECT * FROM life_events WHERE owner_id=?1 AND id=?2').bind(owner,id).first();
+    const row=await env.DB.prepare("SELECT e.*,(SELECT id FROM circle_topics WHERE owner_id=e.owner_id AND resource_key='event:'||e.id) AS topic_id FROM life_events e WHERE owner_id=?1 AND id=?2").bind(owner,id).first();
     if(method==='GET'){
-      if(!row||owner!==user.id&&row.entry_type==='creation'&&!access.circle.combined_sharing)fail('Contenu indisponible.',404);
-      const links=(await env.DB.prepare("SELECT source_id,target_id,payload FROM life_links WHERE owner_id=?1 AND (source_id=?2 OR target_id=?2) AND (?3=1 OR (SELECT count(*) FROM life_events WHERE owner_id=?1 AND id IN(source_id,target_id) AND entry_type='event')=2) LIMIT 40").bind(owner,id,owner===user.id||access.circle.combined_sharing?1:0).all()).results;
+      if(!row||owner!==user.id&&(!row.video_branch||!access.circle.share_enabled||!access.circle.combined_sharing))fail('Contenu indisponible.',404);
+      const links=owner!==user.id?[]:(await env.DB.prepare("SELECT source_id,target_id,payload FROM life_links WHERE owner_id=?1 AND (source_id=?2 OR target_id=?2) AND (?3=1 OR (SELECT count(*) FROM life_events WHERE owner_id=?1 AND id IN(source_id,target_id) AND entry_type='event')=2) LIMIT 40").bind(owner,id,owner===user.id||access.circle.combined_sharing?1:0).all()).results;
       const output={event:await unpack(env,row),links:await Promise.all(links.map(async l=>({...l,payload:await unseal(env,`link:${owner}:${l.source_id}:${l.target_id}`,l.payload)})))};
       await freshAccess(env,access,user);return json(output);
     }
@@ -107,17 +118,18 @@ export async function lifeRoute(request,env,url,user,body,json){
     }
     if(method==='PUT'){
       const event=validate(body),revision=integer(body.revision);
-      if(row&&event.entry_type!==row.entry_type)fail('Le type de ce contenu ne peut pas être changé.');
+      if(row&&(event.entry_type!==row.entry_type||!!event.video_branch!==!!row.video_branch))fail('Le type de ce contenu ne peut pas être changé.');
+      if(event.video_branch==='monthly'&&await env.DB.prepare("SELECT 1 FROM life_events WHERE owner_id=?1 AND video_branch='monthly' AND video_month=?2 AND id<>?3").bind(owner,event.video_month,id).first())fail('Un bilan existe déjà pour ce mois.',409);
       const payload=await seal(env,context(owner,id),event.payload);
       if(row&&row.revision!==revision)fail('Cet événement a été modifié ailleurs. Ta saisie est conservée : recharge la version enregistrée avant de choisir.',409);
-      const statements=[revision===0?env.DB.prepare(`INSERT OR IGNORE INTO life_events(id,owner_id,sort_date,end_date,precision,kind,impact,payload,entry_type)
-        SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9 WHERE (SELECT count(*) FROM life_events WHERE owner_id=?2)<2000`).bind(id,owner,event.sort_date,event.end_date,event.precision,event.kind,event.impact,payload,event.entry_type):
-        env.DB.prepare("UPDATE life_events SET sort_date=?3,end_date=?4,precision=?5,kind=?6,impact=?7,payload=?8,revision=revision+1,updated_at=datetime('now') WHERE id=?1 AND owner_id=?2 AND revision=?9").bind(id,owner,event.sort_date,event.end_date,event.precision,event.kind,event.impact,payload,revision)];
+      const statements=[revision===0?env.DB.prepare(`INSERT OR IGNORE INTO life_events(id,owner_id,sort_date,end_date,precision,kind,impact,payload,entry_type,video_branch,video_month)
+        SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11 WHERE (SELECT count(*) FROM life_events WHERE owner_id=?2)<2000`).bind(id,owner,event.sort_date,event.end_date,event.precision,event.kind,event.impact,payload,event.entry_type,event.video_branch,event.video_month):
+        env.DB.prepare("UPDATE life_events SET sort_date=?3,end_date=?4,precision=?5,kind=?6,impact=?7,payload=?8,video_branch=?10,video_month=?11,revision=revision+1,updated_at=datetime('now') WHERE id=?1 AND owner_id=?2 AND revision=?9").bind(id,owner,event.sort_date,event.end_date,event.precision,event.kind,event.impact,payload,revision,event.video_branch,event.video_month)];
       // Payload equality is a per-request CAS marker, including a random nonce.
       statements.push(env.DB.prepare('DELETE FROM life_tags WHERE owner_id=?1 AND event_id=?2 AND EXISTS(SELECT 1 FROM life_events WHERE id=?2 AND payload=?3)').bind(owner,id,payload));
       for(const tag of event.payload.themes)statements.push(env.DB.prepare('INSERT INTO life_tags(owner_id,event_id,tag_hash) SELECT ?1,?2,?3 WHERE EXISTS(SELECT 1 FROM life_events WHERE id=?2 AND owner_id=?1 AND payload=?4)').bind(owner,id,await tagHash(env,owner,tag),payload));
       statements.push(recordTopic(env,{owner,key:'event:'+id,kind:event.entry_type,event:id,guard:'EXISTS(SELECT 1 FROM life_events WHERE owner_id=?1 AND id=?4 AND payload=?7)',values:[payload]}));
-      const [result]=await env.DB.batch(statements);
+      let result;try{[result]=await env.DB.batch(statements);}catch(error){if(event.video_branch==='monthly'&&String(error).includes('UNIQUE constraint failed'))fail('Un bilan existe déjà pour ce mois.',409);throw error;}
       if(!result.meta.changes)fail('Enregistrement non effectué : version modifiée ou limite de 2 000 événements atteinte. Ta saisie reste disponible.',409);
       return json({event:await unpack(env,await env.DB.prepare('SELECT * FROM life_events WHERE owner_id=?1 AND id=?2').bind(owner,id).first())});
     }

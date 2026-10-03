@@ -7,7 +7,7 @@ async function profile(env,id){const row=await env.DB.prepare(profileSQL).bind(i
 const messageContext=(owner,author,key)=>`message:${owner}:${author}:${key}`;
 async function messageView(env,row){return {id:row.id,author:row.author_id?{id:row.author_id,username:row.username}:null,eventId:row.event_id,parentId:row.parent_id,kind:row.kind,createdAt:row.created_at,...(row.kind==='message'?await unseal(env,messageContext(row.owner_id,row.author_id,row.request_id),row.payload):{})};}
 const invisibleBlocked=`NOT EXISTS(SELECT 1 FROM ace_blocks b WHERE (b.user_id=?3 AND b.blocked_id=m.author_id) OR (b.blocked_id=?3 AND b.user_id=m.author_id))`;
-function messageVisibility(access,user){return {sql:`m.owner_id=?1 AND m.id>=?2 AND ${invisibleBlocked} AND (m.event_id IS NULL OR ?4=1) AND (m.topic_id IS NULL OR ${access.owner===user.id||access.circle.share_enabled&&access.circle.combined_sharing?1:0}=1)`,values:[access.owner,access.member?.joined_seq||0,user.id,access.owner===user.id||access.circle.share_enabled?1:0]};}
+function messageVisibility(access,user){return {sql:`m.owner_id=?1 AND m.id>=?2 AND (?1=?3 OR EXISTS(SELECT 1 FROM circle_topics t JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=m.topic_id AND t.kind='creation' AND e.video_branch IS NOT NULL)) AND ${invisibleBlocked} AND (m.event_id IS NULL OR ?4=1) AND (m.topic_id IS NULL OR ${access.owner===user.id||access.circle.share_enabled&&access.circle.combined_sharing?1:0}=1)`,values:[access.owner,access.member?.joined_seq||0,user.id,access.owner===user.id||access.circle.share_enabled?1:0]};}
 async function ensureCircle(env,owner){await env.DB.prepare('INSERT OR IGNORE INTO ace_circles(owner_id) VALUES(?1)').bind(owner).run();}
 async function invitation(env,user,id){
   const row=await env.DB.prepare('SELECT * FROM ace_invitations WHERE id=?1 AND (owner_id=?2 OR angel_id=?2)').bind(id,user.id).first();
@@ -19,7 +19,7 @@ export async function aceRoute(request,env,url,user,body,json){
   // Leaving/blocking and deleting one's own messages remain possible after a
   // level change; they never disclose a circle's contents.
   const exitAction=method==='DELETE'&&/^\/(members|messages)\/[\w-]+$/.test(suffix)||method==='POST'&&suffix==='/blocks';
-  if(!exitAction)await requireLevel(env,user,20);
+  if(!exitAction)await requireLevel(env,user,18);
   if(!suffix&&method==='POST'){await ensureCircle(env,user.id);return json({ok:true});}
   if(!suffix&&method==='GET'){
     const own=await env.DB.prepare('SELECT * FROM ace_circles WHERE owner_id=?1').bind(user.id).first();
@@ -28,10 +28,10 @@ export async function aceRoute(request,env,url,user,body,json){
       WHERE c.owner_id=?1 OR m.angel_id=?1 ORDER BY c.owner_id=?1 DESC,c.owner_id LIMIT 5`).bind(user.id).all()).results;
     const circles=[];
     for(const row of candidates){
-      if(row.owner_id!==user.id&&(await levelOf(env,row.owner_id)<20||await blocked(env,user.id,row.owner_id)))continue;
+      if(row.owner_id!==user.id&&(await levelOf(env,row.owner_id)<18||await blocked(env,user.id,row.owner_id)))continue;
       const members=(await env.DB.prepare(`SELECT m.id AS membership_id,m.owner_slot,u.id,u.username,u.avatar_data IS NOT NULL AS has_avatar FROM ace_memberships m JOIN users u ON u.id=m.angel_id WHERE m.owner_id=?1 ORDER BY m.owner_slot`).bind(row.owner_id).all()).results;
       const unread=await env.DB.prepare(`SELECT count(*) AS n FROM ace_messages m WHERE m.owner_id=?1 AND m.id>=?2 AND m.author_id<>?3 AND (m.event_id IS NULL OR ?4=1)
-        AND m.kind='message' AND (m.topic_id IS NULL OR ?5=1) AND m.id>COALESCE(CASE WHEN m.topic_id IS NULL THEN (SELECT last_id FROM ace_read_markers WHERE owner_id=?1 AND reader_id=?3) ELSE (SELECT last_id FROM circle_topic_reads WHERE topic_id=m.topic_id AND reader_id=?3) END,0) AND ${invisibleBlocked}`).bind(row.owner_id,row.joined_seq||0,user.id,row.owner_id===user.id||row.share_enabled?1:0,row.owner_id===user.id||row.share_enabled&&row.combined_sharing?1:0).first();
+        AND m.kind='message' AND EXISTS(SELECT 1 FROM circle_topics t JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=m.topic_id AND t.kind='creation' AND e.video_branch IS NOT NULL) AND (m.topic_id IS NULL OR ?5=1) AND m.id>COALESCE(CASE WHEN m.topic_id IS NULL THEN (SELECT last_id FROM ace_read_markers WHERE owner_id=?1 AND reader_id=?3) ELSE (SELECT last_id FROM circle_topic_reads WHERE topic_id=m.topic_id AND reader_id=?3) END,0) AND ${invisibleBlocked}`).bind(row.owner_id,row.joined_seq||0,user.id,row.owner_id===user.id||row.share_enabled?1:0,row.owner_id===user.id||row.share_enabled&&row.combined_sharing?1:0).first();
       circles.push({owner:person({...row,id:row.owner_id}),sharing:!!row.share_enabled,combinedSharing:!!row.combined_sharing,membershipId:row.membership_id,members:members.map(m=>({...person(m),membershipId:m.membership_id,slot:m.owner_slot})),unread:unread.n});
     }
     const invitations=(await env.DB.prepare(`SELECT i.*,o.username AS owner_name,a.username AS angel_name FROM ace_invitations i JOIN users o ON o.id=i.owner_id JOIN users a ON a.id=i.angel_id
@@ -56,13 +56,13 @@ export async function aceRoute(request,env,url,user,body,json){
       AND NOT EXISTS(SELECT 1 FROM ace_memberships WHERE owner_id=?1 AND angel_id=u.id)
       AND NOT EXISTS(SELECT 1 FROM ace_invitations WHERE owner_id=?1 AND angel_id=u.id AND state='pending' AND expires_at>datetime('now'))
       AND NOT EXISTS(SELECT 1 FROM ace_blocks WHERE (user_id=?1 AND blocked_id=u.id) OR (blocked_id=?1 AND user_id=u.id)) LIMIT 1`).bind(user.id,search).all()).results;
-    const people=[];for(const row of rows)if(await levelOf(env,row.id)>=20)people.push({id:row.id,username:row.username});
+    const people=[];for(const row of rows)if(await levelOf(env,row.id)>=18)people.push({id:row.id,username:row.username});
     return json({people,next:null});
   }
   const avatar=/^\/avatar\/(\d+)$/.exec(suffix);
   if(avatar&&method==='GET'){
     const target=integer(Number(avatar[1]),1);let allowed=target===user.id;
-    if(!allowed&&!await blocked(env,user.id,target)&&await levelOf(env,target)>=20){
+    if(!allowed&&!await blocked(env,user.id,target)&&await levelOf(env,target)>=18){
       allowed=!!await env.DB.prepare(`SELECT 1 WHERE EXISTS(SELECT 1 FROM ace_preferences WHERE user_id=?1 AND listed=1)
         OR EXISTS(SELECT 1 FROM ace_memberships m WHERE (m.owner_id=?1 AND m.angel_id=?2) OR (m.owner_id=?2 AND m.angel_id=?1))
         OR EXISTS(SELECT 1 FROM ace_memberships a JOIN ace_memberships b ON a.owner_id=b.owner_id WHERE a.angel_id=?1 AND b.angel_id=?2)`).bind(target,user.id).first();
@@ -75,7 +75,7 @@ export async function aceRoute(request,env,url,user,body,json){
     const id=identifier(body.id),direction=body.direction==='request'?'request':'invite';let target;
     if(body.code){const code=text(body.code,64,true);target=await env.DB.prepare('SELECT user_id AS id FROM ace_preferences WHERE private_code=?1').bind(code).first();}
     else{const targetId=integer(body.target,1);target=await env.DB.prepare('SELECT id FROM users WHERE id=?1').bind(targetId).first();}
-    if(!target||target.id===user.id||await blocked(env,user.id,target.id)||await levelOf(env,target.id)<20)fail('Cette mise en relation n’est pas disponible.',404);
+    if(!target||target.id===user.id||await blocked(env,user.id,target.id)||await levelOf(env,target.id)<18)fail('Cette mise en relation n’est pas disponible.',404);
     const owner=direction==='invite'?user.id:target.id,angel=direction==='invite'?target.id:user.id;
     if(direction==='invite'&&body.recipientNotice!==true)fail('Confirme les accès que cette personne recevra.');
     // A request requires a private code. Directory entries are prospective angels.
@@ -98,7 +98,7 @@ export async function aceRoute(request,env,url,user,body,json){
       if(user.id!==recipient)fail('Seul le destinataire peut accepter.',403);
       if(row.state==='accepted')return json({ok:true});
       if(row.state!=='pending'||row.expires_at<=new Date().toISOString().replace('T',' ').slice(0,19))fail('Cette invitation a expiré.',409);
-      if(await levelOf(env,row.owner_id)<20||await levelOf(env,row.angel_id)<20||await blocked(env,row.owner_id,row.angel_id))fail('Cette mise en relation n’est plus disponible.',403);
+      if(await levelOf(env,row.owner_id)<18||await levelOf(env,row.angel_id)<18||await blocked(env,row.owner_id,row.angel_id))fail('Cette mise en relation n’est plus disponible.',403);
       if(row.direction==='request'&&body.recipientNotice!==true)fail('Confirme les accès que cette personne recevra.');
       // Slots are selected and inserted in one statement. Unique constraints
       // enforce both capacities even with simultaneous acceptance requests.
@@ -125,11 +125,11 @@ export async function aceRoute(request,env,url,user,body,json){
     await env.DB.prepare('DELETE FROM ace_memberships WHERE id=?1 AND (owner_id=?2 OR angel_id=?2)').bind(identifier(member[1]),user.id).run();return json({ok:true});
   }
   if(suffix==='/sharing'&&method==='PUT'){
-    if(typeof body.enabled!=='boolean'||body.enabled&&(body.consent!==true||body.scope!=='matter-and-mechanisms'))fail('Confirme le partage de Matière et Mécanismes avec tes AS.');
+    if(typeof body.enabled!=='boolean'||body.enabled&&(body.consent!==true||!['videography','matter-and-mechanisms'].includes(body.scope)))fail('Confirme le partage de ta Vidéographie avec tes AS.');
     if(body.enabled)await requireStorage(env,user.id);await ensureCircle(env,user.id);
     await env.DB.batch([
       env.DB.prepare('UPDATE ace_circles SET share_enabled=?2,combined_sharing=?2,access_revision=access_revision+1 WHERE owner_id=?1').bind(user.id,body.enabled?1:0),
-      env.DB.prepare("INSERT INTO privacy_consents(user_id,purpose,version,granted) VALUES(?1,'matter-and-mechanisms',?2,?3)").bind(user.id,NOTICE_VERSION,body.enabled?1:0),
+      env.DB.prepare("INSERT INTO privacy_consents(user_id,purpose,version,granted) VALUES(?1,'videography',?2,?3)").bind(user.id,NOTICE_VERSION,body.enabled?1:0),
     ]);return json({ok:true});
   }
   if(suffix==='/blocks'&&method==='POST'){

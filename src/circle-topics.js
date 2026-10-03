@@ -9,7 +9,7 @@ export function recordTopic(env,{owner,key,kind,event=null,target=null,slot=null
 }
 async function accessTo(env,user,owner){
   const access=await circleAccess(env,user,owner);
-  if(user.id!==owner&&!(access.circle.share_enabled&&access.circle.combined_sharing))fail('Matière et Mécanismes ne sont pas partagés.',403);
+  if(user.id!==owner&&!(access.circle.share_enabled&&access.circle.combined_sharing))fail('La Vidéographie n’est pas partagée.',403);
   return access;
 }
 const replyContext=(owner,author,key)=>`message:${owner}:${author}:${key}`;
@@ -30,21 +30,22 @@ async function topicContent(env,row){
     if(!link||!target)fail('Ce lien a été retiré.',404);
     return {title:event.title+' — '+(await unseal(env,`life:${row.owner_id}:${row.target_id}`,target.payload)).title,link:(await unseal(env,`link:${row.owner_id}:${row.event_id}:${row.target_id}`,link.payload)).label};
   }
-  return {title:event.title};
+  return {title:event.title,...(row.video_branch?{video:{notes:event.creation?.work||'',understanding:event.understanding||''}}:{})};
 }
-const topicView=(row,content)=>({id:row.id,owner:row.owner_id,kind:row.kind,eventId:row.event_id,targetId:row.target_id,slot:row.mechanism_slot,revision:row.revision,updatedAt:row.updated_at,...content});
+const topicView=(row,content)=>({id:row.id,owner:row.owner_id,kind:row.kind,eventId:row.event_id,targetId:row.target_id,slot:row.mechanism_slot,videoBranch:row.kind==='creation'?row.video_branch||null:null,archived:row.kind!=='creation'||!row.video_branch,revision:row.revision,updatedAt:row.updated_at,...content});
 async function freshTopic(env,access,user,topic){await freshAccess(env,access,user);if(!await env.DB.prepare('SELECT 1 FROM circle_topics WHERE id=?1 AND revision=?2').bind(topic.id,topic.revision).first())fail('Ce contenu a changé. Recharge la discussion.',409);}
 
 export async function topicsRoute(request,env,url,user,body,json){
   const method=request.method,feed=/^\/api\/ace-circles\/(\d+)\/topics$/.exec(url.pathname),detail=/^\/api\/ace-circles\/topics\/(\d+)(?:\/(replies|read))?$/.exec(url.pathname);
   if(feed&&method==='GET'){
     const owner=integer(Number(feed[1]),1),access=await accessTo(env,user,owner),v=visible(access,user);
+    const archive=url.searchParams.get('archive')==='1';if(archive&&owner!==user.id)fail('Archives privées.',403);
     const stamp=`${access.circle.access_revision}:${access.circle.content_revision}`;
     if(url.searchParams.get('revision')===stamp){await freshAccess(env,access,user);return json({unchanged:true,revision:stamp});}
-    const values=[owner,user.id,access.member?.joined_seq||0];let filter='';const after=url.searchParams.get('after');
-    if(after){if(!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{3})?\|\d+$/.test(after))fail('Page invalide.');const [date,id]=after.split('|');values.push(date,integer(Number(id),1));filter='AND (t.updated_at<?4 OR (t.updated_at=?4 AND t.id<?5))';}
+    const values=[owner,user.id,access.member?.joined_seq||0];let filter=archive?'AND (e.video_branch IS NULL OR t.kind<>\'creation\')':"AND e.video_branch IS NOT NULL AND t.kind='creation'";const after=url.searchParams.get('after');
+    if(after){if(!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{3})?\|\d+$/.test(after))fail('Page invalide.');const [date,id]=after.split('|');values.push(date,integer(Number(id),1));filter+=' AND (t.updated_at<?4 OR (t.updated_at=?4 AND t.id<?5))';}
     const visibleReply=`m.owner_id=t.owner_id AND m.topic_id=t.id AND m.kind='message' AND m.id>=?3 AND NOT EXISTS(SELECT 1 FROM ace_blocks b WHERE (b.user_id=?2 AND b.blocked_id=m.author_id) OR (b.blocked_id=?2 AND b.user_id=m.author_id))`;
-    const rows=(await env.DB.prepare(`SELECT t.*,COALESCE(e.payload,u.payload) AS source_payload,l.payload AS link_payload,target.payload AS target_payload,
+    const rows=(await env.DB.prepare(`SELECT t.*,e.video_branch,COALESCE(e.payload,u.payload) AS source_payload,l.payload AS link_payload,target.payload AS target_payload,
       (SELECT count(*) FROM ace_messages m WHERE ${visibleReply}) AS reply_count,
       (SELECT count(*) FROM ace_messages m WHERE ${visibleReply} AND m.author_id<>?2 AND m.id>COALESCE((SELECT last_id FROM circle_topic_reads WHERE topic_id=t.id AND reader_id=?2),0)) AS unread_count
       FROM circle_topics t LEFT JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id
@@ -59,8 +60,11 @@ export async function topicsRoute(request,env,url,user,body,json){
     await freshAccess(env,access,user);return json({topics,revision:stamp,next:rows.length>20?`${rows[19].updated_at}|${rows[19].id}`:null});
   }
   if(!detail)fail('Discussion indisponible.',404);
-  const id=integer(Number(detail[1]),1),topic=await env.DB.prepare('SELECT * FROM circle_topics WHERE id=?1').bind(id).first();
+  const id=integer(Number(detail[1]),1),topic=await env.DB.prepare('SELECT t.*,e.video_branch FROM circle_topics t LEFT JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=?1').bind(id).first();
   if(!topic)fail('Discussion indisponible.',404);
+  const isVideo=topic.kind==='creation'&&!!topic.video_branch;
+  if(!isVideo&&user.id!==topic.owner_id)fail('Archives privées.',403);
+  if(!isVideo&&!['GET'].includes(method))fail('Cette discussion est archivée.',410);
   const access=await accessTo(env,user,topic.owner_id),v=visible(access,user);
   if(method==='GET'){
     const after=integer(Number(url.searchParams.get('after')||0)),before=integer(Number(url.searchParams.get('before')||0));if(after&&before)fail('Page invalide.');

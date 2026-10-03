@@ -91,7 +91,6 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-7px) rotate
 
 .site-nav { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 
-@media (max-width: 700px) {
   .nav-toggle { display: flex; }
   .site-nav { display: none; }
   body.nav-open .site-nav {
@@ -122,7 +121,6 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-7px) rotate
   }
   body.nav-open .site-nav > *:last-child { border-bottom: none; }
   body.nav-open .site-nav .btn { text-align: center; margin-top: 0.6rem; border-bottom: none; }
-}
 .site-nav a { color: var(--text-dim); }
 .site-nav a:hover { color: var(--text); text-decoration: none; }
 
@@ -2041,7 +2039,10 @@ body.avec-dock main { padding-bottom: 7rem; }
 @media(max-width:700px){body.nav-open .site-nav{max-height:calc(100dvh - 85px);overflow-y:auto;overscroll-behavior:contain}}
 
 .header-identity{display:flex;align-items:center;gap:1rem;flex:none}
-.header-level{font:400 2rem/1 var(--serif);color:#f3c57f!important;padding:.15rem 0 .15rem 1rem;border-left:1px solid #6e57363d;font-variant-numeric:tabular-nums;text-decoration:none!important}
+.header-controls{display:flex;align-items:center;gap:1rem;order:3;flex:none}
+.site-header>.site-nav{order:2;margin-left:auto}
+.header-level{font:400 2rem/1 var(--serif);color:#f3c57f!important;padding:.15rem .1rem;font-variant-numeric:tabular-nums;text-decoration:none!important}
 .header-level[hidden]{display:none}
-@media(max-width:700px){.header-identity{gap:.7rem}.header-level{font-size:1.9rem;padding-left:.7rem}}
-@media(max-width:360px){.site-header{padding-inline:1rem;gap:.5rem;flex-wrap:nowrap}.header-identity{gap:.5rem}.header-level{padding-left:.5rem}.nav-toggle{flex:none}}
+@media(max-width:700px){.header-controls{margin-left:auto;gap:.85rem}.header-level{font-size:1.9rem}.site-header{flex-wrap:nowrap}.site-header>.site-nav{max-width:none}}
+@media(max-width:360px){.site-header{padding-inline:1rem;gap:.5rem}.header-controls{gap:.6rem}.nav-toggle{flex:none}}
+@media(min-width:701px){body.nav-open .site-nav{left:auto;right:1.5rem;width:320px;max-width:calc(100vw - 3rem);max-height:calc(100dvh - 100px);overflow-y:auto;border:1px solid var(--border);border-radius:0 0 12px 12px}}

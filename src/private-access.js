@@ -5,8 +5,8 @@ export const NOTICE_VERSION='2026-10-01';
 export const PRIVATE_NOTICE={version:NOTICE_VERSION,
  purpose:'Cet espace conserve tes récits et réflexions pour te permettre de relire ton parcours. Aucun diagnostic ni analyse automatique n’est effectué.',
  storage:'Les textes sont chiffrés sur le serveur. Les dates, catégories et relations nécessaires au fonctionnement restent des métadonnées protégées. Ce service ne propose pas de chiffrement de bout en bout.',
- combinedSharing:'En activant ce partage, tes AS actuels et ceux que tu accepteras ensuite pourront lire toute ta Matière (événements, créations et liens), tes dix mécanismes et leurs futures modifications. Ils pourront répondre dans les discussions associées. Les brouillons restent privés. Tu peux arrêter le partage à tout moment, sans pouvoir effacer ce qui a déjà été lu ou copié.',
- sharing:'Ton arbre reste privé. Si tu actives son partage, tes AS actuels et ceux que tu accepteras ensuite verront tout l’arbre enregistré et ses futures mises à jour. Tes brouillons restent privés. Tu peux retirer cet accord à tout moment ; cela ne peut pas effacer ce qu’une personne a déjà lu ou copié.',
+ combinedSharing:'En activant ce partage, tes AS actuels et ceux que tu accepteras ensuite pourront lire ta Vidéographie et ses futures modifications. Ils pourront répondre dans les discussions associées. Les brouillons restent privés. Tu peux arrêter le partage à tout moment, sans pouvoir effacer ce qui a déjà été lu ou copié.',
+ sharing:'Ta Vidéographie reste privée. Si tu actives son partage, tes AS actuels et ceux que tu accepteras ensuite verront ses fiches et leurs futures mises à jour. Tes brouillons restent privés. Tu peux retirer cet accord à tout moment ; cela ne peut pas effacer ce qu’une personne a déjà lu ou copié.',
  retention:'Tu peux exporter ou supprimer tes événements et tes brouillons. Ils sont conservés jusqu’à leur suppression ou celle de ton compte. Les copies de restauration Cloudflare peuvent subsister jusqu’à 30 jours ; elles ne sont pas consultables par les autres membres.',
  care:'Écris seulement ce que tu souhaites conserver ici et limite les informations identifiantes sur des tiers. Les échanges entre membres ne remplacent pas un accompagnement professionnel.'};
 export async function levelOf(env,id){return gameLevel(await gameRows(env,id));}
@@ -20,12 +20,12 @@ export async function circleAccess(env,user,owner,tree=false){
   integer(owner,1);
   const circle=await env.DB.prepare('SELECT * FROM ace_circles WHERE owner_id=?1').bind(owner).first();
   if(user.id===owner){
-    if(tree){await requireLevel(env,user,18);return {owner,member:null,circle};}
-    await requireLevel(env,user,20);if(!circle)fail('Crée ton carré pour ouvrir cette conversation.',404);
+    if(tree){await requireLevel(env,user,15);return {owner,member:null,circle};}
+    await requireLevel(env,user,18);if(!circle)fail('Crée ton carré pour ouvrir cette conversation.',404);
     return {owner,member:null,circle};
   }
-  await requireLevel(env,user,20);
-  if(!circle||tree&&!circle.share_enabled||await levelOf(env,owner)<20||await blocked(env,user.id,owner))fail('Cet espace n’est pas accessible.',403);
+  await requireLevel(env,user,18);
+  if(!circle||tree&&!circle.share_enabled||await levelOf(env,owner)<18||await blocked(env,user.id,owner))fail('Cet espace n’est pas accessible.',403);
   const member=await env.DB.prepare('SELECT * FROM ace_memberships WHERE owner_id=?1 AND angel_id=?2').bind(owner,user.id).first();
   if(!member)fail('Cet espace n’est pas accessible.',403);
   return {owner,member,circle};

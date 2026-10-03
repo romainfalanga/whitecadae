@@ -37,7 +37,7 @@ export const NODES = [
     {...legacy('n-g'),visual:'dice'},
     {...legacy('n-c'),source:'5 vins divins',answers:[...legacy('n-c').answers,a('n-c-2','Jésus')]},
     {...legacy('n-b'),answers:legacy('n-b').answers.map(a=>({...a,id:'eg-07-1'}))},
-    {id:'eg-03',source:'Aiguille',answers:[a('eg-03-1','L’horloge',['horloge']),a('eg-03-2','le détail',['détail','détails','les détails','le(s) détail(s)'])]},
+    {id:'eg-03',source:'L’aiguille',answers:[a('eg-03-1','L’horloge',['horloge']),a('eg-03-2','le détail',['détail','détails','les détails','le(s) détail(s)'])]},
     {...legacy('n-k',['n-k-1']),answers:[a('n-k-1','Galaxies',['galaxie']),a('eg-17-1','Signes',['signe'])]},
   ]),
   ...onSong('13h20',3,[legacy('n-e',['n-e-2'])]),
