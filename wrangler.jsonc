@@ -1,11 +1,14 @@
 {
   "name": "whitecadae",
   "main": "src/index.js",
+  "durable_objects": {"bindings":[{"name":"BRAINSTORM_LIVE","class_name":"BrainstormLive"}]},
+  "migrations": [{"tag":"v1-brainstorm-live","new_sqlite_classes":["BrainstormLive"]}],
   "compatibility_date": "2026-08-01",
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/music/*"]
   },
   // Le relatif des carrés parle par Workers AI. Sans ce binding (ou en local
   // sans accès), l'API répond 503 et le portrait reste copiable : rien ne casse.
@@ -24,8 +27,10 @@
       "database_id": "94a4fab8-be1e-41be-8ef1-df5aa32835f3"
     }
   ],
+  "r2_buckets": [{"binding":"MEDIA","bucket_name":"whitecadae-media"}],
   "vars": {
-    // Les comptes créés avec ces emails deviennent automatiquement administrateurs.
-    "ADMIN_EMAILS": "romainfalanga83@gmail.com"
+    // Variable historique conservée ; aucune adresse déclarée à l'inscription
+    // ne confère de droits. Les rôles administrateur sont provisionnés en privé.
+    "ADMIN_EMAILS": "romainfalanga83@gmail.com", "PRIVATE_SPACES_ENABLED": "true"
   }
 }

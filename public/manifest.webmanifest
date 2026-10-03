@@ -1,7 +1,7 @@
 {
   "name": "WhiteCadae",
   "short_name": "WhiteCadae",
-  "description": "Les textes de White Cadae, interprétés par sa communauté.",
+  "description": "Escape Game Orange : écoutez 57, lisez les paroles et découvrez les signes cachés.",
   "lang": "fr",
   "start_url": "/",
   "scope": "/",
@@ -10,9 +10,26 @@
   "background_color": "#0d0d10",
   "theme_color": "#0d0d10",
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/icon-256.png", "sizes": "256x256", "type": "image/png" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-256.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
