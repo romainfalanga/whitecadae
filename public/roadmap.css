@@ -1,0 +1,112 @@
+.road-page { max-width:1080px; margin:auto; padding:.5rem 0 2rem; }
+.road-page button,.road-page input { font:inherit; }
+.road-page :focus-visible { outline:2px solid #efc27c; outline-offset:4px; }
+.road-page [hidden] { display:none!important; }
+.road-header { display:flex; justify-content:space-between; align-items:center; gap:1rem; padding-bottom:1.6rem; border-bottom:1px solid var(--border); }
+.road-header h1 { font:400 clamp(2.8rem,6vw,4.8rem)/1.15 var(--serif); letter-spacing:-.045em; margin:.5rem 0; }
+.road-score { white-space:nowrap; padding-left:1.5rem; border-left:1px solid var(--border); }
+.road-score strong { font:400 3.5rem var(--serif); color:#f3c57f; }
+.road-score span { font-size:.85rem; color:var(--text-dim); padding-left:.4rem; }
+.road-layout { display:grid; grid-template-columns:260px minmax(0,1fr); gap:clamp(2rem,7vw,7rem); margin-top:2.5rem; align-items:start; }
+.road-layout.is-anonymous { grid-template-columns:1fr; }
+.road-layout.is-anonymous .road-line { width:100%; max-width:590px; margin-inline:auto; }
+.road-sidebar { min-width:0; }
+.road-profile { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; column-gap:.9rem; padding:1.1rem 0; border-top:1px solid #d5b67845; }
+#road-settings,#road-profile-status { grid-column:1 / -1; }
+.road-identity { display:flex; gap:.85rem; align-items:center; min-width:0; }
+.road-identity>div { min-width:0; }
+.road-identity strong { display:block; overflow-wrap:anywhere; font-weight:500; }
+.road-avatar { position:relative; display:inline-grid; place-items:center; flex:none; width:54px; height:54px; border:1px solid #cfac6860; border-radius:50%; overflow:hidden; background:#242016; color:#ebc881; font:1.3rem var(--serif); }
+.road-avatar img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.road-avatar.is-small { width:36px; height:36px; font-size:.9rem; }
+.road-text-button { background:none; border:0; color:var(--accent); cursor:pointer; min-height:44px; font-size:.8rem!important; padding:.4rem 0; text-align:left; }
+#road-edit { justify-self:end; max-width:5.5rem; margin:0; text-align:right; line-height:1.4; }
+.road-profile form,.road-credentials { border-top:1px solid var(--border); padding-top:1.1rem; margin-top:.8rem; }
+.road-profile label { display:block; font-size:.8rem; margin-bottom:.4rem; }
+.road-profile input:not([type=file]):not([type=hidden]) { display:block; width:100%; background:var(--bg-soft); border:1px solid var(--border); padding:.7rem; color:var(--text); border-radius:5px; font-size:16px; margin-bottom:.8rem; min-width:0; }
+.road-profile input[readonly] { color:var(--text-dim)!important; background:transparent!important; }
+.road-credentials p { font-size:.75rem; color:var(--text-dim); margin-bottom:.9rem; }
+.road-security summary { display:flex; align-items:center; cursor:pointer; min-height:48px; font-size:.8rem; color:var(--accent); gap:.5rem; list-style:none; }
+.road-security summary::-webkit-details-marker { display:none; }
+.road-security summary:after { content:'+'; margin-left:auto; font-size:1.15rem; }
+.road-security[open] summary:after { content:'−'; }
+.road-security form { margin-top:0; }
+.road-photo-picker { cursor:pointer; color:var(--accent); padding:.5rem 0; }
+.road-photo-picker input { display:block; max-width:100%; font-size:.7rem; margin-top:.4rem; }
+.road-form-actions { display:flex; flex-wrap:wrap; gap:.6rem; margin-top:.6rem; }
+.road-form-actions button { min-height:44px; padding:.6rem .8rem; font-size:.8rem; }
+.road-form-actions button:last-child { background:none; border:0; color:var(--text-dim); cursor:pointer; }
+#road-profile-status,#road-password-status { font-size:.78rem; line-height:1.6; color:var(--accent); margin-top:.7rem; }
+#road-profile-status:empty,#road-password-status:empty { display:none; }
+#road-photo-preview img { border-radius:50%; object-fit:cover; }
+#road-logout { margin-top:.8rem; color:var(--text-dim); }
+.road-page button:disabled { opacity:.5; cursor:wait; }
+
+/* Emissive spheres: the 3D renderer bakes visible stars once into small images. */
+.road-line { list-style:none; min-width:0; margin:0; padding:0; }
+.road-step { --star-color:hsl(var(--star-hue) 95% 58%); position:relative; display:grid; grid-template-columns:96px minmax(0,1fr); gap:1.4rem; min-height:148px; padding-bottom:2rem; }
+.road-step:before { content:''; position:absolute; left:47.5px; top:70px; bottom:-22px; width:1px; background:#27252d; }
+.road-step:last-child:before { display:none; }
+.road-step.is-past:before { background:linear-gradient(hsl(var(--star-hue) 55% 42%),hsl(var(--next-hue) 55% 42%)); }
+.road-step.is-current:before { background:linear-gradient(var(--star-color),#27252d 80%); }
+.road-node { position:relative; display:grid; place-items:center; width:96px; height:96px; isolation:isolate; }
+.road-sphere { position:relative; width:52px; height:52px; border-radius:50%; background:radial-gradient(circle at 38% 32%,#3b3540 0%,#19151d 38%,#0d0d10 74%); box-shadow:inset -3px -3px 7px #0009,inset 1px 1px 2px #75616e35; }
+.road-node[data-stellar] .road-sphere { background:radial-gradient(circle at 40% 35%,hsl(var(--star-hue) 100% 78%),hsl(var(--star-hue) 100% 52%) 40%,hsl(var(--star-hue) 88% 29%) 76%,#260a06); box-shadow:0 0 8px hsl(var(--star-hue) 100% 54% / .5),0 0 26px hsl(var(--star-hue) 100% 49% / .18); }
+.road-node img { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.road-node.has-stellar-image .road-sphere { visibility:hidden; }
+.is-past:not(.is-populated)>.road-node { opacity:.45; }
+.is-current>.road-node:after { content:''; position:absolute; width:68px; height:68px; border-radius:50%; box-shadow:0 0 28px hsl(var(--star-hue) 100% 57% / .17); z-index:-1; }
+.is-future .road-sphere { opacity:.6; }
+.road-step-content { min-width:0; padding-top:1.35rem; }
+.road-step-title { display:flex; align-items:center; flex-wrap:wrap; gap:.8rem; }
+.road-step h2 { font:400 1.45rem/1.4 var(--serif); margin:0; color:#e4d8c6; }
+.is-current h2 { color:#fff1d8; }
+.is-future h2 { color:#706b78; }
+.road-here { font-size:.58rem; letter-spacing:.08em; text-transform:uppercase; padding:.2rem .5rem; border:1px solid #d6af6a55; border-radius:2px; color:#e5c184; }
+.road-people-toggle { display:flex; align-items:center; gap:1.5rem; width:max-content; max-width:100%; min-height:44px; background:none; border:0; padding:.25rem 0; color:#aaa5b0; cursor:pointer; font-size:.8rem!important; text-align:left; font-variant-numeric:tabular-nums; }
+.road-people-toggle:hover,.road-people-toggle[aria-expanded=true] { color:var(--text); }
+.road-plus { display:inline-grid; place-items:center; width:20px; color:var(--star-color); font:400 1.2rem/1 var(--sans); }
+.road-people-toggle { -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+.road-empty { display:flex; align-items:center; min-height:44px; font-size:.8rem; color:#89828f; }
+.road-members { margin:.4rem 0 .6rem; padding:.3rem 0 .3rem 1rem; border-left:1px solid hsl(var(--star-hue) 65% 55% / .45); max-width:400px; }
+.road-members ul { list-style:none; margin:0; padding:0; }
+.road-members li { display:flex; align-items:center; gap:.8rem; min-height:52px; font-size:.85rem; overflow-wrap:anywhere; }
+.road-members li>span:last-child { min-width:0; }
+.road-members>p { font-size:.8rem; color:var(--text-dim); }
+.road-member-error { margin-top:.7rem; }
+@media(max-width:800px) {
+  .road-layout { grid-template-columns:1fr; gap:1.8rem; margin-top:1.6rem; }
+  .road-profile { padding:.4rem 0 .8rem; border-top:0; border-bottom:1px solid var(--border); }
+  .road-header { padding-bottom:1.3rem; }
+  .road-header h1 { font-size:2.7rem; }
+  .road-score strong { font-size:2.7rem; }
+  .road-score { padding-left:.8rem; }
+  .road-line { margin-left:.1rem; }
+  .road-step { gap:.8rem; min-height:140px; }
+  .road-profile form,.road-credentials { max-width:440px; }
+  .road-identity .road-avatar { width:48px; height:48px; }
+  .road-members { max-width:none; }
+}
+@media(max-width:360px) {
+  .road-header h1 { font-size:2.25rem; }
+  .road-step { gap:.65rem; grid-template-columns:80px minmax(0,1fr); }
+  .road-node { width:80px; height:80px; }
+  .road-sphere { width:44px; height:44px; }
+  .road-step:before { left:39.5px; top:60px; bottom:-20px; }
+  .road-step-content { padding-top:.9rem; }
+  .road-step-title { gap:.4rem; }
+  .road-step h2 { font-size:1.3rem; }
+}
+@media(prefers-reduced-motion:reduce) { .road-page * { scroll-behavior:auto!important; transition:none!important; } }
+
+.road-members-reveal{display:grid;grid-template-rows:0fr;transition:grid-template-rows .22s cubic-bezier(.2,.7,.3,1)}
+.road-members-reveal.is-open{grid-template-rows:1fr}
+.road-members-clip{min-height:0;overflow:hidden}
+.road-members-reveal .road-members{opacity:0;transform:translateY(-4px);transition:opacity .16s ease,transform .22s ease}
+.road-members-reveal.is-open .road-members{opacity:1;transform:none}
+.road-members-placeholder>span{display:flex;align-items:center;gap:.8rem;min-height:52px}
+.road-members-placeholder i{width:36px;height:36px;border-radius:50%;background:#c4a6750c;border:1px solid #c4a67520}
+.road-members-placeholder b{width:5rem;height:7px;background:#c4a67516;border-radius:3px}
+.road-plus{border:1px solid #bd9b6338;border-radius:50%;width:25px;height:25px;font-size:1rem;background:#b88a3907}
+.road-people-toggle{gap:1rem}
+@media(prefers-reduced-motion:reduce){.road-members-reveal,.road-members-reveal .road-members{transition:none;transform:none}}
