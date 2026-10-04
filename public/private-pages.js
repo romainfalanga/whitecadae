@@ -35,7 +35,7 @@ async function run(node,action){
   finally{if(node?.isConnected)node.disabled=false;}
 }
 function heading(title,subtitle='',actions='',help=''){return `<header class="private-heading ${help?'has-help ':''}${['Mécanismes','Vidéographie','Carré d’AS'].includes(title)?'center-mobile':''}"><div><h1>${title}</h1>${subtitle?`<p class="private-subtitle">${subtitle}</p>`:''}</div>${help?`<a class="private-info" href="${help}/comprendre" data-link aria-label="Comprendre ${esc(title)}"><span aria-hidden="true">i</span></a>`:''}${actions}</header>`;}
-function helpPage(base){const help=PRIVATE_HELP[base];shell(`<a class="private-back" href="${base}" data-link>Revenir à ${esc(help.title)}</a><article class="private-explanation">${heading(help.title)}${help.paragraphs.map(p=>`<p>${esc(p)}</p>`).join('')}</article>`);}
+function helpPage(base){const help=PRIVATE_HELP[base];shell(`<article class="private-explanation">${heading(help.title)}${help.paragraphs.map(p=>`<p>${esc(p)}</p>`).join('')}<footer class="private-explanation-footer"><a class="private-back" href="${base}" data-link>Revenir à ${esc(help.title)}</a></footer></article>`);}
 
 function shell(html){session.ctx.app.innerHTML=`<section class="private-page">${html}<p id="private-status" class="private-status" role="status"></p></section>`;}
 function avatar(person){return `<span class="ace-avatar">${person?.avatar?`<img src="${esc(person.avatar)}" alt="" loading="lazy" decoding="async">`:esc(person?.username?.slice(0,1)||'·')}</span>`;}
@@ -369,7 +369,7 @@ async function mechanismPage(slot){
     shell(`${heading('Mécanismes','','','/mecanisme')}${group('Mécanismes choisis',mechanisms.slice(0,5))}${group('Mécanismes innés',mechanisms.slice(5))}`);return;
   }
   const {mechanism:m}=await api('/api/mechanisms/'+slot);
-  shell(`<a class="private-back" href="/mecanisme" data-link>Mécanisme</a><article class="mechanism-detail"><p class="mechanism-index">${slot<=5?'Mécanisme choisi':'Mécanisme inné'} · ${String(slot).padStart(2,'0')}</p>${heading(m.title?esc(m.title):'Une place à écrire')}${m.anchor?`<blockquote>${esc(m.anchor)}</blockquote>`:''}<div class="mechanism-reading">${mechanismFields(slot).filter(([key])=>key!=='anchor'&&m[key]).map(([key,label])=>`<section><h2>${label}</h2><p>${esc(m[key])}</p></section>`).join('')}</div></article><nav class="mechanism-pagination" aria-label="Mes mécanismes">${slot>1?`<a href="/mecanisme/${slot-1}" data-link>Précédent</a>`:'<span></span>'}${button(m.title?'Modifier':'Écrire','mechanism-edit','quiet')}${slot<10?`<a href="/mecanisme/${slot+1}" data-link>Suivant</a>`:'<span></span>'}</nav>`);
+  shell(`<a class="private-back" href="/mecanisme" data-link>Mécanismes</a><article class="mechanism-detail"><p class="mechanism-index">${slot<=5?'Mécanisme choisi':'Mécanisme inné'} · ${String(slot).padStart(2,'0')}</p>${heading(m.title?esc(m.title):'Une place à écrire')}${m.anchor?`<blockquote>${esc(m.anchor)}</blockquote>`:''}<div class="mechanism-reading">${mechanismFields(slot).filter(([key])=>key!=='anchor'&&m[key]).map(([key,label])=>`<section><h2>${label}</h2><p>${esc(m[key])}</p></section>`).join('')}</div></article><nav class="mechanism-pagination" aria-label="Mes mécanismes">${slot>1?`<a href="/mecanisme/${slot-1}" data-link>Précédent</a>`:'<span></span>'}${button(m.title?'Modifier':'Écrire','mechanism-edit','quiet')}${slot<10?`<a href="/mecanisme/${slot+1}" data-link>Suivant</a>`:'<span></span>'}</nav>`);
   bind('mechanism-edit',async()=>{if(await consent())mechanismForm(m);});
 }
 function mechanismForm(m){

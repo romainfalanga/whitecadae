@@ -11,7 +11,8 @@
 .road-layout.is-anonymous { grid-template-columns:1fr; }
 .road-layout.is-anonymous .road-line { width:100%; max-width:590px; margin-inline:auto; }
 .road-sidebar { min-width:0; }
-.road-profile { padding:1.1rem 0; border-top:1px solid #d5b67845; }
+.road-profile { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; column-gap:.9rem; padding:1.1rem 0; border-top:1px solid #d5b67845; }
+#road-settings,#road-profile-status { grid-column:1 / -1; }
 .road-identity { display:flex; gap:.85rem; align-items:center; min-width:0; }
 .road-identity>div { min-width:0; }
 .road-identity strong { display:block; overflow-wrap:anywhere; font-weight:500; }
@@ -19,7 +20,7 @@
 .road-avatar img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
 .road-avatar.is-small { width:36px; height:36px; font-size:.9rem; }
 .road-text-button { background:none; border:0; color:var(--accent); cursor:pointer; min-height:44px; font-size:.8rem!important; padding:.4rem 0; text-align:left; }
-#road-edit { margin-top:.6rem; }
+#road-edit { justify-self:end; max-width:5.5rem; margin:0; text-align:right; line-height:1.4; }
 .road-profile form,.road-credentials { border-top:1px solid var(--border); padding-top:1.1rem; margin-top:.8rem; }
 .road-profile label { display:block; font-size:.8rem; margin-bottom:.4rem; }
 .road-profile input:not([type=file]):not([type=hidden]) { display:block; width:100%; background:var(--bg-soft); border:1px solid var(--border); padding:.7rem; color:var(--text); border-radius:5px; font-size:16px; margin-bottom:.8rem; min-width:0; }
