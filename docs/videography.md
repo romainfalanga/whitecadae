@@ -1,5 +1,8 @@
 # Vidéographie et mécanismes — 3 octobre 2026
 
+Historique de la première livraison. L’intégration YouTube, les quatre catégories
+et la simplification du 4 octobre sont décrites dans [youtube-videography.md](youtube-videography.md).
+
 ## Périmètre livré
 
 Les dix mécanismes restent accessibles à l’échelon 12. Les emplacements 1 à 5

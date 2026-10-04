@@ -13,7 +13,7 @@ function setup(){
  f.init=async()=>{for(const level of [22,23,25])await f.ok('/api/private/consent',level,'POST',{consent:true,version:'2026-10-01'});await f.ok('/api/ace-circles',22,'POST',{});};
  f.join=async(level=25)=>{const id=crypto.randomUUID();await f.ok('/api/ace-circles/invitations',22,'POST',{id,target:level+1,recipientNotice:true});await f.ok('/api/ace-circles/invitations/'+id,level,'PUT',{action:'accept'});return id;};
  f.share=(enabled=true)=>f.ok('/api/ace-circles/sharing',22,'PUT',{enabled,consent:enabled,scope:'matter-and-mechanisms'});
- f.save=async(id='event-matter',extra={})=>(await f.ok('/api/life-tree/events/'+id,22,'PUT',event({...(!f.archive?{entryType:'creation',medium:'vidéo',videoBranch:'self',precision:'day',date:'2020-07-01',work:'Notes pour la vidéo'}:{}),...extra}))).event;
+ f.save=async(id='event-matter',extra={})=>(await f.ok('/api/life-tree/events/'+id,22,'PUT',event({...(!f.archive?{entryType:'creation',medium:'vidéo',url:'https://www.youtube.com/watch?v=M7lc1UVf-VE',videoBranch:'self',precision:'day',date:'2020-07-01',work:'Notes pour la vidéo'}:{}),...extra}))).event;
  f.topic=id=>f.sql.prepare('SELECT id FROM circle_topics WHERE owner_id=23 AND event_id=? AND target_id IS NULL').get(id).id;
  f.reply=(id,level=25,extra={})=>f.ok('/api/ace-circles/topics/'+id+'/replies',level,'POST',{id:crypto.randomUUID(),text:'Un regard attentif.',...extra});
  return f;
@@ -51,7 +51,7 @@ test('each saved resource owns one lasting thread; changes preserve replies and 
  const f=setup();try{
   await f.init();await f.join();await f.share();await f.save();const topic=f.topic('event-matter');await f.reply(topic);
   await f.save('event-matter',{title:'Une autre lecture',revision:1});assert.equal(f.topic('event-matter'),topic);
-  assert.equal((await f.call('/api/life-tree/events/event-matter',22,'PUT',event({entryType:'creation',medium:'vidéo',videoBranch:'self',precision:'day',date:'2020-07-01',revision:1}))).status,409);
+  assert.equal((await f.call('/api/life-tree/events/event-matter',22,'PUT',event({entryType:'creation',medium:'vidéo',url:'https://www.youtube.com/watch?v=M7lc1UVf-VE',videoBranch:'self',precision:'day',date:'2020-07-01',revision:1}))).status,409);
   const data=await f.ok('/api/ace-circles/topics/'+topic,25);assert.equal(data.topic.revision,2);assert.equal(data.topic.title,'Une autre lecture');assert.equal(data.replies.length,1);
   await f.ok('/api/mechanisms/2',22,'PUT',{title:'Prendre du recul',revision:0});const mechanism=f.sql.prepare("SELECT id FROM circle_topics WHERE mechanism_slot=2").get().id;
   assert.equal((await f.call('/api/ace-circles/topics/'+mechanism,25)).status,403);assert.equal((await f.call('/api/ace-circles/topics/'+mechanism+'/replies',22,'POST',{id:crypto.randomUUID(),text:'Archivé'})).status,410);await f.ok('/api/mechanisms/2',22,'PUT',{title:'',revision:1});assert.equal((await f.call('/api/ace-circles/topics/'+mechanism,25)).status,404);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ace_messages WHERE topic_id=?').get(mechanism).n,0);

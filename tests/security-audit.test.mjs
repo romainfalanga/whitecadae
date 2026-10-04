@@ -83,5 +83,5 @@ test('static documents and API responses use the same restrictive security polic
   }
   assert.equal(res.headers.get('Cache-Control'),'no-store');
   assert.match(res.headers.get('Content-Security-Policy'),/script-src 'self'/);
-  assert.match(res.headers.get('Content-Security-Policy'),/frame-src 'none'/);
+  assert.match(res.headers.get('Content-Security-Policy'),/frame-src https:\/\/www\.youtube-nocookie\.com;/);
 });

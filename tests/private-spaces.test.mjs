@@ -130,7 +130,7 @@ test('reciprocal circles are independent; self, expiry, cancellation, outsiders 
 });
 test('whole-tree consent, per-membership history, revocation, event threads and deletion cover every access path',async()=>{
  const f=setup();try{
-   await f.ok('/api/ace-circles',201,'POST',{});await send(f,201,201,{text:'Avant ton arrivée'});const e=await save(f,201,crypto.randomUUID(),{entryType:'creation',medium:'vidéo',videoBranch:'self',precision:'day',date:'2020-07-01'});
+   await f.ok('/api/ace-circles',201,'POST',{});await send(f,201,201,{text:'Avant ton arrivée'});const e=await save(f,201,crypto.randomUUID(),{entryType:'creation',medium:'vidéo',url:'https://www.youtube.com/watch?v=M7lc1UVf-VE',videoBranch:'self',precision:'day',date:'2020-07-01'});
    const membership=await join(f,201,202);
    assert.equal((await f.ok('/api/ace-circles/201/messages',202)).messages.length,0);assert.equal((await f.call('/api/life-tree?owner=201',202)).status,403);
    await sharing(f);assert.equal((await f.ok('/api/life-tree?owner=201',202)).events[0].id,e.id);
@@ -160,7 +160,7 @@ test('historical messages stay readable and reportable while free chat writes ar
 
 test('AS access is directed, never transitive between co-members, and pending invitations grant no tree access',async()=>{
  const f=setup();try{
-  await join(f,201,202);await join(f,201,203);await sharing(f,202);const e=await save(f,202,crypto.randomUUID(),{entryType:'creation',medium:'vidéo',videoBranch:'self',precision:'day',date:'2020-07-01'});
+  await join(f,201,202);await join(f,201,203);await sharing(f,202);const e=await save(f,202,crypto.randomUUID(),{entryType:'creation',medium:'vidéo',url:'https://www.youtube.com/watch?v=M7lc1UVf-VE',videoBranch:'self',precision:'day',date:'2020-07-01'});
   for(const who of [201,203,204]){
    assert.equal((await f.call('/api/life-tree?owner=202',who)).status,403);
    assert.equal((await f.call('/api/life-tree/events/'+e.id+'?owner=202',who)).status,403);
@@ -174,7 +174,7 @@ test('AS access is directed, never transitive between co-members, and pending in
 });
 test('delayed message is rejected when a membership is removed during encryption / query preparation',async()=>{
  const f=setup();try{
-   const membership=await join(f,201,202);await sharing(f);await save(f,201,crypto.randomUUID(),{entryType:'creation',medium:'vidéo',videoBranch:'self',precision:'day',date:'2020-07-01'});const topic=f.sql.prepare('SELECT id FROM circle_topics WHERE owner_id=201').get().id,original=f.env.DB.prepare;let removed=false;
+   const membership=await join(f,201,202);await sharing(f);await save(f,201,crypto.randomUUID(),{entryType:'creation',medium:'vidéo',url:'https://www.youtube.com/watch?v=M7lc1UVf-VE',videoBranch:'self',precision:'day',date:'2020-07-01'});const topic=f.sql.prepare('SELECT id FROM circle_topics WHERE owner_id=201').get().id,original=f.env.DB.prepare;let removed=false;
    f.env.DB.prepare=(query,...args)=>{if(query.includes('INSERT OR IGNORE INTO ace_messages')&&!removed){removed=true;f.sql.prepare('DELETE FROM ace_memberships WHERE id=?').run(membership);}return original(query,...args);};
    const r=await f.call('/api/ace-circles/topics/'+topic+'/replies',202,'POST',{id:crypto.randomUUID(),text:'Too late'});assert.equal(r.status,403);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ace_messages').get().n,0);
  }finally{f.sql.close();}

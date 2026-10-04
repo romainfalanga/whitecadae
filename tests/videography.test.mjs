@@ -6,7 +6,7 @@ import {fixture} from './community-fixture.mjs';
 import worker from '../src/index.js';
 import {seal} from '../src/private-data.js';
 import {normalizeMechanism} from '../public/mechanism-model.js';
-const video=(extra={})=>({title:'Une réflexion',entryType:'creation',medium:'vidéo',videoBranch:'self',precision:'day',date:'2026-09-29',kind:'autre',impact:'à explorer',themes:[],work:'Notes privées',revision:0,...extra});
+const video=(extra={})=>({title:'Une réflexion',entryType:'creation',medium:'vidéo',url:'https://www.youtube.com/watch?v=M7lc1UVf-VE',videoBranch:'self',precision:'day',date:'2026-09-29',kind:'autre',impact:'à explorer',themes:[],work:'Notes privées',revision:0,...extra});
 function setup(){
  const f=fixture();f.sql.exec('PRAGMA foreign_keys=ON');
  f.call=async(path,level=18,method='GET',body)=>{const r=await worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session=qa'+level,'X-WC-User':String(level+1),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),f.env);return {status:r.status,data:await r.json()};};
@@ -22,15 +22,15 @@ test('video and AS access use canonical levels 15 and 18, including invitation a
   const access=(await f.ok('/api/me',15)).access;assert.equal(access.lifeTree,true);assert.equal(access.aceSquare,false);
  }finally{f.sql.close();}
 });
-test('five video categories, one monthly recap, concurrent writes, real dates and no premature hosting',async()=>{
+test('four video categories, one monthly recap, concurrent writes, real dates and validated YouTube hosting',async()=>{
  const f=setup();try{
   await f.agree(15);
-  for(const branch of ['self','ideas','projects','society','monthly'])await f.ok('/api/life-tree/events/video-'+branch,15,'PUT',video({videoBranch:branch,...(branch==='monthly'?{precision:'month',date:'2026-09',videoMonth:'2026-09'}:{})}));
-  const all=await f.ok('/api/life-tree?videos=1',15);assert.equal(all.events.length,5);assert.ok(all.events.every(e=>e.topic_id));assert.equal((await f.ok('/api/life-tree?branch=ideas&videos=1',15)).events.length,1);
+  for(const branch of ['self','ideas','projects','monthly'])await f.ok('/api/life-tree/events/video-'+branch,15,'PUT',video({videoBranch:branch,...(branch==='monthly'?{precision:'month',date:'2026-09',videoMonth:'2026-09'}:{})}));
+  const all=await f.ok('/api/life-tree?videos=1',15);assert.equal(all.events.length,4);assert.ok(all.events.every(e=>e.topic_id));assert.equal((await f.ok('/api/life-tree?branch=ideas&videos=1',15)).events.length,1);
   assert.equal((await f.call('/api/life-tree/events/video-monthly-other',15,'PUT',video({videoBranch:'monthly',precision:'month',date:'2026-09',videoMonth:'2026-09'}))).status,409);
   const duplicate=video({videoBranch:'monthly',precision:'month',date:'2026-08',videoMonth:'2026-08'});
   const race=await Promise.all(['one','two'].map(id=>f.call('/api/life-tree/events/month-race-'+id,15,'PUT',duplicate)));assert.deepEqual(race.map(r=>r.status).sort(),[200,409]);
-  for(const extra of [{videoBranch:'other'},{url:'https://youtube.com/watch?v=secret'},{precision:'unknown'},{videoBranch:'monthly',precision:'month',date:'2026-02',videoMonth:'2026-03'},{videoBranch:'monthly',precision:'month',date:'2026-13',videoMonth:'2026-13'},{date:'2026-02-30'},{date:'2099-01-01'}])assert.equal((await f.call('/api/life-tree/events/video-invalid',15,'PUT',video(extra))).status,400);
+  for(const extra of [{videoBranch:'other'},{videoBranch:'society'},{url:''},{url:'https://youtube.com/watch?v=secret'},{precision:'unknown'},{videoBranch:'monthly',precision:'month',date:'2026-02',videoMonth:'2026-03'},{videoBranch:'monthly',precision:'month',date:'2026-13',videoMonth:'2026-13'},{date:'2026-02-30'},{date:'2099-01-01'}])assert.equal((await f.call('/api/life-tree/events/video-invalid',15,'PUT',video(extra))).status,400);
   assert.equal((await f.call('/api/life-tree/events/video-self',15,'PUT',video({videoBranch:null,revision:1}))).status,400);
   assert.equal((await f.call('/api/life-tree/events/video-self',15,'PUT',video({revision:1,title:'Version suivante'}))).status,200);
   assert.equal((await f.call('/api/life-tree/events/video-self',15,'PUT',video({revision:1,title:'Écrasement'}))).status,409);

@@ -2,6 +2,7 @@ import {seal,unseal,tagHash,fail,text,identifier,integer} from './private-data.j
 import {circleAccess,freshAccess,requireStorage,requireLevel} from './private-access.js';
 import {recordTopic} from './circle-topics.js';
 import {VIDEO_BRANCHES} from '../public/video-model.js';
+import {youtubeLink} from '../public/youtube-video.js';
 export const EVENT_KINDS=['rencontre','famille','relation','études','travail','santé','changement','réussite','perte','autre'];
 export const EVENT_IMPACTS=['ressource','difficulté','mixte','à explorer'];
 const context=(owner,id)=>`life:${owner}:${id}`;
@@ -24,10 +25,12 @@ function validate(body){
   const entry_type=body.entryType||'event';if(!['event','creation'].includes(entry_type))fail('Type de contenu invalide.');
   const video_branch=body.videoBranch||null;
   if(video_branch&&!VIDEO_BRANCHES.some(([id])=>id===video_branch))fail('Rubrique invalide.');
-  if(video_branch&&(entry_type!=='creation'||body.medium!=='vidéo'||body.url))fail('L’hébergement vidéo n’est pas encore activé.');
+  if(video_branch&&(entry_type!=='creation'||body.medium!=='vidéo'))fail('Ce contenu doit être une vidéo.');
+  const videoUrl=video_branch?youtubeLink(body.url):null;
+  if(video_branch&&!videoUrl)fail('Ajoute un lien de vidéo YouTube valide (https://…).');
   const video_month=video_branch==='monthly'?String(body.videoMonth||''):null;
   if(video_branch==='monthly'&&(body.precision!=='month'||body.date!==video_month))fail('Choisis le mois de ce bilan.');
-  const creation=entry_type==='creation'?{medium:body.medium,url:creationLink(body.url),work:text(body.work,12000)}:null;
+  const creation=entry_type==='creation'?{medium:body.medium,url:videoUrl??creationLink(body.url),work:text(body.work,12000)}:null;
   if(creation&&(!CREATION_MEDIA.includes(creation.medium)||(!creation.url&&!creation.work&&!video_branch)))fail('Ajoute un texte ou un lien à ta création.');
   const precision=body.precision;if(!['day','month','year','period','unknown'].includes(precision))fail('Précise la forme de la date.');
   if(video_branch&&precision!==(video_branch==='monthly'?'month':'day'))fail('Choisis une date pour cette vidéo.');

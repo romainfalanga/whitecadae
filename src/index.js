@@ -112,8 +112,8 @@ async function serveMusic(request, env) {
    Les styles gardent 'unsafe-inline' : trois barres de progression posent leur
    largeur en attribut. C'est sans danger comparé aux scripts.
 
-   Les anciennes intégrations externes sont fermées. `frame-src 'none'`
-   interdit les cadres intégrés ; `frame-ancestors 'none'` empêche un autre
+   Seul le lecteur YouTube en mode de confidentialité avancé est autorisé.
+   `frame-ancestors 'none'` empêche un autre
    site d'encadrer celui-ci pour détourner les clics d'un membre.            */
 const CSP = [
   "default-src 'self'",
@@ -125,7 +125,7 @@ const CSP = [
   "connect-src 'self'",
   "worker-src 'self'",
   "manifest-src 'self'",
-  "frame-src 'none'",
+  "frame-src https://www.youtube-nocookie.com",
   "form-action 'self'",
   "frame-ancestors 'none'",
   "base-uri 'none'",
