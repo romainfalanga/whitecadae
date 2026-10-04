@@ -31,16 +31,16 @@ test('Matière preserves lived events and supports encrypted creations, filters,
   const draft={...event({entryType:'creation',medium:'texte',work:'x'.repeat(10000),date:'2020--'})};await f.ok('/api/life-tree/drafts/draft-creation',22,'PUT',{revision:0,event:draft});assert.equal((await f.ok('/api/life-tree/drafts')).drafts[0].payload.event.work.length,10000);
  }finally{f.sql.close();}
 });
-test('legacy tree sharing never silently exposes creations, links, mechanisms or new discussions',async()=>{
+test('legacy revocation protects content while accepted AS can read mechanisms without opening archives',async()=>{
  const f=setup();try{
   f.archive=true;await f.init();await f.join();await f.save();await f.save('creation-private',{entryType:'creation',medium:'texte',work:'Privé'});
   await f.ok('/api/life-tree/links',22,'POST',{source:'event-matter',target:'creation-private',label:'Lien intime'});
   await f.ok('/api/mechanisms/1',22,'PUT',{title:'Repère privé',description:'Ma réflexion',revision:0});
-  f.sql.exec('UPDATE ace_circles SET share_enabled=1,combined_sharing=0 WHERE owner_id=23');
-  assert.equal((await f.call('/api/life-tree?owner=23',25)).status,403);assert.equal((await f.call('/api/life-tree/events/event-matter?owner=23',25)).status,404);
+  f.sql.exec('UPDATE ace_circles SET share_enabled=1,combined_sharing=0 WHERE owner_id=23; UPDATE ace_memberships SET content_access=0 WHERE owner_id=23');
+  assert.equal((await f.call('/api/life-tree?owner=23',25)).status,403);assert.equal((await f.call('/api/life-tree/events/event-matter?owner=23',25)).status,403);
   for(const path of ['/api/life-tree/events/creation-private?owner=23','/api/mechanisms?owner=23','/api/ace-circles/23/topics'])assert.ok([403,404].includes((await f.call(path,25)).status));
   assert.equal((await f.call('/api/ace-circles/sharing',22,'PUT',{enabled:true,consent:true})).status,400);
-  await f.share();assert.equal((await f.ok('/api/life-tree?owner=23',25)).events.length,0);assert.equal((await f.call('/api/mechanisms?owner=23',25)).status,403);
+  await f.share();assert.equal((await f.ok('/api/life-tree?owner=23',25)).events.length,0);assert.equal((await f.ok('/api/mechanisms?owner=23',25)).mechanisms[0].title,'Repère privé');
   assert.equal((await f.ok('/api/ace-circles/23/topics',25)).topics.length,0);assert.equal((await f.ok('/api/ace-circles/23/topics?archive=1')).topics.length,4);
   for(const path of ['/api/mechanisms/export?owner=23','/api/life-tree/drafts?owner=23'])assert.equal((await f.call(path,25)).status,403);
   assert.equal((await f.call('/api/mechanisms/1?owner=23',25,'PUT',{title:'Faux',revision:1})).status,403);

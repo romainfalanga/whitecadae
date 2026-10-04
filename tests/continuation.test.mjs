@@ -26,7 +26,7 @@ test('old and new accounts reach 33 through Anges, exactly once, without retired
       assert.equal(state.echelon,32);assert.equal(state.continuation,null);
       assert.deepEqual(state.nodes.filter(n=>n.open).map(n=>n.id),['n-a']);
       const fiftySeven=state.nodes.find(n=>n.id==='n-a');
-      assert.equal(fiftySeven.total,4);assert.deepEqual(fiftySeven.found.map(a=>a.label),['12 apôtres','Signes','Expansions harmonieuses']);
+      assert.equal(fiftySeven.total,4);assert.deepEqual(fiftySeven.found.map(a=>a.label),['12','Signes','Expansions harmonieuses']);
       const home=await(await request(token,'/api/orange?level=33')).json();
       assert.equal(home.continuation,null);
       assert.doesNotMatch(JSON.stringify({state,home}),/discord|y83ewhS49|La suite t’attend/i);

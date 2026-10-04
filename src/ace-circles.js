@@ -7,7 +7,7 @@ async function profile(env,id){const row=await env.DB.prepare(profileSQL).bind(i
 const messageContext=(owner,author,key)=>`message:${owner}:${author}:${key}`;
 async function messageView(env,row){return {id:row.id,author:row.author_id?{id:row.author_id,username:row.username}:null,eventId:row.event_id,parentId:row.parent_id,kind:row.kind,createdAt:row.created_at,...(row.kind==='message'?await unseal(env,messageContext(row.owner_id,row.author_id,row.request_id),row.payload):{})};}
 const invisibleBlocked=`NOT EXISTS(SELECT 1 FROM ace_blocks b WHERE (b.user_id=?3 AND b.blocked_id=m.author_id) OR (b.blocked_id=?3 AND b.user_id=m.author_id))`;
-function messageVisibility(access,user){return {sql:`m.owner_id=?1 AND m.id>=?2 AND (?1=?3 OR EXISTS(SELECT 1 FROM circle_topics t JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=m.topic_id AND t.kind='creation' AND e.video_branch IS NOT NULL)) AND ${invisibleBlocked} AND (m.event_id IS NULL OR ?4=1) AND (m.topic_id IS NULL OR ${access.owner===user.id||access.circle.share_enabled&&access.circle.combined_sharing?1:0}=1)`,values:[access.owner,access.member?.joined_seq||0,user.id,access.owner===user.id||access.circle.share_enabled?1:0]};}
+function messageVisibility(access,user){return {sql:`m.owner_id=?1 AND m.id>=?2 AND (?1=?3 OR EXISTS(SELECT 1 FROM circle_topics t JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=m.topic_id AND t.kind='creation' AND e.video_branch IS NOT NULL)) AND ${invisibleBlocked} AND (m.event_id IS NULL OR ?4=1) AND (m.topic_id IS NULL OR ${access.owner===user.id||access.member?.content_access?1:0}=1)`,values:[access.owner,access.member?.joined_seq||0,user.id,access.owner===user.id||access.member?.content_access?1:0]};}
 async function ensureCircle(env,owner){await env.DB.prepare('INSERT OR IGNORE INTO ace_circles(owner_id) VALUES(?1)').bind(owner).run();}
 async function invitation(env,user,id){
   const row=await env.DB.prepare('SELECT * FROM ace_invitations WHERE id=?1 AND (owner_id=?2 OR angel_id=?2)').bind(id,user.id).first();
@@ -23,7 +23,7 @@ export async function aceRoute(request,env,url,user,body,json){
   if(!suffix&&method==='POST'){await ensureCircle(env,user.id);return json({ok:true});}
   if(!suffix&&method==='GET'){
     const own=await env.DB.prepare('SELECT * FROM ace_circles WHERE owner_id=?1').bind(user.id).first();
-    const candidates=(await env.DB.prepare(`SELECT c.*,m.id AS membership_id,m.joined_seq,u.username,u.avatar_data IS NOT NULL AS has_avatar FROM ace_circles c
+    const candidates=(await env.DB.prepare(`SELECT c.*,m.id AS membership_id,m.joined_seq,m.content_access,u.username,u.avatar_data IS NOT NULL AS has_avatar FROM ace_circles c
       JOIN users u ON u.id=c.owner_id LEFT JOIN ace_memberships m ON m.owner_id=c.owner_id AND m.angel_id=?1
       WHERE c.owner_id=?1 OR m.angel_id=?1 ORDER BY c.owner_id=?1 DESC,c.owner_id LIMIT 5`).bind(user.id).all()).results;
     const circles=[];
@@ -31,8 +31,8 @@ export async function aceRoute(request,env,url,user,body,json){
       if(row.owner_id!==user.id&&(await levelOf(env,row.owner_id)<18||await blocked(env,user.id,row.owner_id)))continue;
       const members=(await env.DB.prepare(`SELECT m.id AS membership_id,m.owner_slot,u.id,u.username,u.avatar_data IS NOT NULL AS has_avatar FROM ace_memberships m JOIN users u ON u.id=m.angel_id WHERE m.owner_id=?1 ORDER BY m.owner_slot`).bind(row.owner_id).all()).results;
       const unread=await env.DB.prepare(`SELECT count(*) AS n FROM ace_messages m WHERE m.owner_id=?1 AND m.id>=?2 AND m.author_id<>?3 AND (m.event_id IS NULL OR ?4=1)
-        AND m.kind='message' AND EXISTS(SELECT 1 FROM circle_topics t JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=m.topic_id AND t.kind='creation' AND e.video_branch IS NOT NULL) AND (m.topic_id IS NULL OR ?5=1) AND m.id>COALESCE(CASE WHEN m.topic_id IS NULL THEN (SELECT last_id FROM ace_read_markers WHERE owner_id=?1 AND reader_id=?3) ELSE (SELECT last_id FROM circle_topic_reads WHERE topic_id=m.topic_id AND reader_id=?3) END,0) AND ${invisibleBlocked}`).bind(row.owner_id,row.joined_seq||0,user.id,row.owner_id===user.id||row.share_enabled?1:0,row.owner_id===user.id||row.share_enabled&&row.combined_sharing?1:0).first();
-      circles.push({owner:person({...row,id:row.owner_id}),sharing:!!row.share_enabled,combinedSharing:!!row.combined_sharing,membershipId:row.membership_id,members:members.map(m=>({...person(m),membershipId:m.membership_id,slot:m.owner_slot})),unread:unread.n});
+        AND m.kind='message' AND EXISTS(SELECT 1 FROM circle_topics t JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=m.topic_id AND t.kind='creation' AND e.video_branch IS NOT NULL) AND (m.topic_id IS NULL OR ?5=1) AND m.id>COALESCE(CASE WHEN m.topic_id IS NULL THEN (SELECT last_id FROM ace_read_markers WHERE owner_id=?1 AND reader_id=?3) ELSE (SELECT last_id FROM circle_topic_reads WHERE topic_id=m.topic_id AND reader_id=?3) END,0) AND ${invisibleBlocked}`).bind(row.owner_id,row.joined_seq||0,user.id,row.owner_id===user.id||row.content_access?1:0,row.owner_id===user.id||row.content_access?1:0).first();
+      circles.push({owner:person({...row,id:row.owner_id}),sharing:row.owner_id===user.id||!!row.content_access,combinedSharing:row.owner_id===user.id||!!row.content_access,membershipId:row.membership_id,members:members.map(m=>({...person(m),membershipId:m.membership_id,slot:m.owner_slot})),unread:unread.n});
     }
     const invitations=(await env.DB.prepare(`SELECT i.*,o.username AS owner_name,a.username AS angel_name FROM ace_invitations i JOIN users o ON o.id=i.owner_id JOIN users a ON a.id=i.angel_id
       WHERE (i.owner_id=?1 OR i.angel_id=?1) AND i.state='pending' AND i.expires_at>datetime('now') ORDER BY i.created_at DESC LIMIT 48`).bind(user.id).all()).results;
@@ -129,6 +129,7 @@ export async function aceRoute(request,env,url,user,body,json){
     if(body.enabled)await requireStorage(env,user.id);await ensureCircle(env,user.id);
     await env.DB.batch([
       env.DB.prepare('UPDATE ace_circles SET share_enabled=?2,combined_sharing=?2,access_revision=access_revision+1 WHERE owner_id=?1').bind(user.id,body.enabled?1:0),
+      env.DB.prepare('UPDATE ace_memberships SET content_access=?2 WHERE owner_id=?1').bind(user.id,body.enabled?1:0),
       env.DB.prepare("INSERT INTO privacy_consents(user_id,purpose,version,granted) VALUES(?1,'videography',?2,?3)").bind(user.id,NOTICE_VERSION,body.enabled?1:0),
     ]);return json({ok:true});
   }
@@ -159,7 +160,7 @@ export async function aceRoute(request,env,url,user,body,json){
       if(after)add('m.id>$',after);if(before)add('m.id<$',before);if(event)add('m.event_id=$',event);if(parent)add('m.parent_id=$',parent);
       const rows=(await env.DB.prepare(`SELECT m.*,u.username FROM ace_messages m LEFT JOIN users u ON u.id=m.author_id WHERE ${filters.join(' AND ')} ORDER BY m.id ${after?'ASC':'DESC'} LIMIT 41`).bind(...values).all()).results;
       const page=rows.slice(0,40);if(!after)page.reverse();const messages=await Promise.all(page.map(row=>messageView(env,row)));await freshAccess(env,access,user);
-      return json({messages,more:rows.length>40,sharing:!!access.circle.share_enabled,membership:access.member?.id||'owner',accessRevision:access.circle.access_revision,contentRevision:access.circle.content_revision});
+      return json({messages,more:rows.length>40,sharing:access.owner===user.id||!!access.member?.content_access,membership:access.member?.id||'owner',accessRevision:access.circle.access_revision,contentRevision:access.circle.content_revision});
     }
     if(method==='POST')fail('Ouvre un événement, une création ou un mécanisme pour y répondre.',410);
   }

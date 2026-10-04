@@ -128,11 +128,11 @@ test('reciprocal circles are independent; self, expiry, cancellation, outsiders 
    f.clearLimits();const another=await invite(f,201,204);f.sql.prepare('DELETE FROM riddle_progress WHERE user_id=204').run();assert.equal((await f.call('/api/ace-circles/invitations/'+another,204,'PUT',{action:'accept'})).status,403);
  }finally{f.sql.close();}
 });
-test('whole-tree consent, per-membership history, revocation, event threads and deletion cover every access path',async()=>{
+test('membership access, history, revocation, event threads and deletion cover every access path',async()=>{
  const f=setup();try{
    await f.ok('/api/ace-circles',201,'POST',{});await send(f,201,201,{text:'Avant ton arrivée'});const e=await save(f,201,crypto.randomUUID(),{entryType:'creation',medium:'vidéo',url:'https://www.youtube.com/watch?v=M7lc1UVf-VE',videoBranch:'self',precision:'day',date:'2020-07-01'});
    const membership=await join(f,201,202);
-   assert.equal((await f.ok('/api/ace-circles/201/messages',202)).messages.length,0);assert.equal((await f.call('/api/life-tree?owner=201',202)).status,403);
+   assert.equal((await f.ok('/api/ace-circles/201/messages',202)).messages.length,0);assert.equal((await f.call('/api/life-tree?owner=201',202)).status,200);
    await sharing(f);assert.equal((await f.ok('/api/life-tree?owner=201',202)).events[0].id,e.id);
    assert.equal((await f.call('/api/life-tree/events/'+e.id+'?owner=201',202,'PUT',event({revision:1}))).status,403);
    await send(f,201,202,{eventId:e.id});await send(f,201,201,{text:'Conversation générale'});

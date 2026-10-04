@@ -1,6 +1,6 @@
 import {seal,unseal,fail,text,integer} from './private-data.js';
 import {recordTopic} from './circle-topics.js';
-import {requireLevel,requireStorage} from './private-access.js';
+import {requireLevel,requireStorage,circleAccess,freshAccess,requireContentAccess} from './private-access.js';
 import {normalizeMechanism,mechanismFields} from '../public/mechanism-model.js';
 
 const DEFAULTS=[
@@ -14,17 +14,22 @@ async function view(env,user,row,slot){return {slot,revision:row?.revision||0,..
 
 export async function mechanismsRoute(request,env,url,user,body,json){
   const owner=url.searchParams.has('owner')?integer(Number(url.searchParams.get('owner')),1):user.id;
-  if(owner!==user.id)fail('Les mécanismes sont personnels.',403);
   const suffix=url.pathname.replace(/^\/api\/mechanisms/,'').replace(/\/$/,''),method=request.method;
+  let access=null;
+  if(owner!==user.id){
+    if(method!=='GET'||suffix==='/export')fail('Seul l’auteur peut modifier ou exporter ses mécanismes.',403);
+    access=await circleAccess(env,user,owner);requireContentAccess(access,user);
+  }
   if(suffix!=='/export')await requireLevel(env,user,12);
   if((suffix===''||suffix==='/export')&&method==='GET'){
     const rows=(await env.DB.prepare('SELECT * FROM user_mechanisms WHERE owner_id=?1 ORDER BY slot').bind(owner).all()).results;
     const mechanisms=await Promise.all(Array.from({length:10},(_,i)=>view(env,{id:owner},rows.find(r=>r.slot===i+1),i+1)));
-    return json({mechanisms},200,suffix==='/export'?{'Content-Disposition':'attachment; filename="mes-mecanismes.json"'}:{});
+    if(access)await freshAccess(env,access,user);
+    return json({mechanisms,editable:owner===user.id},200,suffix==='/export'?{'Content-Disposition':'attachment; filename="mes-mecanismes.json"'}:{});
   }
   const match=/^\/([1-9]|10)$/.exec(suffix);if(!match)fail('Mécanisme introuvable.',404);
   const slot=Number(match[1]);
-  if(method==='GET'){const mechanism=await view(env,{id:owner},await env.DB.prepare('SELECT * FROM user_mechanisms WHERE owner_id=?1 AND slot=?2').bind(owner,slot).first(),slot);return json({mechanism});}
+  if(method==='GET'){const mechanism=await view(env,{id:owner},await env.DB.prepare('SELECT * FROM user_mechanisms WHERE owner_id=?1 AND slot=?2').bind(owner,slot).first(),slot);if(access)await freshAccess(env,access,user);return json({mechanism,editable:owner===user.id});}
   if(method==='PUT'){
     await requireStorage(env,user.id);const revision=integer(body.revision);
     const input={};

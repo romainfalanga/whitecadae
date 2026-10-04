@@ -22,7 +22,7 @@ const expansionForms=['expansion harmonieuse','expansion harmonieuses','expansio
 export const NODES = [
   ...onSong('30-vins-divins',1,[
     {id:'eg-14',source:'30 vins divins',answers:[...legacy('n-c').answers.map(a=>({...a,id:'eg-14-1'})),a('eg-14-2','Jésus')]},
-    {id:'n-a',source:'57',answers:[answer('eg-16-1','12 apôtres',[['12','douze'],['apôtres','apotre']]),a('eg-16-2','Signes',['signe']),a('eg-16-3','Anges',['ange']),a('eg-16-4','Expansions harmonieuses',expansionForms)]},
+    {id:'n-a',source:'57',answers:[a('eg-16-1','12',['douze']),a('eg-16-2','Signes',['signe']),a('eg-16-3','Anges',['ange']),a('eg-16-4','Expansions harmonieuses',expansionForms)]},
     {id:'n-h',source:'Prends la bête à…',answers:[horns('n-h-2','10','dix'),horns('n-h-3','2','deux')]},
     {id:'eg-02',source:'XEU',answers:[a('eg-02-1','Dieu')]},
     {id:'eg-01',source:'Aigle',answers:[a('eg-01-1','Signe',['signes'])]},
@@ -66,7 +66,7 @@ export function progress(rows=[]) {
   const solved=new Set(),parts=new Map(),seen=new Set(),milestones=new Set();
   const previous=new Set(rows.filter(r=>r.solved_at).map(r=>oldId(r.riddle_id)));
   // The corrected interpretation keeps a completed historical rung. Only the
-  // numeric fragment transfers; arc/ange fragments cannot solve « apôtres ».
+  // numeric fragment transfers; unrelated historical fragments never solve 12.
   if(previous.has('n-a-4')||[0,1,2].every(i=>previous.has('n-a-4.p'+i)))solved.add('eg-16-1');
   else if(previous.has('n-a-4.p0'))parts.set('eg-16-1',new Set([0]));
   if(previous.has('eg-11-1.p0')&&previous.has('eg-11-1.p1'))solved.add('eg-11-1');

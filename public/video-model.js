@@ -1,5 +1,5 @@
 export const VIDEO_BRANCHES=[
-  ['self','Observations et améliorations de soi'],
+  ['self','Observation et amélioration de soi'],
   ['ideas','Réflexions'],
   ['projects','Idées et projets'],
 ];

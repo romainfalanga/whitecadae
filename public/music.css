@@ -77,7 +77,7 @@ body.with-player #install-banner { bottom:calc(var(--player-height) + 1rem); }
 @media(max-width:700px) {
   .site-header { z-index:50; }
   .orange-story { padding:.25rem 0; }
-  .orange-title { flex-direction:column;gap:.05em;margin-bottom:1.4rem; }
+  .orange-title { flex-direction:column;align-items:center;text-align:center;gap:.05em;margin-bottom:1.4rem; }
   .music-album { gap:1.6rem;flex-direction:column;text-align:center;padding:1rem 0 2rem; }.music-cover,.music-date-art { width:72%;max-width:300px; }.music-album h2 { font-size:2.7rem; }.music-album .eyebrow { font-size:.65rem; }.player-date { width:36px;height:36px;font-size:13px; }
   .music-list li { gap:.6rem;padding:.65rem .1rem; }.track-play { gap:.65rem;font-size:.9rem; }.track-number { font-size:.7rem; }.track-lyrics span { display:none; }.track-duration { min-width:2.4rem;font-size:.75rem; }
   .music-list-head { padding:1rem .1rem; }

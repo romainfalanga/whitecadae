@@ -7,7 +7,7 @@ import {matchNode,normalize} from '../src/enigmas57.js';
 const cases=[
   ['eg-14','eg-14-1',['25 décembre','25/12','vingt-cinq décembre'],['24 décembre','25 janvier','2 5 décembre']],
   ['eg-14','eg-14-2',['Jésus','jesus'],['jes','Judas']],
-  ['n-a','eg-16-1',['12 apôtres','douze apotre'],['12 anges','1 2 apôtres','13 apôtres']],
+  ['n-a','eg-16-1',['12','douze'],['apôtre','apôtres','12 apôtres','douze apôtres','12 anges','1 2','13']],
   ['n-a','eg-16-2',['signes','signe'],['signaux','singe']],
   ['n-a','eg-16-3',['anges','ange'],['archanges','angel']],
   ['n-a','eg-16-4',['expansion harmonieuse','expansions harmonieuses','expansion harmonieuses','expansions harmonieuse'],['expansion','harmonieuse','expansion bruyante']],

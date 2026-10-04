@@ -174,18 +174,18 @@ test('the two numeric formulas independently accept the same date and preserve e
   assert.ok(!progress(rows('n-c-1')).solved.has('eg-14-1'));
 });
 
-test('AA, apostles and repeated signs remain independent; corrected history keeps earned rungs',()=>{
+test('AA, 12 and repeated signs remain independent; corrected history keeps earned rungs',()=>{
   const aa=NODES.find(n=>n.id==='eg-15'),fiftySeven=NODES.find(n=>n.id==='n-a'),seven=NODES.find(n=>n.id==='n-k');
   assert.equal(aa.answers[0].label,'Andromédien Autiste');
   for(const text of ['Andromédien autiste','andromedien autiste'])assert.ok(matchNode(aa,text,new Set()).prises[0].complet);
-  assert.deepEqual(fiftySeven.answers.map(a=>a.label),['12 apôtres','Signes','Anges','Expansions harmonieuses']);
+  assert.deepEqual(fiftySeven.answers.map(a=>a.label),['12','Signes','Anges','Expansions harmonieuses']);
   assert.deepEqual(seven.answers.map(a=>a.label),['Galaxies','Signes']);
-  for(const text of ['12 apôtres','douze apotres'])assert.ok(matchNode(fiftySeven,text,new Set()).prises[0].complet);
+  for(const text of ['12','douze'])assert.ok(matchNode(fiftySeven,text,new Set()).prises[0].complet);
   for(const text of ['anges','Anges','ange'])assert.ok(matchNode(fiftySeven,text,new Set()).prises.some(p=>p.id==='eg-16-3'&&p.complet));
   assert.ok(!matchNode(fiftySeven,'archanges',new Set())?.prises?.length);
   assert.equal(gameLevel(rows('n-a-4')),2);
   assert.equal(gameLevel(rows('n-a-4.p0','n-a-4.p1','n-a-4.p2')),2);
-  assert.equal(gameLevel(rows('n-a-4.p0','n-a-4.p1')),1);
+  assert.equal(gameLevel(rows('n-a-4.p0','n-a-4.p1')),2);
   assert.deepEqual([...progress(rows('n-a-4.p0','n-a-4.p1')).parts.get('eg-16-1')],[0]);
   assert.equal(gameLevel(rows('n-a-4','eg-16-1')),2);
   const signs=progress(rows('eg-16-2','eg-17-1'));

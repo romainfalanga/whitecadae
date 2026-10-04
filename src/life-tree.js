@@ -73,11 +73,10 @@ export async function lifeRoute(request,env,url,user,body,json){
   }
   const owner=url.searchParams.has('owner')?integer(Number(url.searchParams.get('owner')),1):user.id;
   const access=await circleAccess(env,user,owner,true);
-  if(method!=='GET'){if(owner!==user.id)fail('Seul l’auteur peut modifier son arbre.',403);await requireStorage(env,user.id);}
+  if(method!=='GET'){if(owner!==user.id)fail('Seul l’auteur peut modifier son arbre.',403);if(!/^\/events\/[a-zA-Z0-9_-]+$/.test(suffix))await requireStorage(env,user.id);}
   if(!suffix&&method==='GET'){
     const q=filteredQuery(url,owner),tag=url.searchParams.get('theme'),entryType=url.searchParams.get('entryType');
     if(entryType){if(!['event','creation'].includes(entryType))fail('Filtre invalide.');q.add('e.entry_type=$',entryType);}
-    if(owner!==user.id&&(!access.circle.share_enabled||!access.circle.combined_sharing))fail('La Vidéographie n’est pas partagée.',403);
     const videos=url.searchParams.get('videos')==='1'||owner!==user.id;
     if(videos)q.filters.push('e.video_branch IS NOT NULL');
     if(url.searchParams.get('archive')==='1'){if(owner!==user.id)fail('Archives privées.',403);q.filters.push('e.video_branch IS NULL');}
@@ -86,7 +85,7 @@ export async function lifeRoute(request,env,url,user,body,json){
     const after=url.searchParams.get('after');if(after){if(!/^\d{4}-\d{2}-\d{2}\|[a-zA-Z0-9_-]{8,64}$/.test(after))fail('Page invalide.');q.add("(e.sort_date||'|'||e.id)"+(videos?'<':'>')+'$',after);}
     const rows=(await env.DB.prepare(`SELECT e.*,(SELECT id FROM circle_topics WHERE owner_id=e.owner_id AND resource_key='event:'||e.id) AS topic_id FROM life_events e WHERE ${q.filters.join(' AND ')} ORDER BY e.sort_date ${videos?'DESC':'ASC'},e.id ${videos?'DESC':'ASC'} LIMIT 31`).bind(...q.values).all()).results;
     const events=await Promise.all(rows.slice(0,30).map(r=>unpack(env,r)));await freshAccess(env,access,user);
-    return json({events,next:rows.length>30?`${events.at(-1).sort_date}|${events.at(-1).id}`:null,owner,editable:owner===user.id,sharing:!!access.circle?.share_enabled,kinds:EVENT_KINDS,impacts:EVENT_IMPACTS});
+    return json({events,next:rows.length>30?`${events.at(-1).sort_date}|${events.at(-1).id}`:null,owner,editable:owner===user.id,sharing:owner===user.id||!!access.member?.content_access,kinds:EVENT_KINDS,impacts:EVENT_IMPACTS});
   }
   if(suffix==='/drafts'&&method==='GET'){
     if(owner!==user.id)fail('Brouillons privés.',403);
@@ -109,16 +108,18 @@ export async function lifeRoute(request,env,url,user,body,json){
     const id=identifier(match[1]);
     const row=await env.DB.prepare("SELECT e.*,(SELECT id FROM circle_topics WHERE owner_id=e.owner_id AND resource_key='event:'||e.id) AS topic_id FROM life_events e WHERE owner_id=?1 AND id=?2").bind(owner,id).first();
     if(method==='GET'){
-      if(!row||owner!==user.id&&(!row.video_branch||!access.circle.share_enabled||!access.circle.combined_sharing))fail('Contenu indisponible.',404);
+      if(!row||owner!==user.id&&!row.video_branch)fail('Contenu indisponible.',404);
       const links=owner!==user.id?[]:(await env.DB.prepare("SELECT source_id,target_id,payload FROM life_links WHERE owner_id=?1 AND (source_id=?2 OR target_id=?2) AND (?3=1 OR (SELECT count(*) FROM life_events WHERE owner_id=?1 AND id IN(source_id,target_id) AND entry_type='event')=2) LIMIT 40").bind(owner,id,owner===user.id||access.circle.combined_sharing?1:0).all()).results;
       const output={event:await unpack(env,row),links:await Promise.all(links.map(async l=>({...l,payload:await unseal(env,`link:${owner}:${l.source_id}:${l.target_id}`,l.payload)})))};
       await freshAccess(env,access,user);return json(output);
     }
     if(method==='DELETE'){
+      if(!row?.video_branch)await requireStorage(env,user.id);
       const result=await env.DB.prepare('DELETE FROM life_events WHERE owner_id=?1 AND id=?2 AND revision=?3').bind(owner,id,integer(body.revision,1)).run();
       if(!result.meta.changes)fail('Cet événement a changé. Recharge-le avant de le supprimer.',409);return json({ok:true});
     }
     if(method==='PUT'){
+      if(!body.videoBranch)await requireStorage(env,user.id);
       const event=validate(body),revision=integer(body.revision);
       if(row&&(event.entry_type!==row.entry_type||!!event.video_branch!==!!row.video_branch))fail('Le type de ce contenu ne peut pas être changé.');
       const payload=await seal(env,context(owner,id),event.payload);

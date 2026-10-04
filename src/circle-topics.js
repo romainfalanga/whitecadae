@@ -1,5 +1,5 @@
 import {seal,unseal,fail,text,integer,identifier} from './private-data.js';
-import {circleAccess,freshAccess,writeGuard,requireStorage} from './private-access.js';
+import {circleAccess,freshAccess,writeGuard,requireContentAccess} from './private-access.js';
 import {youtubeLink} from '../public/youtube-video.js';
 
 export function recordTopic(env,{owner,key,kind,event=null,target=null,slot=null,guard='1',values=[]}){
@@ -10,7 +10,7 @@ export function recordTopic(env,{owner,key,kind,event=null,target=null,slot=null
 }
 async function accessTo(env,user,owner){
   const access=await circleAccess(env,user,owner);
-  if(user.id!==owner&&!(access.circle.share_enabled&&access.circle.combined_sharing))fail('La Vidéographie n’est pas partagée.',403);
+  requireContentAccess(access,user);
   return access;
 }
 const replyContext=(owner,author,key)=>`message:${owner}:${author}:${key}`;
@@ -88,7 +88,7 @@ export async function topicsRoute(request,env,url,user,body,json){
       ON CONFLICT(topic_id,reader_id) DO UPDATE SET last_id=MAX(last_id,excluded.last_id)`).bind(...g.values,last,id,access.member?.joined_seq||0).run();return json({ok:true});
   }
   if(detail[2]!=='replies'||method!=='POST')fail('Méthode indisponible.',405);
-  await requireStorage(env,user.id);const key=identifier(body.id),content=text(body.text,4000,true),parent=body.parentId?integer(body.parentId,1):null;
+  const key=identifier(body.id),content=text(body.text,4000,true),parent=body.parentId?integer(body.parentId,1):null;
   if(parent&&!await env.DB.prepare(`SELECT 1 FROM ace_messages m WHERE ${v.sql} AND m.topic_id=?4 AND m.id=?5 AND m.kind='message'`).bind(...v.values,id,parent).first())fail('Cette réponse n’est pas disponible.',404);
   const payload=await seal(env,replyContext(topic.owner_id,user.id,key),{text:content}),g=writeGuard(access,user);
   const result=await env.DB.prepare(`INSERT OR IGNORE INTO ace_messages(owner_id,author_id,payload,request_id,event_id,parent_id,topic_id)

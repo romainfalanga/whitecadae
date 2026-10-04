@@ -19,7 +19,7 @@ test('YouTube links reject arbitrary hosts, credentials, HTML, ambiguous IDs and
     assert.equal(youtubeId(link),null,String(link));assert.equal(youtubeLink(link),'');assert.equal(youtubeEmbed(link),'');
   }
 });
-test('YouTube URL stays encrypted, reaches only accepted AS with active sharing and is revoked with membership',async()=>{
+test('YouTube URL stays encrypted, reaches only accepted AS and is revoked with membership',async()=>{
   const f=fixture();
   async function call(path,level=18,method='GET',body){const r=await worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session=qa'+level,'X-WC-User':String(level+1),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),f.env);return {status:r.status,body:await r.json(),cache:r.headers.get('Cache-Control')};}
   async function ok(...args){const r=await call(...args);assert.equal(r.status,200,JSON.stringify(r.body));return r.body;}
@@ -31,8 +31,7 @@ test('YouTube URL stays encrypted, reaches only accepted AS with active sharing 
     const ciphertext=f.sql.prepare('SELECT payload FROM life_events WHERE id=?').get('youtube-private').payload;assert.ok(!ciphertext.includes(id));
     const membership=crypto.randomUUID();await ok('/api/ace-circles/invitations',18,'POST',{id:membership,target:20,recipientNotice:true});await ok('/api/ace-circles/invitations/'+membership,19,'PUT',{action:'accept'});
     const topic=f.sql.prepare("SELECT id FROM circle_topics WHERE resource_key='event:youtube-private'").get().id,path='/api/ace-circles/topics/'+topic;
-    assert.equal((await call(path,19)).status,403);
-    await ok('/api/ace-circles/sharing',18,'PUT',{enabled:true,consent:true,scope:'videography'});
+    assert.equal((await call(path,19)).status,200);
     const shared=await call(path,19);assert.equal(shared.body.topic.video.url,url);assert.match(shared.cache,/no-store/);
     assert.equal((await call(path,20)).status,403);
     assert.equal((await ok('/api/life-tree/events/youtube-private?owner=19',19)).event.creation.url,url);

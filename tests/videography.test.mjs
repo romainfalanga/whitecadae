@@ -71,7 +71,7 @@ test('retired monthly videos retain encrypted content, dates, revisions and comm
  }finally{f.sql.close();}
 });
 
-test('video sharing excludes archives, mechanisms and their previous comments even with direct URLs',async()=>{
+test('accepted AS see videos and mechanisms but never archives or their previous comments',async()=>{
  const f=setup();try{
   await f.agree(18);await f.agree(19);await f.ok('/api/ace-circles',18,'POST',{});
   await f.ok('/api/life-tree/events/archive-0001',18,'PUT',video({entryType:'event',videoBranch:null}));
@@ -81,7 +81,8 @@ test('video sharing excludes archives, mechanisms and their previous comments ev
   const id=crypto.randomUUID();await f.ok('/api/ace-circles/invitations',18,'POST',{id,target:20,recipientNotice:true});await f.ok('/api/ace-circles/invitations/'+id,19,'PUT',{action:'accept'});
   await f.ok('/api/ace-circles/sharing',18,'PUT',{enabled:true,consent:true,scope:'videography'});
   assert.deepEqual((await f.ok('/api/life-tree?owner=19',19)).events.map(e=>e.id),['video-000001']);
-  for(const path of ['/api/life-tree/events/archive-0001?owner=19','/api/life-tree?owner=19&archive=1','/api/mechanisms?owner=19','/api/ace-circles/topics/'+archive.topic_id])assert.ok([403,404].includes((await f.call(path,19)).status));
+  for(const path of ['/api/life-tree/events/archive-0001?owner=19','/api/life-tree?owner=19&archive=1','/api/ace-circles/topics/'+archive.topic_id])assert.ok([403,404].includes((await f.call(path,19)).status));
+  assert.equal((await f.ok('/api/mechanisms?owner=19',19)).mechanisms[5].title,'Mon fonctionnement');
   const feed=await f.ok('/api/ace-circles/19/topics',19);assert.equal(feed.topics.length,1);
   assert.equal((await f.call('/api/ace-circles/19/topics?archive=1&revision='+encodeURIComponent(feed.revision),19)).status,403);
   const reply={id:crypto.randomUUID(),text:'Un point de vue aidant'};await f.ok('/api/ace-circles/topics/'+videoEvent.topic_id+'/replies',19,'POST',reply);

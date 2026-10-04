@@ -5,8 +5,7 @@ export const NOTICE_VERSION='2026-10-01';
 export const PRIVATE_NOTICE={version:NOTICE_VERSION,
  purpose:'Cet espace conserve tes récits et réflexions pour te permettre de relire ton parcours. Aucun diagnostic ni analyse automatique n’est effectué.',
  storage:'Les textes sont chiffrés sur le serveur. Les dates, catégories et relations nécessaires au fonctionnement restent des métadonnées protégées. Ce service ne propose pas de chiffrement de bout en bout.',
- combinedSharing:'En activant ce partage, tes AS actuels et ceux que tu accepteras ensuite pourront lire ta Vidéographie et ses futures modifications. Ils pourront répondre dans les discussions associées. Les liens YouTube non répertoriés peuvent être transmis et lus en dehors du site. Tu peux arrêter le partage à tout moment, sans pouvoir effacer ce qui a déjà été lu ou copié.',
- sharing:'Ta Vidéographie reste privée. Si tu actives son partage, tes AS actuels et ceux que tu accepteras ensuite verront ses vidéos et leurs futures mises à jour. Toute personne disposant d’un lien YouTube non répertorié peut regarder la vidéo correspondante en dehors du site. Tu peux retirer cet accord à tout moment ; cela ne peut pas effacer ce qu’une personne a déjà lu ou copié.',
+ sharing:'Tes AS acceptés peuvent consulter tes vidéos et tes mécanismes, et répondre sous tes vidéos. Retirer un AS met fin à son accès sur le site. Les liens YouTube non répertoriés peuvent être transmis et lus en dehors du site.',
  retention:'Tu peux exporter ou supprimer tes événements et tes brouillons. Ils sont conservés jusqu’à leur suppression ou celle de ton compte. Les copies de restauration Cloudflare peuvent subsister jusqu’à 30 jours ; elles ne sont pas consultables par les autres membres.',
  care:'Écris seulement ce que tu souhaites conserver ici et limite les informations identifiantes sur des tiers. Les échanges entre membres ne remplacent pas un accompagnement professionnel.'};
 export async function levelOf(env,id){return gameLevel(await gameRows(env,id));}
@@ -25,11 +24,12 @@ export async function circleAccess(env,user,owner,tree=false){
     return {owner,member:null,circle};
   }
   await requireLevel(env,user,18);
-  if(!circle||tree&&!circle.share_enabled||await levelOf(env,owner)<18||await blocked(env,user.id,owner))fail('Cet espace n’est pas accessible.',403);
+  if(!circle||await levelOf(env,owner)<18||await blocked(env,user.id,owner))fail('Cet espace n’est pas accessible.',403);
   const member=await env.DB.prepare('SELECT * FROM ace_memberships WHERE owner_id=?1 AND angel_id=?2').bind(owner,user.id).first();
-  if(!member)fail('Cet espace n’est pas accessible.',403);
+  if(!member||tree&&!member.content_access)fail('Cet espace n’est pas accessible.',403);
   return {owner,member,circle};
 }
+export function requireContentAccess(access,user){if(access.owner!==user.id&&!access.member?.content_access)fail('Cet accès n’est plus disponible.',403);}
 // Guard every write in SQL, so removal between the initial check and an await
 // cannot publish a delayed message. Changes to sharing increment the revision.
 export function writeGuard(access,user){

@@ -186,7 +186,7 @@ async function route() {
   }
   if (path === '/echelon/horloge') return navigate('/signes/horloge'+location.hash,true);
   if(['/arbre-de-vie','/matiere'].includes(path))return navigate('/videographie'+location.hash,true);
-  if(['/game-master-orange','/videographie','/videographie/archives','/carre-d-as','/signalements'].includes(path)||/^\/carre-d-as\/fil\/\d+$/.test(path)||/^\/mecanisme(?:\/(?:[1-9]|10))?$/.test(path)){
+  if(/^\/(mecanisme|videographie|carre-d-as)\/comprendre$/.test(path)||['/game-master-orange','/videographie','/videographie/archives','/carre-d-as','/signalements'].includes(path)||/^\/carre-d-as\/fil\/\d+$/.test(path)||/^\/mecanisme(?:\/(?:[1-9]|10))?$/.test(path)){
     const epoch=renderEpoch;
     app.innerHTML='<div class="loading">Chargement…</div>';
     try{
@@ -299,6 +299,7 @@ function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
   if(value==='57')return '/signes';
   if(value==='echelon'||value==='/parcours')return '/echelon';
+  if(/^\/(mecanisme|videographie|carre-d-as)\/comprendre$/.test(value||''))return value;
   return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|mecanisme(?:\/(?:[1-9]|10))?|arbre-de-vie|matiere|videographie(?:\/archives)?|carre-d-as(?:\/fil\/\d+)?)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 
