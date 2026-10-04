@@ -587,3 +587,8 @@ CREATE UNIQUE INDEX idx_video_monthly ON life_events(owner_id,video_month) WHERE
 -- 0039: Retire the society category without deleting users' content.
 UPDATE circle_topics SET revision=revision+1 WHERE kind='creation' AND event_id IN (SELECT id FROM life_events WHERE video_branch='society');
 UPDATE life_events SET video_branch='ideas', revision=revision+1 WHERE video_branch='society';
+
+-- Retire monthly recaps without deleting their videos, dates or comments.
+UPDATE circle_topics SET revision=revision+1
+WHERE kind='creation' AND event_id IN (SELECT id FROM life_events WHERE video_branch='monthly');
+UPDATE life_events SET video_branch='ideas',video_month=NULL,revision=revision+1 WHERE video_branch='monthly';

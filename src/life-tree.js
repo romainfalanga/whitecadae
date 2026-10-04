@@ -28,12 +28,11 @@ function validate(body){
   if(video_branch&&(entry_type!=='creation'||body.medium!=='vidéo'))fail('Ce contenu doit être une vidéo.');
   const videoUrl=video_branch?youtubeLink(body.url):null;
   if(video_branch&&!videoUrl)fail('Ajoute un lien de vidéo YouTube valide (https://…).');
-  const video_month=video_branch==='monthly'?String(body.videoMonth||''):null;
-  if(video_branch==='monthly'&&(body.precision!=='month'||body.date!==video_month))fail('Choisis le mois de ce bilan.');
+  const video_month=null;
   const creation=entry_type==='creation'?{medium:body.medium,url:videoUrl??creationLink(body.url),work:text(body.work,12000)}:null;
   if(creation&&(!CREATION_MEDIA.includes(creation.medium)||(!creation.url&&!creation.work&&!video_branch)))fail('Ajoute un texte ou un lien à ta création.');
   const precision=body.precision;if(!['day','month','year','period','unknown'].includes(precision))fail('Précise la forme de la date.');
-  if(video_branch&&precision!==(video_branch==='monthly'?'month':'day'))fail('Choisis une date pour cette vidéo.');
+  if(video_branch&&!['day','month'].includes(precision))fail('Choisis une date pour cette vidéo.');
   const sort_date=date(body.date,precision==='period'?'day':precision),end_date=precision==='period'?date(body.endDate,'day'):null;
   if(end_date&&end_date<sort_date)fail('La fin de la période doit suivre son début.');
   if(!EVENT_KINDS.includes(body.kind)||!EVENT_IMPACTS.includes(body.impact))fail('Repère invalide.');
@@ -122,7 +121,6 @@ export async function lifeRoute(request,env,url,user,body,json){
     if(method==='PUT'){
       const event=validate(body),revision=integer(body.revision);
       if(row&&(event.entry_type!==row.entry_type||!!event.video_branch!==!!row.video_branch))fail('Le type de ce contenu ne peut pas être changé.');
-      if(event.video_branch==='monthly'&&await env.DB.prepare("SELECT 1 FROM life_events WHERE owner_id=?1 AND video_branch='monthly' AND video_month=?2 AND id<>?3").bind(owner,event.video_month,id).first())fail('Un bilan existe déjà pour ce mois.',409);
       const payload=await seal(env,context(owner,id),event.payload);
       if(row&&row.revision!==revision)fail('Cet événement a été modifié ailleurs. Ta saisie est conservée : recharge la version enregistrée avant de choisir.',409);
       const statements=[revision===0?env.DB.prepare(`INSERT OR IGNORE INTO life_events(id,owner_id,sort_date,end_date,precision,kind,impact,payload,entry_type,video_branch,video_month)
@@ -132,7 +130,7 @@ export async function lifeRoute(request,env,url,user,body,json){
       statements.push(env.DB.prepare('DELETE FROM life_tags WHERE owner_id=?1 AND event_id=?2 AND EXISTS(SELECT 1 FROM life_events WHERE id=?2 AND payload=?3)').bind(owner,id,payload));
       for(const tag of event.payload.themes)statements.push(env.DB.prepare('INSERT INTO life_tags(owner_id,event_id,tag_hash) SELECT ?1,?2,?3 WHERE EXISTS(SELECT 1 FROM life_events WHERE id=?2 AND owner_id=?1 AND payload=?4)').bind(owner,id,await tagHash(env,owner,tag),payload));
       statements.push(recordTopic(env,{owner,key:'event:'+id,kind:event.entry_type,event:id,guard:'EXISTS(SELECT 1 FROM life_events WHERE owner_id=?1 AND id=?4 AND payload=?7)',values:[payload]}));
-      let result;try{[result]=await env.DB.batch(statements);}catch(error){if(event.video_branch==='monthly'&&String(error).includes('UNIQUE constraint failed'))fail('Un bilan existe déjà pour ce mois.',409);throw error;}
+      const [result]=await env.DB.batch(statements);
       if(!result.meta.changes)fail('Enregistrement non effectué : version modifiée ou limite de 2 000 événements atteinte. Ta saisie reste disponible.',409);
       return json({event:await unpack(env,await env.DB.prepare('SELECT * FROM life_events WHERE owner_id=?1 AND id=?2').bind(owner,id).first())});
     }

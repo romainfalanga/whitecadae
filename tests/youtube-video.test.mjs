@@ -11,6 +11,7 @@ test('YouTube links normalize supported formats and discard tracking, playlists 
   for(const link of [url,url+'&list=private-list&t=60','https://youtu.be/'+id+'?si=tracking','https://m.youtube.com/watch?v='+id,'https://www.youtube.com/shorts/'+id,'https://youtube.com/live/'+id,'https://www.youtube-nocookie.com/embed/'+id+'?autoplay=0','  '+url+'  ']){
     assert.equal(youtubeId(link),id);assert.equal(youtubeLink(link),url);
     assert.equal(youtubeEmbed(link),'https://www.youtube-nocookie.com/embed/'+id+'?autoplay=1&playsinline=1&rel=0');
+    assert.equal(youtubeEmbed(link,false),'https://www.youtube-nocookie.com/embed/'+id+'?autoplay=0&playsinline=1&rel=0');
   }
 });
 test('YouTube links reject arbitrary hosts, credentials, HTML, ambiguous IDs and executable URLs',()=>{

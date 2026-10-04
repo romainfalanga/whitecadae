@@ -13,4 +13,4 @@ export function youtubeId(value){
   return /^[\w-]{11}$/.test(id||'')?id:null;
 }
 export function youtubeLink(value){const id=youtubeId(value);return id?'https://www.youtube.com/watch?v='+id:'';}
-export function youtubeEmbed(value){const id=youtubeId(value);return id?'https://www.youtube-nocookie.com/embed/'+id+'?autoplay=1&playsinline=1&rel=0':'';}
+export function youtubeEmbed(value,autoplay=true){const id=youtubeId(value);return id?'https://www.youtube-nocookie.com/embed/'+id+'?autoplay='+(autoplay?'1':'0')+'&playsinline=1&rel=0':'';}
