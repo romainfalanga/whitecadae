@@ -60,12 +60,14 @@ Conversation, sujets, projets, Brainstorm, Vidéographie et anciennes contributi
 
 ## Développement et publication
 
+La branche de production est `claude/whitecadae-music-platform-qfsv19`, également branche par défaut du dépôt. Les modifications destinées au site doivent y être intégrées. Le raccordement Cloudflare Workers Builds et les contrôles sont décrits dans [docs/deployment.md](docs/deployment.md).
+
 ```sh
 pnpm install --frozen-lockfile
 pnpm test
 pnpm exec wrangler dev
-pnpm exec wrangler deploy --dry-run --experimental-provision=false
-pnpm exec wrangler deploy --experimental-provision=false
+pnpm run build:ci   # tests et validation du bundle, sans publication
+pnpm run deploy    # validation, publication et vérification de la version en ligne
 ```
 
 `schema.sql` et `seed.sql` servent à créer une base locale neuve. **Ne pas rejouer les seeds ni les anciennes migrations de renommage sur la production.** Le catalogue maintient ses données ciblées sans effacer les paroles. Les déploiements normaux ne suppriment aucun compte.
