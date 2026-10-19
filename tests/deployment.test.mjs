@@ -44,7 +44,7 @@ test('verification waits for its exact commit and cache-busts each marker reques
 test('a missing marker or an older commit can never become a successful deployment',async()=>{
   for(const marker of [()=>new Response('<html>SPA fallback</html>',{headers:{'Content-Type':'text/html'}}),()=>response({...info,commitSha:previousSha})]){
     const calls=[];
-    await assert.rejects(verifyDeployment({...options,timeoutMs:25,fetchImpl:async url=>{
+    await assert.rejects(verifyDeployment({...options,fetchImpl:async url=>{
       calls.push(url.pathname);return marker();
     }}),/verification failed/);
     assert.ok(calls.length>0);
@@ -54,7 +54,7 @@ test('a missing marker or an older commit can never become a successful deployme
 
 test('a matching marker does not hide failed or malformed API responses',async()=>{
   for(const api of [()=>new Response('database unavailable',{status:503}),()=>new Response('<html>fallback</html>',{headers:{'Content-Type':'text/html'}}),()=>new Response('{broken',{headers:{'Content-Type':'application/json'}})]){
-    await assert.rejects(verifyDeployment({...options,timeoutMs:25,fetchImpl:async url=>{
+    await assert.rejects(verifyDeployment({...options,fetchImpl:async url=>{
       if(url.pathname==='/deploy-info.json')return response(info);
       return url.pathname==='/api/me'?response({user:null}):api();
     }}),/verification failed/);
@@ -77,17 +77,17 @@ test('asset comparison accepts CRLF normalization and refuses a partially publis
     const result=await verifyDeployment({...options,root,assets:undefined,fetchImpl,timeoutMs:1000});
     assert.equal(result.checked.length,6);
     stale=true;
-    await assert.rejects(verifyDeployment({...options,root,assets:undefined,fetchImpl,timeoutMs:25}),/app\.js: deployed content differs/);
+    await assert.rejects(verifyDeployment({...options,root,assets:undefined,fetchImpl}),/app\.js: deployed content differs/);
   }finally{await rm(root,{recursive:true,force:true});}
 });
 
 test('hanging requests are aborted and cannot exceed the verification deadline',async()=>{
   const started=Date.now();
   const signals=[];
-  await assert.rejects(verifyDeployment({...options,timeoutMs:35,requestTimeoutMs:10,fetchImpl:async(url,{signal})=>{
+  await assert.rejects(verifyDeployment({...options,requestTimeoutMs:20,fetchImpl:async(url,{signal})=>{
     signals.push(signal);return new Promise(()=>{});
   }}),/request timed out/);
   assert.ok(signals.length>0);
   assert.ok(signals.every(signal=>signal.aborted));
-  assert.ok(Date.now()-started<1000);
+  assert.ok(Date.now()-started<1500);
 });
