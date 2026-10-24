@@ -11,11 +11,8 @@ Application JavaScript sans framework : Cloudflare Worker, assets statiques, D1 
 - `/echelon` : parcours de 33 échelons, réglages du compte et membres jusqu’à l’échelon courant inclus.
 - `/chanson/:slug` : paroles accessibles depuis le lecteur selon les droits du morceau.
 - `/game-master-orange` : accompagnement mutuel des joueurs, à l’échelon 11.
-- `/mecanisme` et `/mecanisme/:slot` : dix mécanismes modifiables, à l’échelon 12.
-- `/matiere` : chronologie personnelle, vécu, créations et liens, à l’échelon 18. `/arbre-de-vie` redirige vers cette page.
-- `/carre-d-as` : carré personnel et accompagnements privés, à l’échelon 20.
 
-Ces quatre liens apparaissent progressivement dans le menu et sur l’accueil. Matière et Mécanismes restent privés jusqu’à l’activation explicite de leur partage commun. Chaque carré comprend son centre et jusqu’à quatre AS ; chacun peut accompagner jusqu’à quatre autres centres. L’ajout d’un AS se fait par recherche de pseudo exact, puis acceptation de l’invitation. Les AS peuvent répondre aux événements, créations, liens et mécanismes dans leur discussion dédiée (`/carre-d-as/fil/:id`). Les créations contiennent un texte et/ou un lien HTTPS externe, sans stockage de fichiers multimédias supplémentaire. Les sessions, contrôles d’accès, données chiffrées, migrations et vérifications sont détaillés dans [la documentation des espaces personnels](docs/private-spaces.md).
+Mécanismes, Vidéographie et Carré d’AS sont retirés du site, du menu, de l’accueil et du calendrier des déblocages. Leurs anciennes adresses, y compris les sous-pages, `/matiere` et `/arbre-de-vie`, ramènent à l’accueil. Les indicateurs d’accès correspondants restent désactivés à tous les échelons, y compris pour les administrateurs. Game Master Orange reste la seule page ajoutée au parcours, à l’échelon 11. Les données et API personnelles historiques sont conservées avec leurs contrôles d’accès pour compatibilité ; aucune migration ni suppression de données n’est exécutée.
 
 Le menu comprend Escape Game Orange, Musiques, Signes et Échelons ; Horloge s’ajoute immédiatement après la découverte de L’horloge dans Aiguille. `/api/me` utilise la progression canonique pour cette condition, sans déblocage par niveau ni exception administrateur. Les anciens liens d’énigmes et d’Horloge redirigent vers Signes. `/parcours` et les anciens profils redirigent vers Échelons, dont l’URL reste `/echelon`. Les API historiques `/api/echelon` et `/api/57` restent des alias du jeu pour les anciens clients ; le nouveau client utilise `/api/signes`.
 
@@ -56,7 +53,7 @@ La page Échelons réunit pseudo, photo et mot de passe. Le changement de mot de
 
 ## Espaces retirés
 
-Conversation, sujets, projets, Brainstorm, Vidéographie et anciennes contributions en écriture sont fermés. Leurs API renvoient 410. Aucune messagerie n’est ajoutée à la roadmap. Le binding historique Durable Object reste déclaré pour la compatibilité du déploiement ; sa classe refuse les connexions.
+Conversation, sujets, projets, Brainstorm, ancienne Vidéographie communautaire et anciennes contributions en écriture sont fermés. Leurs API renvoient 410. Aucune messagerie n’est ajoutée à la roadmap. Le binding historique Durable Object reste déclaré pour la compatibilité du déploiement ; sa classe refuse les connexions.
 
 ## Développement et publication
 

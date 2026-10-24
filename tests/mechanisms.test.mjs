@@ -21,7 +21,7 @@ test('mechanisms unlock at 12, contain exactly ten private slots and three edita
  const f=setup();try{
   assert.equal((await f.call('/api/mechanisms',501)).status,403);
   const list=await f.call('/api/mechanisms');assert.equal(list.status,200);assert.equal(list.data.mechanisms.length,10);assert.equal(list.data.mechanisms.filter(m=>m.title).length,3);
-  assert.equal((await f.call('/api/me',501)).data.access.mechanisms,false);assert.equal((await f.call('/api/me')).data.access.mechanisms,true);
+  assert.equal((await f.call('/api/me',501)).data.access.mechanisms,false);assert.equal((await f.call('/api/me')).data.access.mechanisms,false);
   const proposed=list.data.mechanisms[0];assert.equal(proposed.title,'Toujours faire mieux');assert.equal(f.sql.prepare('SELECT count(*) AS n FROM user_mechanisms').get().n,0);
   assert.equal((await f.call('/api/mechanisms/1',500,'PUT',{...proposed,title:'Ma version'})).status,409);
   assert.equal((await f.agree()).status,200);

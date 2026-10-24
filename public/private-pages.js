@@ -51,6 +51,7 @@ function modal(title,html){
 function closeModal(){session?.dialog?.close();}
 async function verifyIdentity(){const current=await api('/api/me');if(current.user?.id!==session.user){session.ctx.app.innerHTML='';session.dialog?.remove();session.ctx.navigate('/connexion?retour='+encodeURIComponent(location.pathname));return false;}return true;}
 export async function page(path,ctx){
+  if(!['/game-master-orange','/signalements'].includes(path)){leave();return ctx.navigate('/',true);}
   leave();const s=session={ctx,user:ctx.state.user?.id,controller:new AbortController(),timer:null,dialog:null,dirty:false};
   if(!document.querySelector('link[href="/private-pages.css"]')){const css=document.createElement('link');css.rel='stylesheet';css.href='/private-pages.css';document.head.append(css);}
   const title=path.startsWith('/mecanisme')?'Mécanismes':path==='/game-master-orange'?'Game Master Orange':path.startsWith('/videographie')?'Vidéographie':path==='/signalements'?'Signalements':'Carré d’AS';document.title=title+' · White Cadae';

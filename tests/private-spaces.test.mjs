@@ -37,7 +37,7 @@ test('exact canonical thresholds; no anonymous, legacy or administrator bypass; 
    for(const [path,below,above] of [['/api/game-master-orange',11,12],['/api/life-tree',15,16],['/api/ace-circles',18,19]]){
      assert.equal((await f.call(path,0)).status,401);assert.equal((await f.call(path,below)).status,403);assert.equal((await f.call(path,above)).status,200);assert.equal((await f.call(path,100)).status,403);
    }
-   const caps=(await f.ok('/api/me',201)).access;assert.ok(caps.gameMaster&&caps.lifeTree&&caps.aceSquare);
+   const caps=(await f.ok('/api/me',201)).access;assert.ok(caps.gameMaster);assert.equal(caps.lifeTree,false);assert.equal(caps.aceSquare,false);
    for(const path of ['/api/carre','/api/arbres','/api/conversation','/api/community'])assert.equal((await f.call(path,201)).status,410);
  }finally{f.sql.close();}
 });

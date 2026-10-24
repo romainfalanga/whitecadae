@@ -19,7 +19,7 @@ test('video and AS access use canonical levels 15 and 18, including invitation a
   assert.equal((await f.call('/api/life-tree?videos=1',14)).status,403);assert.equal((await f.call('/api/life-tree?videos=1',15)).status,200);
   assert.equal((await f.call('/api/ace-circles',17)).status,403);assert.equal((await f.call('/api/ace-circles',18)).status,200);
   await f.agree(18);await f.agree(19);const id=crypto.randomUUID();await f.ok('/api/ace-circles/invitations',19,'POST',{id,target:19,recipientNotice:true});await f.ok('/api/ace-circles/invitations/'+id,18,'PUT',{action:'accept'});
-  const access=(await f.ok('/api/me',15)).access;assert.equal(access.lifeTree,true);assert.equal(access.aceSquare,false);
+  const access=(await f.ok('/api/me',15)).access;assert.equal(access.lifeTree,false);assert.equal(access.aceSquare,false);
  }finally{f.sql.close();}
 });
 test('three categories, concurrent edits, real dates and validated YouTube hosting',async()=>{
