@@ -1,17 +1,16 @@
 # Publication de whitecadae.fr
 
-## État du raccordement au 19 octobre 2026
+## État du raccordement au 24 octobre 2026
 
 Le domaine `whitecadae.fr` est relié au Worker Cloudflare `whitecadae` du compte `834ee251038ce2f923cba9847f973c40`.
-La version publiée le 4 octobre 2026 correspond aux fichiers de la branche `codex/escape-game-orange`, commit `9bfc8a9abb2b46bfee43ec591edcd2370ebe7b30` (comparaison des fichiers HTML, app.js et service worker, fins de ligne normalisées).
 
-La branche par défaut `claude/whitecadae-music-platform-qfsv19` était restée sur une ancienne version. Elle est remise à niveau depuis ce commit, dont elle est un ancêtre, pour que les futures modifications partent de la version réellement publiée.
+Workers Builds est connecté au dépôt `romainfalanga/whitecadae`, avec publication de la branche `claude/whitecadae-music-platform-qfsv19`. La connexion au dépôt et le déclencheur ont été activés le 24 octobre 2026 ; les aperçus des autres branches restent désactivés.
 
-**L'automatisation reste à activer dans Cloudflare.** L'audit ne trouve ni connexion Workers Builds ni déclencheur pour ce Worker ; la connexion Cloudflare disponible refuse la création du lien avec GitHub (« Authentication error »). La préparation du dépôt ne constitue pas une activation de ce service.
+Le premier build (`81df846e-b62d-43a6-8406-994310f16461`) a publié le commit `6b87727a6bcf7e1077817406096600a2fa1b0276`, qui retire Mécanismes, Vidéographie et Carré d’AS de la navigation et des déblocages. Le contrôle de publication a confirmé ce SHA sur `https://whitecadae.fr/deploy-info.json`, comparé les fichiers HTML, app.js et service worker, puis vérifié les API publiques (six contrôles réussis).
 
 ## Configuration Cloudflare Workers Builds
 
-Sur le Worker existant **whitecadae**, ouvrir **Settings → Builds → Connect**, choisir GitHub et le dépôt **romainfalanga/whitecadae**. Autoriser l'application GitHub Cloudflare à accéder à ce dépôt si elle le demande.
+Sur le Worker existant **whitecadae**, les réglages suivants sont maintenant actifs dans **Settings → Builds**.
 
 | Réglage | Valeur |
 | --- | --- |
@@ -37,7 +36,7 @@ Utiliser un jeton de build Cloudflare autorisé à publier ce Worker et à utili
 
 Une erreur bloque la commande. Une réponse HTTP 200 de l'ancien site ne suffit donc pas à valider un nouveau déploiement. Si la publication réussit mais que le contrôle final échoue, le build est signalé en échec ; examiner les journaux et corriger, car le contrôle ne restaure pas automatiquement une version antérieure.
 
-Après activation, valider un push réel, le succès du build Cloudflare et le marqueur `https://whitecadae.fr/deploy-info.json`. Tant que cette chaîne complète n'a pas réussi, considérer l'automatisation comme non vérifiée. Actualiser cette section d'état seulement après ce contrôle.
+Pour chaque modification, contrôler le succès du build Cloudflare et le marqueur `https://whitecadae.fr/deploy-info.json`. Une réponse de l’ancien site ne valide jamais une nouvelle publication.
 
 ## Données conservées
 
