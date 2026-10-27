@@ -46,7 +46,7 @@ export const NODES = [
   {id:'eg-12',source:'3:50 – 3:44',subtitle:'30 vins divins · Sans indices dans les dés',music:'sans-indice-dans-les-des',min:2,kind:'workshop',board:'pair',requires:['eg-03-1'],answers:[a('eg-12-1','2 × 57')]},
   {id:'eg-13',source:'2:39',subtitle:'Orange',music:'orange',min:4,kind:'workshop',board:'last',requires:['eg-03-1'],answers:[a('eg-13-1','57')]},
   {id:'eg-18',source:'114',subtitle:'Vulpis',music:'la-matiere-dense',min:5,kind:'workshop',board:'album',requires:['eg-03-1'],answers:[a('eg-18-1','57 · 2')]},
-  {id:'eg-19',source:'18 juillet 2019',subtitle:'La date de l’album',music:'wanheda',min:8,kind:'workshop',board:'date',requires:['eg-03-1'],answers:[a('eg-19-1','57 · 07')]},
+  {id:'eg-19',source:'18 juillet 2019',subtitle:'L’album de AA',music:'wanheda',min:8,kind:'workshop',board:'date',requires:['eg-03-1'],answers:[a('eg-19-1','57 · 07')]},
   {id:'eg-20',source:'3:54',subtitle:'Wanheda',music:'wanheda',min:8,kind:'workshop',board:'wanheda',requires:['eg-03-1'],answers:[a('eg-20-1','57')]},
   {id:'eg-21',source:'3:18 – 3:18',subtitle:'Quand je vois je pense · Un fil entre deux infinis',music:'un-fil-entre-deux-infinis',min:10,kind:'workshop',board:'infinis',requires:['eg-03-1'],answers:[a('eg-21-1','666')]},
   ...onSong('wanheda',8,[{id:'n-0',source:'En nous collant au bon endroit, un troisième apparaîtra.',answers:[a('n-0-1','Devincix')]}]),
