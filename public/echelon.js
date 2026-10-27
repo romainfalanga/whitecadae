@@ -1,6 +1,6 @@
 /* UI only. The server supplies the discovered territory, never future answers. */
 window.WCGame=(()=>{
-  let data=null,currentPath='',serial=0,pause=null,celebration=null,sending=false;
+  let data=null,currentPath='',serial=0,pause=null,celebration=null,sending=false,answersVisible=false;
   const boards=new Map();
   let activeBoard=null;
   const positions=new Map();
@@ -14,7 +14,14 @@ window.WCGame=(()=>{
   const isClock=()=>location.pathname==='/signes/horloge';
   function link(p){const local=p.href.split('#')[0]===location.pathname;return `<a href="${e(local?'#'+p.id:p.href)}" ${local?'':'data-link'}>${e(p.title)}</a>`;}
   function login(){return accountEntryMarkup();}
-  function header(){return `<header class="eg-header"><h1>${isClock()?'Horloge':'Signes'}</h1></header>`;}
+  const visibilityLabel=()=>answersVisible?'Masquer les signes trouvés':'Afficher les signes trouvés';
+  function visibilityIcon(){return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>${answersVisible?'':'<path d="m3 3 18 18"/>'}</svg>`;}
+  function visibilityButton(){
+    const label=visibilityLabel();
+    return `<button id="eg-visibility" type="button" class="eg-visibility" aria-label="${label}" title="${label}" aria-pressed="${answersVisible}">${visibilityIcon()}</button>`;
+  }
+  function toggleAnswers(){answersVisible=!answersVisible;sync();}
+  function header(){return `<header class="eg-header"><h1>${isClock()?'Horloge':'Signes'}</h1>${isClock()?'':visibilityButton()}</header>`;}
   function locked(p){const r=p.requirements||{},deps=(r.pages||[]).map(d=>pageBy(d.id)).filter(Boolean);return `<p class="eg-lock">Verrouillé${r.level?` · Échelon ${r.level}`:''}${deps.length?` · Termine ${deps.map(link).join(', ')}`:''}</p>`;}
   function feedback(message,id,gained=0,kind='info'){
     const box=(id&&document.querySelector(`#${id} .eg-feedback`))||document.getElementById('eg-feedback');
@@ -26,13 +33,20 @@ window.WCGame=(()=>{
     box.classList.add('is-visible');
   }
   function accept(next){if(data&&next.echelon<data.echelon)return;if(data?.capabilities.share)next.capabilities.share=true;data=next;}
-  function found(p){return `<div class="eg-found"><ul>${p.found.map(a=>`<li><span aria-hidden="true">✧</span> ${e(a.label)}</li>`).join('')}${p.partiels.map(v=>`<li class="eg-partial">${v.jetons.map(t=>e(t.sep)+(t.q?'?':`<strong>${e(t.t)}</strong>`)).join('')}</li>`).join('')}</ul>${p.total?`<span>${p.found.length} / ${p.total} ${p.total>1?'signes':'signe'}</span>`:''}</div>`;}
+  function found(p){return `<div class="eg-found"><ul>${p.found.map(a=>`<li><span aria-hidden="true">✧</span> ${answersVisible?e(a.label):'<span class="eg-hidden-sign" aria-label="Signe trouvé masqué">••••••</span>'}</li>`).join('')}${p.partiels.map(v=>`<li class="eg-partial">${answersVisible?v.jetons.map(t=>e(t.sep)+(t.q?'?':`<strong>${e(t.t)}</strong>`)).join(''):'<span class="eg-hidden-sign" aria-label="Signe partiellement trouvé masqué">••••••</span>'}</li>`).join('')}</ul>${p.total?`<span>${p.found.length} / ${p.total} ${p.total>1?'signes':'signe'}</span>`:''}</div>`;}
   const notice=()=>'<div class="eg-feedback" role="status" aria-live="polite"></div>';
   function riddle(p){return `<article id="${e(p.id)}" class="eg-entry ${p.visual?'has-art':''} ${p.locked?'is-locked':''}" ${p.title?`aria-labelledby="title-${e(p.id)}"`:'aria-label="Mot de passe"'} tabindex="-1">${art(p.visual,true)}<div class="eg-entry-main">${p.title?`<h2 id="title-${e(p.id)}" tabindex="-1">${e(p.title)}</h2>`:''}${found(p)}${p.locked?locked(p):p.open?`<form class="eg-answer" data-answer="${e(p.id)}"><label class="sr-only" for="input-${e(p.id)}">${p.title?`Signe pour ${e(p.title)}`:'Mot de passe'}</label><div><input id="input-${e(p.id)}" name="answer" placeholder="${p.title?'Proposer un signe':'Mot de passe'}" maxlength="200" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" required ${data.anonyme?'disabled':''}><button type="submit" class="orange-button" ${data.anonyme?'disabled':''}>Valider</button></div></form>`:'<p class="eg-complete">Tous les signes sont trouvés.</p>'}${p.id==='eg-03'&&pageBy('eg-10')?'<a class="eg-clock-link" href="/signes/horloge" data-link><span class="eg-clock-emblem" aria-hidden="true"></span><span>Ouvrir Horloge</span><span class="eg-clock-chevron" aria-hidden="true">›</span></a>':''}${notice()}</div></article>`;}
   function lab(p){const solved=!p.open;return `<section id="${e(p.id)}" class="eg-lab ${solved?'is-solved':''}" aria-labelledby="title-${e(p.id)}" data-solved="${solved}"><h2 id="title-${e(p.id)}" tabindex="-1">${solved?`<span>${e(p.title)}</span><span class="eg-solved-label">✓ Résolue</span>`:`<button data-open-board="${e(p.id)}" aria-expanded="false" aria-controls="panel-${e(p.id)}"><span>${e(p.title)}</span><span class="eg-open-label">Ouvrir</span></button>`}</h2><p class="eg-subtitle">${e(p.subtitle)}</p>${notice()}${solved?'':`<div id="panel-${e(p.id)}" class="eg-lab-body" hidden>${p.locked?locked(p):`<div id="bench-${e(p.id)}" class="eg-workbench" aria-busy="true">Chargement…</div>`}</div>`}</section>`;}
   function selectBoard(id){activeBoard=activeBoard===id?null:id;sync();history.replaceState(null,'',activeBoard?'#'+id:location.pathname);if(activeBoard)document.getElementById(id)?.scrollIntoView({block:'start'});}
   function sync(){
-    document.querySelectorAll('.eg-level strong').forEach(el=>el.textContent=data.echelon);
+    const visibility=document.getElementById('eg-visibility');
+    if(visibility){
+      visibility.innerHTML=visibilityIcon();
+      visibility.setAttribute('aria-label',visibilityLabel());
+      visibility.setAttribute('title',visibilityLabel());
+      visibility.setAttribute('aria-pressed',String(answersVisible));
+      visibility.onclick=toggleAnswers;
+    }
     const continuation=document.getElementById('eg-continuation'),markup=continuationMarkup(data.continuation);
     if(continuation&&continuation.innerHTML!==markup)continuation.innerHTML=markup;
     const root=document.getElementById('eg-game-content');if(!root)return;
@@ -52,7 +66,7 @@ window.WCGame=(()=>{
     }else{
       const riddles=data.nodes.filter(n=>n.kind==='riddle');
       for(const [index,p] of riddles.entries()){
-        const version=JSON.stringify(p),old=document.getElementById(p.id);
+        const version=JSON.stringify([p,answersVisible]),old=document.getElementById(p.id);
         if(old&&versions.get(p.id)===version)continue;
         const active=old?.contains(document.activeElement),value=old?.querySelector('input')?.value;
         if(old)old.outerHTML=riddle(p);else{
@@ -91,8 +105,8 @@ window.WCGame=(()=>{
     }catch(err){if(token===serial){feedback(err.message,p.id,0,'error');if(err.data?.attenteMs!==undefined)pause?.sync(err.data.attenteMs);}}
     finally{if(token===serial){sending=false;pause?.refresh();}}
   }
-  async function page(){const epoch=newEpoch(),token=++serial;currentPath=location.pathname;app.innerHTML='<div class="loading">Chargement…</div>';try{data=await api('/api/signes');if(token!==serial||stale(epoch))return;activeBoard=data.nodes.some(n=>n.id===location.hash.slice(1)&&n.open)?location.hash.slice(1):null;render();const anchor=location.hash.slice(1),y=positions.get(currentPath);if(anchor&&/^[a-z0-9-]+$/.test(anchor))document.getElementById(anchor)?.scrollIntoView();else if(y)requestAnimationFrame(()=>window.scrollTo(0,y));}catch(err){if(token===serial)app.innerHTML=`<h1>Signes</h1><p>${e(err.message)}</p><a href="/signes" data-link>Réessayer</a>`;}}
-  function leave(){if(currentPath){positions.set(currentPath,window.scrollY);currentPath='';}serial++;sending=false;celebration?.dispose();celebration=null;pause?.dispose();pause=null;for(const b of boards.values())b.leave();boards.clear();}
+  async function page(){answersVisible=false;const epoch=newEpoch(),token=++serial;currentPath=location.pathname;app.innerHTML='<div class="loading">Chargement…</div>';try{data=await api('/api/signes');if(token!==serial||stale(epoch))return;activeBoard=data.nodes.some(n=>n.id===location.hash.slice(1)&&n.open)?location.hash.slice(1):null;render();const anchor=location.hash.slice(1),y=positions.get(currentPath);if(anchor&&/^[a-z0-9-]+$/.test(anchor))document.getElementById(anchor)?.scrollIntoView();else if(y)requestAnimationFrame(()=>window.scrollTo(0,y));}catch(err){if(token===serial)app.innerHTML=`<h1>Signes</h1><p>${e(err.message)}</p><a href="/signes" data-link>Réessayer</a>`;}}
+  function leave(){answersVisible=false;if(currentPath){positions.set(currentPath,window.scrollY);currentPath='';}serial++;sending=false;celebration?.dispose();celebration=null;pause?.dispose();pause=null;for(const b of boards.values())b.leave();boards.clear();}
 
   function createBoard(p,token){
     let spec,core,logic,flow,draft,revision=0,undo=[],redo=[],timer,saving,dirty=false,conflict=false,disposed=false;

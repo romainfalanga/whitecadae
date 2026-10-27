@@ -45,3 +45,7 @@ Le déploiement réutilise D1 `whitecadae-db` (`94a4fab8-be1e-41be-8ef1-df5aa328
 La commande de publication n'exécute ni `schema.sql`, ni `seed.sql`, ni les migrations D1 historiques. Les initialisations et migrations ciblées déjà prévues par l'application conservent leur fonctionnement.
 
 Les branches de travail passent par la branche de production avant publication. Pour créer des aperçus à l'avenir, prévoir d'abord leurs ressources et secrets distincts afin de ne pas modifier les données de production.
+
+## Correction des paroles des Probabilités
+
+La migration ciblée `migrations/0042_probabilities_lyrics.sql` a été appliquée en un lot D1 le 27 octobre 2026. Elle remplace le début du couplet par les trois lignes fournies par l’artiste, préserve les identifiants des lignes conservées et ignore une seconde exécution. Le fichier `lyrics/les-probabilites.txt` contient la même correction. Cette migration ponctuelle ne fait pas partie de la commande de publication.

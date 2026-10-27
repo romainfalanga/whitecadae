@@ -21,7 +21,7 @@ const horns=(id,number,word)=>answer(id,number+' cornes',[[number,word],['cornes
 const expansionForms=['expansion harmonieuse','expansion harmonieuses','expansions harmonieuse','expansions harmonieuses'];
 export const NODES = [
   ...onSong('30-vins-divins',1,[
-    {id:'eg-14',source:'30 vins divins',answers:[...legacy('n-c').answers.map(a=>({...a,id:'eg-14-1'})),a('eg-14-2','Jésus')]},
+    {id:'eg-14',source:'30 vins divins',answers:[...legacy('n-c').answers.map(a=>({...a,id:'eg-14-1'})),answer('eg-14-2','Jésus (Messie)',[['Jésus','Messie']])]},
     {id:'n-a',source:'57',answers:[a('eg-16-1','12',['douze']),a('eg-16-2','Signes',['signe']),a('eg-16-3','Anges',['ange']),a('eg-16-4','Expansions harmonieuses',expansionForms)]},
     {id:'n-h',source:'Prends la bête à…',answers:[horns('n-h-2','10','dix'),horns('n-h-3','2','deux')]},
     {id:'eg-02',source:'XEU',answers:[a('eg-02-1','Dieu')]},
@@ -35,7 +35,7 @@ export const NODES = [
   ]),
   ...onSong('sans-indice-dans-les-des',2,[
     {...legacy('n-g'),visual:'dice'},
-    {...legacy('n-c'),source:'5 vins divins',answers:[...legacy('n-c').answers,a('n-c-2','Jésus')]},
+    {...legacy('n-c'),source:'5 vins divins',answers:[...legacy('n-c').answers,answer('n-c-2','Jésus (Messie)',[['Jésus','Messie']])]},
     {...legacy('n-b'),answers:legacy('n-b').answers.map(a=>({...a,id:'eg-07-1'}))},
     {id:'eg-03',source:'L’aiguille',answers:[a('eg-03-1','L’horloge',['horloge']),a('eg-03-2','le détail',['détail','détails','les détails','le(s) détail(s)'])]},
     {...legacy('n-k',['n-k-1']),answers:[a('n-k-1','Galaxies',['galaxie']),a('eg-17-1','Signes',['signe'])]},

@@ -6,7 +6,7 @@ import {matchNode,normalize} from '../src/enigmas57.js';
 // Every text answer has a human-reviewed set of positive and negative examples.
 const cases=[
   ['eg-14','eg-14-1',['25 décembre','25/12','vingt-cinq décembre'],['24 décembre','25 janvier','2 5 décembre']],
-  ['eg-14','eg-14-2',['Jésus','jesus'],['jes','Judas']],
+  ['eg-14','eg-14-2',['Jésus','jesus','Messie','MESSIE'],['jes','Judas','Messi']],
   ['n-a','eg-16-1',['12','douze'],['apôtre','apôtres','12 apôtres','douze apôtres','12 anges','1 2','13']],
   ['n-a','eg-16-2',['signes','signe'],['signaux','singe']],
   ['n-a','eg-16-3',['anges','ange'],['archanges','angel']],
@@ -21,7 +21,7 @@ const cases=[
   ['eg-06','eg-06-2',['Méta-Moi = Moi','meta moi moi','metamoi moi'],['moi méta-moi','meta toi moi']],
   ['n-g','n-g-1',['666','six six six','six-cent-soixante-six'],['667','6 6 6','66']],
   ['n-c','n-c-1',['25 décembre','25.12','vingt cinq dec'],['26 décembre','25 janvier']],
-  ['n-c','n-c-2',['Jésus','JESUS'],['christ','Judas']],
+  ['n-c','n-c-2',['Jésus','JESUS','Messie','messie'],['christ','Judas','Messi']],
   ['n-b','eg-07-1',['Signes','signe'],['signal','anges']],
   ['eg-03','eg-03-1',['L’horloge',"l'horloge",'horloge'],['horloger','signe']],
   ['eg-03','eg-03-2',['le détail','détail','details','les détails','le(s) détail(s)'],['le dessin','détail autre']],
