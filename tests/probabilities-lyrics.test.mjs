@@ -19,7 +19,6 @@ test('lyric correction replaces only the opening, keeps surviving line IDs and n
     assert.deepEqual(rows.map(l=>l.line_number),[1,2,3,4,5,6]);
     assert.equal(db.prepare('SELECT text FROM lyric_lines WHERE id=99').get().text,'Another song');
     const saved=db.prepare(query).all();db.exec(migration);assert.deepEqual(db.prepare(query).all(),saved);
-    assert.deepEqual(readFileSync(new URL('../lyrics/les-probabilites.txt',import.meta.url),'utf8').split('\n').slice(0,6),rows.map(l=>l.text));
   }finally{db.close();}
 });
 test('a newer lyric edit or a missing song cannot be overwritten or marked as migrated',()=>{
@@ -28,4 +27,33 @@ test('a newer lyric edit or a missing song cannot be overwritten or marked as mi
     const before=db.prepare(query).all();db.exec(migration);assert.deepEqual(db.prepare(query).all(),before);
     assert.equal(db.prepare('SELECT count(*) AS n FROM site_content_migrations').get().n,0);
   }finally{db.close();}}
+});
+
+const restoreVerse=readFileSync(new URL('../migrations/0043_probabilities_intro_verse.sql',import.meta.url),'utf8');
+test('the intro stays intact and the missing verse line is restored exactly once',()=>{
+  const db=setup();try{
+    db.exec(migration);
+    const before=db.prepare('SELECT * FROM lyric_lines WHERE song_id=1 ORDER BY line_number').all();
+    db.exec('BEGIN');db.exec(restoreVerse);db.exec('COMMIT');
+    const rows=db.prepare('SELECT * FROM lyric_lines WHERE song_id=1 ORDER BY line_number').all();
+    const expected=['[Intro]',"Tu n'existes pas.","Tu n'existes pas.","Sans tes filtres, tu n'existes pas.",'','[Couplet]',"Tu n'existes pas sans tes filtres,",...opening.slice(8)];
+    assert.deepEqual(rows.map(l=>l.text),expected);
+    assert.deepEqual(rows.map(l=>l.line_number),expected.map((_,i)=>i+1));
+    for(const old of before.slice(1)){
+      const current=rows.find(l=>l.id===old.id);
+      assert.equal(current.text,old.text);
+      assert.equal(current.line_number,old.line_number+(old.line_number>=5?3:0));
+    }
+    assert.deepEqual(readFileSync(new URL('../lyrics/les-probabilites.txt',import.meta.url),'utf8').split('\n').slice(0,expected.length),expected);
+    assert.equal(db.prepare('SELECT text FROM lyric_lines WHERE id=99').get().text,'Another song');
+    const saved=db.prepare(query).all();db.exec(restoreVerse);assert.deepEqual(db.prepare(query).all(),saved);
+  }finally{db.close();}
+});
+test('intro restoration leaves an unexpected or more recently edited opening untouched',()=>{
+  const db=setup();try{
+    db.exec(migration);db.exec("UPDATE lyric_lines SET text='A newer opening' WHERE line_number=3 AND song_id=1");
+    const before=db.prepare(query).all();db.exec(restoreVerse);
+    assert.deepEqual(db.prepare(query).all(),before);
+    assert.equal(db.prepare("SELECT count(*) AS n FROM site_content_migrations WHERE id LIKE '0043%'").get().n,0);
+  }finally{db.close();}
 });
