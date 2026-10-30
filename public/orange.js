@@ -1,7 +1,7 @@
 // Public entry points for the album and its escape game.
 async function pageOrange() {
   const epoch = newEpoch();
-  document.title = 'Escape Game Orange · White Cadae';
+  document.title = 'White Cadae';
   app.innerHTML = `<section class="orange-story" aria-labelledby="story-title">
     <h1 id="story-title" class="orange-title">Escape Game <span>Orange</span></h1>
     <div class="orange-story-text"><p>Vulpis était en enfer. Il a écrit quatre morceaux dans un album intitulé <strong>57</strong>, puis trois autres dans un album intitulé <strong>114</strong>. Ces morceaux l’ont aidé à s’en échapper et à trouver le chemin vers son paradis. En mettant en musique ce qu’il traversait, en extériorisant ce qu’il portait en lui, il a laissé des signes dans ses textes.</p>
