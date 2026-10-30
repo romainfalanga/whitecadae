@@ -11,13 +11,13 @@
   <link rel="stylesheet" href="/roadmap.css">
   <link rel="stylesheet" href="/story.css">
 
-  <!-- Onglet du navigateur : icônes rondes (coins transparents). -->
-  <link rel="icon" href="/favicon.ico" sizes="any">
-  <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="/icons/favicon-192.png">
+  <!-- Identité White Cadae : blanc uni opaque, sans symbole. -->
+  <link rel="icon" href="/favicon.ico?v=white-20261030" sizes="any">
+  <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png?v=white-20261030">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png?v=white-20261030">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/favicon-192.png?v=white-20261030">
   <!-- iOS applique son propre arrondi : l'image doit remplir tout le carré. -->
-  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png?v=white-20261030">
 
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#0d0d10">
@@ -28,14 +28,15 @@
 
   <meta property="og:title" content="White Cadae">
   <meta property="og:description" content="Escape Game Orange. Quatre morceaux, plusieurs grilles de lecture, des signes à découvrir.">
-  <meta property="og:image" content="/icons/social.jpg">
+  <meta property="og:image" content="https://whitecadae.fr/icons/social.jpg?v=white-20261030">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://whitecadae.fr/icons/social.jpg?v=white-20261030">
 </head>
 <body>
   <header class="site-header">
-    <div class="header-identity"><a class="brand" href="/" data-link>
-      <span class="brand-white">White</span> <span class="brand-cadae">Cadae</span>
+    <div class="header-identity"><a class="brand" href="/" data-link aria-label="White Cadae, accueil">
+      <img class="brand-logo" src="/icons/icon-192.png?v=white-20261030" alt="" width="40" height="40">
     </a></div>
     <div class="header-controls"><a id="header-level" class="header-level" href="/echelon" data-link hidden></a>
     <button class="nav-toggle" id="nav-toggle" aria-label="Ouvrir le menu" aria-expanded="false">
@@ -49,7 +50,7 @@
   </main>
 
   <div id="install-banner" hidden>
-    <img src="/icons/favicon-192.png" alt="" class="install-icon">
+    <img src="/icons/favicon-192.png?v=white-20261030" alt="" class="install-icon">
     <div class="install-text">
       <strong>Installer White Cadae</strong>
       <span id="install-hint">Ajoutez l’application à votre écran d’accueil.</span>
