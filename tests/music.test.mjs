@@ -31,7 +31,7 @@ test('every gated track opens with its lyrics, cover and direct audio at its own
     bind(...values){return prepare(q,values);},async first(){return db.prepare(q).get(params())||null;},async all(){return{results:db.prepare(q).all(params())};},async run(){return{meta:db.prepare(q).run(params())};}
   };}
   let assetReads=0;
-  const env={DB:{prepare,async batch(qs){db.exec('BEGIN');try{const out=[];for(const q of qs)out.push(await q.run());db.exec('COMMIT');return out;}catch(e){db.exec('ROLLBACK');throw e;}}},ASSETS:{async fetch(request){assetReads++;return new Response(new Uint8Array([1,2,3,4]),{headers:{'Content-Type':request.url.endsWith('.jpeg')?'image/jpeg':request.url.endsWith('.png')?'image/png':'audio/mpeg'}});}}};
+  const env={DB:{prepare,async batch(qs){db.exec('BEGIN');try{const out=[];for(const q of qs)out.push(await q.run());db.exec('COMMIT');return out;}catch(e){db.exec('ROLLBACK');throw e;}}},ASSETS:{async fetch(request){assetReads++;return new Response(new Uint8Array([1,2,3,4]),{headers:{'Content-Type':request.url.endsWith('.jpeg')?'image/jpeg':request.url.endsWith('.png')?'image/png':request.url.endsWith('.webp')?'image/webp':'audio/mpeg'}});}}};
   const call=(path,session,headers={})=>worker.fetch(new Request('https://test'+path,{headers:{...(session?{Cookie:'wc_session='+session}:{}),...headers}}),env);
   for(const {session,level,admin} of [{session:null,level:1},{session:'expired',level:1},...accounts]){
     const permitted=t=>admin||level>=t.minLevel;
@@ -52,6 +52,10 @@ test('every gated track opens with its lyrics, cover and direct audio at its own
       if(visible){assert.equal(listed.title,release.album);assert.deepEqual(listed.songs.map(s=>s.slug),tracks.map(t=>t.slug));assert.deepEqual(listed.songs.map(s=>s.track_number),tracks.map(t=>release.tracks.indexOf(t)+1));}
       const cover=await call(release.cover,session);assert.equal(cover.status,visible?200:403);assert.match(cover.headers.get('cache-control'),/no-store/);
       if(visible)assert.equal(cover.headers.get('content-type'),release.coverType);
+      for(const alias of release.coverAliases||[]){
+        const legacyCover=await call(alias,session);assert.equal(legacyCover.status,visible?200:403);
+        if(visible)assert.equal(legacyCover.headers.get('content-type'),'image/png');
+      }
       for(const track of release.tracks){
         const allowed=!!permitted(track);
         if(!allowed)assert.ok(!JSON.stringify(music).includes('"slug":"'+track.slug+'"'));

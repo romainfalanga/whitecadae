@@ -50,7 +50,7 @@ async function serveMusic(request, env) {
   if(!release)return json({error:'Fichier introuvable.'},404);
   const restricted=!!release;
   if(restricted){
-    const item=path===release.cover?release.tracks.reduce((a,b)=>a.minLevel<b.minLevel?a:b):continuous||release.tracks.find(track=>track.src===path);
+    const item=path===release.cover||release.coverAliases?.includes(path)?release.tracks.reduce((a,b)=>a.minLevel<b.minLevel?a:b):continuous||release.tracks.find(track=>track.src===path);
     if(!item)return json({error:'Fichier introuvable.'},404);
     if(!canListen(item,await listeningAccess(request,env)))return json({error:`Ce contenu se découvre à l’échelon ${item.minLevel}.`},403);
   }

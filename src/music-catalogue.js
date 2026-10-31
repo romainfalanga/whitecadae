@@ -2,7 +2,7 @@ import {ensureMetaMoi} from './meta-moi.js';
 import {CONTINUOUS} from './music-continuous.js';
 
 export const ALBUM57={
-  id:'57',album:'57',artist:'Vulpis',cover:'/music/57/cover.png',coverType:'image/png',lyricAlbums:['57'],
+  id:'57',album:'57',artist:'Vulpis',cover:'/music/57/cover.webp',coverType:'image/webp',coverAliases:['/music/57/cover.png'],lyricAlbums:['57'],
   tracks:[
     {slug:'13h20',title:'13h20',src:'/music/57/13h20.mp3',duration:144.456,minLevel:4},
     {slug:'30-vins-divins',title:'30 vins divins',src:'/music/57/30-vins-divins.mp3',duration:230.374,minLevel:1},
@@ -31,7 +31,7 @@ export const gatedAlbum=slug=>RELEASES.find(album=>album.lyricAlbums.includes(sl
 export const retiredSong = slug => ['ma-folie','rendors-toi','wanheda','quand-je-vois-je-pense'].includes(slug);
 export const canListen = (track,access) => !!access&&(access.admin||access.level>=track.minLevel);
 export const continuousTrack=path=>Object.values(CONTINUOUS).flat().find(item=>item.src===path);
-export function musicAlbums(access){return RELEASES.flatMap(({lyricAlbums,...album})=>{
+export function musicAlbums(access){return RELEASES.flatMap(({lyricAlbums,coverAliases,...album})=>{
   const tracks=album.tracks.map((track,index)=>({...track,number:index+1})).filter(track=>canListen(track,access));
   const variant=(CONTINUOUS[album.id]||[]).filter(item=>canListen(item,access)).at(-1);
   const playback=variant?{src:variant.src,duration:variant.duration,chapters:variant.chapters}:null;

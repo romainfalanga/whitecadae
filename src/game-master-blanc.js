@@ -1,6 +1,7 @@
 // Delivered only after the server has verified the player's final echelon.
 export const GAME_MASTER_BLANC = {
   title:'Game Master Blanc',
+  opening:['Façonne ton paradis','pour le rejoindre.'],
   sections:[
     {title:'Vidéographie',paragraphs:[
       'Extériorise tes réflexions et tes idées en vidéo.',
@@ -23,7 +24,7 @@ export const GAME_MASTER_BLANC = {
       'Utilise cette visualisation pour l’améliorer.'
     ]},
     {title:'Loge sociale',paragraphs:[
-      'Utilise les réseaux sociaux comme une loge pour diffuser tes idées et tes résultats. Intègre les symboles de l’Escape Game dans tes contenus pour que les autres Game Masters puissent te repérer.',
+      'Utilise les réseaux sociaux comme une loge pour diffuser tes idées et tes résultats aux autres Game Masters Blancs. Intègre les symboles de l’Escape Game dans tes contenus pour que les autres Game Masters puissent te repérer.',
       'Aidez-vous mutuellement à faire grandir vos harmonies.'
     ]}
   ]

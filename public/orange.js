@@ -15,14 +15,28 @@ async function pageOrange() {
   } catch { /* The original welcome remains readable if access loading fails. */ }
 }
 
+async function prepareMusicCover(album) {
+  if(!album?.cover)return null;
+  const image=new Image();
+  image.className='music-cover';image.alt=`Pochette de l’album ${album.album}`;
+  image.width=image.height=360;image.decoding='async';image.fetchPriority='high';
+  if(image.decode){image.src=album.cover;try{await image.decode();}catch{}}
+  else await new Promise(resolve=>{image.onload=image.onerror=resolve;image.src=album.cover;});
+  return image;
+}
+
 async function pageMusique() {
   const epoch=newEpoch();
+  const previousAlbum=WCPlayer.getAlbums()[0],preparedCover=prepareMusicCover(previousAlbum);
   document.title = 'Musiques · White Cadae';
   app.innerHTML='<div class="loading">Chargement…</div>';
   try {const data=await api('/api/music');if(stale(epoch))return;WCPlayer.setAlbums(data.albums);}
   catch(err){if(!stale(epoch))app.innerHTML=`<h1>Musiques</h1><p>${esc(err.message)}</p><a href="/musique" data-link>Réessayer</a>`;return;}
-  app.innerHTML = `<h1 class="music-page-title">Musiques</h1>${WCPlayer.getAlbums().map((album,index)=>`<section class="music-release" id="album-${esc(album.id)}" aria-labelledby="album-title-${esc(album.id)}"><div class="music-album">
-    ${album.cover?`<img class="music-cover" loading="${index?'lazy':'eager'}" decoding="async" src="${esc(album.cover)}" alt="Pochette de l’album ${esc(album.album)}" width="360" height="360">`:'<div class="music-date-art" aria-hidden="true"><span>18</span><span>juillet</span><span>2019</span></div>'}
+  const albums=WCPlayer.getAlbums();
+  const firstCover=await (previousAlbum?.cover===albums[0]?.cover?preparedCover:prepareMusicCover(albums[0]));
+  if(stale(epoch))return;
+  app.innerHTML = `<h1 class="music-page-title">Musiques</h1>${albums.map((album,index)=>`<section class="music-release" id="album-${esc(album.id)}" aria-labelledby="album-title-${esc(album.id)}"><div class="music-album">
+    ${index===0&&firstCover?'<span id="music-primary-cover"></span>':album.cover?`<img class="music-cover" loading="lazy" decoding="async" src="${esc(album.cover)}" alt="Pochette de l’album ${esc(album.album)}" width="360" height="360">`:'<div class="music-date-art" aria-hidden="true"><span>18</span><span>juillet</span><span>2019</span></div>'}
     <div><h2 id="album-title-${esc(album.id)}">${esc(album.album)}</h2><p class="music-artist">${esc(album.artist)}</p><p class="music-meta">${album.tracks.length} morceau${album.tracks.length>1?'x':''}</p></div>
   </div>
   <div class="music-list" aria-label="Les morceaux de ${esc(album.album)} dans l’ordre">
@@ -33,6 +47,7 @@ async function pageMusique() {
       <span class="track-duration">${mmss(Math.floor(t.duration))}</span>
     </li>`).join('')}</ol>
   </div></section>`).join('')}`;
+  if(firstCover)document.getElementById('music-primary-cover')?.replaceWith(firstCover);
   bindMusicButtons();
   if(/^#(?:album|track)-/.test(location.hash))document.getElementById(location.hash.slice(1))?.scrollIntoView();
 }
