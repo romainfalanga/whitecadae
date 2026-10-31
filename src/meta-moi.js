@@ -1,32 +1,32 @@
 // Lyrics supplied by the artist. Blank lines separate the five sections.
-export const META_MOI_LYRICS = `[couplet 1]
+export const META_MOI_LYRICS = `[Couplet 1]
 Tout n'est que cause conséquence.
 Je subis, même quand j'modifie
-l'arborescence de ce que je suis.
+L'arborescence de ce que je suis.
 Quand je m'en rapproche, il s'éloigne.
 Quand je comprends mes mécanismes,
-la matière qui les conscientise
-est elle-même faite de mécanismes.
+La matière qui les conscientise
+Est elle-même faite de mécanismes.
 Comme la vitesse de la lumière, c'est la limite.
 J'peux pas l'atteindre, plus je m'en rapproche, plus il me fuit.
 C'est quand j'compare que c'est visible,
-plus j'm'analyse et plus j'existe.
+Plus j'm'analyse et plus j'existe.
 Plus j'conscientise, plus je maîtrise.
 Plus je me rapproche du Méta-Moi.
 Mais je le toucherai jamais,
-puisque chaque nouvelle pensée
-rejoint mes mécanismes et conditionne
-la suivante que j'aurai.
+Puisque chaque nouvelle pensée
+Rejoint mes mécanismes et conditionne
+La suivante que j'aurai.
 
-[refrain]
+[Refrain]
 Je monte les étages
-de cette tour infinie…
+De cette tour infinie…
 Plus je monte,
-plus j'peux voir ce que je suis.
+Plus j'peux voir ce que je suis.
 Quoi que je fasse,
-je suis ma géodésique,
-à jamais l'esclave
-de mes mécanismes.
+Je suis ma géodésique,
+À jamais l'esclave
+De mes mécanismes.
 Je serai jamais libre
 Jamais libre
 Je serai jamais libre
@@ -36,7 +36,7 @@ Jamais libre
 Je serai jamais libre
 Jamais jamais jamais libre
 
-[couplet 2]
+[Couplet 2]
 Plus je creuse…
 Plus il y a à creuser…
 Donc je m'enfonce pour m'rapprocher du méta-moi.
@@ -45,41 +45,41 @@ Pour le moi du passé.
 Je suis un tout.
 Chaque partie de moi me compose.
 Mais chacune d'elles
-résulte de tellement de choses.
+Résulte de tellement de choses.
 Quand, quand j'rentre dedans,
-je comprends
-que tout est connecté, y a pas de biais.
+Je comprends
+Que tout est connecté, y a pas de biais.
 Juste de la matière qui façonne
-le tissu d'ma personnalité.
+Le tissu d'ma personnalité.
 Plus c'est massif,
-plus ça conditionne ce que je serai.
+Plus ça conditionne ce que je serai.
 Toute la matière qui est en moi
-est, en miroir,
-l'équivalence de mes lois.
+Est, en miroir,
+L'équivalence de mes lois.
 Mes mécanismes résultent de mon passé.
 Esclave de lui à jamais,
-vu qu'il contrôle ma façon et mon envie
-de me modifier, d'évoluer.
+Vu qu'il contrôle ma façon et mon envie
+De me modifier, d'évoluer.
 
-[pont]
+[Pont]
 J'suis une branche qui se croit libre
-de créer ses feuilles,
-mais c'est mon tronc qui décide
-en subissant ses racines.
+De créer ses feuilles,
+Mais c'est mon tronc qui décide
+En subissant ses racines.
 Je peux devenir ce que je veux,
-dans mon champ des possibles.
+Dans mon champ des possibles.
 Mais ce que je veux
-résulte de mes mécanismes.
+Résulte de mes mécanismes.
 
-[refrain]
+[Refrain]
 Je monte les étages
-de cette tour infinie…
+De cette tour infinie…
 Plus je monte,
-plus j'peux voir ce que je suis.
+Plus j'peux voir ce que je suis.
 Quoi que je fasse,
-je suis ma géodésique,
-à jamais l'esclave
-de mes mécanismes.
+Je suis ma géodésique,
+À jamais l'esclave
+De mes mécanismes.
 Je serai jamais libre
 Jamais libre
 Je serai jamais libre
@@ -89,13 +89,13 @@ Jamais libre
 Je serai jamais libre
 Jamais libre
 Je monte les étages
-de cette tour infinie…
+De cette tour infinie…
 Plus je monte,
-plus j'peux voir ce que je suis.
+Plus j'peux voir ce que je suis.
 Quoi que je fasse,
-je suis ma géodésique,
-à jamais l'esclave
-de mes mécanismes.
+Je suis ma géodésique,
+À jamais l'esclave
+De mes mécanismes.
 Je serai jamais libre
 Jamais libre
 Je serai jamais libre

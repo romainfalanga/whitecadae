@@ -53,3 +53,11 @@ La migration ciblée `migrations/0042_probabilities_lyrics.sql` a été appliqu�
 La migration complémentaire `0043_probabilities_intro_verse.sql` sépare les trois lignes d’introduction dans `[Intro]`, rétablit `[Couplet]` et « Tu n’existes pas sans tes filtres, » avant « Contrôle les lois de ton univers. ». Elle préserve les autres lignes et ne s’applique qu’une seule fois, en un lot D1.
 
 La migration ciblée `0044_13h20_sans_vin_divin.sql` corrige « J’ai dit sans vins divins, » en « J’ai dit sans vin divin, » à la ligne 50 de 13h20. Elle conserve l’identifiant de cette ligne et toutes les autres paroles, protège les éditions ultérieures et s’applique en un lot D1 distinct du déploiement.
+
+## Révision des paroles du 31 octobre 2026
+
+`data/lyric-corrections-20261031.json` décrit les 95 changements approuvés : majuscule au début de chaque ligne, nom Harmonie, corrections ciblées de 13h20, 30 vins divins, Sans indices dans les dés, Orange et Fais mieux. La confirmation finale conserve « vin » et demande exactement deux points successifs après « chemin.. », puis « Le chemin du réel. » à la ligne. « À 13 heures 20 » reste inchangé.
+
+Les fichiers `lyrics/*.txt` et le texte initial de Meta moi portent les mêmes corrections. `migrations/0046_lyrics_review_20261031.sql` applique le manifeste en un seul lot D1 distinct du déploiement. Elle vérifie que chaque ligne attendue est unique et correspond à son ancien texte ou à sa version déjà corrigée ; une ligne absente, dupliquée ou différente bloque toute la révision et son marqueur. Un marqueur final empêche de réécrire une édition ultérieure. Aucun identifiant ni numéro de ligne n’est remplacé. Les trois lignes numériques retirées deviennent vides pour préserver les références existantes ; le rendu regroupe normalement les séparations de strophes. Aucun seed ni migration historique n’est rejoué.
+
+Avant application, comparer la totalité du corpus en ligne aux sources ; après application, comparer toutes les lignes, leurs identifiants et leurs numéros à la photographie précédente, avec uniquement les changements du manifeste. Contrôler aussi les API de paroles et de corpus, qui partagent la même table.
