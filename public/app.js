@@ -47,11 +47,6 @@ function safeUrl(url) {
   return /^https?:\/\//i.test(u) ? u : '#';
 }
 
-function continuationMarkup(item) {
-  if (!item) return '';
-  return `<section class="game-continuation" aria-label="Échelon ${esc(item.level)}"><a class="game-gate" href="/game-master-blanc" data-link><span class="gate-orbit" aria-hidden="true"></span><span class="gate-title">Échelon <strong>${esc(item.level)}</strong></span><span class="gate-action">${esc(item.label)}</span></a></section>`;
-}
-
 function accountEntryMarkup(destination=location.pathname+location.hash) {
   const query='?retour='+encodeURIComponent(destination);
   return `<div class="eg-account"><a class="orange-button" href="/connexion${esc(query)}" data-link>Se connecter</a><a href="/inscription${esc(query)}" data-link>Créer un compte</a></div>`;
@@ -380,6 +375,26 @@ function lyricLineMarkup(slug,text) {
   return esc(text);
 }
 
+function lyricsMarkup(slug,lines) {
+  const names={intro:'Intro',couplet:'Couplet',verse:'Couplet',refrain:'Refrain',pont:'Pont',outro:'Outro'};
+  const sections=[];
+  let section={title:null,stanzas:[]},stanza=[];
+  function endStanza(){if(stanza.length){section.stanzas.push(stanza);stanza=[];}}
+  function endSection(){endStanza();if(section.title||section.stanzas.length)sections.push(section);}
+  for(const line of lines){
+    const text=String(line.text??''),marker=/^\s*\[([^\]\r\n]+)\]\s*$/.exec(text);
+    if(marker){
+      endSection();
+      const label=marker[1].trim(),known=/^(intro|couplet|verse|refrain|pont|outro)\b(.*)$/i.exec(label);
+      section={title:known?names[known[1].toLowerCase()]+known[2]:label,stanzas:[]};
+    }else if(!text.trim())endStanza();
+    else stanza.push(text);
+  }
+  endSection();
+  if(!sections.length)return '<p>Les paroles de ce morceau seront bientôt disponibles.</p>';
+  return sections.map((part,index)=>`<section class="lyrics-section"${part.title?` aria-labelledby="lyrics-part-${index}"`:''}>${part.title?`<h2 class="lyrics-section-title" id="lyrics-part-${index}">${esc(part.title)}</h2>`:''}<div class="lyrics-section-body">${part.stanzas.map(verse=>`<div class="lyrics-stanza">${verse.map(text=>`<p>${lyricLineMarkup(slug,text)}</p>`).join('')}</div>`).join('')}</div></section>`).join('');
+}
+
 async function pageSong(slug) {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement des paroles…</div>';
@@ -391,7 +406,7 @@ async function pageSong(slug) {
     app.innerHTML = `<article class="lyrics-page">
       ${track ? '' : '<a class="back-link" href="/paroles" data-link>Toutes les paroles</a>'}
       <h1>${esc(song.title)}</h1>
-      <div class="lyrics-readable">${lines.length ? lines.map((l) => l.text ? `<p>${lyricLineMarkup(song.slug,l.text)}</p>` : '<div class="lyrics-break" aria-hidden="true"></div>').join('') : '<p>Les paroles de ce morceau seront bientôt disponibles.</p>'}</div>
+      <div class="lyrics-readable">${lyricsMarkup(song.slug,lines)}</div>
       ${track ? `<a class="back-link" href="/musique#album-${esc(track.albumId)}" data-link>Retrouver l’album ${esc(track.album)}</a>` : ''}
     </article>`;
   } catch (err) {

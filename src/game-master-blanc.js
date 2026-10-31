@@ -26,6 +26,5 @@ export const GAME_MASTER_BLANC = {
       'Utilise les réseaux sociaux comme une loge pour diffuser tes idées et tes résultats. Intègre les symboles de l’Escape Game dans tes contenus pour que les autres Game Masters puissent te repérer.',
       'Aidez-vous mutuellement à faire grandir vos harmonies.'
     ]}
-  ],
-  communityUrl:'https://discord.gg/y83ewhS49'
+  ]
 };

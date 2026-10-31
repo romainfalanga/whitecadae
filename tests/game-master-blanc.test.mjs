@@ -37,6 +37,7 @@ test('the final page requires 33 real earned levels, including for admins; forge
     const content=await res.json();assert.equal(content.page.title,'Game Master Blanc');
     assert.deepEqual(content.page.sections.map(s=>s.title),['Vidéographie','Ta version harmonieuse','Ta société harmonieuse','Ta version harmonieuse IA','Ta société harmonieuse IA','Loge sociale']);
     assert.ok(content.page.sections.every(s=>s.paragraphs.length&&s.paragraphs.every(p=>typeof p==='string'&&p.length>20)));
+    assert.equal(content.page.communityUrl,undefined);assert.doesNotMatch(JSON.stringify(content),/discord|y83ewhS49/);
     const ready=await(await request(f,'/api/me')).json();
     assert.equal(ready.access.gameMasterBlanc,true);assert.equal(ready.access.gameMaster,true);
     assert.match(navigation(ready),/href="\/game-master-blanc"/);
@@ -70,7 +71,7 @@ test('the private page uses the final API and renders no final text on refusal o
     assert.equal(document.title,'Game Master Blanc · White Cadae');
     assert.match(app.innerHTML,/gm-layout gm-white/);assert.match(app.innerHTML,/gm-letter/);
     assert.equal((app.innerHTML.match(/class="gm-section"/g)||[]).length,6);
-    assert.match(app.innerHTML,/Rejoindre les Game Masters/);assert.doesNotMatch(app.innerHTML,/href="\/videographie|[→↗]/);
+    assert.doesNotMatch(app.innerHTML,/Rejoindre les Game Masters|discord|<a |href="\/videographie|[→↗]/);
     assert.ok(calls.every(path=>path==='/api/game-master-blanc'));
     await page('/game-master-blanc',{...ctx,state:{user:null}});
     assert.match(app.innerHTML,/Se connecter/);assert.doesNotMatch(app.innerHTML,/gm-section|Extériorise|discord/);
@@ -80,10 +81,31 @@ test('the private page uses the final API and renders no final text on refusal o
   }
 });
 
-test('final continuation opens the internal page without a new tab, and its copy stays out of the browser bundle',()=>{
-  const helper=source.slice(source.indexOf('function continuationMarkup('),source.indexOf('function accountEntryMarkup('));
-  const html=runInNewContext(helper+'\ncontinuationMarkup({level:33,label:"Game Master Blanc",href:"/game-master-blanc"})',{esc:s=>String(s)});
-  assert.match(html,/href="\/game-master-blanc" data-link/);assert.doesNotMatch(html,/target=|nouvel onglet|[→↗]/);
+test('the home omits the final block at 33 and keeps the discovered-page list informational',async()=>{
+  const orange=readFileSync(new URL('../public/orange.js',import.meta.url),'utf8');
+  const app={innerHTML:''},openings={innerHTML:''};
+  const context={app,document:{title:'',getElementById:id=>id==='orange-openings'?openings:null},window:{addEventListener(){}},esc:s=>String(s),newEpoch:()=>1,stale:()=>false,
+    api:async()=>({openings:[{id:'page-gameMasterBlanc',title:'Game Master Blanc',level:33,href:'/game-master-blanc'}],continuation:{level:33,label:'Game Master Blanc',href:'/game-master-blanc'}}),
+    continuationMarkup(){throw Error('The home must not render a final block');}};
+  runInNewContext(orange,context);await context.pageOrange();
+  assert.doesNotMatch(app.innerHTML,/orange-continuation|game-gate|href="\/game-master-blanc"/);
+  assert.match(openings.innerHTML,/<strong class="opening-title">Game Master Blanc<\/strong>/);
+  assert.doesNotMatch(openings.innerHTML,/<a /);
   const client=readFileSync(new URL('../public/private-pages.js',import.meta.url),'utf8');
   assert.doesNotMatch(client,/Extériorise tes réflexions|Loge sociale|y83ewhS49/);
+});
+
+test('Signes, Horloge and the lyric workshop omit the final block even when the server reports level 33',async()=>{
+  const gameSource=readFileSync(new URL('../public/echelon.js',import.meta.url),'utf8');
+  for(const pathname of ['/signes','/signes/horloge','/sans-vin-divin']){
+    const app={innerHTML:''},window={scrollY:0};
+    const context={window,app,document:{getElementById:()=>null,title:''},location:{pathname,hash:''},state:{user:{id:1}},esc:s=>String(s),newEpoch:()=>1,stale:()=>false,
+      api:async()=>({echelon:33,pages:[{id:'eg-10'},{id:'eg-22',open:false}],nodes:[],capabilities:{},continuation:{level:33,label:'Game Master Blanc',href:'/game-master-blanc'}}),
+      continuationMarkup(){throw Error('Signes must not render a final block');},
+      WCGameFeedback:{mount:()=>({dispose(){}})},WCAttemptTimer:{mount:()=>({dispose(){},refresh(){}})}};
+    runInNewContext(gameSource,context);await window.WCGame.page();
+    assert.doesNotMatch(app.innerHTML,/eg-continuation|Game Master Blanc|game-master-blanc/,pathname);
+    assert.match(app.innerHTML,/eg-game-content/,pathname);
+    window.WCGame.leave();
+  }
 });

@@ -49,8 +49,6 @@ window.WCGame=(()=>{
       visibility.setAttribute('aria-pressed',String(answersVisible));
       visibility.onclick=toggleAnswers;
     }
-    const continuation=document.getElementById('eg-continuation'),markup=continuationMarkup(data.continuation);
-    if(continuation&&continuation.innerHTML!==markup)continuation.innerHTML=markup;
     const root=document.getElementById('eg-game-content');if(!root)return;
     if(isLab()){
       for(const p of data.nodes.filter(n=>n.kind==='workshop'&&(isLyricLab()?n.id==='eg-22':n.surface!=='lyrics'))){
@@ -87,7 +85,7 @@ window.WCGame=(()=>{
     pause?.dispose();pause=null;celebration?.dispose();celebration=WCGameFeedback.mount(app);versions.clear();
     if(isClock()&&!pageBy('eg-10')){app.innerHTML='<section class="eg-page"><h1>Ce chemin n’est pas disponible.</h1><a href="/signes" data-link>Retrouver Signes</a></section>';return;}
     if(isLyricLab()&&!pageBy('eg-22')){app.innerHTML=`<section class="eg-page"><h1>Ce chemin n’est pas disponible.</h1>${data.anonyme?login():''}<a href="/signes" data-link>Retrouver Signes</a></section>`;return;}
-    app.innerHTML=`<section class="eg-page">${header()}${isLyricLab()?'<a class="back-link eg-lyrics-return" href="/chanson/13h20" data-link>Retrouver les paroles de 13h20</a>':''}<div id="eg-continuation" aria-live="polite"></div><div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}<aside class="eg-pause" hidden aria-label="Délai entre les essais"><span class="eg-pause-orbit" aria-hidden="true"><svg viewBox="0 0 40 40"><circle class="eg-orbit-track" cx="20" cy="20" r="17"/><circle class="eg-orbit-progress" cx="20" cy="20" r="17" pathLength="100"/><path d="M20 11v9l5 3"/></svg></span><span class="eg-pause-caption">Prochain essai</span><time aria-live="off">0:33</time><span class="sr-only" role="status"></span></aside><div id="eg-game-content" class="${isLab()?'eg-labs':'eg-entries'}"></div></section>`;
+    app.innerHTML=`<section class="eg-page">${header()}${isLyricLab()?'<a class="back-link eg-lyrics-return" href="/chanson/13h20" data-link>Retrouver les paroles de 13h20</a>':''}<div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}<aside class="eg-pause" hidden aria-label="Délai entre les essais"><span class="eg-pause-orbit" aria-hidden="true"><svg viewBox="0 0 40 40"><circle class="eg-orbit-track" cx="20" cy="20" r="17"/><circle class="eg-orbit-progress" cx="20" cy="20" r="17" pathLength="100"/><path d="M20 11v9l5 3"/></svg></span><span class="eg-pause-caption">Prochain essai</span><time aria-live="off">0:33</time><span class="sr-only" role="status"></span></aside><div id="eg-game-content" class="${isLab()?'eg-labs':'eg-entries'}"></div></section>`;
     document.title=isLyricLab()?'Sans vin divin · White Cadae':`${isClock()?'Horloge · ':''}Signes · White Cadae`;
     sync();
     pause=data.anonyme?null:WCAttemptTimer.mount({root:app,userId:state.user.id,remainingMs:data.attenteMs,readStatus:()=>api('/api/signes/attempt')});
@@ -95,7 +93,7 @@ window.WCGame=(()=>{
   async function submit(p,payload){
     if(sending||pause?.blocked())return;
     sending=true;pause?.start();
-    const token=serial,before=data,anchor=document.getElementById(p.id),top=anchor?.getBoundingClientRect().top;
+    const token=serial,anchor=document.getElementById(p.id),top=anchor?.getBoundingClientRect().top;
     try{
       const result=await api('/api/signes/guess',{method:'POST',body:{id:p.id,...payload}});
       if(token!==serial)return;
@@ -103,7 +101,6 @@ window.WCGame=(()=>{
       if(result.ok){const input=document.getElementById(`input-${p.id}`);if(input)input.value='';}
       if(top!==undefined){const after=document.getElementById(p.id);if(after&&p.kind==='workshop'&&!pageBy(p.id)?.open){after.scrollIntoView({block:'start'});after.querySelector('h2')?.focus({preventScroll:true});}else if(after)window.scrollBy(0,after.getBoundingClientRect().top-top);}
       feedback(result.message||'Une partie de ce signe est trouvée.',p.id,result.gained,result.ok?'info':'error');
-      if(!before.continuation&&data.continuation)document.getElementById('eg-continuation')?.scrollIntoView({block:'start'});
       if(result.gained){await refreshSession();if(token===serial)renderNav();}
     }catch(err){if(token===serial){feedback(err.message,p.id,0,'error');if(err.data?.attenteMs!==undefined)pause?.sync(err.data.attenteMs);}}
     finally{if(token===serial){sending=false;pause?.refresh();}}

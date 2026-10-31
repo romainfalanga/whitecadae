@@ -7,11 +7,10 @@ async function pageOrange() {
     <div class="orange-story-text"><p>Vulpis était en enfer. Il a écrit quatre morceaux dans un album intitulé <strong>57</strong>, puis trois autres dans un album intitulé <strong>114</strong>. Ces morceaux l’ont aidé à s’en échapper et à trouver le chemin vers son paradis. En mettant en musique ce qu’il traversait, en extériorisant ce qu’il portait en lui, il a laissé des signes dans ses textes.</p>
     <p>Dans ces morceaux, plusieurs grilles de lecture se superposent : les mêmes paroles peuvent raconter plusieurs choses à la fois. Un mot, une expression, un nombre, une sonorité ou un rapprochement entre deux passages peut révéler un autre sens. Ces codes cachés sont les <strong>signes</strong> que tu dois retrouver pour t’évader de l’enfer.</p>
     <p>Écoute, réécoute et lis les paroles pour découvrir les superpositions des grilles de lecture et trouver les signes.</p></div>
-  <div id="orange-openings" class="orange-openings"></div><div id="orange-continuation"></div></section>`;
+  <div id="orange-openings" class="orange-openings"></div></section>`;
   try {
     const data = await api("/api/orange");
     if (stale(epoch)) return;
-    document.getElementById('orange-continuation').innerHTML = continuationMarkup(data.continuation);
     document.getElementById("orange-openings").innerHTML = data.openings.map(item => `<div class="orange-opening"><span>Échelon ${item.level}</span><strong class="opening-title">${esc(item.title)}</strong>${item.paragraph?`<p class="orange-opening-story">${esc(item.paragraph)}</p>`:""}</div>`).join("");
   } catch { /* The original welcome remains readable if access loading fails. */ }
 }
