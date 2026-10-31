@@ -1,8 +1,14 @@
-# Playlist — plan et validation
+# Playlist — suspendue, code et données conservés
+
+La fonctionnalité est mise en attente le 31 octobre 2026 à la demande de Romain. `PLAYLISTS_ENABLED=false` dans `src/features.js` interdit les API de lecture, écriture et audio avant tout accès aux données ; aucune exception administrateur ni requête ne peut la réactiver. La page redirige vers l’accueil, le menu et le calendrier ne la mentionnent plus. Aucune playlist enregistrée, aucun fichier audio ni code fonctionnel n’est supprimé.
+
+Pour une réactivation future, rétablir le commutateur source, la route, le lien de menu, le retour après connexion et le droit du lecteur dans `public/app.js`, puis les chargements de `public/index.html` et du service worker. Les tests de fonctionnalité conservée restent exécutés avec une dépendance serveur interne explicitement activée dans leurs fixtures. Les tests de suspension vérifient les entrées de production sans cet opt-in.
+
+La suite documente l’implémentation conservée pour cette reprise.
 
 ## Objectif
 
-Ouvrir une page personnelle à l’échelon 10, sobre et sans explication du jeu. Choisir des morceaux déjà découverts, mélanger leurs albums, les ordonner et écouter le résultat dans le lecteur persistant. Les deux lignes de l’introduction Game Master Blanc sont désormais du même blanc pur.
+Ouvrir une page personnelle à l’échelon 10, sobre et sans explication du jeu. Choisir des morceaux déjà découverts, mélanger leurs albums, les ordonner et écouter le résultat dans le lecteur persistant. L’introduction Game Master Blanc reste en blanc pur et comporte désormais « Façonne ton paradis pour le rejoindre. » puis « Deviens ton propre Game Master. ».
 
 ## Plan réalisé
 

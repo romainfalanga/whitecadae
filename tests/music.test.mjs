@@ -37,8 +37,7 @@ test('every gated track opens with its lyrics, cover and direct audio at its own
     const permitted=t=>admin||level>=t.minLevel;
     const music=await(await call('/api/music',session)).json();
     const personal=await call('/api/playlists',session);
-    assert.equal(personal.status,accounts.some(a=>a.session===session)?(level>=10?200:403):401);
-    if(personal.status===200){const list=await personal.json();assert.equal(list.tracks.length,music.albums.flatMap(a=>a.tracks).length);}
+    assert.equal(personal.status,404);
     const beforePrivateAsset=assetReads;
     assert.equal((await call('/music/playlist/orange.mp3',session)).status,404);
     assert.equal(assetReads,beforePrivateAsset);

@@ -9,7 +9,7 @@ import {accountResetPlan} from '../scripts/account-reset-plan.mjs';
 const ids=NODES.flatMap(node=>node.answers.map(answer=>answer.id));
 function setup(){
   const f=fixture();
-  const deps={json:(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}}),getUser:async request=>{
+  const deps={playlistsEnabled:true,json:(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}}),getUser:async request=>{
     const token=/wc_session=([^;]+)/.exec(request.headers.get('Cookie')||'')?.[1];
     return f.sql.prepare('SELECT u.* FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.token=?').get(token||'')||null;
   }};

@@ -28,7 +28,7 @@ function setup({honorRanges=false}={}){
     if(status===206)headers['Content-Range']=`bytes ${start}-${end}/${bytes.length}`;
     return new Response(body,{status,headers});
   }};
-  const deps={getUser:async request=>{
+  const deps={playlistsEnabled:true,getUser:async request=>{
     const token=/wc_session=qa(\d+)/.exec(request.headers.get('Cookie')||'');
     return token?f.sql.prepare('SELECT id,is_admin FROM users WHERE id=?').get(+token[1]+1)||null:null;
   },json:(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}})};

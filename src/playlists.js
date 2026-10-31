@@ -3,6 +3,7 @@ import {gameLevel} from './echelon.js';
 import {RELEASES,canListen} from './music-catalogue.js';
 import {fail,objectBody,text,integer} from './private-data.js';
 import {playlistPlayback} from './playlist-audio.js';
+import {PLAYLISTS_ENABLED} from './features.js';
 
 export const PLAYLIST_LIMIT=30;
 export const PLAYLIST_SCHEMA=[
@@ -62,7 +63,10 @@ async function bodyOf(request){
   return objectBody(request,16384);
 }
 
-export async function handlePlaylists(request,env,url,{getUser,json}){
+export async function handlePlaylists(request,env,url,{getUser,json,playlistsEnabled=PLAYLISTS_ENABLED}){
+  // Explicit dependency injection keeps the saved feature testable while its
+  // production entry point always uses the source-controlled product switch.
+  if(!playlistsEnabled)return json({error:'Page introuvable.'},404);
   const user=await getUser(request,env),access=await playlistAccess(env,user);
   if(request.headers.get('X-WC-User')&&request.headers.get('X-WC-User')!==String(user.id))fail('Le compte connecté a changé. Recharge la page.',409);
   const path=url.pathname.replace(/\/+$/,''),collection=path==='/api/playlists',match=/^\/api\/playlists\/([1-9]\d*)$/.exec(path);

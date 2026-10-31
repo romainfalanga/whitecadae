@@ -1,6 +1,7 @@
 import {gatedTrack} from './music-catalogue.js';
 import {playlistAccess} from './playlists.js';
 import {PLAYLIST_AUDIO_VERSION,sourcesBySlug} from './playlist-audio-manifest.js';
+import {PLAYLISTS_ENABLED} from './features.js';
 
 const maximum=8;
 function validSlugs(slugs){
@@ -91,7 +92,8 @@ function fixedLengthBody(body,length){
   return fixed.readable;
 }
 
-export async function handlePlaylistAudio(request,env,url,{getUser,json}){
+export async function handlePlaylistAudio(request,env,url,{getUser,json,playlistsEnabled=PLAYLISTS_ENABLED}){
+  if(!playlistsEnabled)return json({error:'Page introuvable.'},404);
   const user=await getUser(request,env),access=await playlistAccess(env,user);
   if(request.headers.get('X-WC-User')&&request.headers.get('X-WC-User')!==String(user.id))return json({error:'Le compte connecté a changé. Recharge la page.'},409);
   if(!['GET','HEAD'].includes(request.method))return json({error:'Méthode indisponible.'},405);

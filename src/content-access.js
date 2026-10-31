@@ -1,16 +1,19 @@
 import {gameLevel,accessLevel} from './echelon.js';
 import {RELEASES,canListen} from './music-catalogue.js';
+import {PLAYLISTS_ENABLED} from './features.js';
 
 export function contentAccess(user,rows=[]){
   const level=gameLevel(rows),legacy=accessLevel(rows),admin=!!user?.is_admin;
-  return {level,legacy,admin,gameMaster:!!user&&level>=7,playlist:!!user&&level>=10,gameMasterBlanc:!!user&&level>=33,mechanisms:false,lifeTree:false,aceSquare:false,conversation:false,topics:false,videographie:false};
+  return {level,legacy,admin,gameMaster:!!user&&level>=7,playlist:PLAYLISTS_ENABLED&&!!user&&level>=10,gameMasterBlanc:!!user&&level>=33,mechanisms:false,lifeTree:false,aceSquare:false,conversation:false,topics:false,videographie:false};
 }
 
 // A single schedule drives the home page, rewards and protected media.
 export function buildOpenings(rows=[],user={}){
   const access=contentAccess(user,rows);
   const items=RELEASES.flatMap(album=>album.tracks.map(track=>({id:'music-'+track.slug,title:track.title,description:album.album+' · musique et paroles',level:track.minLevel,open:canListen(track,access),href:'/musique#track-'+track.slug,lyricsHref:'/chanson/'+track.slug})));
-  for(const [id,title,level,href] of [['gameMaster','Game Master Orange',7,'/game-master-orange'],['playlist','Playlist',10,'/playlist'],['gameMasterBlanc','Game Master Blanc',33,'/game-master-blanc']])items.push({id:'page-'+id,title,level,href,open:access[id]});
+  const pages=[['gameMaster','Game Master Orange',7,'/game-master-orange'],['gameMasterBlanc','Game Master Blanc',33,'/game-master-blanc']];
+  if(PLAYLISTS_ENABLED)pages.push(['playlist','Playlist',10,'/playlist']);
+  for(const [id,title,level,href] of pages)items.push({id:'page-'+id,title,level,href,open:access[id]});
   const pending=items.filter(item=>!item.open&&item.level>access.level);
   const nextLevel=pending.length?Math.min(...pending.map(item=>item.level)):null;
   return {author:access.admin,nextLevel,items:items.filter(item=>item.open||item.level<=nextLevel).sort((a,b)=>a.level-b.level).map(item=>{

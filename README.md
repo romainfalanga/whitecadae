@@ -6,7 +6,6 @@ Application JavaScript sans framework : Cloudflare Worker, assets statiques, D1 
 
 - `/` : présentation, musiques et pages déjà découvertes.
 - `/musique` : albums 57, 114 et 18 juillet 2019, déblocage morceau par morceau.
-- `/playlist` : playlists personnelles à partir de l’échelon 10, avec choix et ordre des morceaux déjà débloqués, tous albums confondus.
 - `/signes` : propositions de signes, anciennement `/echelon`.
 - `/signes/horloge` : tableaux de construction, uniquement après la découverte de L’horloge.
 - `/sans-vin-divin` : atelier accessible depuis le passage correspondant des paroles, à partir de l’échelon 4, sans prérequis Horloge.
@@ -19,7 +18,7 @@ Mécanismes, Vidéographie et Carré d’AS sont retirés du site, du menu, de l
 
 La liste des contenus découverts sur l’accueil est entièrement informative : aucun titre de musique ou de page n’est cliquable et aucun bouton Paroles n’y figure. Les pages de paroles affichent le titre du morceau, son texte et le retour à l’album, sans surtitre album / Paroles ni bouton d’écoute local ; le lecteur global reste disponible. Les repères de section sont présentés sans crochets, avec des titres dorés dans la marge sur ordinateur et au-dessus des strophes sur mobile. Les repères numérotés sont harmonisés à l’affichage et toutes les lignes chantées restent conservées, sans modification des paroles enregistrées.
 
-Le menu comprend Escape Game Orange, Musiques, Signes et Échelons ; Playlist s’ajoute à l’échelon 10 et Horloge immédiatement après la découverte de L’horloge dans Aiguille. `/api/me` utilise la progression canonique pour cette condition, sans déblocage par niveau ni exception administrateur. Les anciens liens d’énigmes et d’Horloge redirigent vers Signes. `/parcours` et les anciens profils redirigent vers Échelons, dont l’URL reste `/echelon`. Les API historiques `/api/echelon` et `/api/57` restent des alias du jeu pour les anciens clients ; le nouveau client utilise `/api/signes`.
+Le menu comprend Escape Game Orange, Musiques, Signes et Échelons ; Horloge s’ajoute immédiatement après la découverte de L’horloge dans Aiguille. `/api/me` utilise la progression canonique pour cette condition, sans déblocage par niveau ni exception administrateur. Les anciens liens d’énigmes et d’Horloge redirigent vers Signes. `/parcours` et les anciens profils redirigent vers Échelons, dont l’URL reste `/echelon`. Les API historiques `/api/echelon` et `/api/57` restent des alias du jeu pour les anciens clients ; le nouveau client utilise `/api/signes`.
 
 Le départ est à 1. Les 32 réponses distinctes actives permettent d’atteindre 33. Les fragments, répétitions et réponses retirées n’ajoutent aucun point. Le catalogue serveur `src/echelon.js` définit la progression ; les réponses non trouvées ne sont pas transmises. Game Master Blanc devient accessible dans le menu à 33. Aucun bloc de fin ne s’affiche sur l’accueil, dans Signes, Horloge ou l’atelier Sans vin divin. Game Master Blanc ne comporte pas de bouton communautaire. Les deux pages Game Master partagent le même cadre doré et des paragraphes centrés ; seul « Blanc » dans le titre reste blanc. Les comptes existants déjà à 33 bénéficient du même accès, sans nouvelle réponse ni remise à zéro.
 
@@ -36,7 +35,6 @@ Le signe `n-0-3` (Katikas) est retiré du score, sans suppression de son histori
 | 4 | 13h20 |
 | 6 | Orange |
 | 7 | Game Master Orange |
-| 10 | Playlist |
 | 12 | La matière danse |
 | 18 | Les probabilités |
 | 25 | Fais Mieux |
@@ -49,7 +47,9 @@ Sans vin divin réutilise l’atelier et la sauvegarde des constructions d’Hor
 
 L’ordre d’écoute de 57 est 13h20, 30 vins divins, Sans indices dans les dés, Orange. Les variantes audio continues ne contiennent que les pistes accessibles à leur seuil. Le lecteur passe de chapitre en chapitre dans le même fichier pour limiter les interruptions lorsque le téléphone est verrouillé. Le service worker ne met jamais en cache les médias protégés ni les API. La pochette de 57 est servie en WebP de 1024 pixels (environ 62 Ko) et décodée avant son insertion sur la page Musiques pour éviter un affichage progressif ; son adresse PNG historique reste valide.
 
-Les playlists sont enregistrées par compte dans D1 (30 maximum, noms de 80 caractères maximum), avec révision pour éviter d’écraser une modification concurrente. La table est créée de façon additive au premier accès, sans modification des comptes ni des signes. Chaque lecture et écriture vérifie le niveau et les morceaux autorisés. Le lecteur persistant utilise un flux MP3 continu à ordre fixe, seekable par plages d’octets, y compris entre albums ; les sources homogènes sont préparées par `scripts/build-playlist-audio.mjs`. Les octets restent protégés et hors cache. Voir [docs/playlists.md](docs/playlists.md) pour le plan, les contrôles et les limites de validation mobile.
+Playlist est temporairement suspendue : aucun menu, aucune découverte ou récompense, et aucune entrée API ni audio active, même pour les administrateurs. Son code, ses fichiers audio et les playlists déjà enregistrées sont conservés. Le commutateur source `src/features.js` maintient les accès serveur fermés ; la route et les liens du client sont désactivés. Les tests fonctionnels utilisent uniquement une dépendance interne explicite, jamais un paramètre de requête ou une variable publique.
+
+Lors de sa réactivation, les playlists restent enregistrées par compte dans D1 (30 maximum, noms de 80 caractères maximum), avec révision pour éviter d’écraser une modification concurrente. La table est créée de façon additive au premier accès, sans modification des comptes ni des signes. Chaque lecture et écriture vérifie le niveau et les morceaux autorisés. Le lecteur persistant utilise un flux MP3 continu à ordre fixe, seekable par plages d’octets, y compris entre albums ; les sources homogènes sont préparées par `scripts/build-playlist-audio.mjs`. Les octets restent protégés et hors cache. Voir [docs/playlists.md](docs/playlists.md) pour le plan, les contrôles et les limites de validation mobile.
 
 ## Roadmap
 

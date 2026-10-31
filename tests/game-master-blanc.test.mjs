@@ -35,7 +35,7 @@ test('the final page requires 33 real earned levels, including for admins; forge
     add(f,1,ids.slice(-1));
     const res=await request(f,'/api/game-master-blanc');assert.equal(res.status,200);
     const content=await res.json();assert.equal(content.page.title,'Game Master Blanc');
-    assert.deepEqual(content.page.opening,['Façonne ton paradis','pour le rejoindre.']);
+    assert.deepEqual(content.page.opening,['Façonne ton paradis pour le rejoindre.','Deviens ton propre Game Master.']);
     assert.match(content.page.sections.at(-1).paragraphs[0],/aux autres Game Masters Blancs\./);
     assert.deepEqual(content.page.sections.map(s=>s.title),['Vidéographie','Ta version harmonieuse','Ta société harmonieuse','Ta version harmonieuse IA','Ta société harmonieuse IA','Loge sociale']);
     assert.ok(content.page.sections.every(s=>s.paragraphs.length&&s.paragraphs.every(p=>typeof p==='string'&&p.length>20)));
@@ -73,7 +73,7 @@ test('the private page uses the final API and renders no final text on refusal o
     assert.equal(document.title,'Game Master Blanc · White Cadae');
     assert.match(app.innerHTML,/gm-layout gm-white/);assert.match(app.innerHTML,/gm-letter/);
     assert.equal((app.innerHTML.match(/class="gm-section"/g)||[]).length,6);
-    assert.match(app.innerHTML,/<p class="gm-opening"><span>Façonne ton paradis<\/span> <span>pour le rejoindre\.<\/span><\/p>/);
+    assert.match(app.innerHTML,/<p class="gm-opening"><span>Façonne ton paradis pour le rejoindre\.<\/span> <span>Deviens ton propre Game Master\.<\/span><\/p>/);
     assert.ok(app.innerHTML.indexOf('gm-opening')<app.innerHTML.indexOf('gm-white-section-0'));
     assert.doesNotMatch(app.innerHTML,/gm-orbit/);
     assert.doesNotMatch(app.innerHTML,/Rejoindre les Game Masters|discord|<a |href="\/videographie|[→↗]/);

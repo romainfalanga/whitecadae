@@ -173,7 +173,8 @@ async function route() {
   if (path === '/escape-game-orange') return navigate('/', true);
   if (path === '/57') return navigate('/musique#album-57', true);
   if (path === '/musique') return pageMusique();
-  if (path === '/playlist') return WCPlaylists.page();
+  // Playlist is kept in the repository but temporarily unavailable.
+  if (/^\/playlist(?:\/|$)/.test(path)) return navigate('/',true);
   if (path === '/paroles') return pageParoles();
   if (path === '/interpretations' || path === '/fil') return navigate('/paroles', true);
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
@@ -214,7 +215,6 @@ function renderNav() {
   const badge=document.getElementById('header-level');if(badge){badge.hidden=!state.user;badge.textContent=state.user?String(state.gameEchelon):'';badge.setAttribute('aria-label','Échelon '+state.gameEchelon);}
   const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musiques</a>', '<a href="/signes" data-link>Signes</a>', '<a href="/echelon" data-link>Échelons</a>'];
   if(state.user&&state.access.horloge)liens.splice(3,0,'<a href="/signes/horloge" data-link>Horloge</a>');
-  if(state.user&&state.access.playlist)liens.splice(2,0,'<a href="/playlist" data-link>Playlist</a>');
   if(state.user&&state.access.gameMaster)liens.push('<a href="/game-master-orange" data-link>Game Master Orange</a>');
   if(state.user&&state.access.gameMasterBlanc)liens.push('<a href="/game-master-blanc" data-link>Game Master Blanc</a>');
   nav.innerHTML = liens.join('\n       ');
@@ -295,7 +295,7 @@ async function refreshSession() {
     accountChannel?.postMessage({type:'account-changed',userId:currentAccount});
   }
   observedAccount=currentAccount;
-  WCPlayer.setPlaylistAccess?.(!!state.user&&!!state.access.playlist);
+  WCPlayer.setPlaylistAccess?.(false); // Playlist is temporarily suspended.
   try { const music=await api('/api/music');WCPlayer.setAlbums(music.albums); }
   catch { WCPlayer.setAlbums([]); }
 }
@@ -304,7 +304,7 @@ function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
   if(value==='57')return '/signes';
   if(value==='echelon'||value==='/parcours')return '/echelon';
-  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|game-master-blanc|sans-vin-divin|playlist)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
+  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|game-master-blanc|sans-vin-divin)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 
 function pageLogin() {
