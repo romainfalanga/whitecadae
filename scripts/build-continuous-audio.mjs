@@ -1,4 +1,4 @@
-// Build only the seven multi-track combinations that the progression permits.
+// Build only the multi-track combinations that the current progression permits.
 // Usage: node scripts/build-continuous-audio.mjs /path/to/ffmpeg /path/to/scratch
 import {execFileSync} from 'node:child_process';
 import {mkdirSync,readFileSync,writeFileSync,appendFileSync,statSync} from 'node:fs';

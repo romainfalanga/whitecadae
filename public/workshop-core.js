@@ -7,17 +7,28 @@ export function evaluate(expr,sources,budget={left:150},depth=0){
     if(source.fixed&&depth)throw Error('Le mois est déjà converti : conserve son bloc.');
     const digits=String(source.value);
     if(expr.op==='part'){
+      if(source.stripZeros)throw Error('Retire d’abord les zéros de ce bloc.');
       if(source.fixed||digits.length<2||!Number.isInteger(expr.index)||expr.index<0||expr.index>=digits.length)throw Error('Chiffre inconnu.');
       return {value:+digits[expr.index],resources:[`${source.id}.${expr.index}`],shared:[]};
     }
-    return {value:source.value,resources:[...digits].map((_,i)=>`${source.id}.${i}`),shared:[],display:source.display};
+    return {value:source.value,resources:[...digits].map((_,i)=>`${source.id}.${i}`),shared:[],display:source.display,...(source.stripZeros?{unstripped:true}:{})};
+  }
+  if(expr.op==='stripZeros'){
+    const source=sources.find(s=>s.id===expr.arg?.ref);
+    if(expr.arg?.op!=='src'||!source?.stripZeros)throw Error('Ce bloc ne contient pas de zéros à retirer.');
+    const v=evaluate(expr.arg,sources,budget,depth+1),digits=String(v.value).replace(/0/g,'');
+    if(!digits)throw Error('Ce bloc doit conserver un chiffre.');
+    const {unstripped,...result}=v;
+    return {...result,value:Number(digits)};
   }
   if(expr.op==='reuse'){
     const v=evaluate(expr.arg,sources,budget,depth+1);
+    if(v.unstripped)throw Error('Retire d’abord les zéros de ce bloc.');
     if(v.shared.length)throw Error('Ce bloc a déjà été dupliqué.');
     return {...v,shared:[...v.resources]};
   }
   const l=evaluate(expr.left,sources,budget,depth+1),r=evaluate(expr.right,sources,budget,depth+1);
+  if(l.unstripped||r.unstripped)throw Error('Retire d’abord les zéros de chaque bloc.');
   if(l.group||r.group)throw Error('Détache la répartition pour reprendre ses nombres.');
   let value,group;
   switch(expr.op){

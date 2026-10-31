@@ -8,11 +8,12 @@ Application JavaScript sans framework : Cloudflare Worker, assets statiques, D1 
 - `/musique` : albums 57, 114 et 18 juillet 2019, déblocage morceau par morceau.
 - `/signes` : propositions de signes, anciennement `/echelon`.
 - `/signes/horloge` : tableaux de construction, uniquement après la découverte de L’horloge.
+- `/sans-vin-divin` : atelier accessible depuis le passage correspondant des paroles, à partir de l’échelon 4, sans prérequis Horloge.
 - `/echelon` : parcours de 33 échelons, réglages du compte et membres jusqu’à l’échelon courant inclus.
 - `/chanson/:slug` : paroles accessibles depuis le lecteur selon les droits du morceau.
-- `/game-master-orange` : accompagnement mutuel des joueurs, à l’échelon 11.
+- `/game-master-orange` : accompagnement mutuel des joueurs, à l’échelon 7.
 
-Mécanismes, Vidéographie et Carré d’AS sont retirés du site, du menu, de l’accueil et du calendrier des déblocages. Leurs anciennes adresses, y compris les sous-pages, `/matiere` et `/arbre-de-vie`, ramènent à l’accueil. Les indicateurs d’accès correspondants restent désactivés à tous les échelons, y compris pour les administrateurs. Game Master Orange reste la seule page ajoutée au parcours, à l’échelon 11. Les données et API personnelles historiques sont conservées avec leurs contrôles d’accès pour compatibilité ; aucune migration ni suppression de données n’est exécutée.
+Mécanismes, Vidéographie et Carré d’AS sont retirés du site, du menu, de l’accueil et du calendrier des déblocages. Leurs anciennes adresses, y compris les sous-pages, `/matiere` et `/arbre-de-vie`, ramènent à l’accueil. Les indicateurs d’accès correspondants restent désactivés à tous les échelons, y compris pour les administrateurs. Game Master Orange reste la seule page ajoutée au parcours, à l’échelon 7. Les données et API personnelles historiques sont conservées avec leurs contrôles d’accès pour compatibilité ; aucune migration ni suppression de données n’est exécutée.
 
 Le menu comprend Escape Game Orange, Musiques, Signes et Échelons ; Horloge s’ajoute immédiatement après la découverte de L’horloge dans Aiguille. `/api/me` utilise la progression canonique pour cette condition, sans déblocage par niveau ni exception administrateur. Les anciens liens d’énigmes et d’Horloge redirigent vers Signes. `/parcours` et les anciens profils redirigent vers Échelons, dont l’URL reste `/echelon`. Les API historiques `/api/echelon` et `/api/57` restent des alias du jeu pour les anciens clients ; le nouveau client utilise `/api/signes`.
 
@@ -20,22 +21,25 @@ Le départ est à 1. Les 32 réponses distinctes actives permettent d’atteindr
 
 Chaque tentative admise dans Signes ou Horloge déclenche une pause commune de 33 secondes, y compris les erreurs, découvertes partielles et répétitions. Une échéance par compte dans `echelon_attempts` est réclamée atomiquement côté serveur ; les alias d’API la partagent. Les requêtes bloquées renvoient 429 et le temps restant sans prolonger la pause. `public/attempt-timer.js` désactive les saisies et manipulations des tableaux, conserve les brouillons et affiche un compteur doré, centré au-dessus du lecteur. Les secondes ne réécrivent pas les formulaires. Navigation, rechargement et autres onglets conservent l’échéance ; retour au premier plan et focus relisent le serveur, sans interrogation périodique. Un succès affiche seulement « +1 échelon » dans une fenêtre centrale légère, refermable et temporaire, sans annoncer les contenus débloqués.
 
-La validation normalise accents, casse, ponctuation et espaces, puis compare la proposition entière à une réponse ou un fragment autorisé. Pour 30 vins divins et 5 vins divins, « Jésus » et « Messie » valident le même signe, affiché « Jésus (Messie) », sans échelon supplémentaire pour la seconde variante. Les variantes de nombre grammatical sont explicites : « expansion harmonieuse » vaut ainsi « expansions harmonieuses ». Les mots parasites et listes de réponses ne révèlent aucun fragment. Les nombres séparés ne sont jamais fusionnés pour fabriquer une réponse. `tests/sign-validation.test.mjs` couvre les 25 réponses textuelles ; les sept constructions d’Horloge sont vérifiées séparément côté serveur.
+La validation normalise accents, casse, ponctuation et espaces, puis compare la proposition entière à une réponse ou un fragment autorisé. Pour 30 vins divins et 5 vins divins, « Jésus » et « Messie » valident le même signe, affiché « Jésus (Messie) », sans échelon supplémentaire pour la seconde variante. Les variantes de nombre grammatical sont explicites : « expansion harmonieuse » vaut ainsi « expansions harmonieuses ». Les mots parasites et listes de réponses ne révèlent aucun fragment. Les nombres séparés ne sont jamais fusionnés pour fabriquer une réponse. `tests/sign-validation.test.mjs` couvre les 25 réponses textuelles ; les six constructions d’Horloge et celle de Sans vin divin sont vérifiées séparément côté serveur.
 
-Le signe `n-0-3` (Katikas) est retiré du score, sans suppression de son historique. L’énigme « En nous collant au bon endroit, un troisième apparaîtra. » n’attend que Devincix à partir de l’échelon 8. La nouvelle réponse `eg-16-4`, « Expansions harmonieuses », appartient à 57 et rapporte son propre échelon, indépendamment de « Mélange les… ». `SCORE_VERSION=2` recalcule les index de roadmap antérieurs. Aucun transfert automatique de point ni remise à zéro de compte.
+Le signe `n-0-3` (Katikas) est retiré du score, sans suppression de son historique. L’énigme « En nous collant au bon endroit, un troisième apparaîtra. » n’attend que Devincix à partir de l’échelon 8. La nouvelle réponse `eg-16-4`, « Expansions harmonieuses », appartient à 57 et rapporte son propre échelon, indépendamment de « Mélange les… ». `SCORE_VERSION=3` recalcule les index de roadmap antérieurs : le signe de l’atelier Wanheda (`eg-20-1`) reste enregistré dans l’historique mais ne compte plus dans le score. La nouvelle énigme Sans vin divin doit être résolue séparément. Les autres réponses et brouillons restent conservés ; les accès suivent le score recalculé et le calendrier ci-dessous, sans droits hérités aux anciens seuils ni remise à zéro de compte.
 
-| Échelon | Morceau |
+| Échelon | Musique ou page |
 | --- | --- |
 | 1 | 30 vins divins |
 | 2 | Sans indices dans les dés |
-| 3 | 13h20 |
-| 4 | Orange |
-| 5 | La matière danse |
-| 6 | Les probabilités |
-| 7 | Fais Mieux |
-| 8 | Wanheda |
-| 9 | Quand je vois je pense |
-| 10 | Un fil entre deux infinis |
+| 4 | 13h20 |
+| 6 | Orange |
+| 7 | Game Master Orange |
+| 12 | La matière danse |
+| 18 | Les probabilités |
+| 25 | Fais Mieux |
+| 30 | Un fil entre deux infinis |
+
+Wanheda et Quand je vois je pense sont retirés du catalogue, des récompenses, des paroles publiques et des accès audio directs. L’album 18 juillet 2019 ne conserve qu’Un fil entre deux infinis ; ses anciennes variantes continues ne sont plus servies. Horloge conserve deux ateliers pour ce morceau à partir de 30 : « 18 juillet 2019 » et « 3:18 », sans duplication de la durée ni atelier « 3:54 ».
+
+Sans vin divin réutilise l’atelier et la sauvegarde des constructions d’Horloge. Ses blocs sont 100, 20, 10 et 20 : chaque bloc doit perdre ses zéros avant d’être utilisé ; deux assemblages donnent 12, puis une duplication permet d’additionner deux 12 pour le jour 24 tout en conservant 12 pour le mois. La validation côté serveur exige cette construction, et non seulement deux nombres finaux équivalents. Le passage de paroles cliquable et la page de l’atelier respectent le seuil du morceau source.
 
 L’ordre d’écoute de 57 est 13h20, 30 vins divins, Sans indices dans les dés, Orange. Les variantes audio continues ne contiennent que les pistes accessibles à leur seuil. Le lecteur passe de chapitre en chapitre dans le même fichier pour limiter les interruptions lorsque le téléphone est verrouillé. Le service worker ne met jamais en cache les médias protégés ni les API.
 

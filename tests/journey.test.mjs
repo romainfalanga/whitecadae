@@ -20,16 +20,16 @@ test('map shows current song signs without exposing their answers',()=>{
 test('workshop dependencies connect only available songs and the discovered clock',()=>{
   const base=['eg-02-1','eg-01-1'];
   assert.ok(!buildJourney(rows(...base)).nodes.some(n=>n.id==='eg-15'));
-  const fifth=buildJourney(rows(...base,'n-h-2'));
-  assert.equal(fifth.nodes.find(n=>n.id==='eg-15').status,'available');
+  const sixth=buildJourney(rows(...base,'n-h-2','n-h-3','n-w-1'));
+  assert.equal(sixth.nodes.find(n=>n.id==='eg-15').status,'available');
   const clock=buildJourney(rows(...base,'eg-03-1'));
   assert.equal(clock.nodes.find(n=>n.id==='eg-10').status,'passage');
   assert.ok(clock.edges.some(e=>e.from==='eg-03'&&e.to==='eg-10'&&e.found===1));
   for(const id of ['eg-11','eg-12'])assert.ok(clock.edges.some(e=>e.from==='eg-10'&&e.to===id&&e.found===1));
-  const expanded=buildJourney(rows(...base,'eg-03-1','@eg/share'));
+  const expanded=buildJourney(rows(...base,'eg-03-1','n-h-2','n-h-3','@eg/share'));
   assert.equal(expanded.nodes.find(n=>n.id==='eg-13').status,'available');
   const full=buildJourney(rows(...NODES.flatMap(n=>n.answers.map(a=>a.id))));
-  for(const graph of [fifth,clock,expanded,full]){
+  for(const graph of [sixth,clock,expanded,full]){
     const visible=new Set(graph.nodes.map(n=>n.id));
     assert.ok(graph.edges.every(e=>visible.has(e.from)&&visible.has(e.to)));
     assert.equal(graph.summary.horizon,graph.echelon+graph.summary.remaining);

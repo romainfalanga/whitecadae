@@ -40,19 +40,20 @@ export const NODES = [
     {id:'eg-03',source:'L’aiguille',answers:[a('eg-03-1','L’horloge',['horloge']),a('eg-03-2','le détail',['détail','détails','les détails','le(s) détail(s)'])]},
     {...legacy('n-k',['n-k-1']),answers:[a('n-k-1','Galaxies',['galaxie']),a('eg-17-1','Signes',['signe'])]},
   ]),
-  ...onSong('13h20',3,[legacy('n-e',['n-e-2'])]),
-  ...onSong('orange',4,[{id:'eg-15',source:'AA',answers:[answer('eg-15-1','Andromédien Autiste',[['Andromédien','andromedienne','andromediens','andromediennes'],['Autiste','autistes']])]}]),
-  {id:'eg-11',source:'2:24',subtitle:'13h20',music:'13h20',min:3,kind:'workshop',board:'first',requires:['eg-03-1'],answers:[a('eg-11-1','24 décembre · 24 / 12')]},
+  ...onSong('13h20',4,[legacy('n-e',['n-e-2'])]),
+  ...onSong('orange',6,[{id:'eg-15',source:'AA',answers:[answer('eg-15-1','Andromédien Autiste',[['Andromédien','andromedienne','andromediens','andromediennes'],['Autiste','autistes']])]}]),
+  {id:'eg-11',source:'2:24',subtitle:'13h20',music:'13h20',min:4,kind:'workshop',board:'first',requires:['eg-03-1'],answers:[a('eg-11-1','24 décembre · 24 / 12')]},
   {id:'eg-12',source:'3:50 – 3:44',subtitle:'30 vins divins · Sans indices dans les dés',music:'sans-indice-dans-les-des',min:2,kind:'workshop',board:'pair',requires:['eg-03-1'],answers:[a('eg-12-1','2 × 57')]},
-  {id:'eg-13',source:'2:39',subtitle:'Orange',music:'orange',min:4,kind:'workshop',board:'last',requires:['eg-03-1'],answers:[a('eg-13-1','57')]},
-  {id:'eg-18',source:'114',subtitle:'Vulpis',music:'la-matiere-dense',min:5,kind:'workshop',board:'album',requires:['eg-03-1'],answers:[a('eg-18-1','57 · 2')]},
-  {id:'eg-19',source:'18 juillet 2019',subtitle:'L’album de AA',music:'wanheda',min:8,kind:'workshop',board:'date',requires:['eg-03-1'],answers:[a('eg-19-1','57 · 07')]},
-  {id:'eg-20',source:'3:54',subtitle:'Wanheda',music:'wanheda',min:8,kind:'workshop',board:'wanheda',requires:['eg-03-1'],answers:[a('eg-20-1','57')]},
-  {id:'eg-21',source:'3:18 – 3:18',subtitle:'Quand je vois je pense · Un fil entre deux infinis',music:'un-fil-entre-deux-infinis',min:10,kind:'workshop',board:'infinis',requires:['eg-03-1'],answers:[a('eg-21-1','666')]},
-  ...onSong('wanheda',8,[{id:'n-0',source:'En nous collant au bon endroit, un troisième apparaîtra.',answers:[a('n-0-1','Devincix')]}]),
+  {id:'eg-13',source:'2:39',subtitle:'Orange',music:'orange',min:6,kind:'workshop',board:'last',requires:['eg-03-1'],answers:[a('eg-13-1','57')]},
+  {id:'eg-18',source:'114',subtitle:'Vulpis',music:'la-matiere-dense',min:12,kind:'workshop',board:'album',requires:['eg-03-1'],answers:[a('eg-18-1','57 · 2')]},
+  {id:'eg-19',source:'18 juillet 2019',subtitle:'Un fil entre deux infinis',music:'un-fil-entre-deux-infinis',min:30,kind:'workshop',board:'date',requires:['eg-03-1'],answers:[a('eg-19-1','57 · 07')]},
+  {id:'eg-21',source:'3:18',subtitle:'Un fil entre deux infinis',music:'un-fil-entre-deux-infinis',min:30,kind:'workshop',board:'infinis',requires:['eg-03-1'],answers:[a('eg-21-1','666')]},
+  {id:'eg-22',source:'Sans vin divin',subtitle:'13h20',music:'13h20',min:4,kind:'workshop',surface:'lyrics',board:'noZero',answers:[a('eg-22-1','24 décembre · 24 / 12')]},
+  // This Instagram riddle is independent of the retired Wanheda recording.
+  ...onSong(null,8,[{id:'n-0',source:'En nous collant au bon endroit, un troisième apparaîtra.',answers:[a('n-0-1','Devincix')]}]),
 ].map(n=>({...n,kind:n.kind||'riddle',requires:n.requires||[],min:n.min||1}));
 // Retired records remain stored, but never add rungs to the current game.
-const retiredAnswers=[['eg-02-2',1],['eg-03-3',1],['n-0-3',1]];
+const retiredAnswers=[['eg-02-2',1],['eg-03-3',1],['n-0-3',1],['eg-20-1',1]];
 export const MAX_GAME_LEVEL=1+NODES.reduce((sum,n)=>sum+n.answers.length,0);
 export const progressLevel=p=>1+p.solved.size;
 const byId = new Map(NODES.map(n=>[n.id,n]));
@@ -103,7 +104,7 @@ export function accessLevel(rows) {
 }
 export const getGameNode=id=>byId.get(id)||null;
 function revealed(n,p){const r=n.reveal;return !r||(r.level!==undefined&&at(p,r.level))||(r.any&&any(p,r.any))||(r.seen&&r.seen.some(id=>p.seen.has(id)))||(r.milestone&&p.milestones.has(r.milestone));}
-export function isVisible(n,p){return at(p,n.min)&&(n.kind!=='workshop'||has(p,'eg-03-1'))&&revealed(n,p);}
+export function isVisible(n,p){return at(p,n.min)&&(n.kind!=='workshop'||n.surface==='lyrics'||has(p,'eg-03-1'))&&revealed(n,p);}
 export function isPlayable(n,p){return isVisible(n,p)&&at(p,n.min)&&all(p,n.requires);}
 function tokens(a,set){const out=[];for(let i=0;i<a.parties.length;i++){if(set.has(i))out.push({t:a.parties[i].t,sep:out.length?(set.has(i-1)?a.seps?.[i-1]||' ':' '):''});else if(!out.at(-1)?.q)out.push({q:true,sep:out.length?' ':''});}return out;}
 
@@ -115,12 +116,12 @@ export function buildGameState(rows=[]) {
     const partiels=n.answers.filter(a=>!has(p,a.id)&&p.parts.has(a.id)).map(a=>({id:a.id,jetons:tokens(a,p.parts.get(a.id))}));
     const missing=n.requires.filter(id=>!has(p,id));
     const deps=[...new Set(missing.map(id=>byAnswer.get(id).n.id))].map(id=>({id,title:byId.get(id).source||'La porte',kind:byId.get(id).kind})).filter(d=>isVisible(byId.get(d.id),p));
-    pages.push({id:n.id,title:n.source||'',source:n.source,music:n.music,subtitle:n.subtitle||'',kind:n.kind,visual:n.visual==='infinity'?n.visual:null,board:n.board,
+    pages.push({id:n.id,title:n.source||'',source:n.source,music:n.music,subtitle:n.subtitle||'',kind:n.kind,surface:n.surface||null,visual:n.visual==='infinity'?n.visual:null,board:n.board,
       total:n.silent?null:n.answers.length,found,partiels,open:found.length<n.answers.length,locked:!isPlayable(n,p),
       requirements:{level:n.min>progressLevel(p)?n.min:null,pages:deps}});
   }
   if(has(p,'eg-03-1'))pages.push({id:'eg-10',kind:'clock',title:'Horloge',source:'Horloge',visual:'clock',locked:false});
-  for(const page of pages)page.href=page.kind==='clock'?'/signes/horloge':page.kind==='workshop'?`/signes/horloge#${page.id}`:`/signes#${page.id}`;
+  for(const page of pages)page.href=page.surface==='lyrics'?'/sans-vin-divin':page.kind==='clock'?'/signes/horloge':page.kind==='workshop'?`/signes/horloge#${page.id}`:`/signes#${page.id}`;
   const echelon=progressLevel(p);
   return {echelon,continuation:gameContinuation(echelon),pages,nodes:pages.filter(n=>['riddle','workshop'].includes(n.kind)),capabilities:has(p,'eg-03-1')?{share:true}:{}};
 }
@@ -132,6 +133,6 @@ export const boardSources={
   last:[{id:'a',value:2,label:'Orange · minutes'},{id:'b',value:39,label:'Orange · secondes'}],
   album:[{id:'a',value:114,label:'Album'},{id:'b',value:2,label:'Bloc'}],
   date:[{id:'a',value:18,label:'Jour'},{id:'b',value:20,label:'Année · premier bloc'},{id:'c',value:19,label:'Année · deuxième bloc'},{id:'d',value:7,display:'07',fixed:true,label:'Juillet → 07'}],
-  wanheda:[{id:'a',value:3,label:'Wanheda · minutes'},{id:'b',value:54,label:'Wanheda · secondes'}],
-  infinis:[{id:'a',value:3,label:'Durée commune · minutes'},{id:'b',value:18,label:'Durée commune · secondes'}]
+  infinis:[{id:'a',value:3,label:'Un fil entre deux infinis · minutes'},{id:'b',value:18,label:'Un fil entre deux infinis · secondes'}],
+  noZero:[{id:'a',value:100,label:'Sans',stripZeros:true},{id:'b',value:20,label:'vin',stripZeros:true},{id:'c',value:10,label:'di',stripZeros:true},{id:'d',value:20,label:'vin',stripZeros:true}]
 };

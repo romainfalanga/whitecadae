@@ -63,8 +63,8 @@ test('signs appear only with their song, even if an old client marked them seen'
   const third=buildGameState(rows('eg-02-1'));
   assert.deepEqual(third.nodes.filter(n=>n.music==='sans-indice-dans-les-des').map(n=>n.id),['n-g','n-c','n-b','eg-03','n-k']);
   assert.ok(!third.nodes.some(n=>n.id==='n-e'||n.id==='eg-15'));
-  assert.ok(buildGameState(rows('eg-02-1','eg-02-2','eg-01-1')).nodes.some(n=>n.id==='n-e'));
-  assert.ok(buildGameState(rows('eg-02-1','eg-02-2','eg-01-1','n-h-2')).nodes.some(n=>n.id==='eg-15'));
+  assert.ok(buildGameState(rows('eg-02-1','eg-01-1','n-h-2')).nodes.some(n=>n.id==='n-e'));
+  assert.ok(buildGameState(rows('eg-02-1','eg-01-1','n-h-2','n-h-3','n-w-1')).nodes.some(n=>n.id==='eg-15'));
   assert.equal(gameProfile(rows('eg-13-1','eg-02-2'),[]).enigmes.length,0);
 });
 
@@ -73,11 +73,13 @@ test('Horloge requires its password, while workshops also require their songs',(
   for(const extra of [[],['eg-03-2'],['eg-03-3'],['@eg/seen/eg-10']])assert.ok(!buildGameState(rows(...base,...extra)).pages.some(n=>n.id==='eg-10'));
   const clock=buildGameState(rows(...base,'eg-03-1'));
   assert.ok(clock.pages.some(n=>n.id==='eg-10'));
-  for(const id of ['eg-11','eg-12'])assert.equal(clock.nodes.find(n=>n.id===id).locked,false);
+  assert.equal(clock.nodes.find(n=>n.id==='eg-12').locked,false);
+  assert.ok(!clock.nodes.some(n=>n.id==='eg-11'));
+  assert.equal(buildGameState(rows(...base,'eg-03-1','eg-01-1')).nodes.find(n=>n.id==='eg-11').locked,false);
   assert.ok(!clock.pages.some(n=>n.id==='eg-13'));
   assert.ok(!buildGameState(rows('eg-03-1',SHARE)).pages.some(n=>n.id==='eg-13'));
-  assert.equal(buildGameState(rows(...base,'eg-03-1','eg-01-1',SHARE)).nodes.find(n=>n.id==='eg-13').locked,false);
-  assert.equal(buildGameState(rows(...base,'eg-03-1','eg-12-1')).nodes.find(n=>n.id==='eg-13').locked,false);
+  assert.equal(buildGameState(rows(...base,'eg-03-1','eg-01-1','n-h-2','n-h-3',SHARE)).nodes.find(n=>n.id==='eg-13').locked,false);
+  assert.equal(buildGameState(rows(...base,'eg-03-1','eg-12-1','n-h-2','n-h-3')).nodes.find(n=>n.id==='eg-13').locked,false);
 });
 
 test('every authored answer is reachable without relying on removed puzzles',()=>{
@@ -87,7 +89,7 @@ test('every authored answer is reachable without relying on removed puzzles',()=
   }
   assert.equal(found.length,NODES.reduce((n,node)=>n+node.answers.length,0));
   const state=buildGameState(rows(...found));
-  assert.deepEqual([...new Set(state.pages.map(p=>p.href.split('#')[0]))].sort(),['/signes','/signes/horloge']);
+  assert.deepEqual([...new Set(state.pages.map(p=>p.href.split('#')[0]))].sort(),['/sans-vin-divin','/signes','/signes/horloge']);
   assert.ok(state.pages.every(p=>['riddle','workshop','clock'].includes(p.kind)));
   assert.ok(state.pages.every(p=>!('group' in p)&&!('quotes' in p)&&!('related' in p)));
   assert.deepEqual(state.nodes.filter(p=>p.visual).map(p=>p.id),['eg-06']);
@@ -229,7 +231,7 @@ test('API handles permission boundaries, points, migrations and draft conflicts'
   assert.equal((await call('/api/echelon/guess',{id:'eg-01',answer:'Signe'})).gained,1);
   const clock=await call('/api/echelon/guess',{id:'eg-03',answer:'horloge'});
   assert.equal(clock.gained,1);
-  assert.deepEqual(clock.opened.map(item=>item.id),['music-les-probabilites']);
+  assert.deepEqual(clock.opened.map(item=>item.id),['music-orange']);
   assert.ok(clock.state.pages.some(p=>p.id==='eg-10'));
   assert.equal((await call('/api/echelon/draft/eg-13')).status,200);
   // Discovery and duplication can occur before the first autosave completes.

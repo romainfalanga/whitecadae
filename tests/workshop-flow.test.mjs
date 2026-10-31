@@ -8,23 +8,23 @@ const start=board=>restoreFlow(initialDraft(boardSpec(board)));
 const values=(flow,spec)=>flow.draft.items.map(x=>formatBlock(evaluate(x,spec.sources),spec.format));
 
 test('guided flow chooses first block, operator, second block, then applies an immutable calculation',()=>{
-  const spec=boardSpec('wanheda'),original=start('wanheda');
-  assert.throws(()=>chooseOperation(original,'add'),/d’abord/);
-  let flow=chooseBlock(original,0);
+  const spec=boardSpec('infinis'),original=start('infinis');
+  assert.throws(()=>chooseOperation(original,'group'),/d’abord/);
+  let flow=chooseBlock(original,1);
   assert.throws(()=>transform(flow,spec),/opération/);
-  flow=chooseOperation(flow,'add');
-  assert.deepEqual(flow.draft.selected,[0]);
-  assert.throws(()=>chooseBlock(flow,0),/autre bloc/);
+  flow=chooseOperation(flow,'group');
+  assert.deepEqual(flow.draft.selected,[1]);
+  assert.throws(()=>chooseBlock(flow,1),/autre bloc/);
   assert.throws(()=>placeBlock(flow,spec,0),/Termine/);
-  flow=chooseBlock(flow,1);
-  assert.deepEqual(flow.draft.selected,[0,1]);
+  flow=chooseBlock(flow,0);
+  assert.deepEqual(flow.draft.selected,[1,0]);
   const computed=transform(flow,spec);
-  assert.deepEqual(values(computed,spec),['57']);
+  assert.deepEqual(values(computed,spec),['666']);
   assert.deepEqual(computed.draft.selected,[0]);assert.equal(computed.operator,null);
-  assert.deepEqual(flow.draft.selected,[0,1]);assert.deepEqual(original,start('wanheda'));
-  assert.ok(!validateConstruction('wanheda',computed.draft));
+  assert.deepEqual(flow.draft.selected,[1,0]);assert.deepEqual(original,start('infinis'));
+  assert.ok(!validateConstruction('infinis',computed.draft));
   const placed=placeBlock(computed,spec,0);
-  assert.ok(validateConstruction('wanheda',placed.draft));
+  assert.ok(validateConstruction('infinis',placed.draft));
   const reclaimed=placeBlock(placed,spec,0);
   assert.deepEqual(reclaimed,computed);
 });
@@ -69,14 +69,14 @@ test('July stays in its answer while the three other date blocks can be combined
 });
 
 test('invalid arithmetic leaves the flow intact, and changing operation requests a second operand',()=>{
-  const spec=boardSpec('wanheda');
-  const invalid=chooseBlock(chooseOperation(chooseBlock(start('wanheda'),0),'group'),1);
+  const spec=boardSpec('infinis');
+  const invalid=chooseBlock(chooseOperation(chooseBlock(start('infinis'),0),'group'),1);
   const saved=structuredClone(invalid);
   assert.throws(()=>transform(invalid,spec),/groupes égaux/);
   assert.deepEqual(invalid,saved);
   const changed=chooseOperation(invalid,'add');
   assert.throws(()=>transform(changed,spec),/second bloc/);
-  assert.deepEqual(values(transform(chooseBlock(changed,1),spec),spec),['57']);
+  assert.deepEqual(values(transform(chooseBlock(changed,1),spec),spec),['21']);
 });
 
 test('single-block actions apply directly and cannot destroy the last copy of a source',()=>{

@@ -13,7 +13,6 @@ const solutions={
   last:[op('join',op('add',src('a'),part('b',0)),op('sub',part('b',1),dup(src('a'))))],
   album:[op('div',src('a'),src('b')),dup(src('b'))],
   date:[op('add',op('add',src('a'),src('b')),src('c')),src('d')],
-  wanheda:[op('add',src('a'),src('b'))],
   infinis:[op('group',src('b'),src('a'))],
 };
 for(const [board,answer]of Object.entries(solutions))test(board+': complete calculation requires explicit final placement and no loose blocks',()=>{
@@ -96,16 +95,20 @@ test('old drafts are migrated and old completed 2 Jesus keeps its rung without c
   assert.equal(gameLevel(rows('eg-11-1.p0')),1);
   assert.equal(gameLevel(rows('eg-14-1','eg-14-2','n-c-1','n-c-2')),5);
 });
-test('new workshop visibility follows exact song thresholds and always requires Horloge',async()=>{
-  const f=fixture(),ids=NODES.filter(n=>n.kind==='riddle').flatMap(n=>n.answers.map(a=>a.id)).filter(id=>id!=='eg-03-1');
-  for(const level of [2,3,5,6,7,8,9,10,11,12]){
-    const user=level+1;f.sql.prepare('DELETE FROM riddle_progress WHERE user_id=?').run(user);
+test('Horloge workshops follow exact song thresholds and require the clock password',async()=>{
+  const f=fixture(),ids=NODES.flatMap(n=>n.answers.map(a=>a.id)).filter(id=>id!=='eg-03-1');
+  for(const level of [2,3,4,5,6,11,12,29,30]){
+    const user=level+1;
+    f.sql.prepare('INSERT OR IGNORE INTO users(id,email,username,password_hash) VALUES(?,?,?,?)').run(user,'qa'+level+'@local.test','QA'+level,'unused');
+    f.sql.prepare('INSERT OR IGNORE INTO sessions(token,user_id,expires_at) VALUES(?,?,?)').run('qa'+level,user,'2099-01-01');
+    f.sql.prepare('DELETE FROM riddle_progress WHERE user_id=?').run(user);
     const insert=id=>f.sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(user,id,'now');
     for(const id of ids.slice(0,level-2))insert(id);
     const call=path=>worker.fetch(new Request('https://test.local'+path,{headers:{Cookie:'wc_session=qa'+level}}),f.env);
     for(const id of ['eg-18','eg-19','eg-20','eg-21'])assert.equal((await call('/api/echelon/draft/'+id)).status,404);
     insert('eg-03-1');
-    for(const [id,min]of [['eg-18',5],['eg-19',8],['eg-20',8],['eg-21',10]]){
+    assert.equal((await call('/api/echelon/draft/eg-20')).status,404);
+    for(const [id,min]of [['eg-11',4],['eg-13',6],['eg-18',12],['eg-19',30],['eg-21',30]]){
       const res=await call('/api/echelon/draft/'+id);assert.equal(res.status,level>=min?200:404,id+' '+level);
       if(res.status===200){const data=await res.json();assert.ok(data.spec.slots);assert.equal(data.draft.version,2);assert.ok(!('solutions' in data));assert.ok(!('prompt' in data.spec));}
     }
@@ -121,7 +124,9 @@ test('API saves final slots, archives legacy drafts, rejects stale saves, and gr
   assert.equal((await call('draft/eg-18',{draft:final(solutions.album),revision:3})).revision,4);
   assert.equal(f.sql.prepare('SELECT count(*) n FROM echelon_draft_history').get().n,1);
   assert.equal((await call('draft/eg-18',{draft:final(solutions.album),revision:3})).status,409);
-  for(const [id,board]of [['eg-18','album'],['eg-19','date'],['eg-20','wanheda'],['eg-21','infinis']]){
+  // Bring an existing account to 30 using other saved signs, leaving these targets unsolved.
+  for(const id of NODES.flatMap(n=>n.answers.map(a=>a.id)).filter(id=>!['eg-18-1','eg-19-1','eg-21-1'].includes(id)))f.sql.prepare('INSERT OR IGNORE INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(user,id,'now');
+  for(const [id,board]of [['eg-18','album'],['eg-19','date'],['eg-21','infinis']]){
     f.sql.exec('UPDATE echelon_attempts SET next_at=0');
     const solved=await call('guess',{id,draft:final(solutions[board])});assert.equal(solved.gained,1,id);
     f.sql.exec('UPDATE echelon_attempts SET next_at=0');

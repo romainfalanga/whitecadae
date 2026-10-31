@@ -21,7 +21,7 @@ export const CONTINUOUS = {
     },
     {
       "src": "/music/57/continuous-v1-4.m4a",
-      "minLevel": 3,
+      "minLevel": 4,
       "bytes": 14792080,
       "duration": 599.5183900226757,
       "chapters": [
@@ -44,7 +44,7 @@ export const CONTINUOUS = {
     },
     {
       "src": "/music/57/continuous-v1-5.m4a",
-      "minLevel": 4,
+      "minLevel": 6,
       "bytes": 18696319,
       "duration": 758.8914512471655,
       "chapters": [
@@ -74,7 +74,7 @@ export const CONTINUOUS = {
   "fais-mieux": [
     {
       "src": "/music/fais-mieux/continuous-v1-7.m4a",
-      "minLevel": 6,
+      "minLevel": 18,
       "bytes": 4276125,
       "duration": 171.65385487528346,
       "chapters": [
@@ -92,7 +92,7 @@ export const CONTINUOUS = {
     },
     {
       "src": "/music/fais-mieux/continuous-v1-8.m4a",
-      "minLevel": 7,
+      "minLevel": 25,
       "bytes": 6254835,
       "duration": 251.80312925170068,
       "chapters": [
@@ -114,47 +114,5 @@ export const CONTINUOUS = {
       ]
     }
   ],
-  "18-juillet-2019": [
-    {
-      "src": "/music/18-juillet-2019/continuous-v1-10.m4a",
-      "minLevel": 9,
-      "bytes": 10659262,
-      "duration": 432.85986394557824,
-      "chapters": [
-        {
-          "slug": "wanheda",
-          "start": 0,
-          "duration": 234.6165986394558
-        },
-        {
-          "slug": "quand-je-vois-je-pense",
-          "start": 234.6165986394558,
-          "duration": 198.24326530612245
-        }
-      ]
-    },
-    {
-      "src": "/music/18-juillet-2019/continuous-v1-11.m4a",
-      "minLevel": 10,
-      "bytes": 15522788,
-      "duration": 631.4198639455782,
-      "chapters": [
-        {
-          "slug": "wanheda",
-          "start": 0,
-          "duration": 234.6165986394558
-        },
-        {
-          "slug": "quand-je-vois-je-pense",
-          "start": 234.6165986394558,
-          "duration": 198.24326530612245
-        },
-        {
-          "slug": "un-fil-entre-deux-infinis",
-          "start": 432.85986394557824,
-          "duration": 198.56
-        }
-      ]
-    }
-  ]
+  "18-juillet-2019": []
 };

@@ -179,7 +179,7 @@ async function route() {
   if (path === '/paroles') return pageParoles();
   if (path === '/interpretations' || path === '/fil') return navigate('/paroles', true);
   if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
-  if (path === '/signes' || path === '/signes/horloge') return WCGame.page();
+  if (path === '/signes' || path === '/signes/horloge' || path === '/sans-vin-divin') return WCGame.page();
   if (path === '/echelon') {
     if(/^#(?:eg-|n-)[a-z0-9-]+$/.test(location.hash))return navigate('/signes'+location.hash,true);
     return WCRoadmap.page();
@@ -299,7 +299,7 @@ function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
   if(value==='57')return '/signes';
   if(value==='echelon'||value==='/parcours')return '/echelon';
-  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
+  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|sans-vin-divin)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 
 function pageLogin() {
@@ -371,6 +371,14 @@ function pageRegister() {
 
 /* ---------------------------------------------------------------- chanson */
 
+function lyricLineMarkup(slug,text) {
+  if(slug==='13h20'){
+    const match=/^(J[’']ai dit )(sans vins? divins?)(\b.*)$/i.exec(text);
+    if(match)return `${esc(match[1])}<a href="/sans-vin-divin" data-link>${esc(match[2])}</a>${esc(match[3])}`;
+  }
+  return esc(text);
+}
+
 async function pageSong(slug) {
   const epoch = newEpoch();
   app.innerHTML = '<div class="loading">Chargement des paroles…</div>';
@@ -384,7 +392,7 @@ async function pageSong(slug) {
       <p class="eyebrow">${esc(song.album_title || 'White Cadae')} · Paroles</p>
       <h1>${esc(song.title)}</h1>
       ${track ? `<div class="lyrics-actions"><button class="orange-button" data-play-track="${esc(track.slug)}">${WCIcon('play')} Écouter le morceau</button></div>` : ''}
-      <div class="lyrics-readable">${lines.length ? lines.map((l) => l.text ? `<p>${esc(l.text)}</p>` : '<div class="lyrics-break" aria-hidden="true"></div>').join('') : '<p>Les paroles de ce morceau seront bientôt disponibles.</p>'}</div>
+      <div class="lyrics-readable">${lines.length ? lines.map((l) => l.text ? `<p>${lyricLineMarkup(song.slug,l.text)}</p>` : '<div class="lyrics-break" aria-hidden="true"></div>').join('') : '<p>Les paroles de ce morceau seront bientôt disponibles.</p>'}</div>
       ${track ? `<a class="back-link" href="/musique#album-${esc(track.albumId)}" data-link>Retrouver l’album ${esc(track.album)} →</a>` : ''}
     </article>`;
     bindMusicButtons();

@@ -55,14 +55,15 @@ test('atomic claims admit one of two simultaneous tabs and keep other accounts i
 test('Horloge and Signes share a deadline, without deleting the saved construction',async t=>{
   const {call,sql}=setup(t),token='qa8';
   sql.prepare('INSERT OR IGNORE INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(9,'eg-03-1','now');
-  const draft={version:2,items:[],selected:[],answer:[{op:'add',left:{op:'src',ref:'a'},right:{op:'src',ref:'b'}}]};
-  assert.equal((await call('/api/signes/draft/eg-20',{revision:0,draft},token)).status,200);
+  const src=ref=>({op:'src',ref}),part=(ref,index)=>({op:'part',ref,index}),op=(op,left,right)=>({op,left,right});
+  const draft={version:2,items:[],selected:[],answer:[op('join',op('add',src('a'),part('b',0)),op('sub',part('b',1),{op:'reuse',arg:src('a')}))]};
+  assert.equal((await call('/api/signes/draft/eg-13',{revision:0,draft},token)).status,200);
   const wrong=await call('/api/signes/guess',{id:'n-0',answer:'Katikas'},token);
   assert.equal(wrong.ok,false);assert.equal(wrong.state.attenteMs,33000);
-  assert.equal((await call('/api/signes/guess',{id:'eg-20',draft},token)).status,429);
-  assert.deepEqual((await call('/api/signes/draft/eg-20',null,token)).draft,draft);
+  assert.equal((await call('/api/signes/guess',{id:'eg-13',draft},token)).status,429);
+  assert.deepEqual((await call('/api/signes/draft/eg-13',null,token)).draft,draft);
   t.mock.timers.tick(33000);
-  const correct=await call('/api/signes/guess',{id:'eg-20',draft},token);
+  const correct=await call('/api/signes/guess',{id:'eg-13',draft},token);
   assert.equal(correct.gained,1);assert.equal(correct.state.attenteMs,33000);
   assert.equal((await call('/api/signes/guess',{id:'n-0',answer:'Devincix'},token)).status,429);
   t.mock.timers.tick(33000);

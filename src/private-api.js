@@ -7,7 +7,7 @@ export async function handlePrivate(request,env,url,{getUser,json}){
   const user=await getUser(request,env);if(!user)fail('Connecte-toi pour ouvrir cet espace.',401);
   if(request.headers.get('X-WC-User')&&request.headers.get('X-WC-User')!==String(user.id))fail('Le compte connecté a changé. Recharge la page.',409);
   if(url.pathname==='/api/game-master-orange'){
-    if(request.method!=='GET')fail('Méthode indisponible.',405);await requireLevel(env,user,11);return json({ok:true});
+    if(request.method!=='GET')fail('Méthode indisponible.',405);await requireLevel(env,user,7);return json({ok:true});
   }
   if(env.PRIVATE_SPACES_ENABLED!=='true')fail('Cet espace est momentanément indisponible.',503);
   let body=null;

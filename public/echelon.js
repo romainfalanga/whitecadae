@@ -12,6 +12,8 @@ window.WCGame=(()=>{
   }
   const versions=new Map();
   const isClock=()=>location.pathname==='/signes/horloge';
+  const isLyricLab=()=>location.pathname==='/sans-vin-divin';
+  const isLab=()=>isClock()||isLyricLab();
   function link(p){const local=p.href.split('#')[0]===location.pathname;return `<a href="${e(local?'#'+p.id:p.href)}" ${local?'':'data-link'}>${e(p.title)}</a>`;}
   function login(){return accountEntryMarkup();}
   const visibilityLabel=()=>answersVisible?'Masquer les signes trouvés':'Afficher les signes trouvés';
@@ -21,7 +23,7 @@ window.WCGame=(()=>{
     return `<button id="eg-visibility" type="button" class="eg-visibility" aria-label="${label}" title="${label}" aria-pressed="${answersVisible}">${visibilityIcon()}</button>`;
   }
   function toggleAnswers(){answersVisible=!answersVisible;sync();}
-  function header(){return `<header class="eg-header"><h1>${isClock()?'Horloge':'Signes'}</h1>${isClock()?'':visibilityButton()}</header>`;}
+  function header(){return `<header class="eg-header"><h1>${isLyricLab()?'Sans vin divin':isClock()?'Horloge':'Signes'}</h1>${isLab()?'':visibilityButton()}</header>`;}
   function locked(p){const r=p.requirements||{},deps=(r.pages||[]).map(d=>pageBy(d.id)).filter(Boolean);return `<p class="eg-lock">Verrouillé${r.level?` · Échelon ${r.level}`:''}${deps.length?` · Termine ${deps.map(link).join(', ')}`:''}</p>`;}
   function feedback(message,id,gained=0,kind='info'){
     const box=(id&&document.querySelector(`#${id} .eg-feedback`))||document.getElementById('eg-feedback');
@@ -50,8 +52,8 @@ window.WCGame=(()=>{
     const continuation=document.getElementById('eg-continuation'),markup=continuationMarkup(data.continuation);
     if(continuation&&continuation.innerHTML!==markup)continuation.innerHTML=markup;
     const root=document.getElementById('eg-game-content');if(!root)return;
-    if(isClock()){
-      for(const p of data.nodes.filter(n=>n.kind==='workshop')){
+    if(isLab()){
+      for(const p of data.nodes.filter(n=>n.kind==='workshop'&&(isLyricLab()?n.id==='eg-22':n.surface!=='lyrics'))){
         let el=document.getElementById(p.id);
         if(!el){root.insertAdjacentHTML('beforeend',lab(p));el=document.getElementById(p.id);}
         else if(el.dataset.solved!==String(!p.open)){
@@ -84,8 +86,9 @@ window.WCGame=(()=>{
   function render(){
     pause?.dispose();pause=null;celebration?.dispose();celebration=WCGameFeedback.mount(app);versions.clear();
     if(isClock()&&!pageBy('eg-10')){app.innerHTML='<section class="eg-page"><h1>Ce chemin n’est pas disponible.</h1><a href="/signes" data-link>Retrouver Signes →</a></section>';return;}
-    app.innerHTML=`<section class="eg-page">${header()}<div id="eg-continuation" aria-live="polite"></div><div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}<aside class="eg-pause" hidden aria-label="Délai entre les essais"><span class="eg-pause-orbit" aria-hidden="true"><svg viewBox="0 0 40 40"><circle class="eg-orbit-track" cx="20" cy="20" r="17"/><circle class="eg-orbit-progress" cx="20" cy="20" r="17" pathLength="100"/><path d="M20 11v9l5 3"/></svg></span><span class="eg-pause-caption">Prochain essai</span><time aria-live="off">0:33</time><span class="sr-only" role="status"></span></aside><div id="eg-game-content" class="${isClock()?'eg-labs':'eg-entries'}"></div></section>`;
-    document.title=`${isClock()?'Horloge · ':''}Signes · White Cadae`;
+    if(isLyricLab()&&!pageBy('eg-22')){app.innerHTML=`<section class="eg-page"><h1>Ce chemin n’est pas disponible.</h1>${data.anonyme?login():''}<a href="/signes" data-link>Retrouver Signes →</a></section>`;return;}
+    app.innerHTML=`<section class="eg-page">${header()}${isLyricLab()?'<a class="back-link" href="/chanson/13h20" data-link>Retrouver les paroles de 13h20 →</a>':''}<div id="eg-continuation" aria-live="polite"></div><div id="eg-feedback" class="eg-feedback" role="status" aria-live="polite"></div>${data.anonyme?login():''}<aside class="eg-pause" hidden aria-label="Délai entre les essais"><span class="eg-pause-orbit" aria-hidden="true"><svg viewBox="0 0 40 40"><circle class="eg-orbit-track" cx="20" cy="20" r="17"/><circle class="eg-orbit-progress" cx="20" cy="20" r="17" pathLength="100"/><path d="M20 11v9l5 3"/></svg></span><span class="eg-pause-caption">Prochain essai</span><time aria-live="off">0:33</time><span class="sr-only" role="status"></span></aside><div id="eg-game-content" class="${isLab()?'eg-labs':'eg-entries'}"></div></section>`;
+    document.title=isLyricLab()?'Sans vin divin · White Cadae':`${isClock()?'Horloge · ':''}Signes · White Cadae`;
     sync();
     pause=data.anonyme?null:WCAttemptTimer.mount({root:app,userId:state.user.id,remainingMs:data.attenteMs,readStatus:()=>api('/api/signes/attempt')});
   }
@@ -105,7 +108,7 @@ window.WCGame=(()=>{
     }catch(err){if(token===serial){feedback(err.message,p.id,0,'error');if(err.data?.attenteMs!==undefined)pause?.sync(err.data.attenteMs);}}
     finally{if(token===serial){sending=false;pause?.refresh();}}
   }
-  async function page(){answersVisible=false;const epoch=newEpoch(),token=++serial;currentPath=location.pathname;app.innerHTML='<div class="loading">Chargement…</div>';try{data=await api('/api/signes');if(token!==serial||stale(epoch))return;activeBoard=data.nodes.some(n=>n.id===location.hash.slice(1)&&n.open)?location.hash.slice(1):null;render();const anchor=location.hash.slice(1),y=positions.get(currentPath);if(anchor&&/^[a-z0-9-]+$/.test(anchor))document.getElementById(anchor)?.scrollIntoView();else if(y)requestAnimationFrame(()=>window.scrollTo(0,y));}catch(err){if(token===serial)app.innerHTML=`<h1>Signes</h1><p>${e(err.message)}</p><a href="/signes" data-link>Réessayer</a>`;}}
+  async function page(){answersVisible=false;const epoch=newEpoch(),token=++serial;currentPath=location.pathname;app.innerHTML='<div class="loading">Chargement…</div>';try{data=await api('/api/signes');if(token!==serial||stale(epoch))return;activeBoard=isLyricLab()&&pageBy('eg-22')?.open?'eg-22':data.nodes.some(n=>n.id===location.hash.slice(1)&&n.open)?location.hash.slice(1):null;render();const anchor=location.hash.slice(1),y=positions.get(currentPath);if(anchor&&/^[a-z0-9-]+$/.test(anchor))document.getElementById(anchor)?.scrollIntoView();else if(y)requestAnimationFrame(()=>window.scrollTo(0,y));}catch(err){if(token===serial)app.innerHTML=`<h1>Signes</h1><p>${e(err.message)}</p><a href="/signes" data-link>Réessayer</a>`;}}
   function leave(){answersVisible=false;if(currentPath){positions.set(currentPath,window.scrollY);currentPath='';}serial++;sending=false;celebration?.dispose();celebration=null;pause?.dispose();pause=null;for(const b of boards.values())b.leave();boards.clear();}
 
   function createBoard(p,token){
@@ -153,7 +156,7 @@ window.WCGame=(()=>{
           ${x?`<button class="eg-operand" data-clear="all" data-focus="left" aria-label="Reposer le bloc ${e(label(x))}"><strong>${e(label(x))}</strong><small>Reposer</small></button>`:'<span class="eg-operand empty">Un bloc</span>'}
           ${operation?`<button class="eg-operator" data-clear="operation" data-focus="operator" aria-label="Changer l’opération ${e(symbols[operation])}">${e(symbols[operation])}<small>changer</small></button>${y?`<button class="eg-operand" data-clear="right" data-focus="right" aria-label="Reposer le second bloc ${e(label(y))}"><strong>${e(label(y))}</strong><small>Reposer</small></button>`:'<span class="eg-operand empty">Second bloc</span>'}`:x?'<span class="eg-equation-hint">Une action<br>ou une case de réponse</span>':'<span class="eg-equation-hint">Ton calcul apparaîtra ici</span>'}
         </div>
-        ${operation?`<div class="eg-compute">${preview!==null?`<span>= <strong>${e(preview)}</strong></span>`:'<span>Le premier bloc est conservé pendant ton choix.</span>'}<button data-calculate data-focus="calculate" class="orange-button" ${preview===null?'disabled':''}>Calculer</button></div>`:x?`<div class="eg-actions" aria-label="Actions sur le bloc choisi">${logic.operations.map(([op,symbol,title])=>`<button data-op="${op}" data-focus="op-${op}" aria-label="${title}"><b aria-hidden="true">${symbol}</b><span>${title}</span></button>`).join('')}<button data-transform="reuse" data-focus="reuse" ${canTransform('reuse')?'':'disabled'}>Dupliquer</button><button data-transform="split" data-focus="split" ${canTransform('split')?'':'disabled'}>Séparer les chiffres</button></div>`:''}
+        ${operation?`<div class="eg-compute">${preview!==null?`<span>= <strong>${e(preview)}</strong></span>`:'<span>Le premier bloc est conservé pendant ton choix.</span>'}<button data-calculate data-focus="calculate" class="orange-button" ${preview===null?'disabled':''}>Calculer</button></div>`:x?`<div class="eg-actions" aria-label="Actions sur le bloc choisi">${canTransform('stripZeros')?'<button data-transform="stripZeros" data-focus="stripZeros">Retirer les zéros</button>':''}${logic.operations.map(([op,symbol,title])=>`<button data-op="${op}" data-focus="op-${op}" aria-label="${title}"><b aria-hidden="true">${symbol}</b><span>${title}</span></button>`).join('')}<button data-transform="reuse" data-focus="reuse" ${canTransform('reuse')?'':'disabled'}>Dupliquer</button><button data-transform="split" data-focus="split" ${canTransform('split')?'':'disabled'}>Séparer les chiffres</button></div>`:''}
         <div class="eg-answer-dock"><h3>Ma réponse</h3><div class="eg-answer-slots">${spec.slots.map((slot,i)=>{
           const block=draft.answer[i],canPlace=!!x&&!operation;
           return `<button data-slot="${i}" data-focus="slot-${i}" class="${block?'filled':''}" ${slot.fixed||(!block&&!canPlace)?'disabled':''} aria-label="${e(slot.label)} : ${slot.fixed?'07, déjà placé':block?'reprendre '+e(label(block)):canPlace?'placer '+e(label(x)):'choisir un bloc'}"><span>${e(slot.label)}</span><strong>${block?e(label(block)):'—'}</strong><small>${slot.fixed?'Juillet → 07':block?'Reprendre':canPlace?'Placer '+e(label(x)):'À compléter'}</small></button>`;

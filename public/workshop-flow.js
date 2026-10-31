@@ -30,7 +30,11 @@ export function transform(flow,spec,unary){
   if(unary==='split'){
     if(x.op!=='src'||String(evaluate(x,spec.sources).value).length<2)throw Error('Ce bloc ne peut pas être séparé.');
     output=[...String(evaluate(x,spec.sources).value)].map((_,index)=>({op:'part',ref:x.ref,index}));
-  }else if(unary==='reuse')output=[x,{op:'reuse',arg:clone(x)}];
+  }else if(unary==='stripZeros'){
+    const cleaned={op:'stripZeros',arg:x};evaluate(cleaned,spec.sources);output=[cleaned];
+  }else if(unary==='reuse'){
+    const copy={op:'reuse',arg:clone(x)};evaluate(copy,spec.sources);output=[x,copy];
+  }
   else if(unary==='detach'){
     if(!x.left||x.op==='reuse')throw Error('Ce bloc ne peut pas être détaché.');output=[x.left,x.right];
   }else if(unary==='discard')output=[];

@@ -15,7 +15,7 @@ test('the Instagram riddle is server-gated at echelon 8, independently of Horlog
     assert.equal(available.echelon,8);assert.ok(!available.pages.some(p=>p.kind==='clock'));
     const puzzle=available.nodes.find(n=>n.id==='n-0');
     assert.equal(puzzle.title,'En nous collant au bon endroit, un troisième apparaîtra.');
-    assert.equal(puzzle.music,'wanheda');assert.equal(puzzle.locked,false);assert.equal(puzzle.total,1);
+    assert.equal(puzzle.music,null);assert.equal(puzzle.locked,false);assert.equal(puzzle.total,1);
     assert.deepEqual(puzzle.found,[]);assert.doesNotMatch(JSON.stringify(puzzle),/Devincix|Katikas|Katikias/);
     for(const answer of ['katikas','katikias']){
       const removed=await(await call(8,'/guess',{id:'n-0',answer})).json();

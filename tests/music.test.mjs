@@ -7,12 +7,12 @@ import {ALBUM57,JULY,FAIS_MIEUX,RELEASES} from '../src/music-catalogue.js';
 import {NODES} from '../src/echelon.js';
 
 test('every gated track opens with its lyrics, cover and direct audio at its own threshold',async()=>{
-  assert.deepEqual(FAIS_MIEUX.tracks.map(t=>[t.title,t.minLevel]),[['La matière danse',5],['Les probabilités',6],['Fais Mieux',7]]);
-  assert.deepEqual(JULY.tracks.map(t=>[t.title,t.minLevel]),[['Wanheda',8],['Quand je vois je pense',9],['Un fil entre deux infinis',10]]);
+  assert.deepEqual(FAIS_MIEUX.tracks.map(t=>[t.title,t.minLevel]),[['La matière danse',12],['Les probabilités',18],['Fais Mieux',25]]);
+  assert.deepEqual(JULY.tracks.map(t=>[t.title,t.minLevel]),[['Un fil entre deux infinis',30]]);
   const db=new DatabaseSync(':memory:');
   db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
   db.exec(`INSERT INTO albums(id,title,slug,position) VALUES(1,'18 juillet 2019','18-juillet-2019',1),(2,'57','57',2),(4,'Fais mieux','114',4);
-    INSERT INTO songs(id,album_id,title,slug,track_number) VALUES(100,1,'Ma folie','ma-folie',3),(101,1,'Rendors-toi','rendors-toi',5);
+    INSERT INTO songs(id,album_id,title,slug,track_number) VALUES(100,1,'Ma folie','ma-folie',3),(101,1,'Rendors-toi','rendors-toi',5),(102,1,'Wanheda','wanheda',1),(103,1,'Quand je vois je pense','quand-je-vois-je-pense',2);
     INSERT INTO lyric_lines(song_id,line_number,text) VALUES(100,1,'Retired verse');
     CREATE TABLE IF NOT EXISTS riddle_progress(user_id INTEGER,riddle_id TEXT,solved_at TEXT,PRIMARY KEY(user_id,riddle_id));`);
   let songId=1;
@@ -21,7 +21,7 @@ test('every gated track opens with its lyrics, cover and direct audio at its own
     db.prepare('INSERT INTO lyric_lines(song_id,line_number,text) VALUES(?,1,?)').run(songId,'Protected verse '+track.slug);songId++;
   }
   const ids=NODES.flatMap(n=>n.answers.map(a=>a.id));
-  const accounts=[...Array.from({length:15},(_,i)=>({level:i+1,session:'level'+(i+1)})),{level:0,session:'admin',admin:true}];
+  const accounts=[...Array.from({length:ids.length+1},(_,i)=>({level:i+1,session:'level'+(i+1)})),{level:0,session:'admin',admin:true}];
   for(const [index,account]of accounts.entries()){
     const userId=index+1;db.prepare('INSERT INTO users(id,email,username,password_hash,is_admin) VALUES(?,?,?,?,?)').run(userId,account.session+'@test',account.session,'unused',account.admin?1:0);
     db.prepare('INSERT INTO sessions(token,user_id,expires_at) VALUES(?,?,?)').run(account.session,userId,'2099-01-01');
@@ -63,11 +63,17 @@ test('every gated track opens with its lyrics, cover and direct audio at its own
         else assert.equal(assetReads,before);
       }
     }
-    assert.equal((await call('/api/songs/ma-folie',session)).status,404);
-    assert.equal((await call('/api/songs/rendors-toi',session)).status,404);
-    assert.equal((await call('/api/songs/orange',session)).status,admin||level>=4?200:403);
+    for(const slug of ['ma-folie','rendors-toi','wanheda','quand-je-vois-je-pense']){
+      assert.equal((await call('/api/songs/'+slug,session)).status,404);
+      assert.ok(!JSON.stringify(catalogue).includes('\"slug\":\"'+slug+'\"'));
+      assert.ok(!corpus.includes('\"slug\":\"'+slug+'\"'));
+    }
+    for(const file of ['wanheda.mp3','quand-je-vois-je-pense.mp3','continuous-v1-10.m4a','continuous-v1-11.m4a']){
+      const before=assetReads;assert.equal((await call('/music/18-juillet-2019/'+file,session)).status,404);assert.equal(assetReads,before);
+    }
+    assert.equal((await call('/api/songs/orange',session)).status,admin||level>=6?200:403);
   }
   assert.equal(FAIS_MIEUX.tracks[1].duration,93);
-  assert.equal(db.prepare('SELECT count(*) AS n FROM lyric_lines WHERE song_id<100').get().n,10);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM lyric_lines WHERE song_id<100').get().n,8);
   db.close();
 });

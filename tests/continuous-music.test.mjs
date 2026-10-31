@@ -3,19 +3,20 @@ import assert from 'node:assert/strict';
 import {readFileSync,statSync} from 'node:fs';
 import worker from '../src/index.js';
 import {CONTINUOUS} from '../src/music-continuous.js';
-import {musicAlbums} from '../src/music-catalogue.js';
+import {musicAlbums,gatedTrack} from '../src/music-catalogue.js';
 import {fixture} from './community-fixture.mjs';
 test('continuous variants include only unlocked chapters in canonical album order and exact file sizes',()=>{
-  for(let level=1;level<=12;level++)for(const album of musicAlbums({level})){
+  for(let level=1;level<=33;level++)for(const album of musicAlbums({level})){
     if(album.tracks.length===1){assert.equal(album.playback,null);continue;}
     assert.deepEqual(album.playback.chapters.map(c=>c.slug),album.tracks.map(t=>t.slug));
     let end=0;for(const c of album.playback.chapters){assert.ok(Math.abs(c.start-end)<.0001);end=c.start+c.duration;}assert.ok(Math.abs(end-album.playback.duration)<.0001);
   }
-  for(const item of Object.values(CONTINUOUS).flat()){assert.equal(statSync(new URL('../public'+item.src,import.meta.url)).size,item.bytes);assert.ok(item.bytes<25*1024*1024);}
+  assert.deepEqual(CONTINUOUS['18-juillet-2019'],[]);
+  for(const item of Object.values(CONTINUOUS).flat()){assert.equal(item.minLevel,Math.max(...item.chapters.map(c=>gatedTrack(c.slug).minLevel)));assert.equal(statSync(new URL('../public'+item.src,import.meta.url)).size,item.bytes);assert.ok(item.bytes<25*1024*1024);}
 });
 test('continuous URLs and their byte ranges enforce the song threshold before accessing assets',async()=>{
   const f=fixture();let reads=0;f.env.ASSETS={fetch:async req=>{reads++;const bytes=readFileSync(new URL('../public'+new URL(req.url).pathname,import.meta.url));return new Response(bytes,{headers:{'Content-Type':'audio/mp4'}});}};
-  for(const item of Object.values(CONTINUOUS).flat())for(const level of [0,2,3,5,6,7,8,9,10,11,12]){
+  for(const item of Object.values(CONTINUOUS).flat())for(const level of [0,2,3,5,6,7,8,9,10,11,12,17,18,23,25]){
     const before=reads,res=await worker.fetch(new Request('https://test.local'+item.src,{headers:{Cookie:'wc_session=qa'+level,Range:'bytes=100-107'}}),f.env);
     assert.equal(res.status,level>=item.minLevel?206:403);if(res.status===206){assert.match(res.headers.get('cache-control'),/no-store/);assert.deepEqual(Buffer.from(await res.arrayBuffer()),readFileSync(new URL('../public'+item.src,import.meta.url)).subarray(100,108));}else assert.equal(reads,before);
   }

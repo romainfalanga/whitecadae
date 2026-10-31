@@ -5,6 +5,6 @@ export const BOARD_SPECS={
   last:{slots:[{label:'Nombre'}]},
   album:{slots:[{label:'Premier bloc'},{label:'Deuxième bloc'}]},
   date:{slots:[{label:'Nombre'},{label:'Mois',fixed:'d'}]},
-  wanheda:{slots:[{label:'Nombre'}]},
   infinis:{slots:[{label:'Nombre'}]},
+  noZero:{slots:[{label:'Jour'},{label:'Mois'}]},
 };

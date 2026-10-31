@@ -15,9 +15,18 @@ export function validateConstruction(board,draft){
     if(values.some(v=>v.group))return false;
     if(board==='album')return nums[0]===57&&nums[1]===2;
     if(board==='first')return nums[0]===24&&nums[1]===12;
+    if(board==='noZero'){
+      // Each 12 assembles zero-free word blocks. One complete 12 is copied,
+      // then the two matching blocks are added for the day; the other is month.
+      const twelve=expr=>expr?.op==='reuse'?twelve(expr.arg):expr?.op==='join'&&
+        [expr.left,expr.right].every(e=>e?.op==='stripZeros')&&evaluate(expr,board).value===12;
+      const day=draft.answer[0],month=draft.answer[1];
+      return nums[0]===24&&nums[1]===12&&day.op==='add'&&twelve(day.left)&&twelve(day.right)&&twelve(month)&&
+        [day.left,day.right,month].filter(e=>e.op==='reuse').length===1;
+    }
     if(board==='pair')return nums.every(n=>n===57);
     if(board==='date')return nums[0]===57&&nums[1]===7;
-    if(board==='last'||board==='wanheda')return nums[0]===57;
+    if(board==='last')return nums[0]===57;
   }catch{return false;}
   return false;
 }
