@@ -123,6 +123,8 @@
 .gm-section p:last-child{margin-bottom:0}
 .gm-layout .gm-opening{font-size:clamp(1.4rem,3vw,1.85rem);line-height:1.5}
 .gm-opening>span{display:block}.gm-opening>span+span{margin-top:.7rem;font-size:.78em;color:#ccb38c}
+.gm-white .gm-opening{color:#f3efe7}
+.gm-white .gm-opening>span+span{color:#d5d0c7}
 .mechanism-group{margin:2.5rem 0 3.5rem}
 .mechanism-group-title{font:400 clamp(1.6rem,3vw,2.1rem)/1.3 var(--serif);color:#e4c394;margin:0 0 1.2rem}
 .mechanism-card h3{font:400 1.35rem/1.4 var(--serif);color:#ead1ac;margin:.8rem 0}
