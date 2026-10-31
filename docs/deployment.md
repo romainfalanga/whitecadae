@@ -51,3 +51,5 @@ Les branches de travail passent par la branche de production avant publication. 
 La migration ciblée `migrations/0042_probabilities_lyrics.sql` a été appliquée en un lot D1 le 27 octobre 2026. Elle remplace le début du couplet par les trois lignes fournies par l’artiste, préserve les identifiants des lignes conservées et ignore une seconde exécution. Le fichier `lyrics/les-probabilites.txt` contient la même correction. Cette migration ponctuelle ne fait pas partie de la commande de publication.
 
 La migration complémentaire `0043_probabilities_intro_verse.sql` sépare les trois lignes d’introduction dans `[Intro]`, rétablit `[Couplet]` et « Tu n’existes pas sans tes filtres, » avant « Contrôle les lois de ton univers. ». Elle préserve les autres lignes et ne s’applique qu’une seule fois, en un lot D1.
+
+La migration ciblée `0044_13h20_sans_vin_divin.sql` corrige « J’ai dit sans vins divins, » en « J’ai dit sans vin divin, » à la ligne 50 de 13h20. Elle conserve l’identifiant de cette ligne et toutes les autres paroles, protège les éditions ultérieures et s’applique en un lot D1 distinct du déploiement.

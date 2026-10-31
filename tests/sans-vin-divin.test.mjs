@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
+import {DatabaseSync} from 'node:sqlite';
 import {initialDraft,evaluate,formatBlock} from '../public/workshop-core.js';
 import {restoreFlow,chooseBlock,chooseOperation,transform,placeBlock} from '../public/workshop-flow.js';
 import {boardSpec,validateConstruction,restoreDraft} from '../src/echelon-workshop.js';
@@ -70,10 +71,27 @@ test('lyrics preserve their exact words and link only the requested 13h20 phrase
   const context={esc:text=>text.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')};
   vm.createContext(context);vm.runInContext(helper,context);
   const text=readFileSync(new URL('../lyrics/13h20.txt',import.meta.url),'utf8').split('\n').find(line=>line.startsWith('J’ai dit sans'));
-  assert.equal(context.lyricLineMarkup('13h20',text),'J’ai dit <a href="/sans-vin-divin" data-link>sans vins divins</a>,');
+  assert.equal(context.lyricLineMarkup('13h20',text),'J’ai dit <a href="/sans-vin-divin" data-link>sans vin divin</a>,');
   assert.equal(context.lyricLineMarkup('sans-indice-dans-les-des',text),text);
   assert.equal(context.lyricLineMarkup('13h20','Les jours sans vin'),'Les jours sans vin');
   assert.match(context.lyricLineMarkup('13h20',"J'ai dit sans vin divin<script>"),/divin<\/a>&lt;script&gt;/);
+});
+
+test('the singular lyric migration preserves line IDs and unrelated text, and cannot overwrite a later edit',()=>{
+  const migration=readFileSync(new URL('../migrations/0044_13h20_sans_vin_divin.sql',import.meta.url),'utf8');
+  const db=new DatabaseSync(':memory:');try{
+    db.exec("CREATE TABLE songs(id INTEGER PRIMARY KEY,slug TEXT);CREATE TABLE lyric_lines(id INTEGER PRIMARY KEY,song_id INTEGER,line_number INTEGER,text TEXT);INSERT INTO songs VALUES(1,'13h20'),(2,'other')");
+    const put=db.prepare('INSERT INTO lyric_lines VALUES(?,?,?,?)');
+    put.run(1644,1,50,'J’ai dit sans vins divins,');put.run(1645,1,51,'Le diable prendra sa retraite.');put.run(90,2,50,'J’ai dit sans vins divins,');
+    const lines=()=>db.prepare('SELECT * FROM lyric_lines ORDER BY id').all().map(line=>({...line}));
+    const before=lines();
+    db.exec(migration);
+    const after=lines();
+    assert.deepEqual(after,before.map(line=>line.id===1644?{...line,text:'J’ai dit sans vin divin,'}:line));
+    db.exec(migration);assert.deepEqual(lines(),after);
+    db.prepare('UPDATE lyric_lines SET text=? WHERE id=1644').run('Une édition ultérieure');db.exec(migration);
+    assert.equal(db.prepare('SELECT text FROM lyric_lines WHERE id=1644').get().text,'Une édition ultérieure');
+  }finally{db.close();}
 });
 
 test('API gates the lyric board at 4 without Horloge, preserves drafts, shares the timer and grants one rung',async()=>{

@@ -12,7 +12,7 @@ async function pageOrange() {
     const data = await api("/api/orange");
     if (stale(epoch)) return;
     document.getElementById('orange-continuation').innerHTML = continuationMarkup(data.continuation);
-    document.getElementById("orange-openings").innerHTML = data.openings.map(item => `<div class="orange-opening"><span>Échelon ${item.level}</span><a href="${esc(item.href)}" data-link>${esc(item.title)}</a>${item.lyricsHref ? `<a class="opening-lyrics" href="${esc(item.lyricsHref)}" data-link>Paroles</a>` : ""}${item.paragraph?`<p class="orange-opening-story">${esc(item.paragraph)}</p>`:""}</div>`).join("");
+    document.getElementById("orange-openings").innerHTML = data.openings.map(item => `<div class="orange-opening"><span>Échelon ${item.level}</span>${item.id.startsWith('music-')?`<strong class="opening-title">${esc(item.title)}</strong>`:`<a href="${esc(item.href)}" data-link>${esc(item.title)}</a>`}${item.paragraph?`<p class="orange-opening-story">${esc(item.paragraph)}</p>`:""}</div>`).join("");
   } catch { /* The original welcome remains readable if access loading fails. */ }
 }
 

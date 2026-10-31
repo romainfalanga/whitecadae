@@ -49,7 +49,7 @@ function safeUrl(url) {
 
 function continuationMarkup(item) {
   if (!item) return '';
-  return `<section class="game-continuation" aria-label="Échelon ${esc(item.level)}"><a class="game-gate" href="${esc(safeUrl(item.href))}" target="_blank" rel="noopener noreferrer"><span class="gate-orbit" aria-hidden="true"></span><span class="gate-title">Échelon <strong>${esc(item.level)}</strong></span><span class="gate-action">Rejoindre <span aria-hidden="true">↗</span></span><span class="sr-only"> (nouvel onglet)</span></a></section>`;
+  return `<section class="game-continuation" aria-label="Échelon ${esc(item.level)}"><a class="game-gate" href="${esc(safeUrl(item.href))}" target="_blank" rel="noopener noreferrer"><span class="gate-orbit" aria-hidden="true"></span><span class="gate-title">Échelon <strong>${esc(item.level)}</strong></span><span class="gate-action">Rejoindre</span><span class="sr-only"> (nouvel onglet)</span></a></section>`;
 }
 
 function accountEntryMarkup(destination=location.pathname+location.hash) {
@@ -388,12 +388,12 @@ async function pageSong(slug) {
     const track = WCPlayer.findTrack(song.slug);
     document.title = `${song.title} · Paroles · White Cadae`;
     app.innerHTML = `<article class="lyrics-page">
-      ${track ? '' : '<a class="back-link" href="/paroles" data-link>← Toutes les paroles</a>'}
+      ${track ? '' : '<a class="back-link" href="/paroles" data-link>Toutes les paroles</a>'}
       <p class="eyebrow">${esc(song.album_title || 'White Cadae')} · Paroles</p>
       <h1>${esc(song.title)}</h1>
       ${track ? `<div class="lyrics-actions"><button class="orange-button" data-play-track="${esc(track.slug)}">${WCIcon('play')} Écouter le morceau</button></div>` : ''}
       <div class="lyrics-readable">${lines.length ? lines.map((l) => l.text ? `<p>${lyricLineMarkup(song.slug,l.text)}</p>` : '<div class="lyrics-break" aria-hidden="true"></div>').join('') : '<p>Les paroles de ce morceau seront bientôt disponibles.</p>'}</div>
-      ${track ? `<a class="back-link" href="/musique#album-${esc(track.albumId)}" data-link>Retrouver l’album ${esc(track.album)} →</a>` : ''}
+      ${track ? `<a class="back-link" href="/musique#album-${esc(track.albumId)}" data-link>Retrouver l’album ${esc(track.album)}</a>` : ''}
     </article>`;
     bindMusicButtons();
   } catch (err) {
