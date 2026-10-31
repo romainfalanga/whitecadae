@@ -12,12 +12,15 @@ Application JavaScript sans framework : Cloudflare Worker, assets statiques, D1 
 - `/echelon` : parcours de 33 échelons, réglages du compte et membres jusqu’à l’échelon courant inclus.
 - `/chanson/:slug` : paroles accessibles depuis le lecteur selon les droits du morceau.
 - `/game-master-orange` : accompagnement mutuel des joueurs, à l’échelon 7.
+- `/game-master-blanc` : prolongement du parcours à l’échelon 33, avec les six rubriques sur la vidéographie, les versions harmonieuses et la loge sociale. Le contenu et le lien communautaire sont transmis uniquement après vérification du score côté serveur.
 
-Mécanismes, Vidéographie et Carré d’AS sont retirés du site, du menu, de l’accueil et du calendrier des déblocages. Leurs anciennes adresses, y compris les sous-pages, `/matiere` et `/arbre-de-vie`, ramènent à l’accueil. Les indicateurs d’accès correspondants restent désactivés à tous les échelons, y compris pour les administrateurs. Game Master Orange reste la seule page ajoutée au parcours, à l’échelon 7. Les données et API personnelles historiques sont conservées avec leurs contrôles d’accès pour compatibilité ; aucune migration ni suppression de données n’est exécutée.
+Mécanismes, Vidéographie et Carré d’AS sont retirés du site, du menu, de l’accueil et du calendrier des déblocages. Leurs anciennes adresses, y compris les sous-pages, `/matiere` et `/arbre-de-vie`, ramènent à l’accueil. Les indicateurs d’accès correspondants restent désactivés à tous les échelons, y compris pour les administrateurs. Game Master Orange rejoint le parcours à l’échelon 7, puis Game Master Blanc à l’échelon 33. Les données et API personnelles historiques sont conservées avec leurs contrôles d’accès pour compatibilité ; aucune migration ni suppression de données n’est exécutée.
+
+La liste des contenus découverts sur l’accueil est entièrement informative : aucun titre de musique ou de page n’est cliquable et aucun bouton Paroles n’y figure. Les pages de paroles affichent le titre du morceau, son texte et le retour à l’album, sans surtitre album / Paroles ni bouton d’écoute local ; le lecteur global reste disponible.
 
 Le menu comprend Escape Game Orange, Musiques, Signes et Échelons ; Horloge s’ajoute immédiatement après la découverte de L’horloge dans Aiguille. `/api/me` utilise la progression canonique pour cette condition, sans déblocage par niveau ni exception administrateur. Les anciens liens d’énigmes et d’Horloge redirigent vers Signes. `/parcours` et les anciens profils redirigent vers Échelons, dont l’URL reste `/echelon`. Les API historiques `/api/echelon` et `/api/57` restent des alias du jeu pour les anciens clients ; le nouveau client utilise `/api/signes`.
 
-Le départ est à 1. Les 32 réponses distinctes actives permettent d’atteindre 33. Les fragments, répétitions et réponses retirées n’ajoutent aucun point. Le catalogue serveur `src/echelon.js` définit la progression ; les réponses non trouvées ne sont pas transmises. À 33, le même composant « Échelon 33 / Rejoindre » apparaît sur l’accueil et Signes. Son adresse de destination reste côté serveur avant ce seuil.
+Le départ est à 1. Les 32 réponses distinctes actives permettent d’atteindre 33. Les fragments, répétitions et réponses retirées n’ajoutent aucun point. Le catalogue serveur `src/echelon.js` définit la progression ; les réponses non trouvées ne sont pas transmises. À 33, le même composant « Échelon 33 / Game Master Blanc » apparaît sur l’accueil et Signes et ouvre la nouvelle page dans le même onglet. La communauté Discord reste accessible en bas de Game Master Blanc. Les comptes existants déjà à 33 bénéficient du même accès, sans nouvelle réponse ni remise à zéro.
 
 Chaque tentative admise dans Signes ou Horloge déclenche une pause commune de 33 secondes, y compris les erreurs, découvertes partielles et répétitions. Une échéance par compte dans `echelon_attempts` est réclamée atomiquement côté serveur ; les alias d’API la partagent. Les requêtes bloquées renvoient 429 et le temps restant sans prolonger la pause. `public/attempt-timer.js` désactive les saisies et manipulations des tableaux, conserve les brouillons et affiche un compteur doré, centré au-dessus du lecteur. Les secondes ne réécrivent pas les formulaires. Navigation, rechargement et autres onglets conservent l’échéance ; retour au premier plan et focus relisent le serveur, sans interrogation périodique. Un succès affiche seulement « +1 échelon » dans une fenêtre centrale légère, refermable et temporaire, sans annoncer les contenus débloqués.
 
@@ -36,6 +39,7 @@ Le signe `n-0-3` (Katikas) est retiré du score, sans suppression de son histori
 | 18 | Les probabilités |
 | 25 | Fais Mieux |
 | 30 | Un fil entre deux infinis |
+| 33 | Game Master Blanc |
 
 Wanheda et Quand je vois je pense sont retirés du catalogue, des récompenses, des paroles publiques et des accès audio directs. L’album 18 juillet 2019 ne conserve qu’Un fil entre deux infinis ; ses anciennes variantes continues ne sont plus servies. Horloge conserve deux ateliers pour ce morceau à partir de 30 : « 18 juillet 2019 » et « 3:18 », sans duplication de la durée ni atelier « 3:54 ».
 

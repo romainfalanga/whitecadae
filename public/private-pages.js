@@ -51,10 +51,10 @@ function modal(title,html){
 function closeModal(){session?.dialog?.close();}
 async function verifyIdentity(){const current=await api('/api/me');if(current.user?.id!==session.user){session.ctx.app.innerHTML='';session.dialog?.remove();session.ctx.navigate('/connexion?retour='+encodeURIComponent(location.pathname));return false;}return true;}
 export async function page(path,ctx){
-  if(!['/game-master-orange','/signalements'].includes(path)){leave();return ctx.navigate('/',true);}
+  if(!['/game-master-orange','/game-master-blanc','/signalements'].includes(path)){leave();return ctx.navigate('/',true);}
   leave();const s=session={ctx,user:ctx.state.user?.id,controller:new AbortController(),timer:null,dialog:null,dirty:false};
   if(!document.querySelector('link[href="/private-pages.css"]')){const css=document.createElement('link');css.rel='stylesheet';css.href='/private-pages.css';document.head.append(css);}
-  const title=path.startsWith('/mecanisme')?'Mécanismes':path==='/game-master-orange'?'Game Master Orange':path.startsWith('/videographie')?'Vidéographie':path==='/signalements'?'Signalements':'Carré d’AS';document.title=title+' · White Cadae';
+  const title=path.startsWith('/mecanisme')?'Mécanismes':path==='/game-master-orange'?'Game Master Orange':path==='/game-master-blanc'?'Game Master Blanc':path.startsWith('/videographie')?'Vidéographie':path==='/signalements'?'Signalements':'Carré d’AS';document.title=title+' · White Cadae';
   if(!s.user){shell(heading(title)+ctx.accountEntryMarkup());return;}
   s.beforeUnload=e=>{if(s.dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',s.beforeUnload);
   s.visibility=async()=>{
@@ -63,7 +63,8 @@ export async function page(path,ctx){
     else{try{if(await verifyIdentity()){if(s.poll)await s.poll();ctx.app.style.visibility='';ctx.app.inert=false;if(s.dialog)s.dialog.style.visibility='';schedule();}}catch(e){ctx.app.innerHTML='<p>Reconnecte-toi pour retrouver cet espace.</p>';ctx.app.style.visibility='';ctx.app.inert=false;s.dialog?.remove();}}
   };document.addEventListener('visibilitychange',s.visibility);
   try{
-    if(path==='/game-master-orange'){await api('/api/game-master-orange');gameMaster();return;} if(path==='/signalements'){await reportsPage();return;}
+    if(path==='/game-master-orange'){await api('/api/game-master-orange');gameMaster();return;}
+    if(path==='/game-master-blanc'){const content=await api('/api/game-master-blanc');gameMasterBlanc(content.page);return;} if(path==='/signalements'){await reportsPage();return;}
     const helpBase=path.endsWith('/comprendre')?path.slice(0,-11):null;
     if(PRIVATE_HELP[helpBase]){await api(helpBase==='/mecanisme'?'/api/mechanisms':helpBase==='/videographie'?'/api/life-tree?videos=1':'/api/ace-circles');helpPage(helpBase);return;}
     const slot=Number(path.split('/')[2])||null,topic=/^\/carre-d-as\/fil\/(\d+)$/.exec(path);
@@ -83,6 +84,9 @@ function schedule(){
 function gameMaster(){
   shell(`<div class="gm-layout"><header class="private-heading gm-heading"><h1 class="gm-title"><span>Game Master</span><span>Orange</span></h1></header><article class="gm-letter"><p class="gm-opening"><span>Avancer ensemble.</span><span>Devenir les Game Masters<br class="gm-desktop-break"> les uns des autres.</span></p><div class="gm-copy"><p>Pour avancer de la meilleure manière dans l’Escape Game Orange, trouve des partenaires dans ton entourage et invite-les à entrer dans le jeu. Au début, tu es leur Game Master : accompagne-les à partir des cheminements qui t’ont permis de comprendre ce que tu as compris et d’en arriver là.</p><p>Réécoutez les musiques, relisez les paroles, propose des parallèles ou des indices subtils. Aide-les à trouver par eux-mêmes, sans leur donner les réponses.</p><p>Le but est de devenir mutuellement les Game Masters les uns des autres. Dès que l’un de vous comprend une énigme qu’un autre cherche encore, il le guide sur cette énigme. Les rôles s’échangent au fil de vos découvertes, sans avoir besoin d’être au même échelon.</p><p>Fais grandir ce cercle de partenaires, chacun peut aider les autres à avancer et à se tirer vers le haut.</p><div class="gm-orbit" aria-hidden="true"></div>${button('Inviter mes partenaires','gm-share','')}</div></article></div>`);
   bind('gm-share',async()=>{const data={title:'Escape Game Orange',url:location.origin+'/'};if(navigator.share){try{await navigator.share(data);}catch(e){if(e.name!=='AbortError')throw e;}}else{await navigator.clipboard.writeText(data.url);status('Le lien est copié.');}});
+}
+function gameMasterBlanc(content){
+  shell(`<div class="gm-layout gm-white"><header class="private-heading gm-heading"><h1 class="gm-title"><span>Game Master</span><span>Blanc</span></h1></header><article class="gm-letter"><div class="gm-copy">${content.sections.map((section,index)=>`<section class="gm-section" aria-labelledby="gm-white-section-${index}"><h2 id="gm-white-section-${index}">${esc(section.title)}</h2>${section.paragraphs.map(text=>`<p>${esc(text)}</p>`).join('')}</section>`).join('')}<div class="gm-orbit" aria-hidden="true"></div><a class="private-button" href="${esc(content.communityUrl)}" target="_blank" rel="noopener noreferrer">Rejoindre les Game Masters<span class="sr-only"> (nouvel onglet)</span></a></div></article></div>`);
 }
 function noticeMarkup(){const n=session.consent.notice;return `<div class="private-note"><p>${esc(n.purpose)}</p><p>${esc(n.storage)}</p><p>${esc(n.retention)}</p><p>${esc(n.care)}</p></div>`;}
 async function consent(){

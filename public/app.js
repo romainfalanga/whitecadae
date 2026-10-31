@@ -49,7 +49,7 @@ function safeUrl(url) {
 
 function continuationMarkup(item) {
   if (!item) return '';
-  return `<section class="game-continuation" aria-label="Échelon ${esc(item.level)}"><a class="game-gate" href="${esc(safeUrl(item.href))}" target="_blank" rel="noopener noreferrer"><span class="gate-orbit" aria-hidden="true"></span><span class="gate-title">Échelon <strong>${esc(item.level)}</strong></span><span class="gate-action">Rejoindre</span><span class="sr-only"> (nouvel onglet)</span></a></section>`;
+  return `<section class="game-continuation" aria-label="Échelon ${esc(item.level)}"><a class="game-gate" href="/game-master-blanc" data-link><span class="gate-orbit" aria-hidden="true"></span><span class="gate-title">Échelon <strong>${esc(item.level)}</strong></span><span class="gate-action">${esc(item.label)}</span></a></section>`;
 }
 
 function accountEntryMarkup(destination=location.pathname+location.hash) {
@@ -186,7 +186,7 @@ async function route() {
   }
   if (path === '/echelon/horloge') return navigate('/signes/horloge'+location.hash,true);
   if(/^\/(mecanisme|videographie|carre-d-as|arbre-de-vie|matiere)(?:\/|$)/.test(path))return navigate('/',true);
-  if(['/game-master-orange','/signalements'].includes(path)){
+  if(['/game-master-orange','/game-master-blanc','/signalements'].includes(path)){
     const epoch=renderEpoch;
     app.innerHTML='<div class="loading">Chargement…</div>';
     try{
@@ -217,6 +217,7 @@ function renderNav() {
   const liens = ['<a href="/" data-link>Escape Game Orange</a>', '<a href="/musique" data-link>Musiques</a>', '<a href="/signes" data-link>Signes</a>', '<a href="/echelon" data-link>Échelons</a>'];
   if(state.user&&state.access.horloge)liens.splice(3,0,'<a href="/signes/horloge" data-link>Horloge</a>');
   if(state.user&&state.access.gameMaster)liens.push('<a href="/game-master-orange" data-link>Game Master Orange</a>');
+  if(state.user&&state.access.gameMasterBlanc)liens.push('<a href="/game-master-blanc" data-link>Game Master Blanc</a>');
   nav.innerHTML = liens.join('\n       ');
   nav.querySelectorAll('a').forEach((a) => { if (a.getAttribute('href') === location.pathname) a.setAttribute('aria-current', 'page'); });
 
@@ -299,7 +300,7 @@ function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
   if(value==='57')return '/signes';
   if(value==='echelon'||value==='/parcours')return '/echelon';
-  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|sans-vin-divin)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
+  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|game-master-blanc|sans-vin-divin)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 
 function pageLogin() {
@@ -389,13 +390,10 @@ async function pageSong(slug) {
     document.title = `${song.title} · Paroles · White Cadae`;
     app.innerHTML = `<article class="lyrics-page">
       ${track ? '' : '<a class="back-link" href="/paroles" data-link>Toutes les paroles</a>'}
-      <p class="eyebrow">${esc(song.album_title || 'White Cadae')} · Paroles</p>
       <h1>${esc(song.title)}</h1>
-      ${track ? `<div class="lyrics-actions"><button class="orange-button" data-play-track="${esc(track.slug)}">${WCIcon('play')} Écouter le morceau</button></div>` : ''}
       <div class="lyrics-readable">${lines.length ? lines.map((l) => l.text ? `<p>${lyricLineMarkup(song.slug,l.text)}</p>` : '<div class="lyrics-break" aria-hidden="true"></div>').join('') : '<p>Les paroles de ce morceau seront bientôt disponibles.</p>'}</div>
       ${track ? `<a class="back-link" href="/musique#album-${esc(track.albumId)}" data-link>Retrouver l’album ${esc(track.album)}</a>` : ''}
     </article>`;
-    bindMusicButtons();
   } catch (err) {
     if (!stale(epoch)) app.innerHTML = `<h1>Paroles indisponibles</h1><p>${esc(err.message)}</p><a href="/paroles" data-link>Retour aux paroles</a>`;
   }

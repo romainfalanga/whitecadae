@@ -173,7 +173,7 @@ async function handleApi(request, env, url) {
   };
 
   let p;
-  if(/^\/api\/(game-master-orange|mechanisms|life-tree|ace-circles|private)(?:\/|$)/.test(path))return handlePrivate(request,env,url,{getUser,json});
+  if(/^\/api\/(game-master-orange|game-master-blanc|mechanisms|life-tree|ace-circles|private)(?:\/|$)/.test(path))return handlePrivate(request,env,url,{getUser,json});
   if(path==='/api/roadmap'||path.startsWith('/api/roadmap/'))return handleRoadmap(request,env,url,{getUser,json});
   if(path==='/api/signes'||path.startsWith('/api/signes/'))return handleEchelon(request,env,path.replace(/^\/api\/signes/,'/api/echelon'),{getUser,json});
 

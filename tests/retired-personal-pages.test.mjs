@@ -23,7 +23,7 @@ test('old personal URLs and nested pages return home before loading a module or 
 });
 
 test('login return URLs reject retired pages and preserve the active game destinations',()=>{
-  for(const path of [...destinations,'/signes','/signes/horloge','/echelon','/game-master-orange']){
+  for(const path of [...destinations,'/signes','/signes/horloge','/echelon','/game-master-orange','/game-master-blanc']){
     const result=runInNewContext(destinationSource+'\naccountDestination()',{URLSearchParams,location:{search:'?retour='+encodeURIComponent(path)}});
     assert.equal(result,destinations.includes(path)?'/':path,path);
   }

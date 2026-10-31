@@ -5,7 +5,7 @@ import {NODES,gameLevel} from '../src/echelon.js';
 import {buildJourney} from '../src/journey.js';
 const ids=NODES.flatMap(n=>n.answers.map(a=>a.id));
 const rows=level=>ids.slice(0,level-1).map(riddle_id=>({riddle_id,solved_at:'now'}));
-const schedule=[[1,'music-30-vins-divins'],[2,'music-sans-indice-dans-les-des'],[4,'music-13h20'],[6,'music-orange'],[7,'page-gameMaster'],[12,'music-la-matiere-dense'],[18,'music-les-probabilites'],[25,'music-fais-mieux'],[30,'music-un-fil-entre-deux-infinis']];
+const schedule=[[1,'music-30-vins-divins'],[2,'music-sans-indice-dans-les-des'],[4,'music-13h20'],[6,'music-orange'],[7,'page-gameMaster'],[12,'music-la-matiere-dense'],[18,'music-les-probabilites'],[25,'music-fais-mieux'],[30,'music-un-fil-entre-deux-infinis'],[33,'page-gameMasterBlanc']];
 test('songs and Game Master follow the revised unlock schedule for every existing score',()=>{
   assert.ok(ids.length>=29,'The game must allow reaching the final music threshold.');
   for(let level=1;level<=ids.length+1;level++){

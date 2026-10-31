@@ -5,7 +5,7 @@ import {NODES} from '../src/echelon.js';
 import worker from '../src/index.js';
 import {fixture} from './community-fixture.mjs';
 const ids=NODES.flatMap(n=>n.answers.map(a=>a.id));
-const expected=[[1,'music-30-vins-divins'],[2,'music-sans-indice-dans-les-des'],[4,'music-13h20'],[6,'music-orange'],[7,'page-gameMaster'],[12,'music-la-matiere-dense'],[18,'music-les-probabilites'],[25,'music-fais-mieux'],[30,'music-un-fil-entre-deux-infinis']];
+const expected=[[1,'music-30-vins-divins'],[2,'music-sans-indice-dans-les-des'],[4,'music-13h20'],[6,'music-orange'],[7,'page-gameMaster'],[12,'music-la-matiere-dense'],[18,'music-les-probabilites'],[25,'music-fais-mieux'],[30,'music-un-fil-entre-deux-infinis'],[33,'page-gameMasterBlanc']];
 test('welcome shows earned discoveries in level order, without invented narrative or locked links',()=>{
   for(let level=1;level<=33;level++){
     const result=buildOrange(ids.slice(0,level-1).map(riddle_id=>({riddle_id,solved_at:'now'})),{id:1});

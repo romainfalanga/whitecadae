@@ -4,7 +4,7 @@ export function gameContinuation(level) {
   if (!Number.isInteger(level) || level < 33) return null;
   return {
     level: 33,
-    label: 'Rejoindre',
-    href: 'https://discord.gg/y83ewhS49',
+    label: 'Game Master Blanc',
+    href: '/game-master-blanc',
   };
 }

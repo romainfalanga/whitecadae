@@ -5,15 +5,15 @@ import {NODES} from '../src/echelon.js';
 import {gameContinuation} from '../src/game-continuation.js';
 import {fixture} from './community-fixture.mjs';
 
-test('the Discord continuation begins at exactly 33 and remains available thereafter',()=>{
+test('the Game Master Blanc continuation begins at exactly 33 and remains available thereafter',()=>{
   for(let level=1;level<33;level++)assert.equal(gameContinuation(level),null);
   for(const level of [undefined,null,NaN,Infinity,'33',32.5])assert.equal(gameContinuation(level),null);
-  const expected={level:33,label:'Rejoindre',href:'https://discord.gg/y83ewhS49'};
+  const expected={level:33,label:'Game Master Blanc',href:'/game-master-blanc'};
   assert.deepEqual(gameContinuation(33),expected);
   assert.deepEqual(gameContinuation(34),expected);
 });
 
-test('old and new accounts reach 33 through Anges, exactly once, without retired credits or early Discord access',async()=>{
+test('old and new accounts reach 33 through Anges, exactly once, without retired credits or early final-page access',async()=>{
   const f=fixture();
   try{
     const insert=f.sql.prepare('INSERT OR IGNORE INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)');
