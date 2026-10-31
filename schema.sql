@@ -605,3 +605,15 @@ CREATE TRIGGER ace_member_access_changed AFTER UPDATE OF content_access ON ace_m
 WHEN OLD.content_access<>NEW.content_access BEGIN
  UPDATE ace_circles SET access_revision=access_revision+1 WHERE owner_id=NEW.owner_id;
 END;
+
+-- 0045: Personal playlists, separate from scores and the public catalogue.
+CREATE TABLE IF NOT EXISTS playlists (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 80),
+  tracks TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(tracks)),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK(revision>=1),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_playlists_user ON playlists(user_id,updated_at DESC,id DESC);

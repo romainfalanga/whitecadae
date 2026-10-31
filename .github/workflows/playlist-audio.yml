@@ -1,0 +1,37 @@
+name: Prepare playlist audio
+on:
+  push:
+    branches: [codex/playlist-audio-assets-20261031]
+    paths:
+      - scripts/build-playlist-audio.mjs
+      - .github/workflows/playlist-audio.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install FFmpeg
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+      - name: Prepare and validate native playlist sources
+        run: node scripts/build-playlist-audio.mjs /usr/bin/ffmpeg
+      - name: Save generated audio
+        env:
+          AUDIO_BRANCH: ${{ github.ref_name }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/music/playlist src/playlist-audio-manifest.js
+          if ! git diff --cached --quiet; then
+            git commit -m 'Prepare uniform MP3 sources for native playlist playback'
+            git push origin "HEAD:$AUDIO_BRANCH"
+          fi

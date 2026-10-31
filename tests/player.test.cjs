@@ -169,3 +169,112 @@ test('expanding the 57 catalogue preserves the selected song, time and album que
   f.audio.finish();assert.equal(f.player.snapshot().slug,'13h20');
   f.player.setAlbums([]);assert.equal(f.audio.src,'');assert.equal(f.audio.paused,true);
 });
+
+function playlistMix(slugs=['un-fil-entre-deux-infinis','orange','13h20'],name='Mes trajectoires'){
+  const available=[...full57.tracks,...july.tracks];let start=0;
+  const chapters=slugs.map(slug=>{const track=available.find(track=>track.slug===slug);const chapter={slug,start,duration:track.duration};start+=track.duration;return chapter;});
+  return {id:17,name,tracks:slugs,playback:{src:'/api/playlists/audio?tracks='+slugs.join(','),duration:start,chapters}};
+}
+function playlistFixture(){const f=fixture();f.player.setAlbums([continuous57(),july]);f.player.setPlaylistAccess(true);return f;}
+
+test('a cross-album playlist traverses and loops in one native stream while JavaScript sleeps',async()=>{
+  const f=playlistFixture(),playlist=playlistMix();f.audio.duration=playlist.playback.duration;
+  assert.equal(f.player.playPlaylist(playlist),true);await Promise.resolve();
+  assert.equal(f.audio.src,playlist.playback.src);assert.equal(f.audio.loop,true);
+  assert.equal(f.player.snapshot().playlistId,17);assert.equal(f.player.snapshot().playlistSource,playlist.playback.src);
+  assert.equal(f.player.snapshot().slug,'un-fil-entre-deux-infinis');
+  assert.equal(f.navigator.mediaSession.metadata.artist,'AA');assert.equal(f.navigator.mediaSession.metadata.album,'Mes trajectoires');
+  assert.equal(f.navigator.mediaSession.metadata.artwork[0].src,july.cover);
+  assert.equal(f.elements.get('player-title').href,'/playlist');assert.match(f.elements.get('player-repeat').getAttribute('aria-label'),/de la playlist/);
+  assert.deepEqual(Array.from(f.player.getAlbums(),album=>album.id),['57','18-juillet-2019']);
+  assert.equal(f.player.findTrack('orange').album,'57');
+  const calls=f.audio.calls;
+  f.document.hidden=true;f.document.dispatchEvent(new Event('visibilitychange'));
+  f.audio.currentTime=205; // Native streaming continues with no events or JS callbacks.
+  assert.equal(f.audio.paused,false);assert.equal(f.audio.calls,calls);assert.equal(f.audio.src,playlist.playback.src);
+  f.document.hidden=false;f.document.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(f.player.snapshot().slug,'orange');assert.equal(f.audio.calls,calls);
+  assert.equal(f.navigator.mediaSession.metadata.artist,'Vulpis');assert.equal(f.elements.get('player-elapsed').textContent,'0:07');
+  f.audio.currentTime=0;f.audio.dispatchEvent(new Event('timeupdate')); // Native loop, not ended -> play().
+  assert.equal(f.player.snapshot().slug,'un-fil-entre-deux-infinis');assert.equal(f.audio.calls,calls);
+});
+
+test('playlist lock-screen controls and repeat-one retain chapter-relative positions and the paused state',async()=>{
+  const f=playlistFixture(),playlist=playlistMix();f.audio.duration=playlist.playback.duration;
+  f.player.playPlaylist(playlist,1);await Promise.resolve();assert.equal(f.audio.currentTime,198);
+  f.actions.seekto({seekTime:11});assert.equal(f.audio.currentTime,209);
+  f.elements.get('player-repeat').onclick();await Promise.resolve();
+  assert.equal(f.audio.src,full57.tracks[3].src);assert.equal(f.audio.currentTime,11);assert.equal(f.audio.loop,true);
+  assert.equal(f.player.snapshot().playlistSource,playlist.playback.src);
+  f.actions.pause();const calls=f.audio.calls;
+  f.elements.get('player-repeat').onclick();assert.equal(f.audio.paused,true);assert.equal(f.audio.calls,calls);
+  f.audio.readyState=4;f.audio.dispatchEvent(new Event('loadedmetadata'));assert.equal(f.audio.currentTime,209);assert.equal(f.audio.src,playlist.playback.src);
+  f.actions.play();await Promise.resolve();assert.equal(f.audio.currentTime,209);
+  f.actions.nexttrack();assert.equal(f.player.snapshot().slug,'13h20');assert.equal(f.audio.currentTime,357);
+  f.actions.previoustrack();assert.equal(f.player.snapshot().slug,'orange');assert.equal(f.audio.currentTime,198);
+  assert.equal(f.document.getElementById('music-audio'),f.audio);
+});
+
+test('same playlist version preserves its position, reordered versions restart correctly, and Music clicks exit the playlist',async()=>{
+  const f=playlistFixture(),playlist=playlistMix();f.audio.duration=playlist.playback.duration;
+  f.player.playPlaylist(playlist,1);await Promise.resolve();f.actions.seekto({seekTime:26});
+  f.player.playPlaylist({...playlist,name:'Nouvelle trajectoire'},1);await Promise.resolve();
+  assert.equal(f.audio.currentTime,224);assert.equal(f.navigator.mediaSession.metadata.album,'Nouvelle trajectoire');
+  const revised=playlistMix(['orange','13h20','un-fil-entre-deux-infinis']);
+  f.player.playPlaylist(revised);await Promise.resolve();assert.equal(f.audio.currentTime,0);
+  assert.equal(f.player.snapshot().slug,'orange');assert.equal(f.player.snapshot().playlistSource,revised.playback.src);
+  f.audio.duration=continuous57().playback.duration;
+  f.player.toggle('orange');await Promise.resolve();
+  assert.equal(f.player.snapshot().playlistId,null);assert.equal(f.player.snapshot().playlistSource,null);
+  assert.equal(f.audio.paused,false);assert.equal(f.audio.src,continuous57().playback.src);assert.equal(f.audio.currentTime,598);
+  assert.equal(f.navigator.mediaSession.metadata.album,'57');assert.equal(f.elements.get('player-title').href,'/musique#album-57');
+});
+
+test('renaming the active playlist updates labels without playback calls, seeking or changing pause and repeat modes',async()=>{
+  const f=playlistFixture(),playlist=playlistMix();f.audio.duration=playlist.playback.duration;
+  f.player.playPlaylist(playlist,1);await Promise.resolve();f.actions.seekto({seekTime:26});
+  let calls=f.audio.calls;
+  assert.equal(f.player.updatePlaylistMetadata({...playlist,name:'Nouveau nom'}),true);
+  assert.equal(f.audio.calls,calls);assert.equal(f.audio.currentTime,224);assert.equal(f.audio.paused,false);
+  assert.equal(f.audio.src,playlist.playback.src);assert.equal(f.player.snapshot().repeat,false);
+  assert.equal(f.navigator.mediaSession.metadata.album,'Nouveau nom');assert.match(f.elements.get('player-album').textContent,/Nouveau nom/);
+  f.elements.get('player-repeat').onclick();await Promise.resolve();f.actions.pause();calls=f.audio.calls;
+  const source=f.audio.src,position=f.audio.currentTime;
+  assert.equal(f.player.updatePlaylistMetadata({...playlist,name:'Nom pendant la pause'}),true);
+  assert.equal(f.audio.calls,calls);assert.equal(f.audio.currentTime,position);assert.equal(f.audio.paused,true);
+  assert.equal(f.audio.src,source);assert.equal(f.player.snapshot().repeat,true);
+  assert.equal(f.navigator.mediaSession.metadata.album,'Nom pendant la pause');
+  for(const other of [{...playlist,id:18},{...playlist,playback:{...playlist.playback,src:'/api/playlists/audio?tracks=orange'}},{...playlist,name:''}])assert.equal(f.player.updatePlaylistMetadata(other),false);
+  assert.equal(f.navigator.mediaSession.metadata.album,'Nom pendant la pause');assert.equal(f.audio.calls,calls);
+  f.player.playTrack('orange');await Promise.resolve();assert.equal(f.player.updatePlaylistMetadata(playlist),false);
+  assert.equal(f.navigator.mediaSession.metadata.album,'57');
+});
+
+test('catalogue refresh preserves an allowed playlist but either a locked track or a revoked level clears every buffered chapter',async()=>{
+  const f=playlistFixture(),playlist=playlistMix();f.audio.duration=playlist.playback.duration;
+  f.player.playPlaylist(playlist);await Promise.resolve();f.audio.currentTime=31;const calls=f.audio.calls;
+  f.player.setAlbums([continuous57(),july]);assert.equal(f.audio.currentTime,31);assert.equal(f.audio.calls,calls);assert.equal(f.player.snapshot().playlistId,17);
+  f.player.setAlbums([continuous57()]);assert.equal(f.audio.paused,true);assert.equal(f.audio.src,'');assert.equal(f.player.snapshot().playlistId,null);
+  const publicQueue=playlistMix(['30-vins-divins']);f.audio.duration=publicQueue.playback.duration;
+  f.player.playPlaylist(publicQueue);await Promise.resolve();f.player.setPlaylistAccess(false);
+  assert.equal(f.audio.paused,true);assert.equal(f.audio.src,'');assert.equal(f.navigator.mediaSession.metadata,null);
+  assert.equal(f.player.playPlaylist(publicQueue),false);
+});
+
+test('deleting only the active playlist clears its queue; rejected playlists never change the current album',async()=>{
+  const f=playlistFixture(),playlist=playlistMix();f.audio.duration=playlist.playback.duration;
+  f.player.playTrack('orange');await Promise.resolve();const calls=f.audio.calls;
+  const invalids=[{...playlist,tracks:['unknown']},{...playlist,tracks:['orange','orange']},{...playlist,playback:{...playlist.playback,src:'https://other.test/audio.mp3'}},{...playlist,playback:{...playlist.playback,chapters:playlist.playback.chapters.toReversed()}}];
+  for(const invalid of invalids){assert.equal(f.player.playPlaylist(invalid),false);assert.equal(f.audio.calls,calls);assert.equal(f.player.snapshot().playlistId,null);}
+  f.player.playPlaylist(playlist);await Promise.resolve();assert.equal(f.player.clearPlaylist(9),false);assert.equal(f.audio.paused,false);
+  assert.equal(f.player.clearPlaylist(17),true);assert.equal(f.audio.src,'');assert.equal(f.player.snapshot().playlistId,null);
+  assert.equal(f.player.playPlaylist(playlist),true); // Deletion does not revoke the user's overall Playlist permission.
+});
+
+test('reloading a saved playlist never restores an unrelated album track or starts playback',async()=>{
+  const f=playlistFixture(),playlist=playlistMix();f.audio.duration=playlist.playback.duration;
+  f.player.playPlaylist(playlist);await Promise.resolve();f.audio.currentTime=33;f.window.dispatchEvent(new Event('pagehide'));
+  const saved=JSON.parse(f.stored.get('wc_music_progressive_v2'));assert.equal(saved.playlistId,17);assert.equal(saved.slug,undefined);
+  const restored=fixture(saved,'wc_music_progressive_v2');restored.player.setAlbums([continuous57(),july]);restored.player.setPlaylistAccess(true);
+  assert.equal(restored.player.snapshot().playlistId,null);assert.equal(restored.player.snapshot().slug,null);assert.equal(restored.audio.calls,0);assert.equal(restored.audio.src,'');
+});

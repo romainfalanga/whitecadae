@@ -23,10 +23,26 @@ test('old personal URLs and nested pages return home before loading a module or 
 });
 
 test('login return URLs reject retired pages and preserve the active game destinations',()=>{
-  for(const path of [...destinations,'/signes','/signes/horloge','/echelon','/game-master-orange','/game-master-blanc']){
+  for(const path of [...destinations,'/signes','/signes/horloge','/echelon','/game-master-orange','/game-master-blanc','/playlist']){
     const result=runInNewContext(destinationSource+'\naccountDestination()',{URLSearchParams,location:{search:'?retour='+encodeURIComponent(path)}});
     assert.equal(result,destinations.includes(path)?'/':path,path);
   }
+});
+
+test('Playlist menu follows server access and private queues are cleared before switching eligible accounts',async()=>{
+  for(const playlist of [false,true]){
+    const nav={querySelectorAll:()=>[]};
+    runInNewContext(navSource+'\nrenderNav()',{nav,document:{getElementById:()=>null},state:{user:{id:1},access:{playlist}},location:{pathname:'/'}});
+    assert.equal(nav.innerHTML.includes('href="/playlist"'),playlist);
+  }
+  const refresh=source.slice(source.indexOf('async function refreshSession()'),source.indexOf('\nfunction accountDestination()'));
+  const calls=[],state={};
+  const context={state,observedAccount:1,window:{WCPlaylists:{clear:()=>calls.push('clear')}},accountChannel:{postMessage:()=>calls.push('broadcast')},WCPlayer:{setPlaylistAccess:value=>calls.push(value),setAlbums:()=>calls.push('albums')},api:async path=>path==='/api/me'?{user:{id:2},access:{playlist:true}}:{albums:[]}};
+  await runInNewContext(refresh+'\nrefreshSession()',context);
+  assert.deepEqual(calls,[false,'clear','broadcast',true,'albums']);
+  calls.length=0;
+  await runInNewContext(refresh+'\nrefreshSession()',context);
+  assert.deepEqual(calls,[true,'albums']);
 });
 
 test('menu ignores former page access flags even with a stale signed-in session',()=>{

@@ -64,7 +64,7 @@ function updateMusicButtons() {
   document.querySelectorAll('[data-play-track]').forEach((button) => {
     const t = WCPlayer.findTrack(button.dataset.playTrack);
     if(!t){button.disabled=true;return;}
-    const playing = current.slug === t.slug && (current.playing || current.loading);
+    const playing = !current.playlistId && current.slug === t.slug && (current.playing || current.loading);
     const key=JSON.stringify([playing,t.title,t.artist]);
     if(button.dataset.playbackKey===key)return;
     button.dataset.playbackKey=key;
@@ -76,7 +76,7 @@ function updateMusicButtons() {
       : `${WCIcon(playing ? 'pause' : 'play')} ${playing ? 'Mettre en pause' : 'Écouter le morceau'}`;
   });
   document.querySelectorAll('[data-track-row]').forEach((row) => {
-    row.classList.toggle('is-current', row.dataset.trackRow === current.slug);
+    row.classList.toggle('is-current', !current.playlistId && row.dataset.trackRow === current.slug);
   });
 }
 window.addEventListener('wc:music', updateMusicButtons);

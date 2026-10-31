@@ -29,7 +29,7 @@ test('account inputs reject object passwords and avatars reject truncated or exc
 });
 test('foreign origins and non-JSON writes fail before database access',async()=>{
   const env={get DB(){throw Error('Must be rejected before database access');}};
-  for(const path of ['/api/signes/guess','/api/echelon/guess','/api/57/guess','/api/account/username','/api/register','/api/login']){
+  for(const path of ['/api/signes/guess','/api/echelon/guess','/api/57/guess','/api/account/username','/api/register','/api/login','/api/playlists','/api/playlists/1']){
     for(const headers of [{Origin:'https://hostile.local'},{Origin:'null'},{'Sec-Fetch-Site':'cross-site'}])assert.equal((await worker.fetch(request(path,{},headers),env)).status,403,path);
     assert.equal((await worker.fetch(request(path,{}, {'Content-Type':'text/plain'}),env)).status,415,path);
   }
