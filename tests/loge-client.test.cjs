@@ -125,6 +125,7 @@ test('feed delegates videos to the shared controller and exposes no extra player
   assert.match(f.app.innerHTML,/&lt;script&gt;bad/);assert.doesNotMatch(f.app.innerHTML,/img src=x|onerror=bad/);assert.equal(f.app.querySelector('script'),null);
   assert.equal(f.requests[0].headers['X-WC-User'],'11');assert(f.requests[0].signal instanceof AbortSignal);
   assert.equal(f.app.querySelector('[data-post-edit]'),null);assert.equal(f.find('a[href="/loge-virtuelle/membres/12"]').textContent.includes('<b>Bob</b>'),true);
+  assert.equal(f.app.querySelector('[data-favorite]'),null);
   const controller=f.controllers.at(-1);assert.equal(controller.items.size,1);assert.equal(controller.options.root,f.node('loge-feed'));assert.equal(controller.options.isCurrent(),true);
   assert.equal(f.app.querySelector('[data-video-open]'),null);assert.doesNotMatch(f.app.textContent,/Fermer le lecteur|ouvre-la sur YouTube|Voir la vidéo/);
   f.click(f.find('[data-comments-open]'));await flush();assert(f.node('loge-comments-list'));assert.equal(controller.paused,false);
@@ -289,37 +290,12 @@ test('Loge scenes keep one layout across profile tabs and only entering the Loge
   const anonymous=fixture({user:null});await anonymous.page();assert.equal(anonymous.document.body.classList.contains('loge-immersive'),false);
 });
 
-test('a favorite waits for acknowledgement, locks duplicate clicks and keeps its state on failure',async()=>{
-  const f=fixture();await f.page();await flush();const favorite=f.find('[data-favorite="7"]');
-  assert.equal(favorite.getAttribute('aria-pressed'),'false');const reject=f.defer();f.click(favorite);assert.equal(favorite.disabled,true);assert.equal(favorite.getAttribute('aria-pressed'),'false');
-  assert.deepEqual(f.requests.at(-1).body,{favorite:true});assert.equal(f.requests.at(-1).url,'/api/loge/posts/7/favorite');
-  reject(error(503,'Réessaie plus tard'));await flush();assert.equal(favorite.disabled,false);assert.equal(favorite.getAttribute('aria-pressed'),'false');assert.match(f.node('loge-post-status-7').textContent,/Réessaie/);
-  const accept=f.defer();f.click(favorite);accept({postId:7,isFavorite:true});await flush();assert.equal(favorite.disabled,false);assert.equal(favorite.getAttribute('aria-pressed'),'true');assert(favorite.classList.contains('is-active'));assert.equal(favorite.getAttribute('aria-label'),'Retirer des favoris');
-  f.click(favorite);await flush();assert.deepEqual(f.requests.filter(request=>request.url.endsWith('/favorite')).at(-1).body,{favorite:false});assert.equal(favorite.getAttribute('aria-pressed'),'false');f.client.clear();
-});
-
-test('private favorites retain server order and cursor, and removing a favorite moves to the following clip',async()=>{
-  const entries=[{...post(3),isFavorite:true},{...post(9),isFavorite:true},{...post(7),isFavorite:true}];const f=fixture({posts:entries});
-  f.queue({self,member:self,posts:entries.slice(0,2),next:41});await f.page('/loge-virtuelle/membres/11','?onglet=favoris');await flush();
-  const list=f.node('loge-profile-list'),controller=f.controllers.at(-1),ids=()=>list.querySelectorAll('[data-post-id]').map(card=>card.dataset.postId);
-  assert.deepEqual(ids(),['3','9']);assert.equal(controller.options.root,list);assert.equal(f.app.querySelector('[data-post-edit]'),null);assert(f.find('a[href="/loge-virtuelle/membres/11?onglet=favoris"]'));
-  f.queue({self,member:self,posts:entries.slice(2),next:null});f.click('loge-profile-more');await flush();assert.equal(f.requests.at(-1).url,'/api/loge/membres/11?tab=favoris&after=41');assert.deepEqual(ids(),['3','9','7']);
-  f.click(f.find('[data-favorite="9"]'));await flush();assert.deepEqual(ids(),['3','7']);assert.equal(controller.items.has('9'),false);assert.equal(f.node('loge-post-7').scrolled,true);assert.equal(f.node('loge-profile-more').hidden,true);
-  await f.navigate('/loge-virtuelle/membres/12?onglet=reflexions');assert.equal(f.app.querySelector('a[href="/loge-virtuelle/membres/12?onglet=favoris"]'),null);f.client.clear();
-});
-
 test('favorite tabs and comment panels reuse cached scenes with one active controller and restored swipe position',async()=>{
   const f=fixture({posts:[{...post(),isFavorite:true}]});await f.page();await flush();await f.navigate('/loge-virtuelle/membres/11?onglet=favoris');await flush();
   const list=f.node('loge-profile-list');list.scrollTop=520;f.click(f.find('[data-comments-open="7"]'));await flush();assert(f.node('loge-comments-list'));assert.equal(f.controllers.at(-1).paused,false);
   const form=f.find('form',f.node('loge-comment-compose'));f.fill(form,'body','Brouillon de réponse');f.click(f.find('[data-discussion-close]'));
   await f.navigate('/loge-virtuelle/membres/11?onglet=interventions');const count=f.requests.length;await f.navigate('/loge-virtuelle/membres/11?onglet=favoris');assert.equal(f.node('loge-profile-list'),list);assert.equal(list.scrollTop,520);assert.equal(f.requests.length,count);
   f.click(f.find('[data-comments-open="7"]'));await flush();assert.equal(f.find('form',f.node('loge-comment-compose')),form);assert.equal(form.elements.namedItem('body').value,'Brouillon de réponse');assert.equal(f.controllers.filter(controller=>!controller.destroyed).length,1);f.client.clear();assert.equal(f.document.body.classList.contains('loge-immersive'),false);
-});
-
-test('a late favorite acknowledgement invalidates the cached history without changing the current scene',async()=>{
-  const f=fixture();await f.page();await flush();const release=f.defer();f.click(f.find('[data-favorite="7"]'));await f.navigate('/loge-virtuelle/membres/11?onglet=reflexions');await flush();const visible=f.app.innerHTML;
-  release({postId:7,isFavorite:true});await flush();assert.equal(f.app.innerHTML,visible);
-  const saved={...post(),isFavorite:true};f.queue({self,member:self,posts:[saved],next:null});await f.navigate('/loge-virtuelle/membres/11?onglet=favoris');assert.equal(f.find('[data-favorite="7"]').getAttribute('aria-pressed'),'true');assert(f.node('loge-post-7'));f.client.clear();
 });
 
 test('publication forms accept Shorts and send only the title, immutable URL and creation nonce',async()=>{
@@ -340,30 +316,19 @@ test('site header measurements and menu pauses are observed without leaking acro
   f.client.clear();assert.equal(f.document.body.style.getPropertyValue('--loge-site-header-height'),'');assert.equal(f.observers.resize[0].closed,true);assert.equal(menu.closed,true);
 });
 
-test('the four Loge sections keep the same navigation and restore the interventions list scroll position',async()=>{
-  const f=fixture();await f.page('/loge-virtuelle/membres/11');let tabs;
-  for(const tab of ['reflexions','interventions','favoris']){
-    await f.navigate('/loge-virtuelle/membres/11?onglet='+tab);const nav=f.find('.loge-tabs');assert.deepEqual(nav.querySelectorAll('a').map(link=>link.textContent),['Loge','Réflexions','Interventions','Favoris']);
-    assert.equal(nav.querySelectorAll('a[aria-current="page"]').length,1);assert.equal(f.find('a[aria-current="page"]').getAttribute('href'),'/loge-virtuelle/membres/11?onglet='+tab);
-    assert(f.app.querySelector('.is-loge-layout'));assert.equal(f.app.querySelector('a[aria-label="Mon profil"]'),null);tabs=nav;
-    if(tab==='interventions')f.node('loge-profile-list').scrollTop=240;
-  }
-  await f.navigate('/loge-virtuelle/membres/11?onglet=interventions');assert.equal(f.node('loge-profile-list').scrollTop,240);assert.notEqual(tabs,f.find('.loge-tabs'));f.client.clear();
-});
-
-test('the feed and own histories share four destinations, one active section and a stable page heading',async()=>{
+test('the feed and own reflections share only two destinations and expose no favorites or interventions navigation',async()=>{
   const f=fixture();await f.page();await flush();
-  const destinations=['/loge-virtuelle','/loge-virtuelle/membres/11?onglet=reflexions','/loge-virtuelle/membres/11?onglet=interventions','/loge-virtuelle/membres/11?onglet=favoris'];
+  const destinations=['/loge-virtuelle','/loge-virtuelle/membres/11?onglet=reflexions'];
   for(const destination of destinations){
     await f.navigate(destination);const navigation=f.find('.loge-tabs'),links=navigation.querySelectorAll('a');
-    assert.deepEqual(links.map(link=>link.getAttribute('href')),destinations);
+    assert.deepEqual(links.map(link=>link.getAttribute('href')),destinations);assert.deepEqual(links.map(link=>link.textContent),['Loge','Mes réflexions']);assert.equal(f.app.querySelector('[data-favorite]'),null);
     assert.equal(navigation.querySelectorAll('a[aria-current="page"]').length,1);
     assert.equal(navigation.querySelector('a[aria-current="page"]').getAttribute('href'),destination);
     assert.equal(f.find('h1').textContent,'Loge virtuelle');assert(f.find('.is-video-view'));assert.equal(f.app.querySelector('a[aria-label="Mon profil"]'),null);
   }
-  await f.navigate('/loge-virtuelle/membres/12?onglet=interventions');
+  await f.navigate('/loge-virtuelle/membres/12?onglet=reflexions');
   assert.deepEqual(f.find('.loge-tabs').querySelectorAll('a').map(link=>link.getAttribute('href')),destinations,'the main navigation always points to the signed-in member’s histories');
-  const member=f.find('.loge-member-tabs');assert.equal(member.querySelectorAll('a').length,2);assert.equal(member.querySelector('a[aria-current="page"]').getAttribute('href'),'/loge-virtuelle/membres/12?onglet=interventions');
+  assert.equal(f.app.querySelector('.loge-member-tabs'),null);assert.equal(f.app.querySelector('[data-favorite]'),null);
   assert.equal(f.app.querySelector('a[href="/loge-virtuelle/membres/12?onglet=favoris"]'),null);f.client.clear();
 });
 
@@ -376,10 +341,9 @@ test('interventions play the shared videos once per post, retain every exchange 
   assert.deepEqual([...player.items.keys()],['3','9']);assert.equal(player.options.root,list);
   assert.equal(list.querySelectorAll('[data-intervention-id]').length,3);assert.equal(f.node('loge-interventions-post-3').hidden,false);
   assert(f.find('a[href="/loge-virtuelle/publications/3?comment=38"]'));assert.equal(f.app.querySelector('[data-post-edit]'),null);
-  const card=f.node('loge-post-3'),actions=f.find('.loge-reel-actions',card);assert.equal(actions.querySelectorAll('button').length,2);assert.equal(f.find('[data-comment-count]',actions).textContent,'3');
+  const card=f.node('loge-post-3'),actions=f.find('.loge-reel-actions',card);assert.equal(actions.querySelectorAll('button').length,1);assert.equal(card.querySelector('[data-favorite]'),null);assert.equal(f.find('[data-comment-count]',actions).textContent,'3');
   f.click(f.find('[data-comments-open="3"]'));await flush();assert.equal(f.requests.filter(r=>r.url.includes('/comments')).at(-1).url,'/api/loge/posts/3/comments?focus=40');assert.equal(player.paused,false);
   f.click(f.find('[data-discussion-close]'));assert.equal(player.paused,false);
-  f.queue({postId:3,isFavorite:true});f.click(f.find('[data-favorite="3"]'));await flush();assert.equal(f.find('[data-favorite="3"]').getAttribute('aria-pressed'),'true');
   f.queue({self,member:self,interventions:[c,{...comment(37),postId:9,post:second}],next:null});f.click('loge-profile-more');await flush();
   assert.equal(f.requests.find(r=>r.url.includes('&after=')).url,'/api/loge/membres/11?tab=interventions&after=38');assert.equal(list.querySelectorAll('[data-post-id]').length,2);assert.equal(list.querySelectorAll('[data-intervention-id]').length,4);f.client.clear();
 });
@@ -418,4 +382,13 @@ test('comments retain the same media and timeline without pausing, restarting or
     f.click(f.find('[data-discussion-close]'));assert.equal(player.pauseCalls,pauses);assert.equal(player.resumeCalls,resumes);
   }
   f.click('loge-open-compose');assert.equal(player.paused,true);f.client.clear();assert.equal(player.destroyed,true);
+});
+
+
+test('normal Loge navigation preloads only the remaining views',async()=>{
+  const f=fixture();await f.page();await flush();
+  assert.deepEqual(f.requests.map(request=>request.url).sort(),['/api/loge','/api/loge/membres/11?tab=reflexions']);
+  await f.navigate('/loge-virtuelle/membres/11?onglet=reflexions');await flush();
+  assert.equal(f.requests.some(request=>/tab=(?:favoris|interventions)/.test(request.url)),false);
+  assert.equal(f.requests.some(request=>request.url.endsWith('/favorite')),false);f.client.clear();
 });

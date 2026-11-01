@@ -41,7 +41,7 @@ function immersion(enabled){
   if(enabled)siteHeaderSize();else document.body.style.removeProperty?.('--loge-site-header-height');
 }
 function icon(kind){
-  const paths={home:'<path d="m3 10 9-7 9 7v10H7V10m2 10v-6h6v6"/>',back:'<path d="m14 5-7 7 7 7"/>',profile:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',plus:'<path d="M12 4v16M4 12h16"/>',comment:'<path d="M21 11a9 9 0 0 1-9 9H4l-2 2V11a9 9 0 0 1 19 0Z"/>',bookmark:'<path d="M6 3h12v18l-6-4-6 4Z"/>'};
+  const paths={home:'<path d="m3 10 9-7 9 7v10H7V10m2 10v-6h6v6"/>',back:'<path d="m14 5-7 7 7 7"/>',profile:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',plus:'<path d="M12 4v16M4 12h16"/>',comment:'<path d="M21 11a9 9 0 0 1-9 9H4l-2 2V11a9 9 0 0 1 19 0Z"/>'};
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[kind]||''}</svg>`;
 }
 function shell(html){
@@ -51,10 +51,9 @@ function shell(html){
 function topbar(view){const other=view.kind==='profile'&&String(view.memberId)!==String(session.user);return `<header class="loge-topbar"><h1>${esc(other?view.member.username:'Loge virtuelle')}</h1><button type="button" class="loge-publish" id="loge-open-compose" aria-label="Publier" aria-controls="loge-compose">${icon('plus')}<span>Publier</span></button></header>`;}
 function composerMarkup(){return '<section id="loge-compose" class="loge-compose loge-composer-sheet" role="dialog" aria-modal="true" aria-labelledby="loge-compose-title" hidden></section>';}
 function logeNavigation(view){
-  const ownProfile=view.kind==='profile'&&String(view.memberId)===String(session.user),active=ownProfile?view.tab:'loge';
-  return `<nav class="loge-tabs" aria-label="Navigation de la Loge">${[['loge','Loge',base],['reflexions','Réflexions',memberPath(session.user)+'?onglet=reflexions'],['interventions','Interventions',memberPath(session.user)+'?onglet=interventions'],['favoris','Favoris',memberPath(session.user)+'?onglet=favoris']].map(([tab,label,href])=>`<a href="${href}" data-link ${active===tab?'aria-current="page"':''}>${label}</a>`).join('')}</nav>`;
+  const ownProfile=view.kind==='profile'&&String(view.memberId)===String(session.user),active=ownProfile&&view.tab==='reflexions'?'reflexions':'loge';
+  return `<nav class="loge-tabs" aria-label="Navigation de la Loge">${[['loge','Loge',base],['reflexions','Mes réflexions',memberPath(session.user)+'?onglet=reflexions']].map(([tab,label,href])=>`<a href="${href}" data-link ${active===tab?'aria-current="page"':''}>${label}</a>`).join('')}</nav>`;
 }
-function memberTabs(view,member){return `<nav class="loge-member-tabs" aria-label="Historique de ${esc(member.username)}">${[['reflexions','Réflexions'],['interventions','Interventions']].map(([tab,label])=>`<a href="${memberPath(view.memberId)}?onglet=${tab}" data-link ${view.tab===tab?'aria-current="page"':''}>${label}</a>`).join('')}</nav>`;}
 function login(s){
   if(!live(s))return;
   closeVideo(s);immersion(false);s.blocked=true;
@@ -159,15 +158,9 @@ function refreshLayout(view){
   view.player?.refresh();
 }
 function ownerMenu(kind,id){return `<details class="loge-menu"><summary aria-label="Options de ${kind==='post'?'la publication':'ton commentaire'}">…</summary><div>${button('Modifier',`data-${kind}-edit="${esc(id)}"`,true)}${button('Supprimer',`data-${kind}-delete="${esc(id)}"`,true)}</div></details>`;}
-function favoriteMarkup(post){const active=!!post.isFavorite;return `<button type="button" class="loge-reel-icon loge-favorite${active?' is-active':''}" data-favorite="${esc(post.id)}" aria-label="${active?'Retirer des favoris':'Ajouter aux favoris'}" aria-pressed="${active}">${icon('bookmark')}</button>`;}
 function postMarkup(post){
   const manage=own(post)&&canManagePosts(),count=Number.isInteger(post.commentCount)?post.commentCount:0;
-  return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage">${videoMarkup(post)}<footer class="loge-reel-info"><div class="loge-reel-copy"><div class="loge-reel-byline"><a class="loge-reel-username" href="${memberPath(post.author.id)}" data-link>${esc(post.author.username)}</a>${manage?ownerMenu('post',post.id):''}</div><h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2>${statusMarkup('loge-post-status-'+post.id)}</div><div class="loge-reel-actions" role="group" aria-label="Actions de la vidéo"><button type="button" class="loge-reel-icon" data-comments-open="${esc(post.id)}" aria-label="Commentaires (${count})" aria-expanded="false">${icon('comment')}<small data-comment-count>${count}</small></button>${favoriteMarkup(post)}</div><div class="loge-intervention-context" id="loge-interventions-post-${esc(post.id)}" hidden></div></footer></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div>${manage?`<div id="loge-post-editor-${esc(post.id)}" class="loge-edit-sheet" role="dialog" aria-modal="true" aria-label="Modifier le titre" hidden></div>`:''}</article>`;
-}
-function updateFavorite(postId,active){
-  const post=session.posts.get(String(postId));if(post)post.isFavorite=!!active;
-  const control=node('loge-post-'+postId)?.querySelector('[data-favorite]');
-  if(control){control.setAttribute('aria-pressed',String(!!active));control.setAttribute('aria-label',active?'Retirer des favoris':'Ajouter aux favoris');control.classList.toggle('is-active',!!active);}
+  return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage">${videoMarkup(post)}<footer class="loge-reel-info"><div class="loge-reel-copy"><div class="loge-reel-byline"><a class="loge-reel-username" href="${memberPath(post.author.id)}" data-link>${esc(post.author.username)}</a>${manage?ownerMenu('post',post.id):''}</div><h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2>${statusMarkup('loge-post-status-'+post.id)}</div><div class="loge-reel-actions" role="group" aria-label="Actions de la vidéo"><button type="button" class="loge-reel-icon" data-comments-open="${esc(post.id)}" aria-label="Commentaires (${count})" aria-expanded="false">${icon('comment')}<small data-comment-count>${count}</small></button></div><div class="loge-intervention-context" id="loge-interventions-post-${esc(post.id)}" hidden></div></footer></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div>${manage?`<div id="loge-post-editor-${esc(post.id)}" class="loge-edit-sheet" role="dialog" aria-modal="true" aria-label="Modifier le titre" hidden></div>`:''}</article>`;
 }
 function removeProfileClip(postId){
   const view=session.current,list=node('loge-profile-list');if(!list)return;
@@ -177,21 +170,11 @@ function removeProfileClip(postId){
   if(!view.posts.size)list.insertAdjacentHTML('afterbegin',`<p class="loge-empty" id="loge-profile-empty">${view.tab==='interventions'?'Aucune intervention pour le moment.':'Aucune vidéo en favori.'}</p>`);
   view.player?.refresh();
 }
-function favorite(postId){
-  const s=session,view=s.current,post=view.posts.get(String(postId)),control=node('loge-post-'+postId)?.querySelector('[data-favorite]');if(!post||!control)return;
-  perform('favorite-'+postId,control,async()=>{
-    const result=await request('/api/loge/posts/'+encodeURIComponent(postId)+'/favorite',{method:'PUT',body:{favorite:!post.isFavorite}});
-    if(String(result.postId)!==String(postId)||typeof result.isFavorite!=='boolean')throw Error('La réponse du favori n’a pas pu être confirmée.');
-    updateFavorite(postId,result.isFavorite);invalidateOtherViews();
-    if(view.kind==='profile'&&view.tab==='favoris'&&!result.isFavorite)removeProfileClip(postId);
-    else prefetchDestination(memberPath(s.user)+'?onglet=favoris');
-  },error=>notice('loge-post-status-'+postId,error.message,true));
-}
 function updatePost(post){
   const s=session;s.posts.set(String(post.id),post);
   const title=node('loge-post-title-'+post.id);
   if(title){const link=title.querySelector('a');(link||title).textContent=post.title;}
-  updateFavorite(post.id,post.isFavorite);commentCount(post.id,0);
+  commentCount(post.id,0);
 
   if(s.view==='post')document.title=post.title+' · Loge virtuelle · White Cadae';
 }
@@ -203,7 +186,6 @@ function insertPost(post,list,detail=false){
   bindVideo(post.id);
   const card=node('loge-post-'+post.id);
   card.querySelector('[data-comments-open]')?.addEventListener('click',()=>openDiscussion(post.id));
-  card.querySelector('[data-favorite]')?.addEventListener('click',()=>favorite(post.id));
   card.querySelector('[data-post-edit]')?.addEventListener('click',()=>openPostEdit(post.id));
   card.querySelector('[data-post-delete]')?.addEventListener('click',()=>deletePost(post.id));
 }
@@ -427,7 +409,7 @@ function renderView(view,result){
   const s=session;view.posts.clear();view.comments.clear();view.interventions.clear();view.interventionFocus.clear();view.panels.clear();view.activePanel=null;view.editingId=null;
   if(view.kind==='profile'){view.member=result.member;document.title=result.member.username+' · Loge virtuelle · White Cadae';}
   else document.title=(view.kind==='post'?result.post.title+' · ':'')+'Loge virtuelle · White Cadae';
-  const tabs=logeNavigation(view)+(view.kind==='profile'&&String(view.memberId)!==String(s.user)?memberTabs(view,result.member):'');
+  const tabs=logeNavigation(view);
   {
     const listId=view.kind==='feed'?'loge-feed':view.kind==='profile'?'loge-profile-list':'loge-detail-post',moreId=view.kind==='profile'?'loge-profile-more':'loge-feed-more';
     shell(`${topbar(view)}${tabs}${composerMarkup()}<div id="${listId}" class="loge-reels" aria-label="Réflexions en vidéo"><div class="loge-feed-pagination">${button('Voir la suite',`id="${moreId}"`,true)}</div></div>`);
@@ -475,8 +457,8 @@ function prefetchDestination(destination){
   fetchView(target).catch(()=>{});
 }
 function prefetchSibling(view){
-  if(view.kind==='profile'){prefetchDestination(base);for(const tab of ['reflexions','interventions',...(String(view.memberId)===String(session.user)?['favoris']:[])]){if(tab!==view.tab)prefetchDestination(memberPath(view.memberId)+'?onglet='+tab);}}
-  else if(view.kind==='feed')for(const tab of ['reflexions','interventions','favoris'])prefetchDestination(memberPath(session.user)+'?onglet='+tab);
+  if(view.kind!=='feed')prefetchDestination(base);
+  if(view.kind!=='profile'||String(view.memberId)!==String(session.user)||view.tab!=='reflexions')prefetchDestination(memberPath(session.user)+'?onglet=reflexions');
   trimViews();
 }
 export function canNavigate(destination){return live(session)&&!!parseDestination(destination);}
