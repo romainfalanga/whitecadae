@@ -34,37 +34,28 @@ function youtubeAPI(){
   return pending;
 }
 
-// YouTube owns the playback controls. Only the visible player's sound toggle is
-// added beside the iframe; no extra play overlay or external-link fallback.
+// Use YouTube's official player settings, without custom controls or overlays.
+// Audible autoplay is attempted once; browser policy can require a native gesture.
 export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}}={}){
   const records=new Map();let active=null,destroyed=false,paused=false,musicClip=null,musicPlaying=false;
   const connected=record=>record.container.isConnected!==false;
   const current=()=>{try{return !destroyed&&!paused&&isCurrent()&&!document.hidden;}catch{return false;}};
   const eligible=record=>current()&&record===active&&connected(record)&&measureRecord(record,viewport()).ratio>0.5;
   const invoke=(record,method)=>{try{return record.player?.[method]?.();}catch{return undefined;}};
-  const soundLabel=record=>{
-    if(!record.sound)return;
-    record.sound.textContent=record.muted?'Activer le son':'Couper le son';
-    record.sound.setAttribute('aria-pressed',String(!record.muted));
-    record.sound.hidden=!record.ready||record!==active;
-  };
   function stop(record){invoke(record,'pauseVideo');record.playing=false;record.container.classList.remove('is-playing');}
   function stopOthers(record){for(const other of records.values())if(other!==record)stop(other);}
-  function play(record,{gesture=false,retry=false}={}){
-    if(!record.ready||record.failed||!eligible(record)||(!gesture&&musicClip===record.key))return;
-    if(record.attempted&&!gesture&&!retry)return;
-    if(gesture){musicClip=null;record.blocked=0;record.musicPauseConfirmed=false;}
+  function play(record){
+    if(!record.ready||record.failed||record.blocked||!eligible(record)||musicClip===record.key||record.attempted)return;
     record.attempted=true;stopOthers(record);
     // Synchronous pause before playVideo prevents concurrent music playback.
     window.WCPlayer?.pause();
-    invoke(record,record.muted?'mute':'unMute');record.playPending=true;invoke(record,'playVideo');soundLabel(record);
+    invoke(record,'unMute');record.playPending=true;invoke(record,'playVideo');
   }
   function release(record){
     record.token++;stop(record);observer?.unobserve(record.observed||record.container);
     try{record.player?.destroy?.();}catch{/* Removing the iframe still stops playback. */}
     record.player=null;record.ready=false;record.attempted=false;record.musicPauseConfirmed=false;record.playPending=false;record.state=null;
     record.iframe?.remove();record.iframe=null;
-    if(record.sound){record.sound.removeEventListener('click',record.toggleSound);record.sound.remove();record.sound=null;}
     observe(record);
   }
   function unavailable(record,error){
@@ -77,26 +68,19 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     if(record.iframe||record.failed||!connected(record))return;
     const token=++record.token,iframe=document.createElement('iframe');
     const src=new URL('https://www.youtube-nocookie.com/embed/'+record.video);
-    for(const [key,value]of Object.entries({enablejsapi:'1',origin:location.origin,playsinline:'1',autoplay:'0',mute:'1',controls:'1',rel:'0'}))src.searchParams.set(key,value);
+    for(const [key,value]of Object.entries({enablejsapi:'1',origin:location.origin,playsinline:'1',autoplay:'0',mute:'0',controls:'0',disablekb:'0',rel:'0'}))src.searchParams.set(key,value);
     iframe.id='loge-youtube-'+(++frameSequence)+'-'+record.key;iframe.className='loge-reel-frame';
     iframe.src=src.href;iframe.title='Vidéo : '+(record.post.title||'');
     iframe.setAttribute('allow','autoplay; encrypted-media; picture-in-picture; fullscreen');
     iframe.setAttribute('allowfullscreen','');iframe.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
-    record.iframe=iframe;record.muted=true;record.blocked=0;record.container.append(iframe);observe(record);
-    const sound=document.createElement('button');sound.type='button';sound.className='loge-video-sound';record.sound=sound;
-    record.toggleSound=()=>{
-      if(!eligible(record)||!record.ready)return;
-      const nativeMuted=invoke(record,'isMuted');record.muted=typeof nativeMuted==='boolean'?!nativeMuted:!record.muted;
-      play(record,{gesture:true});soundLabel(record);
-    };
-    sound.addEventListener('click',record.toggleSound);record.container.append(sound);soundLabel(record);
+    record.iframe=iframe;record.blocked=false;record.container.append(iframe);observe(record);
     const live=()=>!destroyed&&records.get(record.key)===record&&record.token===token&&record.iframe===iframe;
     youtubeAPI().then(YT=>{
       if(!live())return;
       record.player=new YT.Player(iframe, {events:{
         onReady:event=>{
           if(!live()){try{event.target.pauseVideo();event.target.destroy();}catch{}return;}
-          record.player=event.target;record.ready=true;invoke(record,'mute');record.muted=true;
+          record.player=event.target;record.ready=true;
           // Loading can change layout or finish after the user has scrolled.
           // Re-select using the iframe itself before any autoplay attempt.
           refresh();if(!eligible(record))stop(record);
@@ -110,17 +94,17 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
             // PLAYING event after the requested PAUSED state can therefore
             // resume native playback; an earlier in-flight event is stopped.
             if(!eligible(record)||(musicClip===record.key&&!record.musicPauseConfirmed)){stop(record);return;}
-            stopOthers(record);window.WCPlayer?.pause();record.attempted=true;record.playing=true;record.container.classList.add('is-playing');
-            const muted=invoke(record,'isMuted');if(typeof muted==='boolean')record.muted=muted;soundLabel(record);
+            stopOthers(record);window.WCPlayer?.pause();record.attempted=true;record.blocked=false;record.playing=true;record.container.classList.add('is-playing');
           }else if(event.data===0||event.data===2){
             record.playing=false;record.container.classList.remove('is-playing');
             if(event.data===2&&musicClip===record.key)record.musicPauseConfirmed=true;
           }
         },
         onAutoplayBlocked:()=>{
-          if(!live())return;record.playPending=false;
-          if(!eligible(record)||musicClip===record.key||record.blocked>=1)return;
-          record.blocked++;record.muted=true;play(record,{retry:true});
+          if(!live())return;
+          // No muted fallback or automatic retry: leave the native iframe
+          // available for a real user gesture after the browser's refusal.
+          record.playPending=false;record.blocked=true;
         },
         onError:event=>{if(live())unavailable(record,Error('Vidéo indisponible ('+event.data+').'));}
       }});
@@ -142,7 +126,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     const next=visible[0]||null;
     if(next!==active){
       if(active)stop(active);active=next;musicClip=null;
-      if(active){active.attempted=false;active.blocked=0;}
+      if(active){active.attempted=false;active.blocked=false;}
     }
     // Keep at most the current/nearest player and two adjacent players warm.
     const anchor=active||list.filter(record=>!record.failed).sort((a,b)=>b.ratio-a.ratio||a.distance-b.distance)[0];
@@ -150,7 +134,6 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     const keep=new Set(index<0?[]:list.slice(start,start+3));
     for(const record of records.values())if(!keep.has(record)&&record.iframe)release(record);
     for(const record of keep)warm(record);
-    for(const record of records.values())soundLabel(record);
     if(active)play(active);
   }
   function viewport(){
@@ -195,7 +178,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
       const state=invoke(active,'getPlayerState');
       // pauseVideo need not emit another PAUSED event for an already-paused
       // player. Accept that known state, except while a scripted play is pending.
-      active.musicPauseConfirmed=!active.playPending&&(state===2||(state===undefined&&active.state===2));
+      active.musicPauseConfirmed=!active.playPending&&(state===2||(state===undefined&&active.state===2)||(active.blocked&&[-1,0,5].includes(state)));
     }
     for(const record of records.values())stop(record);
   }
@@ -208,7 +191,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
       const key=String(post.id),existing=records.get(key);
       if(existing&&existing.container===container&&existing.post.youtubeUrl===post.youtubeUrl){existing.post=post;if(existing.iframe)existing.iframe.title='Vidéo : '+(post.title||'');refresh();return;}
       if(existing)this.remove(key);
-      const record={key,post:{...post},container,video:youtubeId(post.youtubeUrl),ratio:0,distance:Infinity,token:0,muted:true,blocked:0};records.set(key,record);
+      const record={key,post:{...post},container,video:youtubeId(post.youtubeUrl),ratio:0,distance:Infinity,token:0,blocked:false};records.set(key,record);
       if(!record.video)unavailable(record,Error('Lien vidéo invalide.'));
       observe(record);refresh();
     },

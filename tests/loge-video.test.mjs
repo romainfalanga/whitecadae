@@ -76,13 +76,14 @@ test('warm loading is bounded to three native iframes with safe official API par
     assert.equal(h.document.querySelectorAll('iframe').length,3);await tick();assert.equal(h.players.length,3);
     for(const iframe of h.document.querySelectorAll('iframe')){
       const url=new URL(iframe.src);assert.equal(url.origin,'https://www.youtube-nocookie.com');
-      for(const [key,value]of Object.entries({enablejsapi:'1',origin:'https://whitecadae.fr',playsinline:'1',autoplay:'0',mute:'1',controls:'1'}))assert.equal(url.searchParams.get(key),value);
+      for(const [key,value]of Object.entries({enablejsapi:'1',origin:'https://whitecadae.fr',playsinline:'1',autoplay:'0',mute:'0',controls:'0',disablekb:'0'}))assert.equal(url.searchParams.get(key),value);
       assert.match(iframe.getAttribute('allow'),/autoplay/);assert.equal(iframe.getAttribute('referrerpolicy'),'strict-origin-when-cross-origin');
     }
     for(const player of h.players)player.emit('onReady');
     assert.equal(h.players[0].count('play'),1);assert.equal(h.players[1].count('play'),0);assert.equal(h.players[2].count('play'),0);
-    assert.ok(h.musicPauses>=1);assert.equal(containers[0].querySelector('button').textContent,'Activer le son');
-    assert.equal(containers[0].querySelector('button').hidden,false);assert.equal(containers[1].querySelector('button').hidden,true);
+    assert.ok(h.musicPauses>=1);assert.equal(h.document.querySelectorAll('button').length,0);
+    assert.equal(h.players[0].muted,false);assert.equal(h.players[0].count('mute'),0);assert.ok(h.players[0].calls.indexOf('unMute')<h.players[0].calls.indexOf('play'));
+    assert.equal(h.players[1].count('unMute'),0);assert.equal(h.players[2].count('unMute'),0);
     for(const node of containers)node.box={...node.box,top:(node.index-10)*800,bottom:(node.index-9)*800};feed.refresh();await tick();
     assert.equal(h.document.querySelectorAll('iframe').length,3);
     assert.equal(h.players.slice(0,3).every(player=>player.count('destroy')===1),true);
@@ -108,16 +109,18 @@ test('only more than half-visible video plays; switching pauses the previous pla
   }finally{await h.close();}
 });
 
-test('sound changes require a gesture; autoplay blocking retries muted once then leaves native controls',async()=>{
+test('audible autoplay has no custom control or muted retry; blocked playback remains available to native gestures',async()=>{
   const h=await harness(),feed=h.feed(),node=h.container();
   try{
     feed.add(h.post(1),node);await tick();const player=h.players[0];player.emit('onReady');
-    const button=node.querySelector('button');button.dispatchEvent(new Event('click'));
-    assert.equal(player.muted,false);assert.equal(button.textContent,'Couper le son');assert.equal(button.getAttribute('aria-pressed'),'true');
-    const before=player.count('play');player.emit('onAutoplayBlocked');assert.equal(player.muted,true);assert.equal(player.count('play'),before+1);assert.equal(button.textContent,'Activer le son');
-    player.emit('onAutoplayBlocked');feed.refresh();assert.equal(player.count('play'),before+1);
-    assert.equal(node.querySelectorAll('button').length,1);assert.equal(new URL(node.querySelector('iframe').src).searchParams.get('controls'),'1');
-    button.dispatchEvent(new Event('click'));assert.equal(player.muted,false);assert.equal(player.count('play'),before+2);
+    assert.equal(player.muted,false);assert.equal(node.querySelectorAll('button').length,0);
+    const before=player.count('play');player.emit('onAutoplayBlocked');assert.equal(player.muted,false);assert.equal(player.count('play'),before);
+    player.emit('onAutoplayBlocked');feed.refresh();feed.pause();feed.resume();
+    h.document.hidden=true;h.document.dispatchEvent(new Event('visibilitychange'));h.document.hidden=false;h.document.dispatchEvent(new Event('visibilitychange'));
+    assert.equal(player.count('play'),before);assert.equal(player.count('mute'),0);
+    assert.equal(node.querySelectorAll('button').length,0);assert.equal(new URL(node.querySelector('iframe').src).searchParams.get('controls'),'0');
+    player.emit('onStateChange',1);assert.equal(node.classList.contains('is-playing'),true);assert.equal(player.count('play'),before);assert.equal(player.muted,false);
+    player.emit('onStateChange',2);feed.refresh();assert.equal(player.count('play'),before);
   }finally{await h.close();}
 });
 
@@ -126,15 +129,16 @@ test('music, hidden tabs, navigation suspension and detached caches cannot resta
   try{
     feed.add(h.post(1),one);feed.add(h.post(2),two);await tick();h.players.forEach(player=>player.emit('onReady'));
     const [a,b]=h.players;
-    const music=new Event('wc:music');music.detail={playing:true};h.window.dispatchEvent(music);
-    const count=a.count('play');feed.refresh();assert.equal(a.count('play'),count);a.emit('onStateChange',1);assert.equal(one.classList.contains('is-playing'),false);
-    one.querySelector('button').dispatchEvent(new Event('click'));assert.equal(a.count('play'),count+1);
     h.document.hidden=true;h.document.dispatchEvent(new Event('visibilitychange'));const hidden=a.count('play');a.emit('onAutoplayBlocked');feed.refresh();assert.equal(a.count('play'),hidden);
-    h.document.hidden=false;h.document.dispatchEvent(new Event('visibilitychange'));assert.equal(a.count('play'),hidden+1);
+    h.document.hidden=false;h.document.dispatchEvent(new Event('visibilitychange'));assert.equal(a.count('play'),hidden);
     feed.pause();assert.equal(h.observers[0].targets.size,0);const paused=a.count('play');feed.refresh();a.emit('onStateChange',1);assert.equal(a.count('play'),paused);
     one.remove();two.remove();feed.resume();assert.equal(a.count('play'),paused);
     h.document.body.append(one,two);current=false;feed.resume();assert.equal(a.count('play'),paused);
-    current=true;feed.resume();assert.equal(a.count('play'),paused+1);
+    current=true;feed.resume();assert.equal(a.count('play'),paused);
+    a.emit('onStateChange',1);
+    const music=new Event('wc:music');music.detail={playing:true};h.window.dispatchEvent(music);
+    const count=a.count('play');feed.refresh();assert.equal(a.count('play'),count);a.emit('onStateChange',1);assert.equal(one.classList.contains('is-playing'),false);
+    a.emit('onStateChange',2);a.emit('onStateChange',1);assert.equal(a.count('play'),count);assert.equal(one.classList.contains('is-playing'),true);
     h.window.dispatchEvent(music);one.box={...one.box,top:-800,bottom:0};two.box={...two.box,top:0,bottom:800};feed.refresh();assert.equal(b.count('play'),1);
   }finally{await h.close();}
 });
@@ -166,11 +170,26 @@ test('an already-paused native player can resume after music without waiting for
     const music=new Event('wc:music');music.detail={playing:true};h.window.dispatchEvent(music);
     const calls=player.count('play');feed.refresh();player.emit('onAutoplayBlocked');assert.equal(player.count('play'),calls);
     player.emit('onStateChange',1);assert.equal(container.classList.contains('is-playing'),true);assert.equal(player.count('play'),calls);
-    // Cached state PAUSED is insufficient when a new scripted play command is
-    // still in transit: the music request must wait for its actual pause ack.
-    player.emit('onStateChange',2);container.querySelector('button').dispatchEvent(new Event('click'));h.window.dispatchEvent(music);
+  }finally{await h.close();}
+});
+
+test('a cached PAUSED state does not unlock a scripted play still in transit when music starts',async()=>{
+  const h=await harness(),feed=h.feed(),container=h.container();
+  try{
+    feed.add(h.post(1),container);await tick();const player=h.players[0];player.state=2;player.emit('onReady');
+    const music=new Event('wc:music');music.detail={playing:true};h.window.dispatchEvent(music);
     player.emit('onStateChange',1);assert.equal(container.classList.contains('is-playing'),false);
     player.emit('onStateChange',2);player.emit('onStateChange',1);assert.equal(container.classList.contains('is-playing'),true);
+  }finally{await h.close();}
+});
+
+test('a browser-blocked unstarted clip can resume natively after music without a redundant pause acknowledgement',async()=>{
+  const h=await harness(),feed=h.feed(),container=h.container();
+  try{
+    feed.add(h.post(1),container);await tick();const player=h.players[0];player.emit('onReady');player.emit('onAutoplayBlocked');
+    const music=new Event('wc:music');music.detail={playing:true};h.window.dispatchEvent(music);
+    const calls=player.count('play');feed.refresh();player.emit('onAutoplayBlocked');assert.equal(player.count('play'),calls);
+    player.emit('onStateChange',1);assert.equal(container.classList.contains('is-playing'),true);assert.equal(player.count('play'),calls);assert.equal(player.count('mute'),0);
   }finally{await h.close();}
 });
 
@@ -235,8 +254,8 @@ test('visibility measures and observes the actual iframe, including a layout cha
     io.emit([[iframe,.5]]);assert.equal(player.count('play'),0);
     iframe.frameBox={...iframe.frameBox,top:-392,bottom:408};io.emit([[iframe,.51]]);assert.equal(player.count('play'),1);
     // Even before an observer delivery, a fresh geometry check prevents a
-    // stale retry or user sound command from restarting an offscreen player.
+    // stale autoplay or native PLAYING event from restarting an offscreen player.
     iframe.frameBox={...iframe.frameBox,top:900,bottom:1700};
-    player.emit('onAutoplayBlocked');container.querySelector('button').dispatchEvent(new Event('click'));assert.equal(player.count('play'),1);
+    player.emit('onAutoplayBlocked');player.emit('onStateChange',1);assert.equal(player.count('play'),1);assert.equal(container.classList.contains('is-playing'),false);
   }finally{await h.close();}
 });
