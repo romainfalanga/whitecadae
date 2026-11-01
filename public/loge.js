@@ -27,21 +27,29 @@ function author(person){
 function notice(id,message,error=false){const el=node(id);if(el){el.textContent=message;el.classList.toggle('is-error',error);}}
 function heading(title,actions=''){return `<header class="loge-heading"><h1>${esc(title)}</h1>${actions?`<nav class="loge-actions" aria-label="Actions de la Loge">${actions}</nav>`:''}</header>`;}
 function videoView(view){return !!view&&(view.kind==='feed'||view.kind==='post'||view.kind==='profile'&&view.tab!=='interventions');}
+function logeView(view){return !!view&&['feed','profile','post'].includes(view.kind);}
+function siteHeaderSize(){const header=document.querySelector('.site-header'),height=header?.getBoundingClientRect?.().height;document.body.style.setProperty('--loge-site-header-height',(height>0?Math.ceil(height):77)+'px');}
+function menuState(s){
+  if(!live(s))return;const open=document.body.classList.contains('nav-open');if(open===s.navOpen)return;s.navOpen=open;
+  if(open){const view=s.current;s.menuPaused={view,player:view?.player,version:s.navigationVersion};view?.player?.pause();}
+  else{const saved=s.menuPaused;s.menuPaused=null;const view=s.current;if(view&&saved?.player&&saved.view===view&&saved.player===view.player&&saved.version===s.navigationVersion&&!view.activePanel&&!view.editingId&&node('loge-compose')?.hidden)saved.player?.resume();}
+}
 function immersion(enabled){
   const active=document.body.classList.contains('loge-immersive');
   if(enabled&&!active)window.WCPlayer?.pause();
   document.body.classList.toggle('loge-immersive',!!enabled);
+  if(enabled)siteHeaderSize();else document.body.style.removeProperty?.('--loge-site-header-height');
 }
 function icon(kind){
   const paths={home:'<path d="m3 10 9-7 9 7v10H7V10m2 10v-6h6v6"/>',back:'<path d="m14 5-7 7 7 7"/>',profile:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',plus:'<path d="M12 4v16M4 12h16"/>',comment:'<path d="M21 11a9 9 0 0 1-9 9H4l-2 2V11a9 9 0 0 1 19 0Z"/>',bookmark:'<path d="M6 3h12v18l-6-4-6 4Z"/>'};
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[kind]||''}</svg>`;
 }
 function shell(html){
-  const view=session.current,root=document.createElement('section');root.className='loge-page'+(videoView(view)?' is-video-view':'')+(view.kind==='feed'?' is-feed':'');
+  const view=session.current,root=document.createElement('section');root.className='loge-page'+(logeView(view)?' is-loge-layout':'')+(videoView(view)?' is-video-view':'')+(view.kind==='feed'?' is-feed':'');
   root.innerHTML=html+statusMarkup('loge-status');view.root=root;session.ctx.app.replaceChildren(root);
 }
 function profileLink(){return `<a class="loge-nav-icon" href="${memberPath(session.user)}" data-link aria-label="Mon profil">${icon('profile')}</a>`;}
-function topbar(view,name){return `<header class="loge-topbar"><a class="loge-nav-icon" href="${view.kind==='feed'?'/':base}" data-link aria-label="${view.kind==='feed'?'Retour à l’accueil':'Retour à la Loge'}">${icon(view.kind==='feed'?'home':'back')}</a><h1>${esc(name)}</h1><nav class="loge-topbar-actions" aria-label="Actions de la Loge"><button type="button" class="loge-nav-icon" id="loge-open-compose" aria-label="Publier" aria-controls="loge-compose">${icon('plus')}</button>${profileLink()}</nav></header>`;}
+function topbar(view,name){const ownProfile=view.kind==='profile'&&String(view.memberId)===String(session.user);return `<header class="loge-topbar"><div class="loge-topbar-title">${view.kind==='feed'?'':`<a class="loge-back-link" href="${base}" data-link>Loge virtuelle</a>`}<h1>${esc(name)}</h1></div><nav class="loge-topbar-actions" aria-label="Actions de la Loge"><button type="button" class="loge-publish" id="loge-open-compose" aria-label="Publier" aria-controls="loge-compose">${icon('plus')}<span>Publier</span></button>${ownProfile?'':profileLink()}</nav></header>`;}
 function composerMarkup(){return '<section id="loge-compose" class="loge-compose loge-composer-sheet" role="dialog" aria-modal="true" aria-labelledby="loge-compose-title" hidden></section>';}
 function profileTabs(view,member){return `<nav class="loge-tabs" aria-label="Historique de ${esc(member.username)}">${[['reflexions','Réflexions'],['interventions','Interventions'],...(String(view.memberId)===String(session.user)?[['favoris','Favoris']]:[])].map(([tab,label])=>`<a href="${memberPath(view.memberId)}?onglet=${tab}" data-link ${view.tab===tab?'aria-current="page"':''}>${label}</a>`).join('')}</nav>`;}
 function login(s){
@@ -432,11 +440,11 @@ async function fetchView(view){
   try{return await view.fetching;}finally{view.fetching=null;}
 }
 function saveView(view){
-  if(!view?.root)return;view.scrollY=window.scrollY||0;view.reelScroll=view.root.querySelector('.loge-reels')?.scrollTop||0;
+  if(!view?.root)return;view.scrollY=window.scrollY||0;view.reelScroll=(view.root.querySelector('.loge-reels')||view.root.querySelector('.loge-feed'))?.scrollTop||0;
   view.player?.pause();view.paginationObserver?.disconnect();view.paginationObserver=null;
 }
 function restoreView(view){
-  const s=session,scroll=()=>{if(!live(s)||s.current!==view)return;const reels=view.root.querySelector('.loge-reels');if(reels)reels.scrollTop=view.reelScroll;window.scrollTo?.(0,view.scrollY);if(view.player){view.player.resume();view.player.refresh();}else initMedia(view);if(view.activePanel||view.editingId||node('loge-compose')&&!node('loge-compose').hidden)view.player?.pause();feedPagination(view);};
+  const s=session,scroll=()=>{if(!live(s)||s.current!==view)return;const reels=view.root.querySelector('.loge-reels')||view.root.querySelector('.loge-feed');if(reels)reels.scrollTop=view.reelScroll;window.scrollTo?.(0,view.scrollY);if(view.player){view.player.resume();view.player.refresh();}else initMedia(view);if(document.body.classList.contains('nav-open')||view.activePanel||view.editingId||node('loge-compose')&&!node('loge-compose').hidden)view.player?.pause();feedPagination(view);};
   if(typeof requestAnimationFrame==='function')requestAnimationFrame(scroll);else scroll();
 }
 function trimViews(){
@@ -465,7 +473,7 @@ export async function navigate(destination){
     if(!result||view.dirty||Date.now()-view.loadedAt>120000)result=await fetchView(view);
     if(!live(s)||token!==s.navigationVersion||view.destroyed)return;
     if(s.current!==view){s.current?.player?.destroy();if(s.current)s.current.player=null;s.current=view;}
-    immersion(videoView(view));
+    immersion(logeView(view));
     if(!view.root||view.renderedGeneration!==view.dataGeneration){renderView(view,result);}else{s.ctx.app.replaceChildren(view.root);document.title=view.title;}
     restoreView(view);if(view.openCompose)openComposer();
     if(view.kind==='post'&&view.focusComment&&!view.activePanel)await openDiscussion(view.postId);
@@ -473,13 +481,13 @@ export async function navigate(destination){
   }catch(error){
     if(!live(s)||token!==s.navigationVersion)return;
     if(error.name==='AbortError'){if(view.dirty)await navigate(destination);return;}
-    if(previous?.root){s.current=previous;immersion(videoView(previous));s.ctx.app.replaceChildren(previous.root);restoreView(previous);notice('loge-status',error.message,true);if(parseDestination(location.pathname+location.search+location.hash)?.key!==previous.key)await s.ctx.navigate(previous.key,true);}
+    if(previous?.root){s.current=previous;immersion(logeView(previous));s.ctx.app.replaceChildren(previous.root);restoreView(previous);notice('loge-status',error.message,true);if(parseDestination(location.pathname+location.search+location.hash)?.key!==previous.key)await s.ctx.navigate(previous.key,true);}
     else{s.current=view;immersion(false);shell(`${heading('Loge virtuelle')}<p class="loge-empty">${esc(error.message)}</p><a href="${base}" data-link>Réessayer</a>`);view.root.className='loge-page';}
   }
 }
 export function leave(){
   const s=session;immersion(false);if(!s)return;
-  closeVideo(s);s.closed=true;s.controller.abort();clearTimeout(s.quotaTimer);window.removeEventListener('resize',s.resize);document.removeEventListener('keydown',s.keydown);session=null;
+  closeVideo(s);s.headerObserver?.disconnect();s.menuObserver?.disconnect();s.closed=true;s.controller.abort();clearTimeout(s.quotaTimer);window.removeEventListener('resize',s.resize);document.removeEventListener('keydown',s.keydown);session=null;
 }
 export function clear(){leave();drafts.clear();}
 export async function page(path,ctx){
@@ -489,10 +497,12 @@ export async function page(path,ctx){
   const s=session={ctx,user:ctx.state.user.id,controller:new AbortController(),closed:false,blocked:false,pending:new Set(),views:new Map(),current:null,navigationVersion:0,nextPublicationAt:null,clockOffset:0,quotaTimer:null};
   for(const key of ['posts','comments','interventions','next','loading','member'])Object.defineProperty(s,key,{get:()=>s.current?.[key],set:value=>{if(s.current)s.current[key]=value;}});
   Object.defineProperty(s,'view',{get:()=>s.current?.kind});
-  s.resize=()=>refreshLayout(s.current);window.addEventListener('resize',s.resize);
+  s.resize=()=>{if(live(s)&&document.body.classList.contains('loge-immersive')){siteHeaderSize();refreshLayout(s.current);}};window.addEventListener('resize',s.resize);
+  const header=document.querySelector('.site-header');if(header&&typeof ResizeObserver==='function'){s.headerObserver=new ResizeObserver(()=>{if(live(s))s.resize();});s.headerObserver.observe(header);}
+  s.navOpen=document.body.classList.contains('nav-open');s.menuPaused=null;if(typeof MutationObserver==='function'){s.menuObserver=new MutationObserver(()=>menuState(s));s.menuObserver.observe(document.body,{attributes:true,attributeFilter:['class']});}
   s.keydown=event=>{if(!live(s))return;const compose=node('loge-compose'),editor=s.current?.editingId?node('loge-post-editor-'+s.current.editingId):null,dialog=compose&&!compose.hidden?compose:editor&&!editor.hidden?editor:null;
     if(event.key==='Tab'&&dialog){const controls=[...dialog.querySelectorAll('button,input,textarea,a')].filter(el=>!el.disabled),first=controls[0],last=controls.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}return;}
     if(event.key!=='Escape')return;if(compose&&!compose.hidden){composerVisibility(false);node('loge-open-compose')?.focus({preventScroll:true});}else if(editor&&!editor.hidden)closePostEditor(s.current.editingId);else if(videoView(s.current))closeDiscussion();};document.addEventListener('keydown',s.keydown);
-  immersion(videoView(parseDestination(path+location.search)));ctx.app.innerHTML='<section class="loge-page"><p class="loge-empty" role="status">Chargement…</p></section>';
+  immersion(logeView(parseDestination(path+location.search)));ctx.app.innerHTML='<section class="loge-page"><p class="loge-empty" role="status">Chargement…</p></section>';
   await navigate(path+location.search+location.hash);
 }

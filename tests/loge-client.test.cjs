@@ -14,7 +14,7 @@ const error=(status,message,data={})=>Object.assign(new Error(message),{status,d
 const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const decode=value=>value.replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
 
-function fixture({posts=[post()],comments=[],user=self,search=''}={}){
+function fixture({posts=[post()],comments=[],user=self,search='',observeUI=false}={}){
   // A small tree of ordinary HTML elements: enough for real form handlers,
   // dynamically inserted cards and frame removal; no layout/browser simulation.
   let document,focused=null;
@@ -22,7 +22,7 @@ function fixture({posts=[post()],comments=[],user=self,search=''}={}){
     constructor(tag='div',attrs={}){
       super();this.tag=tag;this.attrs=attrs;this.children=[];this.parent=null;this.dataset={};this.disabled=Object.hasOwn(attrs,'disabled');this.hidden=Object.hasOwn(attrs,'hidden');this.value=attrs.value||'';
       for(const [key,value]of Object.entries(attrs))if(key.startsWith('data-'))this.dataset[key.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;
-      this.style={setProperty:(key,value)=>{this.attrs.style=(this.attrs.style||'')+key+':'+value+';'}};this.scrollTop=0;
+      const styles=new Map();this.style={setProperty:(key,value)=>{styles.set(key,value);this.attrs.style=[...styles].map(([name,value])=>name+':'+value+';').join('');},getPropertyValue:key=>styles.get(key)||'',removeProperty:key=>{styles.delete(key);this.attrs.style=[...styles].map(([name,value])=>name+':'+value+';').join('');}};this.scrollTop=0;
       this.classList={add:name=>this.attrs.class=(this.attrs.class||'')+' '+name,remove:name=>this.attrs.class=(this.attrs.class||'').split(/\s+/).filter(item=>item!==name).join(' '),toggle:(name,on)=>{const set=new Set((this.attrs.class||'').split(/\s+/));if(on)set.add(name);else set.delete(name);this.attrs.class=[...set].join(' ');},contains:name=>(this.attrs.class||'').split(/\s+/).includes(name)};
     }
     get isConnected(){return this===document||!!this.parent?.isConnected;}
@@ -95,13 +95,15 @@ function fixture({posts=[post()],comments=[],user=self,search=''}={}){
   }
   async function api(url,options={}){requests.push({url,...options,body:options.body&&copy(options.body)});const answer=queued.length?queued.shift():()=>normal(url,options);const result=typeof answer==='function'?await answer(url,options):await answer;if(result instanceof Error)throw result;return copy(result);}
   const ctx={app,api,esc:escape,state,navigate:(...args)=>{navigations.push(args);const url=new URL(args[0],location.origin);location.pathname=url.pathname;location.search=url.search;location.hash=url.hash;},isCurrent:()=>current};
+  const observers={resize:[],menu:[]};
+  const observerType=kind=>class{constructor(callback){this.callback=callback;this.closed=false;observers[kind].push(this);}observe(target){this.target=target;}disconnect(){this.closed=true;}emit(){if(!this.closed)this.callback([]);}};
   const sandbox=vm.createContext({window,document,location,URL,URLSearchParams,AbortController,DOMException,crypto:webcrypto,console,
-    setTimeout:(fn,delay)=>{timers.set(++timerId,{fn,delay});return timerId;},clearTimeout:id=>timers.delete(id),confirm:()=>f.confirm});
+    setTimeout:(fn,delay)=>{timers.set(++timerId,{fn,delay});return timerId;},clearTimeout:id=>timers.delete(id),confirm:()=>f.confirm,...(observeUI?{ResizeObserver:observerType('resize'),MutationObserver:observerType('menu')}:{})});
   const youtube=readFileSync(path.join(__dirname,'../public/youtube-video.js'),'utf8').replace(/export /g,'');
   const source=readFileSync(path.join(__dirname,'../public/loge.js'),'utf8').replace(/^import .*\n/gm,'').replace(/export /g,'');
   sandbox.createLogeVideoFeed=options=>{const items=new Map(),controller={options,items,destroyed:false,paused:false,add:(post,container)=>items.set(String(post.id),{post,container}),remove:id=>items.delete(String(id)),refresh(){},pause(){this.paused=true;},resume(){this.paused=false;},destroy(){this.destroyed=true;for(const item of items.values())item.container.querySelector('iframe')?.remove();items.clear();}};controllers.push(controller);return controller;};
   vm.runInContext(youtube+'\n'+source+'\nwindow.client={page,leave,clear,navigate,canNavigate};',sandbox);
-  const f={app,document,window,state,location,ctx,requests,navigations,music,timers,controllers,scrolls,confirm:true,client:window.client,
+  const f={app,document,window,state,location,ctx,requests,navigations,music,timers,controllers,scrolls,observers,confirm:true,client:window.client,
     async page(path='/loge-virtuelle',query=search){location.pathname=path;location.search=query;await this.client.page(path,ctx);},
     async navigate(destination){const target=new URL(destination,location.origin);location.pathname=target.pathname;location.search=target.search;location.hash=target.hash;await this.client.navigate(destination);},
     node(id){const node=document.getElementById(id);assert(node,'Missing element '+id);return node;},
@@ -275,11 +277,11 @@ test('comments update the reel count and late panel acknowledgements refresh whe
   f.queue({comments:[{...comment(29),body:'Un envoi tardif'}],next:null});f.click(open);await flush();assert.equal(f.node('loge-comment-body-29').textContent,'Un envoi tardif');compose=f.find('form',f.node('loge-comment-compose'));assert.equal(compose.elements.namedItem('body').value,'');f.client.clear();
 });
 
-test('immersive scenes hide site chrome until Interventions or a clean exit, and only entering immersion pauses music',async()=>{
+test('Loge scenes keep one layout across profile tabs and only entering the Loge pauses music',async()=>{
   const f=fixture();await f.page();await flush();assert(f.document.body.classList.contains('loge-immersive'));assert.equal(f.music.length,1);
   await f.navigate('/loge-virtuelle/membres/11?onglet=reflexions');assert(f.document.body.classList.contains('loge-immersive'));assert.equal(f.music.length,1);
-  await f.navigate('/loge-virtuelle/membres/11?onglet=interventions');assert.equal(f.document.body.classList.contains('loge-immersive'),false);
-  await f.navigate('/loge-virtuelle/membres/11?onglet=favoris');assert(f.document.body.classList.contains('loge-immersive'));assert.equal(f.music.length,2);
+  await f.navigate('/loge-virtuelle/membres/11?onglet=interventions');assert.equal(f.document.body.classList.contains('loge-immersive'),true);assert(f.app.querySelector('.is-loge-layout'));assert.equal(f.app.querySelector('.is-video-view'),null);
+  await f.navigate('/loge-virtuelle/membres/11?onglet=favoris');assert(f.document.body.classList.contains('loge-immersive'));assert.equal(f.music.length,1);
   await f.navigate('/loge-virtuelle/publications/7');assert(f.document.body.classList.contains('loge-immersive'));assert.equal(f.document.getElementById('loge-comments-list'),null);
   f.client.leave();assert.equal(f.document.body.classList.contains('loge-immersive'),false);assert.equal(f.controllers.filter(controller=>!controller.destroyed).length,0);
   for(const status of [401,403,503]){const failed=fixture();failed.queue(error(status,'Indisponible'));await failed.page();assert.equal(failed.document.body.classList.contains('loge-immersive'),false);failed.client.clear();}
@@ -323,4 +325,27 @@ test('publication forms accept Shorts and send only the title, immutable URL and
   const f=fixture({posts:[]});await f.page();await flush();f.click('loge-open-compose');const form=f.node('loge-new-form');assert.equal(form.querySelector('textarea'),null);
   f.fill(form,'title','Mon titre');f.fill(form,'url','https://www.youtube.com/shorts/dQw4w9WgXcQ');f.submit(form);await flush();const create=f.requests.find(request=>request.method==='POST');assert.deepEqual(Object.keys(create.body).sort(),['requestId','title','url']);
   await f.navigate('/loge-virtuelle/membres/11?onglet=reflexions');f.click(f.find('[data-post-edit="20"]'));const edit=f.find('form',f.node('loge-post-editor-20'));assert.equal(edit.elements.namedItem('url'),null);assert.equal(edit.elements.namedItem('description'),null);f.fill(edit,'title','Titre revu');f.submit(edit);await flush();const update=f.requests.find(request=>request.method==='PUT');assert.deepEqual(update.body,{title:'Titre revu',revision:1});assert.equal(f.node('loge-post-title-20').textContent,'Titre revu');f.client.clear();
+});
+
+test('site header measurements and menu pauses are observed without leaking across navigation or cleanup',async()=>{
+  const f=fixture({observeUI:true}),header=f.document.createElement('header');header.className='site-header';let height=77;header.getBoundingClientRect=()=>({height});f.document.body.append(header);
+  await f.page();await flush();assert.equal(f.document.body.style.getPropertyValue('--loge-site-header-height'),'77px');
+  height=93;f.observers.resize[0].emit();assert.equal(f.document.body.style.getPropertyValue('--loge-site-header-height'),'93px');
+  const player=f.controllers.at(-1),menu=f.observers.menu[0];f.document.body.classList.add('nav-open');menu.emit();assert.equal(player.paused,true);
+  f.document.body.classList.remove('nav-open');menu.emit();assert.equal(player.paused,false);
+  f.click(f.find('[data-comments-open]'));await flush();f.document.body.classList.add('nav-open');menu.emit();f.document.body.classList.remove('nav-open');menu.emit();assert.equal(player.paused,true);
+  f.click(f.find('[data-discussion-close]'));assert.equal(player.paused,false);
+  f.document.body.classList.add('nav-open');menu.emit();f.document.body.classList.remove('nav-open');await f.navigate('/loge-virtuelle/membres/11?onglet=favoris');menu.emit();assert.equal(player.destroyed,true);assert.equal(f.controllers.filter(controller=>!controller.destroyed).length,1);
+  f.client.clear();assert.equal(f.document.body.style.getPropertyValue('--loge-site-header-height'),'');assert.equal(f.observers.resize[0].closed,true);assert.equal(menu.closed,true);
+});
+
+test('the three profile sections keep the same navigation and restore the interventions list scroll position',async()=>{
+  const f=fixture();await f.page('/loge-virtuelle/membres/11');let tabs;
+  for(const tab of ['reflexions','interventions','favoris']){
+    await f.navigate('/loge-virtuelle/membres/11?onglet='+tab);const nav=f.find('.loge-tabs');assert.deepEqual(nav.querySelectorAll('a').map(link=>link.textContent),['Réflexions','Interventions','Favoris']);
+    assert.equal(nav.querySelectorAll('a[aria-current="page"]').length,1);assert.equal(f.find('a[aria-current="page"]').getAttribute('href'),'/loge-virtuelle/membres/11?onglet='+tab);
+    assert(f.app.querySelector('.is-loge-layout'));assert.equal(f.app.querySelector('a[aria-label="Mon profil"]'),null);tabs=nav;
+    if(tab==='interventions')f.node('loge-profile-list').scrollTop=240;
+  }
+  await f.navigate('/loge-virtuelle/membres/11?onglet=interventions');assert.equal(f.node('loge-profile-list').scrollTop,240);assert.notEqual(tabs,f.find('.loge-tabs'));f.client.clear();
 });
