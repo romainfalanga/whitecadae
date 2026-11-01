@@ -46,7 +46,7 @@ test('Loge joins Game Master Blanc only at 33 real levels and existing accounts 
 
 test('Loge write routes reject cross-site or non-JSON traffic before accessing any account or database',async()=>{
   const env={get DB(){throw Error('Must reject before DB');}};
-  for(const path of ['/api/loge/posts','/api/loge/posts/1','/api/loge/posts/1/comments','/api/loge/comments/1']){
+  for(const path of ['/api/loge/posts','/api/loge/posts/1','/api/loge/posts/1/comments','/api/loge/comments/1','/api/loge/themes/proposals','/api/loge/themes/proposals/1/like']){
     for(const headers of [{Origin:'https://hostile.local'},{Origin:'null'},{'Sec-Fetch-Site':'cross-site'}]){
       const response=await worker.fetch(new Request('https://test.local'+path,{method:'POST',headers:{'Content-Type':'application/json',...headers},body:'{}'}),env);
       assert.equal(response.status,403,path);

@@ -14,13 +14,13 @@ const error=(status,message,data={})=>Object.assign(new Error(message),{status,d
 const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const decode=value=>value.replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
 
-function fixture({posts=[post()],comments=[],user=self,search='',observeUI=false}={}){
+function fixture({posts=[post()],comments=[],user=self,search='',observeUI=false,themeData}={}){
   // A small tree of ordinary HTML elements: enough for real form handlers,
   // dynamically inserted cards and frame removal; no layout/browser simulation.
   let document,focused=null;
   class Element extends EventTarget{
     constructor(tag='div',attrs={}){
-      super();this.tag=tag;this.attrs=attrs;this.children=[];this.parent=null;this.dataset={};this.disabled=Object.hasOwn(attrs,'disabled');this.hidden=Object.hasOwn(attrs,'hidden');this.value=attrs.value||'';
+      super();this.tag=tag;this.attrs=attrs;this.children=[];this.parent=null;this.dataset={};this.disabled=Object.hasOwn(attrs,'disabled');this.hidden=Object.hasOwn(attrs,'hidden');this.value=attrs.value||'';this.checked=Object.hasOwn(attrs,'checked');
       for(const [key,value]of Object.entries(attrs))if(key.startsWith('data-'))this.dataset[key.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;
       const styles=new Map();this.style={setProperty:(key,value)=>{styles.set(key,value);this.attrs.style=[...styles].map(([name,value])=>name+':'+value+';').join('');},getPropertyValue:key=>styles.get(key)||'',removeProperty:key=>{styles.delete(key);this.attrs.style=[...styles].map(([name,value])=>name+':'+value+';').join('');}};this.scrollTop=0;
       this.classList={add:name=>this.attrs.class=(this.attrs.class||'')+' '+name,remove:name=>this.attrs.class=(this.attrs.class||'').split(/\s+/).filter(item=>item!==name).join(' '),toggle:(name,on)=>{const set=new Set((this.attrs.class||'').split(/\s+/));if(on)set.add(name);else set.delete(name);this.attrs.class=[...set].join(' ');},contains:name=>(this.attrs.class||'').split(/\s+/).includes(name)};
@@ -71,10 +71,17 @@ function fixture({posts=[post()],comments=[],user=self,search='',observeUI=false
   window.WCPlayer={pause:()=>music.push('pause')};window.scrollY=0;window.innerHeight=900;window.innerWidth=1200;window.scrollTo=(x,y)=>{window.scrollY=y;scrolls.push(y);};
   const location={pathname:'/loge-virtuelle',search,hash:'',origin:'https://whitecadae.fr'};const state={user:user&&{...user},access:{loge:true},gameEchelon:33};
   let savedPosts=copy(posts),savedComments=copy(comments);
+  const now=Math.floor(Date.now()/1000),themes=copy(themeData||{current:{week:'2026-11-02',themeId:null,title:null,startsAt:now-100,endsAt:now+60000},nextWeek:{week:'2026-11-09',startsAt:now+60000,endsAt:now+660000},proposals:[],next:null,history:[],historyNext:null,serverNow:new Date().toISOString()});
+  const themeMeta=()=>themeData?{currentTheme:themes.current}:{};
   function normal(url,options){
     const method=options.method||'GET';
-    if(url==='/api/loge')return {self,posts:savedPosts,next:null,nextPublicationAt:null};
-    if(url.startsWith('/api/loge/membres/')){const target=new URL(url,'https://whitecadae.fr'),id=Number(target.pathname.split('/').at(-1));return {self,member:id===self.id?self:{id,username:'Bob'},posts:target.searchParams.get('tab')==='favoris'?savedPosts.filter(post=>post.isFavorite):savedPosts.filter(post=>post.author.id===id),interventions:[],next:null};}
+    if(url==='/api/loge/themes')return themes;
+    const thematic=/^\/api\/loge\/themes\/(\d+)\/posts/.exec(url);if(thematic){const id=Number(thematic[1]),theme=themes.current.themeId===id?{id,title:themes.current.title}:themes.history.find(t=>t.id===id)||{id,title:'Ancien thème'};return {theme,posts:savedPosts.filter(p=>p.theme?.id===id),next:null,...themeMeta()};}
+    const like=/^\/api\/loge\/themes\/proposals\/(\d+)\/like$/.exec(url);if(like){const p=themes.proposals.find(p=>p.id===Number(like[1]));if(p.liked!==options.body.liked)p.likes+=options.body.liked?1:-1;p.liked=options.body.liked;return {proposal:p};}
+    if(url.startsWith('/api/loge/themes/history')){const q=new URL(url,location.origin).searchParams.get('q')||'';return {themes:themes.history.filter(t=>t.title.toLowerCase().includes(q.toLowerCase())),next:null};}
+    if(url.startsWith('/api/loge/themes/proposals')){if(method==='GET')return {proposals:[],next:null,nextWeek:themes.nextWeek};const t=themes.history.find(t=>t.id===options.body.themeId),p={id:99,themeId:t?.id||99,title:t?.title||options.body.title,likes:0,liked:false,proposedBy:self};themes.proposals.unshift(p);return {proposal:p};}
+    if(url==='/api/loge')return {self,posts:savedPosts,next:null,nextPublicationAt:null,...themeMeta()};
+    if(url.startsWith('/api/loge/membres/')){const target=new URL(url,'https://whitecadae.fr'),id=Number(target.pathname.split('/').at(-1));return {self,member:id===self.id?self:{id,username:'Bob'},posts:target.searchParams.get('tab')==='favoris'?savedPosts.filter(post=>post.isFavorite):savedPosts.filter(post=>post.author.id===id),interventions:[],next:null,...themeMeta()};}
     if(url.endsWith('/favorite')){const id=Number(url.split('/').at(-2)),item=savedPosts.find(post=>post.id===id);item.isFavorite=options.body.favorite;return {postId:id,isFavorite:item.isFavorite};}
     if(url.match(/\/comments(?:\?|$)/)){
       if(method==='POST'){const item={...comment(18),body:options.body.body};savedComments.push(item);return {comment:item};}
@@ -86,7 +93,7 @@ function fixture({posts=[post()],comments=[],user=self,search='',observeUI=false
       savedComments[index]={...savedComments[index],body:options.body.body,revision:options.body.revision+1};return {comment:savedComments[index]};
     }
     if(url==='/api/loge/posts'){
-      const item={...post(20),title:options.body.title,youtubeUrl:options.body.url};savedPosts.unshift(item);
+      const item={...post(20),title:options.body.title,youtubeUrl:options.body.url,...(options.body.themeWeek?{theme:{id:themes.current.themeId,title:themes.current.title,week:options.body.themeWeek}}:{})};savedPosts.unshift(item);
       return {post:item,nextPublicationAt:new Date(Date.now()+604800000).toISOString()};
     }
     const id=Number(url.split('/').at(-1)),index=savedPosts.findIndex(p=>p.id===id);
@@ -103,8 +110,10 @@ function fixture({posts=[post()],comments=[],user=self,search='',observeUI=false
   const youtube=readFileSync(path.join(__dirname,'../public/youtube-video.js'),'utf8').replace(/export /g,'');
   const source=readFileSync(path.join(__dirname,'../public/loge.js'),'utf8').replace(/^import .*\n/gm,'').replace(/export /g,'');
   sandbox.createLogeVideoFeed=options=>{const items=new Map(),controller={options,items,destroyed:false,paused:false,pauseCalls:0,resumeCalls:0,add:(post,container,timeline)=>items.set(String(post.id),{post,container,timeline}),remove:id=>items.delete(String(id)),refresh(){},pause(){this.pauseCalls++;this.paused=true;},resume(){this.resumeCalls++;this.paused=false;},destroy(){this.destroyed=true;for(const item of items.values())item.container.querySelector('iframe')?.remove();items.clear();}};controllers.push(controller);return controller;};
+  const themeUI=readFileSync(path.join(__dirname,'../public/loge-themes-ui.js'),'utf8').replace(/export /g,'');
+  vm.runInContext('Object.assign(globalThis,(()=>{'+themeUI+';return {themeOverviewMarkup,proposalMarkup,historyMarkup};})());',sandbox);
   vm.runInContext(youtube+'\n'+source+'\nwindow.client={page,leave,clear,navigate,canNavigate};',sandbox);
-  const f={app,document,window,state,location,ctx,requests,navigations,music,timers,controllers,scrolls,observers,confirm:true,client:window.client,
+  const f={app,document,window,state,location,ctx,themes,requests,navigations,music,timers,controllers,scrolls,observers,confirm:true,client:window.client,
     async page(path='/loge-virtuelle',query=search){location.pathname=path;location.search=query;await this.client.page(path,ctx);},
     async navigate(destination){const target=new URL(destination,location.origin);location.pathname=target.pathname;location.search=target.search;location.hash=target.hash;await this.client.navigate(destination);},
     node(id){const node=document.getElementById(id);assert(node,'Missing element '+id);return node;},
@@ -316,12 +325,12 @@ test('site header measurements and menu pauses are observed without leaking acro
   f.client.clear();assert.equal(f.document.body.style.getPropertyValue('--loge-site-header-height'),'');assert.equal(f.observers.resize[0].closed,true);assert.equal(menu.closed,true);
 });
 
-test('the feed and own reflections share only two destinations and expose no favorites or interventions navigation',async()=>{
+test('the feed and own reflections share three destinations and expose no favorites or interventions navigation',async()=>{
   const f=fixture();await f.page();await flush();
-  const destinations=['/loge-virtuelle','/loge-virtuelle/membres/11?onglet=reflexions'];
+  const destinations=['/loge-virtuelle','/loge-virtuelle/membres/11?onglet=reflexions','/loge-virtuelle/theme'];
   for(const destination of destinations){
     await f.navigate(destination);const navigation=f.find('.loge-tabs'),links=navigation.querySelectorAll('a');
-    assert.deepEqual(links.map(link=>link.getAttribute('href')),destinations);assert.deepEqual(links.map(link=>link.textContent),['Loge','Mes réflexions']);assert.equal(f.app.querySelector('[data-favorite]'),null);
+    assert.deepEqual(links.map(link=>link.getAttribute('href')),destinations);assert.deepEqual(links.map(link=>link.textContent),['Loge','Mes réflexions','Thème']);assert.equal(f.app.querySelector('[data-favorite]'),null);
     assert.equal(navigation.querySelectorAll('a[aria-current="page"]').length,1);
     assert.equal(navigation.querySelector('a[aria-current="page"]').getAttribute('href'),destination);
     assert.equal(f.find('h1').textContent,'Loge virtuelle');assert(f.find('.is-video-view'));assert.equal(f.app.querySelector('a[aria-label="Mon profil"]'),null);
@@ -391,4 +400,80 @@ test('normal Loge navigation preloads only the remaining views',async()=>{
   await f.navigate('/loge-virtuelle/membres/11?onglet=reflexions');await flush();
   assert.equal(f.requests.some(request=>/tab=(?:favoris|interventions)/.test(request.url)),false);
   assert.equal(f.requests.some(request=>request.url.endsWith('/favorite')),false);f.client.clear();
+});
+
+const currentThemes=(extra={})=>{const now=Math.floor(Date.now()/1000);return {current:{week:'2026-11-02',themeId:2,title:'Grandir ensemble',startsAt:now-100,endsAt:now+60000},nextWeek:{week:'2026-11-09',startsAt:now+60000,endsAt:now+660000},proposals:[{id:4,themeId:3,title:'Comprendre ses choix',likes:2,liked:false,proposedBy:self}],next:null,history:[{id:2,title:'Grandir ensemble',editions:2,videoCount:2}],historyNext:null,serverNow:new Date().toISOString(),...extra};};
+
+test('Theme shows the active week and its videos with the shared paused reader and comments',async()=>{
+  const entries=[{...post(7),theme:{id:2,title:'Grandir ensemble',week:'2026-11-02'}},{...post(3),theme:{id:2,title:'Grandir ensemble',week:'2026-10-19'}},post(9)];
+  const f=fixture({posts:entries,themeData:currentThemes()});await f.page('/loge-virtuelle/theme');await flush();
+  assert.equal(f.find('a[aria-current="page"]').textContent,'Thème');assert.equal(f.node('loge-theme-posts').querySelectorAll('[data-post-id]').length,2);
+  const player=f.controllers.at(-1);assert.equal(player.options.root,f.find('.loge-themes-scroll'));assert.deepEqual([...player.items.keys()],['7','3']);
+  f.click(f.find('[data-comments-open="7"]'));await flush();assert.equal(player.paused,false);assert(f.node('loge-comments-list'));assert.equal(f.app.querySelector('[data-favorite]'),null);
+  f.client.clear();assert.equal(f.timers.size,0);assert.equal(player.destroyed,true);
+});
+
+test('Theme proposals and support use the announced week, keep drafts on failure and lock duplicate votes',async()=>{
+  const f=fixture({themeData:currentThemes()});await f.page('/loge-virtuelle/theme');await flush();const form=f.node('loge-theme-propose-form');f.fill(form,'title','Un autre regard');
+  f.queue(error(503,'Conservé'));f.submit(form);await flush();assert.equal(form.elements.namedItem('title').value,'Un autre regard');assert.match(f.node('loge-theme-proposal-status').textContent,/Conservé/);
+  f.submit(form);await flush();const proposal=f.requests.filter(r=>r.method==='POST').at(-1);assert.deepEqual(proposal.body,{title:'Un autre regard',targetWeek:'2026-11-09'});assert.equal(form.elements.namedItem('title').value,'');assert(f.node('loge-proposal-99'));
+  const vote=f.find('[data-theme-like="4"]'),release=f.defer();f.click(vote);vote.onclick();assert.equal(vote.disabled,true);assert.equal(f.requests.filter(r=>r.url.endsWith('/4/like')).length,1);assert.deepEqual(f.requests.at(-1).body,{liked:true,targetWeek:'2026-11-09'});
+  release({proposal:{id:4,themeId:3,title:'Comprendre ses choix',likes:3,liked:true,proposedBy:self}});await flush();assert.equal(f.find('[data-theme-like="4"]').getAttribute('aria-pressed'),'true');f.client.clear();
+});
+
+test('a historical theme is proposed by canonical ID and its archive stays available across editions',async()=>{
+  const f=fixture({themeData:currentThemes(),posts:[{...post(),theme:{id:2,title:'Grandir ensemble',week:'2026-10-19'}}]});await f.page('/loge-virtuelle/theme');await flush();
+  f.click(f.find('[data-theme-propose="2"]'));await flush();assert.deepEqual(f.requests.find(r=>r.method==='POST').body,{themeId:2,targetWeek:'2026-11-09'});
+  await f.navigate('/loge-virtuelle/theme?theme=2');assert(f.node('loge-post-7'));assert.equal(f.find('a[aria-current="page"]').getAttribute('href'),'/loge-virtuelle/theme');f.client.clear();
+});
+
+test('weekly publication tagging is opt-in, preserved on retry and absent when unchecked',async()=>{
+  for(const checked of [false,true]){
+    const f=fixture({posts:[],themeData:currentThemes()});await f.page();await flush();f.click('loge-open-compose');const form=f.node('loge-new-form'),choice=form.elements.namedItem('themeWeek');assert(choice);assert.equal(choice.checked,false);
+    f.fill(form,'title','Mes avancées');f.fill(form,'url','https://youtu.be/dQw4w9WgXcQ');choice.checked=checked;choice.dispatchEvent(new Event('change'));
+    f.queue(error(503,'Réessaie'));f.submit(form);await flush();assert.equal(choice.checked,checked);const first=f.requests.filter(r=>r.method==='POST').at(-1);
+    f.submit(form);await flush();const second=f.requests.filter(r=>r.method==='POST').at(-1);assert.equal(first.body.requestId,second.body.requestId);assert.equal(second.body.themeWeek,checked?'2026-11-02':undefined);
+    if(checked)assert.equal(f.find('.loge-post-theme').textContent,'Grandir ensemble');f.client.clear();assert.equal(f.timers.size,0);
+  }
+});
+
+test('a week with no winner offers proposals without an empty theme link or publication checkbox',async()=>{
+  const data=currentThemes({current:{week:'2026-11-02',themeId:null,title:null,startsAt:0,endsAt:Math.floor(Date.now()/1000)+60000}}),f=fixture({themeData:data});await f.page('/loge-virtuelle/theme');await flush();
+  assert.match(f.app.textContent,/Aucun thème cette semaine/);assert.equal(f.app.querySelector('a[href="/loge-virtuelle/theme?theme="]'),null);
+  f.click('loge-open-compose');assert.equal(f.node('loge-new-form').elements.namedItem('themeWeek'),null);f.client.clear();
+});
+
+test('late history searches cannot replace a newer selection or another page',async()=>{
+  const f=fixture({themeData:currentThemes()});await f.page('/loge-virtuelle/theme');await flush();const form=f.node('loge-theme-search-form'),old=f.defer();
+  f.fill(form,'q','ancien');f.submit(form);f.queue({themes:[{id:9,title:'Résultat récent',editions:1,videoCount:0}],next:null});f.fill(form,'q','récent');f.submit(form);await flush();
+  old({themes:[{id:8,title:'Réponse tardive',editions:1,videoCount:0}],next:null});await flush();assert.match(f.node('loge-theme-history').textContent,/Résultat récent/);assert.doesNotMatch(f.node('loge-theme-history').textContent,/Réponse tardive/);f.client.clear();
+});
+
+test('the week boundary refreshes the winner and preserves a publication draft without retagging it silently',async()=>{
+  const f=fixture({themeData:currentThemes()});await f.page('/loge-virtuelle/theme');await flush();f.click('loge-open-compose');let form=f.node('loge-new-form');f.fill(form,'title','Brouillon conservé');form.elements.namedItem('themeWeek').checked=true;form.elements.namedItem('themeWeek').dispatchEvent(new Event('change'));
+  const boundary=[...f.timers.values()].find(job=>job.delay>1000000);assert(boundary);f.themes.current={...f.themes.current,week:'2026-11-09',themeId:3,title:'Nouveau thème'};f.themes.nextWeek={...f.themes.nextWeek,week:'2026-11-16'};
+  boundary.fn();for(let i=0;i<5;i++)await flush();form=f.node('loge-new-form');assert.equal(form.elements.namedItem('title').value,'Brouillon conservé');assert.equal(form.elements.namedItem('themeWeek').checked,false);assert.match(f.app.textContent,/Nouveau thème/);
+  f.client.clear();assert.equal(f.timers.size,0);const count=f.requests.length;boundary.fn();await flush();assert.equal(f.requests.length,count);
+});
+
+test('comment writing starts with five lines, grows while typing and resets after publishing',async()=>{
+  const f=fixture();await f.page();f.click(f.find('[data-comments-open]'));await flush();const form=f.find('form',f.node('loge-comment-compose')),field=form.elements.namedItem('body');
+  assert.equal(field.getAttribute('rows'),'5');assert.equal(field.style.getPropertyValue('height'),'144px');field.scrollHeight=280;f.fill(form,'body','Une réflexion sur plusieurs lignes');assert.equal(field.style.getPropertyValue('height'),'280px');
+  field.scrollHeight=800;f.fill(form,'body','Encore du texte');assert.equal(field.style.getPropertyValue('height'),'360px');assert.equal(field.style.getPropertyValue('overflow-y'),'auto');
+  field.scrollHeight=0;f.submit(form);await flush();assert.equal(field.value,'');assert.equal(field.style.getPropertyValue('height'),'144px');f.client.clear();
+});
+
+
+test('publishing off theme never inserts a video into an empty Theme page and a second proposal draft survives navigation',async()=>{
+  const f=fixture({posts:[],themeData:currentThemes({current:{week:'2026-11-02',themeId:null,title:null,endsAt:Math.floor(Date.now()/1000)+60000}})});await f.page('/loge-virtuelle/theme');await flush();
+  let form=f.node('loge-theme-propose-form');f.fill(form,'title','Premier thème');f.submit(form);await flush();f.fill(form,'title','Deuxième brouillon');
+  await f.navigate('/loge-virtuelle');await f.navigate('/loge-virtuelle/theme');assert.equal(f.node('loge-theme-propose-form').elements.namedItem('title').value,'Deuxième brouillon');
+  f.click('loge-open-compose');form=f.node('loge-new-form');f.fill(form,'title','Hors thème');f.fill(form,'url','https://youtu.be/dQw4w9WgXcQ');f.submit(form);await flush();assert.equal(f.node('loge-theme-posts').querySelector('[data-post-id]'),null);f.client.clear();
+});
+
+
+test('Theme retries a boundary-crossing overview instead of mixing old proposals with the new week',async()=>{
+  const old=currentThemes(),fresh=currentThemes({current:{...currentThemes().current,week:'2026-11-09',themeId:3,title:'Nouvelle semaine'},nextWeek:{...currentThemes().nextWeek,week:'2026-11-16'},proposals:[]});
+  const f=fixture({themeData:fresh});f.queue(old);f.queue({theme:{id:2,title:'Ancien thème'},posts:[],next:null,currentTheme:fresh.current});f.queue(fresh);f.queue({theme:{id:3,title:'Nouvelle semaine'},posts:[],next:null,currentTheme:fresh.current});
+  await f.page('/loge-virtuelle/theme');assert.match(f.app.textContent,/Nouvelle semaine/);assert.equal(f.app.querySelector('[data-theme-like="4"]'),null);assert.equal(f.requests.filter(r=>r.url==='/api/loge/themes').length,2);f.client.clear();
 });

@@ -14,7 +14,8 @@ import {handlePrivate} from './private-api.js';
 import {validAvatar} from './avatar-validation.js';
 import {handlePlaylists} from './playlists.js';
 import {handlePlaylistAudio} from './playlist-audio.js';
-import {handleLoge} from './loge.js';
+import {handleLoge,ensureLogeTables} from './loge.js';
+import {settleThemeWeeks} from './loge-themes.js';
 export {BrainstormLive} from './brainstorm-live.js';
 
 const SESSION_COOKIE = 'wc_session';
@@ -22,6 +23,10 @@ const SESSION_DAYS = 30;
 const PBKDF2_ITERATIONS = 100000;
 
 export default {
+  async scheduled(controller, env) {
+    await ensureLogeTables(env);
+    await settleThemeWeeks(env, controller.scheduledTime);
+  },
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/music/')) return avecSecurite(await serveMusic(request, env));

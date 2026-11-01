@@ -231,7 +231,7 @@ test('interventions embed the complete visible post while retaining distinct com
       id:commentId,postId:id,author:(await f.call('/api/loge/membres/12')).data.member,
       body:'Le texte exact de mon intervention',createdAt:'2023-11-14T22:16:40.000Z',updatedAt:'2023-11-14T22:18:20.000Z',revision:2,
       post:{id,author:(await f.call('/api/loge/membres/26')).data.member,title:'La publication complète',description:'Une description du clip',
-        youtubeUrl:'https://www.youtube.com/watch?v=aqz-KE-bpKQ',createdAt:'2023-11-14T22:13:20.000Z',updatedAt:'2023-11-14T22:15:00.000Z',revision:3,commentCount:2,isFavorite:true}
+        youtubeUrl:'https://www.youtube.com/watch?v=aqz-KE-bpKQ',createdAt:'2023-11-14T22:13:20.000Z',updatedAt:'2023-11-14T22:15:00.000Z',revision:3,commentCount:2,isFavorite:true,theme:null}
     });
     const otherViewer=(await f.call('/api/loge/membres/12?tab=interventions',{token:'qa11'})).data.interventions[0];
     assert.deepEqual(otherViewer.post,{...intervention.post,isFavorite:false});
@@ -272,7 +272,7 @@ test('short comment-write limits are atomic, do not spend publication quota and 
 
 test('the wired Worker rejects foreign origins and non-JSON Loge writes before accessing any database',async()=>{
   const env={get DB(){throw Error('Origin and content type must be rejected first');}};
-  for(const [endpoint,method]of [['/api/loge/posts','POST'],['/api/loge/posts/1','PUT'],['/api/loge/posts/1','DELETE'],['/api/loge/posts/1/comments','POST'],['/api/loge/comments/1','PUT'],['/api/loge/posts/1/favorite','PUT']]){
+  for(const [endpoint,method]of [['/api/loge/posts','POST'],['/api/loge/posts/1','PUT'],['/api/loge/posts/1','DELETE'],['/api/loge/posts/1/comments','POST'],['/api/loge/comments/1','PUT'],['/api/loge/posts/1/favorite','PUT'],['/api/loge/themes/candidates','POST'],['/api/loge/themes/candidates/1/like','PUT']]){
     for(const extra of [{Origin:'https://foreign.test'},{Origin:'null'},{'Sec-Fetch-Site':'cross-site'},{'Content-Type':'text/plain'}]){
       const response=await worker.fetch(new Request('https://test.local'+endpoint,{method,headers:{'Content-Type':'application/json',...extra},body:'{}'}),env);
       assert.equal(response.status,extra['Content-Type']?415:403,method+' '+endpoint);assert.match(response.headers.get('Cache-Control'),/no-store/);
@@ -426,4 +426,119 @@ test('the favorites migration is additive and lazy; reset planning and user/post
     f.sql.exec('PRAGMA foreign_keys=ON;DELETE FROM users WHERE id=11');assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_favorites').get().n,0);assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_posts').get().n,1);
     await favorite(f,id,true,{token:'qa25'});f.sql.prepare('DELETE FROM loge_posts WHERE id=?').run(id);assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_favorites').get().n,0);assert.deepEqual(f.sql.prepare('PRAGMA foreign_key_check').all(),[]);
   }finally{f.sql.close();}
+});
+
+async function selectedTheme(f,title='Le choix et le hasard'){
+  const current=(await f.call()).data.currentTheme;
+  const id=Number(f.sql.prepare('INSERT INTO loge_themes(title,normalized,created_by) VALUES(?,?,11)').run(title,title.toLowerCase()).lastInsertRowid);
+  f.sql.prepare('UPDATE loge_theme_weeks SET theme_id=? WHERE week_start=?').run(id,current.week);
+  return {...current,themeId:id,title};
+}
+
+test('optional weekly tagging preserves legacy publications and appears consistently in all visible post representations',async()=>{
+  const f=setup();try{
+    const legacy=f.seedPost(26,'Une ancienne réflexion'),theme=await selectedTheme(f);
+    assert.equal((await f.call(path(legacy))).data.post.theme,null);
+    const body=makePost({themeWeek:theme.week}),created=await f.post(body);
+    assert.equal(created.status,201);const id=created.data.post.id,expected={id:theme.themeId,title:theme.title,week:theme.week};
+    assert.deepEqual(created.data.post.theme,expected);
+    assert.equal((Date.parse(created.data.nextPublicationAt)-Date.parse(created.data.post.createdAt))/1000,LOGE_WEEK_SECONDS);
+    await favorite(f,id,true);f.seedComment(id,12);
+    for(const endpoint of ['/api/loge',path(id),'/api/loge/membres/11','/api/loge/membres/11?tab=favoris','/api/loge/themes/'+theme.themeId+'/posts']){
+      const response=await f.call(endpoint);assert.equal(response.status,200,endpoint);
+      assert.deepEqual((response.data.post||response.data.posts[0]).theme,expected,endpoint);
+      assert.equal(response.data.currentTheme.themeId,theme.themeId,endpoint);
+    }
+    assert.deepEqual((await f.call('/api/loge/membres/12?tab=interventions')).data.interventions[0].post.theme,expected);
+    assert.equal((await f.call(path(id),{method:'PUT',body:{title:'Titre modifié',revision:1,themeWeek:null}})).status,400);
+    const edited=await f.call(path(id),{method:'PUT',body:{title:'Titre modifié',revision:1}});assert.equal(edited.status,200);assert.deepEqual(edited.data.post.theme,expected);
+    const untagged=await f.post(makePost({themeWeek:null}),{token:'qa11'});assert.equal(untagged.status,201);assert.equal(untagged.data.post.theme,null);
+    assert.equal((await f.call(path(id),{method:'DELETE',body:{revision:2}})).status,200);
+    assert.deepEqual((await f.call('/api/loge/themes/'+theme.themeId+'/posts')).data.posts,[]);
+    assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_post_themes WHERE post_id=?').get(id).n,1);
+  }finally{f.sql.close();}
+});
+
+test('weekly post choices reject malformed, stale and unavailable editions without reserving publication quota or bypassing earned access',async()=>{
+  const f=setup();try{
+    const empty=(await f.call()).data.currentTheme;
+    assert.equal(empty.themeId,null);assert.equal((await f.post(makePost({themeWeek:empty.week}))).status,409);
+    const theme=await selectedTheme(f);
+    for(const value of ['',false,12,{},[], '2026-02-30','2026-1-01','2026-01-01T00:00:00Z'])assert.equal((await f.post(makePost({themeWeek:value}))).status,400,JSON.stringify(value));
+    assert.equal((await f.post(makePost({themeWeek:'2000-01-03'}))).status,409);
+    for(const token of ['qa9','qa99']){
+      assert.equal((await f.post(makePost({themeWeek:theme.week}),{token})).status,403);
+      assert.equal((await f.call('/api/loge/themes/'+theme.themeId+'/posts',{token})).status,403);
+    }
+    assert.equal((await f.call('/api/loge/themes/'+theme.themeId+'/posts',{token:'invalid'})).status,401);
+    assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_publication_limits').get().n,0);
+    assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_posts').get().n,0);
+    assert.equal((await f.post(makePost({themeId:theme.themeId}))).data.post.theme,null,'arbitrary IDs never assign a theme');
+    assert.equal((await f.call('/api/loge/themes/99999/posts')).status,404);
+    assert.equal((await f.call('/api/loge/themes/'+theme.themeId+'/posts?after=-1')).status,400);
+  }finally{f.sql.close();}
+});
+
+test('theme-aware request IDs replay the original immutable association after a rollover and reject a changed choice',async()=>{
+  const f=setup();try{
+    const theme=await selectedTheme(f),body=makePost({themeWeek:theme.week});
+    const attempts=await Promise.all([f.post(body),f.post(body)]);
+    assert.deepEqual(attempts.map(response=>response.status).sort(),[200,201]);
+    const original=attempts[0].data.post;
+    assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_post_themes').get().n,1);
+    f.sql.prepare('UPDATE loge_theme_weeks SET theme_id=NULL WHERE week_start=?').run(theme.week);
+    const replay=await f.post(body);assert.equal(replay.status,200);assert.deepEqual(replay.data.post,original);
+    assert.equal((await f.post({...body,themeWeek:null})).status,409);
+    const withoutChoice={...body};delete withoutChoice.themeWeek;assert.equal((await f.post(withoutChoice)).status,409);
+    assert.equal((await f.post({...body,requestId:crypto.randomUUID()})).status,409);
+    assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_posts').get().n,1);
+    const oldBody=makePost(),old=await f.post(oldBody,{token:'qa11'});assert.equal(old.status,201);
+    assert.equal((await f.post(oldBody,{token:'qa11'})).status,200,'legacy three-field fingerprints stay compatible');
+    assert.equal((await f.post({...oldBody,themeWeek:null},{token:'qa11'})).status,409);
+  }finally{f.sql.close();}
+});
+
+test('theme feeds aggregate recurring editions by stable theme identity with stable descending pagination',async()=>{
+  const f=setup();try{
+    const theme=await selectedTheme(f),older='2000-01-03';
+    f.sql.prepare('INSERT INTO loge_theme_weeks(week_start,starts_at,ends_at,theme_id) VALUES(?,?,?,?)').run(older,946857600,947462400,theme.themeId);
+    const unrelated=Number(f.sql.prepare('INSERT INTO loge_themes(title,normalized) VALUES(?,?)').run('Autre thème','autre thème').lastInsertRowid),expected=[];
+    for(let i=0;i<47;i++){
+      const id=f.seedPost(11,'Réflexion '+i);expected.push(id);
+      f.sql.prepare('INSERT INTO loge_post_themes(post_id,theme_id,week_start) VALUES(?,?,?)').run(id,theme.themeId,i%2?older:theme.week);
+    }
+    const deleted=f.seedPost(),other=f.seedPost();f.seedPost();
+    f.sql.prepare('INSERT INTO loge_post_themes(post_id,theme_id,week_start) VALUES(?,?,?)').run(deleted,theme.themeId,older);
+    f.sql.prepare('INSERT INTO loge_post_themes(post_id,theme_id,week_start) VALUES(?,?,?)').run(other,unrelated,theme.week);
+    f.sql.prepare("UPDATE loge_posts SET title='',description='',youtube_id='',deleted_at=unixepoch() WHERE id=?").run(deleted);
+    await favorite(f,expected.at(-1),true);
+    const endpoint='/api/loge/themes/'+theme.themeId+'/posts',first=(await f.call(endpoint)).data;
+    assert.equal(first.posts.length,20);assert.equal(first.posts[0].isFavorite,true);assert.deepEqual(first.theme,{id:theme.themeId,title:theme.title});
+    const newest=f.seedPost();f.sql.prepare('INSERT INTO loge_post_themes(post_id,theme_id,week_start) VALUES(?,?,?)').run(newest,theme.themeId,theme.week);
+    f.sql.prepare('UPDATE loge_theme_weeks SET theme_id=? WHERE week_start=?').run(unrelated,theme.week);
+    const second=(await f.call(endpoint+'?after='+first.next)).data,third=(await f.call(endpoint+'?after='+second.next)).data;
+    const posts=[...first.posts,...second.posts,...third.posts];assert.deepEqual(posts.map(post=>post.id),expected.toReversed());assert.equal(third.next,null);
+    assert.equal(new Set(posts.map(post=>post.theme.week)).size,2);assert.ok(posts.every(post=>post.theme.id===theme.themeId));
+    assert.equal((await f.call(endpoint)).data.posts[0].id,newest);
+  }finally{f.sql.close();}
+});
+
+test('SQL-time theme expiry at reservation, post insertion or association insertion rejects atomically without spending the 168-hour quota',async()=>{
+  for(const boundary of ['INSERT INTO loge_publication_limits','INSERT INTO loge_posts','INSERT INTO loge_post_themes']){
+    const f=setup();try{
+      const theme=await selectedTheme(f);
+      f.sql.prepare("INSERT INTO loge_publication_limits(user_id,next_publish_at,claim_token,write_window_at,write_count,write_claim_token) VALUES(11,unixepoch()-1,'previous',unixepoch(),3,'comment')").run();
+      const before=f.sql.prepare('SELECT * FROM loge_publication_limits WHERE user_id=11').get(),prepare=f.env.DB.prepare;let armed=true;
+      f.env.DB.prepare=query=>{
+        const decorate=statement=>({...statement,bind(...args){return decorate(statement.bind(...args));},sync(){
+          if(armed&&query.startsWith(boundary)){armed=false;f.sql.prepare('UPDATE loge_theme_weeks SET ends_at=unixepoch() WHERE week_start=?').run(theme.week);}
+          return statement.sync();
+        }});return decorate(prepare(query));
+      };
+      const response=await f.post(makePost({themeWeek:theme.week}));assert.equal(response.status,409,boundary);assert.equal(armed,false,boundary);
+      assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_posts').get().n,0,boundary);
+      assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_post_themes').get().n,0,boundary);
+      assert.deepEqual(f.sql.prepare('SELECT * FROM loge_publication_limits WHERE user_id=11').get(),before,boundary);
+    }finally{f.sql.close();}
+  }
 });

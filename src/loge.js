@@ -2,6 +2,7 @@ import {gameRows} from './echelon-api.js';
 import {gameLevel} from './echelon.js';
 import {fail,objectBody,text,integer} from './private-data.js';
 import {youtubeId} from '../public/youtube-video.js';
+import {ensureThemeTables,handleThemes,getCurrentTheme,postThemeAssignment} from './loge-themes.js';
 
 export const LOGE_WEEK_SECONDS=168*60*60;
 export const LOGE_PAGE_SIZE=20;
@@ -69,10 +70,13 @@ export async function ensureLogeTables(env){
 const iso=value=>new Date(value*1000).toISOString();
 const person=row=>({id:row.author_id??row.id,username:row.username,avatar:row.has_avatar?`/api/roadmap/avatar/${row.author_id??row.id}`:null});
 const authorFields=`u.username,u.avatar_data IS NOT NULL AS has_avatar`;
-const postFields=`p.*,${authorFields},(SELECT count(*) FROM loge_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count`;
+const themeFields=`(SELECT pt.theme_id FROM loge_post_themes pt WHERE pt.post_id=p.id) AS theme_id,
+  (SELECT t.title FROM loge_post_themes pt JOIN loge_themes t ON t.id=pt.theme_id WHERE pt.post_id=p.id) AS theme_title,
+  (SELECT pt.week_start FROM loge_post_themes pt WHERE pt.post_id=p.id) AS theme_week`;
+const postFields=`p.*,${authorFields},${themeFields},(SELECT count(*) FROM loge_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count`;
 const postSelect=`SELECT ${postFields} FROM loge_posts p JOIN users u ON u.id=p.author_id`;
 const commentSelect=`SELECT c.*,${authorFields} FROM loge_comments c JOIN users u ON u.id=c.author_id JOIN loge_posts p ON p.id=c.post_id`;
-const postView=row=>({id:row.id,author:person(row),title:row.title,description:row.description,youtubeUrl:'https://www.youtube.com/watch?v='+row.youtube_id,createdAt:iso(row.created_at),updatedAt:iso(row.updated_at),revision:row.revision,commentCount:row.comment_count,isFavorite:!!row.is_favorite});
+const postView=row=>({id:row.id,author:person(row),title:row.title,description:row.description,youtubeUrl:'https://www.youtube.com/watch?v='+row.youtube_id,createdAt:iso(row.created_at),updatedAt:iso(row.updated_at),revision:row.revision,commentCount:row.comment_count,isFavorite:!!row.is_favorite,theme:row.theme_id?{id:row.theme_id,title:row.theme_title,week:row.theme_week}:null});
 const commentView=row=>({id:row.id,postId:row.post_id,author:person(row),body:row.body,createdAt:iso(row.created_at),updatedAt:iso(row.updated_at),revision:row.revision});
 const cursor=url=>integer(Number(url.searchParams.get('after')||0));
 const safeId=value=>{const id=Number(value);if(!Number.isSafeInteger(id)||id<1)fail('Page introuvable.',404);return id;};
@@ -161,31 +165,65 @@ async function createPost(request,env,user,json){
   // Existing D1 tables require a nonempty description. A title-only client
   // fills that legacy column without rebuilding tables or changing old text.
   if(!video)fail('Ce lien YouTube n’est pas valide.');
-  const hash=await fingerprint([title,description,video]);
+  const hasThemeWeek=Object.hasOwn(body,'themeWeek'),requestedWeek=hasThemeWeek?body.themeWeek:null;
+  if(requestedWeek!==null&&(typeof requestedWeek!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(requestedWeek)||!Number.isFinite(Date.parse(requestedWeek+'T00:00:00Z'))||new Date(requestedWeek+'T00:00:00Z').toISOString().slice(0,10)!==requestedWeek))fail('Semaine de thème invalide.');
+  // Keep the original fingerprint format for older clients. An explicit choice
+  // participates in idempotency, including an explicit unchecked (null) choice.
+  const hash=await fingerprint(hasThemeWeek?[title,description,video,requestedWeek]:[title,description,video]);
   const repeated=await env.DB.prepare('SELECT id,request_fingerprint,deleted_at FROM loge_posts WHERE author_id=?1 AND request_id=?2').bind(user.id,nonce).first();
   if(repeated){sameRequest(repeated,hash);const time=await timing(env,user.id);return json({post:postView(await visiblePost(env,repeated.id,user.id)),nextPublicationAt:time.nextPublicationAt});}
+  // Resolve only after nonce replay: a successful old-week retry must retain
+  // its original post and theme even after the weekly selection changes.
+  const assignment=await postThemeAssignment(env,requestedWeek);
   const claim=crypto.randomUUID();
-  // D1 batches are transactional. The unique claim ties this INSERT to the
-  // successful conditional reservation, even with simultaneous submissions.
-  const results=await env.DB.batch([
+  const activeWeek=assignment?`EXISTS(SELECT 1 FROM loge_theme_weeks w WHERE w.week_start=?8 AND w.theme_id=?9 AND w.starts_at<=unixepoch() AND unixepoch()<w.ends_at)`:'1';
+  const reserveActiveWeek=assignment?`EXISTS(SELECT 1 FROM loge_theme_weeks w WHERE w.week_start=?4 AND w.theme_id=?5 AND w.starts_at<=unixepoch() AND unixepoch()<w.ends_at)`:'1';
+  // Every write rechecks the server-selected edition inside the transaction.
+  // The final assertion rolls back a reservation if the edition expires between
+  // statements, so a rejected theme choice cannot spend the publication quota.
+  const statements=[
     env.DB.prepare(`INSERT INTO loge_publication_limits(user_id,next_publish_at,claim_token)
       SELECT ?1,unixepoch()+${LOGE_WEEK_SECONDS},?2
-      WHERE NOT EXISTS(SELECT 1 FROM loge_posts WHERE author_id=?1 AND request_id=?3)
+      WHERE NOT EXISTS(SELECT 1 FROM loge_posts WHERE author_id=?1 AND request_id=?3) AND ${reserveActiveWeek}
       ON CONFLICT(user_id) DO UPDATE SET next_publish_at=excluded.next_publish_at,claim_token=excluded.claim_token
-      WHERE next_publish_at<=unixepoch() AND NOT EXISTS(SELECT 1 FROM loge_posts WHERE author_id=?1 AND request_id=?3)`).bind(user.id,claim,nonce),
+      WHERE next_publish_at<=unixepoch() AND NOT EXISTS(SELECT 1 FROM loge_posts WHERE author_id=?1 AND request_id=?3) AND ${reserveActiveWeek}`)
+      .bind(user.id,claim,nonce,...(assignment?[assignment.week,assignment.themeId]:[])),
     env.DB.prepare(`INSERT INTO loge_posts(author_id,request_id,request_fingerprint,youtube_id,title,description,created_at,updated_at)
       SELECT ?1,?2,?3,?4,?5,?6,q.next_publish_at-${LOGE_WEEK_SECONDS},q.next_publish_at-${LOGE_WEEK_SECONDS}
       FROM loge_publication_limits q WHERE q.user_id=?1 AND q.claim_token=?7
-      AND NOT EXISTS(SELECT 1 FROM loge_posts WHERE author_id=?1 AND request_id=?2)`).bind(user.id,nonce,hash,video,title,description,claim)
-  ]);
+      AND NOT EXISTS(SELECT 1 FROM loge_posts WHERE author_id=?1 AND request_id=?2) AND ${activeWeek}`)
+      .bind(user.id,nonce,hash,video,title,description,claim,...(assignment?[assignment.week,assignment.themeId]:[]))
+  ];
+  if(assignment){
+    statements.push(env.DB.prepare(`INSERT INTO loge_post_themes(post_id,theme_id,week_start)
+      SELECT p.id,?4,?5 FROM loge_posts p JOIN loge_publication_limits q ON q.user_id=p.author_id
+      WHERE p.author_id=?1 AND p.request_id=?2 AND q.claim_token=?3
+      AND EXISTS(SELECT 1 FROM loge_theme_weeks w WHERE w.week_start=?5 AND w.theme_id=?4 AND w.starts_at<=unixepoch() AND unixepoch()<w.ends_at)`)
+      .bind(user.id,nonce,claim,assignment.themeId,assignment.week));
+    statements.push(env.DB.prepare(`UPDATE loge_publication_limits SET next_publish_at=CASE WHEN EXISTS(
+      SELECT 1 FROM loge_posts p JOIN loge_post_themes pt ON pt.post_id=p.id
+      WHERE p.author_id=?1 AND p.request_id=?2 AND pt.theme_id=?4 AND pt.week_start=?5
+      ) THEN next_publish_at ELSE NULL END WHERE user_id=?1 AND claim_token=?3`)
+      .bind(user.id,nonce,claim,assignment.themeId,assignment.week));
+  }
+  let results;
+  try{results=await env.DB.batch(statements);}
+  catch(error){
+    if(assignment&&/NOT NULL constraint failed: loge_publication_limits.next_publish_at/.test(String(error?.message||error)))fail('Le thème de la semaine a changé. Recharge la page avant de publier.',409);
+    throw error;
+  }
   const row=await env.DB.prepare('SELECT id,request_fingerprint,deleted_at FROM loge_posts WHERE author_id=?1 AND request_id=?2').bind(user.id,nonce).first();
   const time=await timing(env,user.id);
   if(row){sameRequest(row,hash);return json({post:postView(await visiblePost(env,row.id,user.id)),nextPublicationAt:time.nextPublicationAt},results[1].meta.changes?201:200);}
+  if(assignment&&!await env.DB.prepare(`SELECT 1 AS active FROM loge_theme_weeks w
+    WHERE w.week_start=?1 AND w.theme_id=?2 AND w.starts_at<=unixepoch() AND unixepoch()<w.ends_at`)
+    .bind(assignment.week,assignment.themeId).first())fail('Le thème de la semaine a changé. Recharge la page avant de publier.',409);
   return json({error:'Tu peux publier une vidéo tous les sept jours.',nextPublicationAt:time.nextPublicationAt,serverNow:time.serverNow},429,{'Retry-After':String(Math.max(1,time.retryAfter))});
 }
 async function updatePost(request,env,user,id,json){
   await ownedPost(env,id,user.id);
   const body=await bodyOf(request);immutableVideo(body);
+  if(Object.hasOwn(body,'themeWeek'))fail('Le thème d’une publication ne peut pas être remplacé.');
   const title=titleOf(body.title),description=Object.hasOwn(body,'description')?clean(body.description,5000):null,revision=integer(body.revision,1);
   const result=await env.DB.prepare(`UPDATE loge_posts SET title=?1,description=COALESCE(?2,description),revision=revision+1,updated_at=unixepoch()
     WHERE id=?3 AND author_id=?4 AND revision=?5 AND deleted_at IS NULL`).bind(title,description,id,user.id,revision).run();
@@ -247,21 +285,21 @@ async function listComments(env,postId,url,json){
 async function memberPage(env,user,id,url,json){
   const tab=url.searchParams.get('tab')||'reflexions';
   if(tab==='favoris'&&id!==user.id)fail('Cette liste est privée.',403);
-  const member=await selfOf(env,id),self=await selfOf(env,user.id),after=cursor(url);
+  const member=await selfOf(env,id),self=await selfOf(env,user.id),after=cursor(url),currentTheme=await getCurrentTheme(env);
   if(tab==='favoris'){
     const rows=(await env.DB.prepare(`SELECT ${postFields},f.id AS favorite_id FROM loge_favorites f
       JOIN loge_posts p ON p.id=f.post_id JOIN users u ON u.id=p.author_id
       WHERE f.user_id=?1 AND p.deleted_at IS NULL AND (?2=0 OR f.id<?2) ORDER BY f.id DESC LIMIT 21`).bind(user.id,after).all()).results||[];
-    return json({member,self,posts:rows.slice(0,LOGE_PAGE_SIZE).map(row=>postView({...row,is_favorite:true})),next:rows.length>LOGE_PAGE_SIZE?rows[LOGE_PAGE_SIZE-1].favorite_id:null});
+    return json({member,self,currentTheme,posts:rows.slice(0,LOGE_PAGE_SIZE).map(row=>postView({...row,is_favorite:true})),next:rows.length>LOGE_PAGE_SIZE?rows[LOGE_PAGE_SIZE-1].favorite_id:null});
   }
   if(tab==='reflexions'){
     const rows=(await env.DB.prepare(postSelect+' WHERE p.author_id=?1 AND p.deleted_at IS NULL AND (?2=0 OR p.id<?2) ORDER BY p.id DESC LIMIT 21').bind(id,after).all()).results||[];
-    const result=page(await withFavorites(env,user.id,rows),postView);return json({member,self,posts:result.items,next:result.next});
+    const result=page(await withFavorites(env,user.id,rows),postView);return json({member,self,currentTheme,posts:result.items,next:result.next});
   }
   if(tab!=='interventions')fail('Vue invalide.');
   const rows=(await env.DB.prepare(`SELECT c.*,${authorFields},p.id AS target_post_id,p.title AS post_title,p.description AS post_description,
     p.youtube_id AS post_youtube_id,p.created_at AS post_created_at,p.updated_at AS post_updated_at,p.revision AS post_revision,p.author_id AS post_author_id,
-    pu.username AS post_username,pu.avatar_data IS NOT NULL AS post_has_avatar,
+    ${themeFields},pu.username AS post_username,pu.avatar_data IS NOT NULL AS post_has_avatar,
     (SELECT count(*) FROM loge_comments pc WHERE pc.post_id=p.id AND pc.deleted_at IS NULL) AS post_comment_count
     FROM loge_comments c JOIN users u ON u.id=c.author_id JOIN loge_posts p ON p.id=c.post_id JOIN users pu ON pu.id=p.author_id
     WHERE c.author_id=?1 AND p.author_id<>?1 AND c.deleted_at IS NULL AND p.deleted_at IS NULL AND (?2=0 OR c.id<?2)
@@ -271,9 +309,10 @@ async function memberPage(env,user,id,url,json){
     id:row.target_post_id,author_id:row.post_author_id,username:row.post_username,has_avatar:row.post_has_avatar,
     title:row.post_title,description:row.post_description,youtube_id:row.post_youtube_id,
     created_at:row.post_created_at,updated_at:row.post_updated_at,revision:row.post_revision,
+    theme_id:row.theme_id,theme_title:row.theme_title,theme_week:row.theme_week,
     comment_count:row.post_comment_count,is_favorite:favorites.has(row.target_post_id)
   })}));
-  return json({member,self,interventions:result.items,next:result.next});
+  return json({member,self,currentTheme,interventions:result.items,next:result.next});
 }
 
 export async function handleLoge(request,env,url,{getUser,json}){
@@ -282,12 +321,25 @@ export async function handleLoge(request,env,url,{getUser,json}){
   const writing=!['GET','HEAD','OPTIONS'].includes(request.method);
   if(writing?request.headers.get('X-WC-User')!==String(user.id):request.headers.has('X-WC-User')&&request.headers.get('X-WC-User')!==String(user.id))fail('Le compte connecté a changé. Recharge la page.',409);
   await ensureLogeTables(env);
+  await ensureThemeTables(env);
   const path=url.pathname.replace(/\/+$/,''),method=request.method;
+  const themePosts=/^\/api\/loge\/themes\/([1-9]\d*)\/posts$/.exec(path);
+  if(themePosts){
+    if(method!=='GET')fail('Méthode indisponible.',405);
+    const id=safeId(themePosts[1]),theme=await env.DB.prepare('SELECT id,title FROM loge_themes WHERE id=?1').bind(id).first();
+    if(!theme)fail('Thème introuvable.',404);
+    const after=cursor(url),rows=(await env.DB.prepare(postSelect+` WHERE p.deleted_at IS NULL
+      AND EXISTS(SELECT 1 FROM loge_post_themes pt WHERE pt.post_id=p.id AND pt.theme_id=?1)
+      AND (?2=0 OR p.id<?2) ORDER BY p.id DESC LIMIT 21`).bind(id,after).all()).results||[];
+    const result=page(await withFavorites(env,user.id,rows),postView),time=await timing(env,user.id);
+    return json({theme,self:await selfOf(env,user.id),currentTheme:await getCurrentTheme(env),posts:result.items,next:result.next,nextPublicationAt:time.nextPublicationAt,serverNow:time.serverNow});
+  }
+  if(path==='/api/loge/themes'||path.startsWith('/api/loge/themes/'))return handleThemes(request,env,url,user,json);
   if(path==='/api/loge'){
     if(method!=='GET')fail('Méthode indisponible.',405);
     const after=cursor(url),rows=(await env.DB.prepare(postSelect+' WHERE p.deleted_at IS NULL AND (?1=0 OR p.id<?1) ORDER BY p.id DESC LIMIT 21').bind(after).all()).results||[];
     const result=page(await withFavorites(env,user.id,rows),postView),time=await timing(env,user.id);
-    return json({self:await selfOf(env,user.id),posts:result.items,next:result.next,nextPublicationAt:time.nextPublicationAt,serverNow:time.serverNow});
+    return json({self:await selfOf(env,user.id),currentTheme:await getCurrentTheme(env),posts:result.items,next:result.next,nextPublicationAt:time.nextPublicationAt,serverNow:time.serverNow});
   }
   if(path==='/api/loge/posts'){
     if(method!=='POST')fail('Méthode indisponible.',405);return createPost(request,env,user,json);
@@ -314,7 +366,7 @@ export async function handleLoge(request,env,url,{getUser,json}){
   match=/^\/api\/loge\/posts\/([1-9]\d*)$/.exec(path);
   if(match){
     const id=safeId(match[1]);
-    if(method==='GET'){const time=await timing(env,user.id);return json({post:postView(await visiblePost(env,id,user.id)),self:await selfOf(env,user.id),nextPublicationAt:time.nextPublicationAt});}
+    if(method==='GET'){const time=await timing(env,user.id);return json({post:postView(await visiblePost(env,id,user.id)),self:await selfOf(env,user.id),currentTheme:await getCurrentTheme(env),nextPublicationAt:time.nextPublicationAt});}
     if(method==='PUT')return updatePost(request,env,user,id,json);
     if(method==='DELETE')return deletePost(request,env,user,id,json);
     fail('Méthode indisponible.',405);
