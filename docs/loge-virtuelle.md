@@ -8,10 +8,10 @@ La Loge est indépendante de l’ancienne Vidéographie, de ses contenus et des 
 
 ## Parcours
 
-- Fil récent : auteur, photo, date, titre, description, lecture YouTube et accès aux commentaires.
+- Fil récent : défilement vertical par vidéo avec arrêt sur le clip visible, auteur, date, titre, description et commentaires. Les commandes de gestion des vidéos se trouvent uniquement sur Mon profil, dans Réflexions.
 - Publication : titre de 140 caractères maximum, description de 5 000 caractères et lien YouTube. Les vidéos non répertoriées se partagent par lien ; les vidéos privées exigent des invitations YouTube et ne conviennent pas au fil commun. Un lien non répertorié reste partageable hors du site.
 - Une vidéo toutes les 168 heures à partir de sa publication dans la Loge. La suppression ne libère pas le droit de publier immédiatement. Le titre et la description sont modifiables ; l’identifiant vidéo est fixe après publication.
-- Commentaires dans la Loge : créer, modifier et supprimer ses propres interventions. La limite hebdomadaire ne s’applique pas aux commentaires.
+- Commentaires dans la Loge : panneau dédié, bulles de texte et menu discret pour modifier ou supprimer ses propres interventions. La limite hebdomadaire ne s’applique pas aux commentaires.
 - Profil `/loge-virtuelle/membres/:id` : onglets Réflexions et Interventions. Le second rassemble les commentaires sous les publications d’autres membres et permet de retrouver leur contexte, y compris au-delà de la première page de commentaires.
 
 ## Texte exact de Game Master Blanc
@@ -30,8 +30,16 @@ La réservation technique du droit de publication et l’insertion sont atomique
 
 Toutes les API sont privées et hors cache. Les écritures vérifient l’origine, le format JSON, le compte actif, le niveau et la propriété des éléments. Les liens vidéo sont normalisés avec le validateur YouTube existant ; aucun HTML de lecteur externe n’est accepté. Les listes sont paginées avec des curseurs stables.
 
-Le client charge le lecteur YouTube après un clic, sans miniature distante ni lecture automatique. L’ouverture d’une vidéo suspend la musique ; une reprise de la musique ou l’ouverture d’une autre vidéo ferme le lecteur précédent. Les requêtes et lecteurs sont arrêtés à la navigation ou au changement de compte.
+Le contrôleur `public/loge-video.js` utilise l’API IFrame officielle de YouTube. Trois lecteurs au maximum sont préparés pour le clip courant et ses voisins. La lecture automatique ne démarre que lorsque plus de la moitié de l’iframe est visible ; le clip précédent est mis en pause. Elle commence en sourdine, avec une commande de son extérieure au lecteur. Un blocage de lecture automatique déclenche au maximum une nouvelle tentative muette, puis laisse les contrôles natifs disponibles. Aucun bouton de lecture intermédiaire, texte permanent de repli YouTube ou bouton Fermer le lecteur n’est ajouté. Le chargement du SDK est partagé et peut être repris après une erreur réseau.
+
+La navigation interne conserve la session, les vues et leurs positions de défilement. Les onglets du profil sont conservés en mémoire pour éviter l’écran de chargement à chaque aller-retour. Les lecteurs de la vue quittée sont détruits pour garder une borne globale de trois. Les requêtes sont liées à leur vue et les réponses tardives ne remplacent pas une autre page. Au changement de compte, les données et brouillons en mémoire sont effacés. La reprise de la musique suspend les vidéos. Une fois la pause confirmée, la commande Lecture native de YouTube permet de reprendre la vidéo et suspend la musique ; le passage à un autre clip et la commande de son restent disponibles. Les relances automatiques restent bloquées pendant cette suspension.
 
 ## Vérifications
 
 Accès anonyme et niveaux 32/33, administrateurs, révocation, profils, propriété et conflits ; liens invalides, tailles et origine ; soumissions concurrentes, rejeu, suppression et fin des sept jours ; pagination et commentaire ciblé ; interface sur mobile et ordinateur, brouillons après erreur, navigation et changement de compte. Les suites existantes contrôlent aussi Playlist suspendue, les anciennes pages retirées et les paroles. Les tests client utilisent un DOM léger et les vrais handlers ; ils vérifient les formulaires, les erreurs, les lecteurs et les changements de compte, sans simuler la mise en page ni la lecture YouTube réelle. Aucun compte ou contenu de test n’est créé en production.
+
+## Ajustements associés
+
+Les découvertes de même échelon sont regroupées dans un seul bloc d’accueil : à 33, Game Master Blanc puis Loge virtuelle, chacun sur sa ligne. Les signes déjà résolus utilisent le libellé « Ce signe est déjà trouvé. ». Le bouton des membres d’un échelon utilise une icône SVG géométriquement centrée pour ses états plus et moins.
+
+Références du lecteur : [API IFrame](https://developers.google.com/youtube/iframe_api_reference), [paramètres](https://developers.google.com/youtube/player_parameters), [lecture automatique et visibilité](https://developers.google.com/youtube/terms/required-minimum-functionality).

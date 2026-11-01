@@ -14,7 +14,7 @@ test('Jesus and Messie solve each wine sign once and preserve the same historica
       const result=await submit(first);assert.equal(result.gained,1);
       assert.deepEqual(result.state.nodes.find(n=>n.id===node).found.find(a=>a.id===id),{id,label:'Jésus (Messie)'});
       f.sql.exec('UPDATE echelon_attempts SET next_at=0');
-      const duplicate=await submit(second);assert.equal(duplicate.gained,0);assert.equal(duplicate.state.echelon,result.state.echelon);
+      const duplicate=await submit(second);assert.equal(duplicate.gained,0);assert.equal(duplicate.state.echelon,result.state.echelon);assert.equal(duplicate.message,'Ce signe est déjà trouvé.');
       assert.equal(f.sql.prepare('SELECT count(*) AS n FROM riddle_progress WHERE user_id=3 AND riddle_id=?').get(id).n,1);
       const old=buildGameState([{riddle_id:id,solved_at:'now'}]);
       assert.equal(old.nodes.find(n=>n.id===node).found.find(a=>a.id===id).label,'Jésus (Messie)');

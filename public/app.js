@@ -153,6 +153,11 @@ function coupePageTimer() {
 }
 
 async function route() {
+  const destination=location.pathname+location.search+location.hash;
+  if(window.WCLoge?.canNavigate?.(destination)){
+    closeNav();renderNav();
+    return window.WCLoge.navigate(destination);
+  }
   window.WCPrivate?.leave();
   window.WCPlaylists?.leave();
   window.WCLoge?.leave();

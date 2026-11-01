@@ -28,14 +28,13 @@ window.WCRoadmap=(()=>{
     return `<li id="palier-${level}" class="road-step ${past?'is-past':current?'is-current':'is-future'} ${visible&&count?'is-populated':''}" style="--star-hue:${hue};--next-hue:${nextHue}" ${current?'aria-current="step"':''}>
       <span class="road-node" aria-hidden="true" ${past||current?`data-stellar="${hue}" data-star-seed="${level}"`:''}><span class="road-sphere"></span></span><div class="road-step-content">
       <div class="road-step-title"><h2>Échelon ${level}</h2>${current?'<span class="road-here">Tu es ici</span>':''}</div>
-      ${visible?(count?`<button class="road-people-toggle" data-members="${level}" aria-expanded="false" aria-controls="reveal-${level}"><span>${count} personne${count>1?'s':''}<span class="sr-only"> à l’échelon ${level}</span></span><span class="road-plus" aria-hidden="true">+</span></button>`:'<p class="road-empty">0 personne</p>'):''}
+      ${visible?(count?`<button class="road-people-toggle" data-members="${level}" aria-expanded="false" aria-controls="reveal-${level}"><span>${count} personne${count>1?'s':''}<span class="sr-only"> à l’échelon ${level}</span></span><span class="road-plus" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M6 12h12"/><path class="road-plus-vertical" d="M12 6v12"/></svg></span></button>`:'<p class="road-empty">0 personne</p>'):''}
       ${visible?`<div id="reveal-${level}" class="road-members-reveal" aria-hidden="true" inert><div class="road-members-clip"><div id="members-${level}" class="road-members"></div></div></div>`:''}</div></li>`;
   }
   function toggleMembers(level){
     const box=document.getElementById('members-'+level),toggle=app.querySelector(`[data-members="${level}"]`);
     const panel=document.getElementById('reveal-'+level),open=toggle.getAttribute('aria-expanded')!=='true';
     toggle.setAttribute('aria-expanded',String(open));
-    toggle.querySelector('.road-plus').textContent=open?'−':'+';
     if(open&&!box.dataset.loaded)showMembers(level);
     panel.inert=!open;panel.setAttribute('aria-hidden',String(!open));panel.classList.toggle('is-open',open);
   }

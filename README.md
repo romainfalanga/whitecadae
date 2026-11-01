@@ -54,7 +54,7 @@ Lors de sa réactivation, les playlists restent enregistrées par compte dans D1
 
 ## Loge virtuelle
 
-La Loge est indépendante de l’ancienne Vidéographie. Le serveur contrôle le niveau réel 33 pour toutes ses API. Chaque membre publie au maximum une vidéo toutes les 168 heures avec un titre, une description et un lien YouTube ; la vidéo reste hébergée chez YouTube. Une suppression ne réinitialise pas le délai. Les profils réunissent les réflexions et les commentaires laissés sur les publications des autres membres. Voir [docs/loge-virtuelle.md](docs/loge-virtuelle.md) pour les règles et les vérifications.
+La Loge est indépendante de l’ancienne Vidéographie. Le serveur contrôle le niveau réel 33 pour toutes ses API. Chaque membre publie au maximum une vidéo toutes les 168 heures avec un titre, une description et un lien YouTube ; la vidéo reste hébergée chez YouTube. Une suppression ne réinitialise pas le délai. Le fil défile vidéo par vidéo, avec lecture automatique muette de la vidéo visible et préchargement limité aux vidéos proches. Les profils réunissent les réflexions et les commentaires laissés sur les publications des autres membres, avec des onglets conservés en mémoire pendant la navigation. La modification et la suppression des publications se font uniquement dans « Mon profil », onglet « Réflexions ». Voir [docs/loge-virtuelle.md](docs/loge-virtuelle.md) pour les règles et les vérifications.
 
 ## Roadmap
 

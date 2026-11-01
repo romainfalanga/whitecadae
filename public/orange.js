@@ -11,7 +11,9 @@ async function pageOrange() {
   try {
     const data = await api("/api/orange");
     if (stale(epoch)) return;
-    document.getElementById("orange-openings").innerHTML = data.openings.map(item => `<div class="orange-opening"><span>Échelon ${item.level}</span><strong class="opening-title">${esc(item.title)}</strong>${item.paragraph?`<p class="orange-opening-story">${esc(item.paragraph)}</p>`:""}</div>`).join("");
+    const groups=new Map();
+    for(const item of data.openings){if(!groups.has(item.level))groups.set(item.level,[]);groups.get(item.level).push(item);}
+    document.getElementById("orange-openings").innerHTML = [...groups].map(([level,items])=>`<div class="orange-opening${items.length>1?' is-grouped':''}"><span>Échelon ${level}</span><div class="opening-items">${items.map(item=>`<strong class="opening-title">${esc(item.title)}</strong>${item.paragraph?`<p class="orange-opening-story">${esc(item.paragraph)}</p>`:''}`).join('')}</div></div>`).join('');
   } catch { /* The original welcome remains readable if access loading fails. */ }
 }
 

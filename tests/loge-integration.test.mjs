@@ -10,6 +10,7 @@ const ids=NODES.flatMap(node=>node.answers.map(answer=>answer.id));
 const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const navSource=source.slice(source.indexOf('function renderNav()'),source.indexOf('/* ---',source.indexOf('function renderNav()')));
 const destination=source.slice(source.indexOf('function accountDestination()'),source.indexOf('\nfunction pageLogin()'));
+const routeSource=source.slice(source.indexOf('async function route()'),source.indexOf('\nfunction renderNav()'));
 function menu(state){
   const nav={querySelectorAll:()=>[]};
   runInNewContext(navSource+'\nrenderNav()',{nav,state,document:{getElementById:()=>null},location:{pathname:'/loge-virtuelle'}});
@@ -61,4 +62,13 @@ test('login returns preserve Loge posts, profiles and focused comments without a
     const result=runInNewContext(destination+'\naccountDestination()',{URLSearchParams,location:{search:'?retour='+encodeURIComponent(value)}});
     assert.equal(result,valid.includes(value)?value:'/',value);
   }
+});
+
+test('internal Loge navigation retains its session and scroll instead of resetting the SPA route',async()=>{
+  const calls=[];
+  const context={location:{pathname:'/loge-virtuelle/membres/11',search:'?onglet=interventions',hash:''},
+    window:{WCLoge:{canNavigate:path=>{calls.push(['check',path]);return true;},navigate:async path=>calls.push(['navigate',path]),leave(){throw Error('Should retain the Loge session');}},scrollTo(){throw Error('Should retain scroll');}},
+    closeNav:()=>calls.push('close-menu'),renderNav:()=>calls.push('nav')};
+  await runInNewContext(routeSource+'\nroute()',context);
+  assert.deepEqual(calls,[['check','/loge-virtuelle/membres/11?onglet=interventions'],'close-menu','nav',['navigate','/loge-virtuelle/membres/11?onglet=interventions']]);
 });

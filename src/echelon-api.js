@@ -80,7 +80,7 @@ export async function handleEchelon(request,env,path,{getUser,json}){
   const now=Date.now();
   const claim=await env.DB.prepare('INSERT INTO echelon_attempts(user_id,next_at) VALUES (?1,?2) ON CONFLICT(user_id) DO UPDATE SET next_at=excluded.next_at WHERE echelon_attempts.next_at<=?3').bind(id,now+ATTEMPT_DELAY_MS,now).run();
   if(!claim.meta.changes){const wait=await env.DB.prepare('SELECT next_at FROM echelon_attempts WHERE user_id=?1').bind(id).first();return json({error:'Prends un instant avant de réessayer.',attenteMs:Math.max(0,wait.next_at-now)},429);}
-  if(n.answers.every(a=>p.solved.has(a.id)))return json({ok:true,gained:0,message:'Cette lecture est déjà trouvée.',state:await stateFor(env,id)});
+  if(n.answers.every(a=>p.solved.has(a.id)))return json({ok:true,gained:0,message:'Ce signe est déjà trouvé.',state:await stateFor(env,id)});
   let prise;
   if(n.kind==='workshop'){
     const valid=validateConstruction(n.board,body.draft);
@@ -89,7 +89,7 @@ export async function handleEchelon(request,env,path,{getUser,json}){
   const fresh=prise?.prises||[];
   const known=!!prise?.echo?.length&&prise.echo.every(t=>t.ok);
   if(!fresh.length){
-    return json({ok:known,gained:0,message:known?'Cette lecture est déjà trouvée.':n.kind==='workshop'?'Cette réponse n’est pas encore la bonne.':'Ce signe n’est pas le bon.',echo:prise?.echo||[],state:await stateFor(env,id)});
+    return json({ok:known,gained:0,message:known?'Ce signe est déjà trouvé.':n.kind==='workshop'?'Cette réponse n’est pas encore la bonne.':'Ce signe n’est pas le bon.',echo:prise?.echo||[],state:await stateFor(env,id)});
   }
   const ids=[];
   for(const v of fresh){const ans=n.answers.find(a=>a.id===v.id);for(let i=0;i<ans.parties.length;i++)if(v.masque&(1<<i))ids.push(v.id+'.p'+i);if(v.complet)ids.push(v.id);}

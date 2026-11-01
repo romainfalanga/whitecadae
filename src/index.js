@@ -105,8 +105,8 @@ async function serveMusic(request, env) {
 
 /* ------------------------------------------------- en-têtes de sécurité ---
 
-   Le vrai verrou est `script-src 'self'` : le site n'exécute que ses propres
-   fichiers. Si une chaîne écrite par un membre parvenait un jour à s'échapper
+   `script-src` limite les scripts aux fichiers du site et à l’API officielle
+   du lecteur YouTube. Si une chaîne écrite par un membre parvenait à s'échapper
    de l'échappement du client, le navigateur refuserait quand même de la
    lancer. Il n'y a aucun script en ligne dans le site : c'est pourquoi le
    repli d'avatar, qui vivait dans un attribut `onerror`, a été déplacé dans
@@ -120,7 +120,7 @@ async function serveMusic(request, env) {
    site d'encadrer celui-ci pour détourner les clics d'un membre.            */
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' https://www.youtube.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "media-src 'self'",

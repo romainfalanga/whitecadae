@@ -90,11 +90,14 @@ test('the home omits the final block at 33 and keeps the discovered-page list in
   const orange=readFileSync(new URL('../public/orange.js',import.meta.url),'utf8');
   const app={innerHTML:''},openings={innerHTML:''};
   const context={app,document:{title:'',getElementById:id=>id==='orange-openings'?openings:null},window:{addEventListener(){}},esc:s=>String(s),newEpoch:()=>1,stale:()=>false,
-    api:async()=>({openings:[{id:'page-gameMasterBlanc',title:'Game Master Blanc',level:33,href:'/game-master-blanc'}],continuation:{level:33,label:'Game Master Blanc',href:'/game-master-blanc'}}),
+    api:async()=>({openings:[{id:'page-gameMasterBlanc',title:'Game Master Blanc',level:33,href:'/game-master-blanc'},{id:'page-loge',title:'Loge virtuelle',level:33,href:'/loge-virtuelle'}],continuation:{level:33,label:'Game Master Blanc',href:'/game-master-blanc'}}),
     continuationMarkup(){throw Error('The home must not render a final block');}};
   runInNewContext(orange,context);await context.pageOrange();
   assert.doesNotMatch(app.innerHTML,/orange-continuation|game-gate|href="\/game-master-blanc"/);
   assert.match(openings.innerHTML,/<strong class="opening-title">Game Master Blanc<\/strong>/);
+  assert.equal((openings.innerHTML.match(/Échelon 33/g)||[]).length,1);
+  assert.equal((openings.innerHTML.match(/class="orange-opening/g)||[]).length,1);
+  assert.ok(openings.innerHTML.indexOf('Game Master Blanc')<openings.innerHTML.indexOf('Loge virtuelle'));
   assert.doesNotMatch(openings.innerHTML,/<a /);
   const client=readFileSync(new URL('../public/private-pages.js',import.meta.url),'utf8');
   assert.doesNotMatch(client,/Extériorise tes réflexions|Loge virtuelle|y83ewhS49/);

@@ -29,6 +29,7 @@ test('every admitted guess starts exactly 33 seconds, including mistakes, parts,
   for(const [body,ok,gained] of cases){
     const result=await call('/api/signes/guess',body);
     assert.equal(result.status,200);assert.equal(result.ok,ok);assert.equal(result.gained,gained);
+    if(body.id==='eg-02'&&ok&&gained===0)assert.equal(result.message,'Ce signe est déjà trouvé.');
     assert.equal(result.state.attenteMs,33000);
     const deadline=sql.prepare('SELECT next_at FROM echelon_attempts WHERE user_id=1').get().next_at;
     assert.equal(deadline,Date.now()+33000);
