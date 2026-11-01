@@ -36,7 +36,7 @@ function youtubeAPI(){
 
 // Keep YouTube's native controls hidden; the optional external timeline uses
 // only the official time, duration and seek APIs and never covers the iframe.
-// Audible autoplay is attempted once; browser policy can require a native gesture.
+// Videos start only through the native player after a deliberate user action.
 export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}}={}){
   const records=new Map();let active=null,destroyed=false,paused=false,musicClip=null,musicPlaying=false,nativeExitPending=null,progressTimer=null;
   const connected=record=>record.container.isConnected!==false;
@@ -61,10 +61,10 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
   function clearProgress(){if(progressTimer!==null){clearInterval(progressTimer);progressTimer=null;}}
   function trackProgress(){
     const record=active;
-    if(!record?.range||!timelineEligible(record)||record.blocked||!(record.playing||record.playPending)){clearProgress();return;}
+    if(!record?.range||!timelineEligible(record)||record.blocked||!(record.playing)){clearProgress();return;}
     if(progressTimer===null)progressTimer=setInterval(()=>{
       const latest=active;
-      if(!latest?.range||!timelineEligible(latest)||latest.blocked||!(latest.playing||latest.playPending)){clearProgress();if(latest)syncTimeline(latest);return;}
+      if(!latest?.range||!timelineEligible(latest)||latest.blocked||!(latest.playing)){clearProgress();if(latest)syncTimeline(latest);return;}
       syncTimeline(latest);
     },250);
   }
@@ -107,20 +107,13 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     // dispatches its event synchronously while a player is being removed.
     queueMicrotask(()=>{if(!destroyed)refresh();});
   }
-  function stop(record){invoke(record,'pauseVideo');record.playing=false;record.playPending=false;record.container.classList.remove('is-playing');syncTimeline(record);if(record===active)clearProgress();}
+  function stop(record){invoke(record,'pauseVideo');record.playing=false;record.container.classList.remove('is-playing');syncTimeline(record);if(record===active)clearProgress();}
   function stopOthers(record){for(const other of records.values())if(other!==record)stop(other);}
-  function play(record){
-    if(!record.ready||record.failed||record.blocked||!eligible(record)||musicClip===record.key||record.attempted)return;
-    record.attempted=true;stopOthers(record);
-    // Synchronous pause before playVideo prevents concurrent music playback.
-    window.WCPlayer?.pause();
-    invoke(record,'unMute');record.playPending=true;invoke(record,'playVideo');
-  }
   function release(record){
     exitOwnedFullscreen(record);
     record.token++;stop(record);observer?.unobserve(record.observed||record.container);
     try{record.player?.destroy?.();}catch{/* Removing the iframe still stops playback. */}
-    record.player=null;record.ready=false;record.attempted=false;record.musicPauseConfirmed=false;record.playPending=false;record.state=null;
+    record.player=null;record.ready=false;record.musicPauseConfirmed=false;record.state=null;
     record.iframe?.remove();record.iframe=null;
     syncTimeline(record);
     observe(record);
@@ -149,19 +142,18 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
           if(!live()){try{event.target.pauseVideo();event.target.destroy();}catch{}return;}
           record.player=event.target;record.ready=true;
           // Loading can change layout or finish after the user has scrolled.
-          // Re-select using the iframe itself before any autoplay attempt.
+          // Re-select using the iframe itself; readiness never starts playback.
           refresh();if(!eligible(record))stop(record);
         },
         onStateChange:event=>{
           if(!live())return;
           record.state=event.data;
-          if([0,1,2].includes(event.data))record.playPending=false;
           if(event.data===1){
-            // No playVideo command is issued while musicClip is locked. A
+            // The site never requests playback. A
             // PLAYING event after the requested PAUSED state can therefore
             // resume native playback; an earlier in-flight event is stopped.
             if(!eligible(record)||(musicClip===record.key&&!record.musicPauseConfirmed)){stop(record);return;}
-            stopOthers(record);window.WCPlayer?.pause();record.attempted=true;record.blocked=false;record.playing=true;record.container.classList.add('is-playing');
+            stopOthers(record);window.WCPlayer?.pause();record.blocked=false;record.playing=true;record.container.classList.add('is-playing');
           }else if(event.data===0||event.data===2){
             record.playing=false;record.container.classList.remove('is-playing');
             if(event.data===2&&musicClip===record.key)record.musicPauseConfirmed=true;
@@ -172,7 +164,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
           if(!live())return;
           // No muted fallback or automatic retry: leave the native iframe
           // available for a real user gesture after the browser's refusal.
-          record.playPending=false;record.blocked=true;
+          record.blocked=true;
           refreshTimelines();
         },
         onError:event=>{if(live())unavailable(record,Error('Vidéo indisponible ('+event.data+').'));}
@@ -195,7 +187,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     const next=visible[0]||null;
     if(next!==active){
       if(active)stop(active);active=next;musicClip=null;
-      if(active){active.attempted=false;active.blocked=false;}
+      if(active)active.blocked=false;
     }
     // Keep at most the current/nearest player and two adjacent players warm.
     const anchor=fullscreenRecord()||active||list.filter(record=>!record.failed).sort((a,b)=>b.ratio-a.ratio||a.distance-b.distance)[0];
@@ -203,7 +195,6 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     const keep=new Set(index<0?[]:list.slice(start,start+3));
     for(const record of records.values())if(!keep.has(record)&&record.iframe)release(record);
     for(const record of keep)warm(record);
-    if(active)play(active);
   }
   function viewport(){
     const screen={top:0,left:0,right:window.innerWidth,bottom:window.innerHeight};
@@ -236,7 +227,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
   }
   function visibility(){
     if(document.hidden){for(const record of records.values())stop(record);}
-    else if(current()){if(active)active.attempted=false;refresh();}
+    else if(current())refresh();
     refreshTimelines();
   }
   function music(event){
@@ -249,8 +240,8 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
       musicClip=active.key;
       const state=invoke(active,'getPlayerState');
       // pauseVideo need not emit another PAUSED event for an already-paused
-      // player. Accept that known state, except while a scripted play is pending.
-      active.musicPauseConfirmed=!active.playPending&&(state===2||(state===undefined&&active.state===2)||(active.blocked&&[-1,0,5].includes(state)));
+      // player. Accept that known state without requesting playback.
+      active.musicPauseConfirmed=(state===2||(state===undefined&&active.state===2)||(active.blocked&&[-1,0,5].includes(state)));
     }
     for(const record of records.values())stop(record);
     refreshTimelines();
@@ -273,7 +264,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     remove(id){const record=records.get(String(id));if(!record)return;release(record);attachTimeline(record,null);observer?.unobserve(record.observed);record.label?.remove();records.delete(record.key);if(active===record){active=null;musicClip=null;}refresh();},
     refresh,
     pause(){if(destroyed)return;paused=true;exitOwnedFullscreen();observer?.disconnect();for(const record of records.values())stop(record);refreshTimelines();},
-    resume(){if(destroyed)return;paused=false;for(const record of records.values())observe(record);if(active)active.attempted=false;refresh();},
+    resume(){if(destroyed)return;paused=false;for(const record of records.values())observe(record);refresh();},
     destroy(){
       if(destroyed)return;destroyed=true;clearProgress();observer?.disconnect();
       exitOwnedFullscreen();

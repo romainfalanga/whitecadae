@@ -40,7 +40,7 @@ async function harness({apiReady=true,previousReady}={}){
   const window=new Bus();window.innerWidth=400;window.innerHeight=800;window.WCPlayer={pause(){musicPauses++;const event=new Event('wc:music');event.detail={playing:false};window.dispatchEvent(event);}};
   let musicPauses=0,timerSequence=0;const players=[],observers=[],feeds=[],timers=new Map();
   class Player{
-    constructor(iframe,options){this.iframe=iframe;this.events=options.events;this.calls=[];this.muted=true;this.state=-1;this.time=0;this.duration=180;this.seeks=[];players.push(this);}
+    constructor(iframe,options){this.iframe=iframe;this.events=options.events;this.calls=[];this.muted=new URL(iframe.src).searchParams.get('mute')==='1';this.state=-1;this.time=0;this.duration=180;this.seeks=[];players.push(this);}
     emit(type,data){if(type==='onStateChange')this.state=data;this.events[type]?.({target:this,data});}
     mute(){this.calls.push('mute');this.muted=true;}
     unMute(){this.calls.push('unMute');this.muted=false;}
@@ -84,18 +84,18 @@ test('warm loading is bounded to three native iframes with safe official API par
       assert.match(iframe.getAttribute('allow'),/autoplay/);assert.equal(iframe.getAttribute('referrerpolicy'),'strict-origin-when-cross-origin');
     }
     for(const player of h.players)player.emit('onReady');
-    assert.equal(h.players[0].count('play'),1);assert.equal(h.players[1].count('play'),0);assert.equal(h.players[2].count('play'),0);
-    assert.ok(h.musicPauses>=1);assert.equal(h.document.querySelectorAll('button').length,0);
-    assert.equal(h.players[0].muted,false);assert.equal(h.players[0].count('mute'),0);assert.ok(h.players[0].calls.indexOf('unMute')<h.players[0].calls.indexOf('play'));
+    assert.equal(h.players[0].count('play'),0);assert.equal(h.players[1].count('play'),0);assert.equal(h.players[2].count('play'),0);
+    assert.equal(h.musicPauses,0);assert.equal(h.document.querySelectorAll('button').length,0);
+    assert.equal(h.players[0].muted,false);assert.equal(h.players[0].count('mute'),0);assert.equal(h.players[0].count('unMute'),0);
     assert.equal(h.players[1].count('unMute'),0);assert.equal(h.players[2].count('unMute'),0);
     for(const node of containers)node.box={...node.box,top:(node.index-10)*800,bottom:(node.index-9)*800};feed.refresh();await tick();
     assert.equal(h.document.querySelectorAll('iframe').length,3);
     assert.equal(h.players.slice(0,3).every(player=>player.count('destroy')===1),true);
     assert.equal(h.players.length,6);
     for(const player of h.players.slice(3))player.emit('onReady');
-    assert.equal(h.players.slice(3).filter(player=>player.count('play')===1).length,1);
+    assert.equal(h.players.slice(3).filter(player=>player.count('play')>0).length,0);
     // Reload/resize never overrides a user's pause with another scripted play.
-    const current=h.players.slice(3).find(player=>player.count('play')===1);current.emit('onStateChange',2);feed.refresh();assert.equal(current.count('play'),1);
+    const current=h.players[4];current.emit('onStateChange',1);current.emit('onStateChange',2);feed.refresh();assert.equal(current.count('play'),0);
   }finally{await h.close();}
 });
 
@@ -107,13 +107,13 @@ test('only more than half-visible video plays; switching pauses the previous pla
     one.box={...one.box,top:-400,bottom:400};two.box={...two.box,top:400,bottom:1200};
     io.emit([[a.iframe,.5],[b.iframe,.5]]);const before=a.count('play');a.emit('onStateChange',1);assert.equal(a.count('play'),before);assert.ok(a.count('pause')>0);
     one.box={...one.box,top:-408,bottom:392};two.box={...two.box,top:392,bottom:1192};
-    io.emit([[a.iframe,.49],[b.iframe,.51]]);assert.equal(b.count('play'),1);assert.ok(a.count('pause')>0);
+    io.emit([[a.iframe,.49],[b.iframe,.51]]);assert.equal(b.count('play'),0);assert.ok(a.count('pause')>0);
     a.emit('onStateChange',1);assert.ok(a.count('pause')>1);assert.equal(one.classList.contains('is-playing'),false);
     b.emit('onStateChange',1);assert.equal(two.classList.contains('is-playing'),true);
   }finally{await h.close();}
 });
 
-test('audible autoplay has no custom control or muted retry; blocked playback remains available to native gestures',async()=>{
+test('initial playback waits for a native gesture without adding controls or automatic retries',async()=>{
   const h=await harness(),feed=h.feed(),node=h.container();
   try{
     feed.add(h.post(1),node);await tick();const player=h.players[0];player.emit('onReady');
@@ -143,7 +143,7 @@ test('music, hidden tabs, navigation suspension and detached caches cannot resta
     const music=new Event('wc:music');music.detail={playing:true};h.window.dispatchEvent(music);
     const count=a.count('play');feed.refresh();assert.equal(a.count('play'),count);a.emit('onStateChange',1);assert.equal(one.classList.contains('is-playing'),false);
     a.emit('onStateChange',2);a.emit('onStateChange',1);assert.equal(a.count('play'),count);assert.equal(one.classList.contains('is-playing'),true);
-    h.window.dispatchEvent(music);one.box={...one.box,top:-800,bottom:0};two.box={...two.box,top:0,bottom:800};feed.refresh();assert.equal(b.count('play'),1);
+    h.window.dispatchEvent(music);one.box={...one.box,top:-800,bottom:0};two.box={...two.box,top:0,bottom:800};feed.refresh();assert.equal(b.count('play'),0);
   }finally{await h.close();}
 });
 
@@ -177,13 +177,13 @@ test('an already-paused native player can resume after music without waiting for
   }finally{await h.close();}
 });
 
-test('a cached PAUSED state does not unlock a scripted play still in transit when music starts',async()=>{
+test('an initially paused clip waits through music changes and starts only through its native player',async()=>{
   const h=await harness(),feed=h.feed(),container=h.container();
   try{
     feed.add(h.post(1),container);await tick();const player=h.players[0];player.state=2;player.emit('onReady');
-    const music=new Event('wc:music');music.detail={playing:true};h.window.dispatchEvent(music);
-    player.emit('onStateChange',1);assert.equal(container.classList.contains('is-playing'),false);
-    player.emit('onStateChange',2);player.emit('onStateChange',1);assert.equal(container.classList.contains('is-playing'),true);
+    const music=new Event('wc:music');music.detail={playing:true};h.window.dispatchEvent(music);feed.refresh();
+    assert.equal(player.count('play'),0);assert.equal(container.classList.contains('is-playing'),false);
+    player.emit('onStateChange',1);assert.equal(container.classList.contains('is-playing'),true);assert.equal(player.count('play'),0);
   }finally{await h.close();}
 });
 
@@ -219,7 +219,7 @@ test('remove/update/errors release players and expose one compact unavailable la
     feed.add({...h.post(1),title:'Titre corrigé'},node);assert.equal(h.players.length,1);assert.equal(old.iframe.title,'Vidéo : Titre corrigé');
     old.emit('onError',150);assert.equal(node.querySelectorAll('iframe').length,0);assert.equal(node.querySelectorAll('button').length,0);assert.equal(node.querySelectorAll('p').length,1);assert.equal(errors.length,2);
     feed.refresh();assert.equal(h.players.length,1);
-    feed.remove(1);old.emit('onReady');assert.equal(old.count('play'),1);assert.equal(node.children.length,0);
+    feed.remove(1);old.emit('onReady');assert.equal(old.count('play'),0);assert.equal(node.children.length,0);
   }finally{await h.close();}
 });
 
@@ -241,7 +241,7 @@ test('a later visit can recover from API load failure without retrying the faile
     first.refresh();assert.equal(h.document.querySelectorAll('script').length,0);first.destroy();a.remove();
     const second=h.feed(),b=h.container();second.add(h.post(2),b);
     assert.equal(h.document.querySelectorAll('script').length,1);assert.notEqual(h.document.querySelector('script'),failed);
-    h.api();await tick();assert.equal(h.players.length,1);h.players[0].emit('onReady');assert.equal(h.players[0].count('play'),1);
+    h.api();await tick();assert.equal(h.players.length,1);h.players[0].emit('onReady');assert.equal(h.players[0].count('play'),0);
   }finally{await h.close();}
 });
 
@@ -256,11 +256,11 @@ test('visibility measures and observes the actual iframe, including a layout cha
     player.emit('onReady');assert.equal(player.count('play'),0);
     iframe.frameBox={top:-400,left:0,right:400,bottom:400,width:400,height:800};
     io.emit([[iframe,.5]]);assert.equal(player.count('play'),0);
-    iframe.frameBox={...iframe.frameBox,top:-392,bottom:408};io.emit([[iframe,.51]]);assert.equal(player.count('play'),1);
+    iframe.frameBox={...iframe.frameBox,top:-392,bottom:408};io.emit([[iframe,.51]]);assert.equal(player.count('play'),0);
     // Even before an observer delivery, a fresh geometry check prevents a
     // stale autoplay or native PLAYING event from restarting an offscreen player.
     iframe.frameBox={...iframe.frameBox,top:900,bottom:1700};
-    player.emit('onAutoplayBlocked');player.emit('onStateChange',1);assert.equal(player.count('play'),1);assert.equal(container.classList.contains('is-playing'),false);
+    player.emit('onAutoplayBlocked');player.emit('onStateChange',1);assert.equal(player.count('play'),0);assert.equal(container.classList.contains('is-playing'),false);
   }finally{await h.close();}
 });
 
@@ -273,7 +273,7 @@ test('YouTube native fullscreen ignores reel clipping and pauses other visible f
     const selected=h.players[2],iframe=selected.iframe,src=iframe.src;selected.time=37;
     iframe.frameBox={top:0,left:0,right:400,bottom:800,width:400,height:800};h.players[1].iframe.frameBox={...iframe.frameBox};
     h.document.fullscreenElement=iframe;h.document.dispatchEvent(new Event('fullscreenchange'));await tick();
-    assert.equal(selected.count('play'),1);assert.equal(iframe.src,src);assert.equal(selected.time,37);
+    assert.equal(selected.count('play'),0);selected.emit('onStateChange',1);assert.equal(iframe.src,src);assert.equal(selected.time,37);
     assert.equal(h.document.querySelectorAll('iframe').length,3);assert.equal(h.document.querySelectorAll('button').length,0);
     const other=h.players[1];other.emit('onStateChange',1);assert.equal(other.iframe.parentNode.classList.contains('is-playing'),false);assert.ok(other.count('pause')>0);
     assert.equal(selected.iframe,media[2].querySelector('iframe'));assert.equal(selected.count('destroy'),0);
@@ -378,19 +378,35 @@ test('many warm clips share one active progress timer and inactive, replaced or 
     const old=timelines[0],replacement=h.timeline();feed.add(h.post(0),media[0],replacement.node);assert.equal(old.node.hidden,true);assert.equal(old.range.count(),0);
     old.range.value='30';old.range.dispatchEvent(new Event('change'));assert.equal(first.seeks.length,0);assert.equal(h.timers.size,1);
     for(const node of media)node.box={...node.box,top:(node.index-10)*800,bottom:(node.index-9)*800};feed.refresh();await tick();h.players.slice(3).forEach(player=>player.emit('onReady'));
-    assert.equal(h.document.querySelectorAll('iframe').length,3);assert.equal(h.timers.size,1);assert.equal(replacement.range.disabled,true);
+    assert.equal(h.document.querySelectorAll('iframe').length,3);assert.equal(h.timers.size,0);assert.equal(replacement.range.disabled,true);
     replacement.range.value='30';replacement.range.dispatchEvent(new Event('change'));assert.equal(first.seeks.length,0);
-    const selected=h.players.slice(3).find(player=>player.count('play'));selected.emit('onStateChange',1);feed.remove(10);assert.equal(h.timers.size,0);assert.equal(timelines[10].range.count(),0);assert.equal(timelines[10].range.disabled,true);
+    const selected=h.players[4];selected.emit('onStateChange',1);feed.remove(10);assert.equal(h.timers.size,0);assert.equal(timelines[10].range.count(),0);assert.equal(timelines[10].range.disabled,true);
     feed.destroy();assert.equal(h.timers.size,0);assert.ok(timelines.every(timeline=>timeline.range.count()===0));assert.equal(replacement.range.count(),0);
   }finally{await h.close();}
 });
 
-test('blocked autoplay clears progress polling and a detached timeline never issues a seek',async()=>{
+test('blocked playback leaves progress polling stopped and a detached timeline never issues a seek',async()=>{
   const h=await harness(),feed=h.feed(),media=h.container(),timeline=h.timeline();
   try{
-    feed.add(h.post(1),media,timeline.node);await tick();const player=h.players[0];player.emit('onReady');assert.equal(h.timers.size,1);
+    feed.add(h.post(1),media,timeline.node);await tick();const player=h.players[0];player.emit('onReady');assert.equal(h.timers.size,0);
     player.emit('onAutoplayBlocked');assert.equal(h.timers.size,0);assert.equal(timeline.node.hidden,false);
     player.emit('onStateChange',1);assert.equal(h.timers.size,1);timeline.node.remove();h.progress();assert.equal(h.timers.size,0);
     timeline.range.value='30';timeline.range.dispatchEvent(new Event('change'));assert.equal(player.seeks.length,0);feed.destroy();assert.equal(timeline.range.count(),0);
+  }finally{await h.close();}
+});
+
+
+test('every clip starts idle and scroll, resize, visibility or view restoration never requests playback',async()=>{
+  const h=await harness(),feed=h.feed(),first=h.container(),second=h.container(1),timeline=h.timeline();
+  try{
+    feed.add(h.post(1),first,timeline.node);feed.add(h.post(2),second);await tick();h.players.forEach(player=>player.emit('onReady'));
+    const [a,b]=h.players;assert.ok(h.players.every(player=>player.count('play')===0));assert.equal(h.timers.size,0);assert.equal(h.musicPauses,0);
+    a.emit('onStateChange',1);assert.equal(first.classList.contains('is-playing'),true);assert.equal(h.timers.size,1);assert.ok(h.musicPauses>0);
+    feed.refresh();h.window.dispatchEvent(new Event('resize'));assert.equal(a.count('play'),0);
+    h.document.hidden=true;h.document.dispatchEvent(new Event('visibilitychange'));assert.equal(h.timers.size,0);
+    h.document.hidden=false;h.document.dispatchEvent(new Event('visibilitychange'));assert.equal(a.count('play'),0);assert.equal(h.timers.size,0);
+    first.box={...first.box,top:-800,bottom:0};second.box={...second.box,top:0,bottom:800};feed.refresh();assert.equal(b.count('play'),0);assert.equal(second.classList.contains('is-playing'),false);
+    b.emit('onStateChange',1);assert.equal(second.classList.contains('is-playing'),true);feed.pause();feed.resume();assert.equal(b.count('play'),0);assert.equal(second.classList.contains('is-playing'),false);
+    assert.ok(h.players.every(player=>player.count('play')===0));
   }finally{await h.close();}
 });
