@@ -1,20 +1,50 @@
 # Loge virtuelle
 
-## Périmètre approuvé
-
-Une communauté commune aux Game Masters Blancs, ouverte au niveau réel 33. Le menu donne accès au fil à `/loge-virtuelle`. Les pages de publication et de membre restent elles aussi contrôlées par le serveur. Le calcul se fonde sur les signes enregistrés, sans exception de niveau pour les administrateurs. Les comptes existants à 33 obtiennent le même accès.
-
-La Loge est indépendante de l’ancienne Vidéographie, de ses contenus et des carrés d’AS. Les comptes, les pseudos et les photos existants constituent le socle d’identité. Aucune vidéo n’est envoyée dans R2 ou D1 : seules les informations de publication et l’identifiant YouTube sont conservés.
-
 ## Parcours
 
-- Fil récent : défilement vertical par vidéo avec arrêt sur le clip visible, auteur, date, titre, description et commentaires. Les commandes de gestion des vidéos se trouvent uniquement sur Mon profil, dans Réflexions.
-- Publication : titre de 140 caractères maximum, description de 5 000 caractères et lien YouTube. Les vidéos non répertoriées se partagent par lien ; les vidéos privées exigent des invitations YouTube et ne conviennent pas au fil commun. Un lien non répertorié reste partageable hors du site.
-- Une vidéo toutes les 168 heures à partir de sa publication dans la Loge. La suppression ne libère pas le droit de publier immédiatement. Le titre et la description sont modifiables ; l’identifiant vidéo est fixe après publication.
-- Commentaires dans la Loge : panneau dédié, bulles de texte et menu discret pour modifier ou supprimer ses propres interventions. La limite hebdomadaire ne s’applique pas aux commentaires.
-- Profil `/loge-virtuelle/membres/:id` : onglets Réflexions et Interventions. Le second rassemble les commentaires sous les publications d’autres membres et permet de retrouver leur contexte, y compris au-delà de la première page de commentaires.
+La Loge est une communauté réservée au niveau réel 33. Son menu, ses publications, ses profils et toutes ses API appliquent cette même progression, sans exception pour les administrateurs. Elle reste indépendante de l’ancienne Vidéographie et des carrés d’AS.
 
-## Texte exact de Game Master Blanc
+Les vues vidéo occupent la fenêtre dès leur ouverture. Le fil défile verticalement, une publication par écran. La vidéo verticale reste centrée, sans colonne de commande qui réduirait sa largeur ou la décalerait. Le cadre YouTube entier est conservé, sans recadrage de la vidéo. Les anciens contenus horizontaux restent lisibles.
+
+L’interface de publication se limite au pseudo de l’auteur, au titre placé dessous et aux commandes Commentaires et Favoris à droite. Ces informations occupent une zone compacte extérieure à l’iframe ; elles ne recouvrent pas le lecteur YouTube. Le header du site et le lecteur musical ne réduisent pas cette vue ; ils reviennent à la sortie de la Loge. La navigation reste accessible dans une barre compacte.
+
+Le profil conserve les onglets Réflexions et Interventions. Un onglet Favoris, visible uniquement sur son propre profil, réunit les vidéos sauvegardées. Les listes Réflexions et Favoris proposent le même lecteur vertical. Les Interventions retrouvent les commentaires laissés chez d’autres membres et leur contexte. Les liens directs vers un commentaire conservent ce contexte.
+
+Les publications se créent avec un titre de 140 caractères maximum et un lien YouTube. Les liens Shorts, watch et youtu.be valides utilisent le même identifiant vidéo normalisé. Le format vertical est la présentation prévue ; le seul lien ne suffit pas à certifier l’orientation de sa vidéo. Les vidéos restent hébergées chez YouTube, sans envoi dans R2 ou D1. Les vidéos non répertoriées se partagent par lien ; les vidéos privées exigeant des invitations YouTube ne conviennent pas à ce fil commun.
+
+La limite reste une publication toutes les 168 heures. Supprimer une publication ne remet pas ce délai à zéro. La modification et la suppression d’une vidéo se font uniquement depuis son propre profil, dans Réflexions. Le titre reste modifiable et l’identifiant vidéo est fixe après publication.
+
+Le bouton Commentaires ouvre les échanges et leur formulaire. Sur mobile, le lecteur est mis en pause et masqué pendant leur consultation. Les commentaires gardent leurs bulles et le menu discret de gestion de ses propres réponses. La limite hebdomadaire ne s’applique pas aux commentaires ni aux favoris.
+
+## Favoris
+
+`PUT /api/loge/posts/:id/favorite` reçoit `{favorite: true}` ou `{favorite: false}` et renvoie `{postId, isFavorite}`. Cette écriture exprime un état souhaité, sans basculement implicite ni duplication. Elle vérifie le compte actif, le niveau réel et l’existence de la publication. Aucun compteur public de favoris n’est ajouté.
+
+Les représentations de publication incluent `isFavorite`, calculé pour le membre qui les consulte. La liste `GET /api/loge/membres/:id?tab=favoris` est privée : seul le propriétaire du profil peut la lire. Son curseur entier suit l’identifiant de sauvegarde et son ordre décroissant, indépendamment des identifiants des publications. Les vidéos supprimées disparaissent des favoris ; leur suppression nettoie également les références associées.
+
+La table `loge_favorites` référence les comptes et les publications. La migration additive `0048_loge_favorites.sql`, la définition initiale et l’initialisation à la demande contiennent les mêmes table et index. Les anciennes données restent en place. Le classement des données de compte pour les opérations de maintenance suit automatiquement ces clés étrangères.
+
+La migration `0048_loge_favorites.sql` a été appliquée à D1 le 1er novembre 2026. La table, ses deux index et ses clés étrangères ont été vérifiés ; cette création additive ne modifie pas les publications, les commentaires ou les comptes existants.
+
+## Données et compatibilité
+
+Les tables `loge_posts`, `loge_comments` et `loge_publication_limits` conservent leur fonctionnement. Les écritures sont atomiques lorsqu’elles réservent un droit de publication ; un identifiant de requête protège les reprises après coupure et une révision protège les éditions concurrentes. Les suppressions masquent les contenus et effacent leur texte, tout en gardant le minimum nécessaire pour empêcher un rejeu.
+
+Le champ historique description reste en base pour préserver les publications existantes et la compatibilité des anciens clients. Il n’apparaît plus dans les vues ni les formulaires actuels. Une nouvelle publication sans description utilise son titre dans cette ancienne colonne pour respecter la contrainte des bases déjà installées. Une modification avec seulement le titre conserve l’ancienne description. Aucune reconstruction de table ni migration destructive n’est nécessaire.
+
+Toutes les API restent privées et hors cache. Les écritures contrôlent l’origine, le format JSON, le compte et les droits. Les listes ont des curseurs stables. Les réponses ne livrent ni email d’autres membres, ni texte de session, ni HTML de lecteur fourni par un membre.
+
+## Lecture et navigation
+
+Le contrôleur `public/loge-video.js` utilise l’API IFrame officielle. Trois lecteurs au maximum sont préparés pour le clip courant et ses voisins. Une seule vidéo joue, seulement lorsque plus de la moitié de son iframe est visible. Le passage à une autre vidéo, la navigation ou l’écoute de musique met les autres lecteurs en pause. Le son est activé par défaut ; si le navigateur refuse le démarrage sonore, le site ne revient pas en sourdine et ne relance pas la lecture en boucle.
+
+L’ancien rail du bouton plein écran est retiré. La vue occupe déjà toute la fenêtre, sans action supplémentaire pour y accéder. Les paramètres `controls=0`, `fs=1` et `disablekb=0` gardent le lecteur épuré et les commandes clavier disponibles. Si YouTube ouvre un plein écran natif, sa visibilité est évaluée sur l’écran entier.
+
+Le navigateur empêche le site de simuler un clic dans l’interface interne de YouTube. Le titre, la chaîne, les écrans de pause et les éléments de marque peuvent donc encore apparaître. Les anciens paramètres `showinfo`, `modestbranding` et `autohide` sont obsolètes ; aucun masque, recadrage ou calque n’essaie de les dissimuler.
+
+La navigation interne conserve les vues et leurs positions de défilement. Les réponses tardives ne remplacent pas une autre vue ; les mutations reconnues après navigation invalident les caches concernés. Les lecteurs quittés sont détruits pour conserver une borne globale de trois. Les données et brouillons en mémoire sont effacés au changement de compte. Les styles d’immersion sont retirés sur les sorties, refus d’accès et changements de session.
+
+## Texte de Game Master Blanc
 
 **Loge virtuelle**
 
@@ -22,30 +52,10 @@ Partage dans la Loge virtuelle tes réflexions et tes avancées aux autres Game 
 
 Commente leurs vidéos pour leur apporter ton regard et des pistes d’amélioration. Aidez-vous mutuellement à faire grandir vos harmonies.
 
-## Intégration
-
-Le module serveur `src/loge.js` et le client `public/loge.js` utilisent les nouvelles tables `loge_posts`, `loge_comments` et `loge_publication_limits`. La migration additive `0047_loge_virtuelle.sql` est également initialisée à la demande par le serveur, sans toucher aux anciennes données. Les clés étrangères permettent le classement habituel des données de compte.
-
-La réservation technique du droit de publication et l’insertion sont atomiques. Un identifiant de requête permet de reprendre une création après une coupure réseau. Une révision protège les modifications concurrentes. La suppression masque immédiatement les contenus, efface leur texte et conserve le minimum nécessaire pour que ni une ancienne requête ni une suppression ne contournent la limite.
-
-Toutes les API sont privées et hors cache. Les écritures vérifient l’origine, le format JSON, le compte actif, le niveau et la propriété des éléments. Les liens vidéo sont normalisés avec le validateur YouTube existant ; aucun HTML de lecteur externe n’est accepté. Les listes sont paginées avec des curseurs stables.
-
-Le contrôleur `public/loge-video.js` utilise l’API IFrame officielle de YouTube. Trois lecteurs au maximum sont préparés pour le clip courant et ses voisins. La lecture automatique ne démarre que lorsque plus de la moitié de l’iframe est visible ; le clip précédent est mis en pause. Le son est activé par défaut lors de la tentative de lecture. Aucun bouton Activer/Couper le son ni espace réservé à ce bouton ne sont ajoutés. Un blocage de lecture automatique ne déclenche ni repli muet ni nouvelle tentative en boucle : une interaction directe avec le lecteur peut alors être nécessaire. Le chargement du SDK est partagé et peut être repris après une erreur réseau.
-
-Le paramètre officiel `controls=0` masque les commandes YouTube de réglages, de sous-titres et de volume. Le lecteur conserve une seule icône de plein écran, sans bouton texte sous la vidéo. Cette icône occupe une colonne noire de 36 pixels à droite de l’iframe : elle appartient au cadre du site et ne recouvre ni la vidéo ni les éléments de YouTube. Elle permet aussi de quitter le plein écran. Les commandes clavier de YouTube restent autorisées.
-
-Le site utilise l’API plein écran du navigateur pour agrandir le même cadre et la même iframe, sans recharger la vidéo. Un mode agrandi dans la fenêtre prend le relais si le plein écran natif est indisponible ou refusé. Le bouton, la sortie native et Échap dans la page permettent de revenir au fil ; en mode agrandi de secours, les touches saisies dans l’iframe restent gérées par YouTube. Les sorties restaurent le focus et le défilement ; les changements de vue nettoient le lecteur agrandi. Seul le clip agrandi peut jouer, sans être tronqué par le calcul de visibilité du fil.
-
-Le navigateur empêche les scripts du site d’accéder à l’interface interne de l’iframe YouTube pour y simuler un clic. L’API officielle ne propose pas de commande pour déclencher la disparition immédiate de cet habillage. Les éléments imposés par YouTube — notamment le titre, la chaîne, certains écrans de pause et le logo — peuvent encore apparaître au chargement ou à l’interaction : `showinfo`, `modestbranding` et `autohide` sont obsolètes. Aucun recadrage, masque ou calque ne tente de les dissimuler. Le site ne prend pas le focus et ne génère pas de clic au démarrage de la lecture. La lecture automatique sonore dépend des autorisations du navigateur.
-
-La navigation interne conserve la session, les vues et leurs positions de défilement. Les onglets du profil sont conservés en mémoire pour éviter l’écran de chargement à chaque aller-retour. Les lecteurs de la vue quittée sont détruits pour garder une borne globale de trois. Les requêtes sont liées à leur vue et les réponses tardives ne remplacent pas une autre page. Au changement de compte, les données et brouillons en mémoire sont effacés. La reprise de la musique suspend les vidéos. Une fois la pause confirmée, la commande Lecture native de YouTube permet de reprendre la vidéo et suspend la musique ; le passage à un autre clip reste disponible. Les relances automatiques restent bloquées pendant cette suspension.
-
 ## Vérifications
 
-Accès anonyme et niveaux 32/33, administrateurs, révocation, profils, propriété et conflits ; liens invalides, tailles et origine ; soumissions concurrentes, rejeu, suppression et fin des sept jours ; pagination et commentaire ciblé ; interface sur mobile et ordinateur, brouillons après erreur, navigation et changement de compte. Les suites existantes contrôlent aussi Playlist suspendue, les anciennes pages retirées et les paroles. Les tests client utilisent un DOM léger et les vrais handlers ; ils vérifient les formulaires, les erreurs, les lecteurs et les changements de compte, sans simuler la mise en page ni la lecture YouTube réelle. Aucun compte ou contenu de test n’est créé en production.
+Les tests utilisent les vrais handlers serveur, SQLite et un DOM client léger. Ils couvrent les niveaux 32/33 et les administrateurs, les profils privés, la propriété et les conflits, les quotas et rejeux, la pagination, les liens YouTube, les favoris privés et leur suppression, les publications avec titre seul, les réponses tardives et les changements de compte. Les tests du lecteur contrôlent les événements de l’API, le son, la visibilité, la limite de trois lecteurs et le plein écran natif.
 
-## Ajustements associés
+Le DOM de test ne reproduit ni la mise en page réelle du navigateur ni la lecture YouTube physique sur téléphone. Aucun compte, publication ou commentaire de test n’est créé en production. Le contrôle du rendu réel exige une session authentifiée au niveau 33 et un appareil capable de lire YouTube.
 
-Les découvertes de même échelon sont regroupées dans un seul bloc d’accueil : à 33, Game Master Blanc puis Loge virtuelle, chacun sur sa ligne. Les signes déjà résolus utilisent le libellé « Ce signe est déjà trouvé. ». Le bouton des membres d’un échelon utilise une icône SVG géométriquement centrée pour ses états plus et moins.
-
-Références du lecteur : [API IFrame](https://developers.google.com/youtube/iframe_api_reference), [paramètres](https://developers.google.com/youtube/player_parameters), [lecture automatique et visibilité](https://developers.google.com/youtube/terms/required-minimum-functionality).
+Références : [API IFrame](https://developers.google.com/youtube/iframe_api_reference), [paramètres](https://developers.google.com/youtube/player_parameters), [visibilité et éléments du lecteur](https://developers.google.com/youtube/terms/required-minimum-functionality).

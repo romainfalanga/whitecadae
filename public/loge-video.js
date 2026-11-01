@@ -34,97 +34,31 @@ function youtubeAPI(){
   return pending;
 }
 
-// Keep the player unobscured. Its only host control lives in a separate rail.
+// Use YouTube's official player settings, without custom controls or overlays.
 // Audible autoplay is attempted once; browser policy can require a native gesture.
 export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}}={}){
-  const records=new Map();let active=null,destroyed=false,paused=false,musicClip=null,musicPlaying=false,nativeExitPending=null,expanded=null;
+  const records=new Map();let active=null,destroyed=false,paused=false,musicClip=null,musicPlaying=false,nativeExitPending=null;
   const connected=record=>record.container.isConnected!==false;
   const current=()=>{try{return !destroyed&&!paused&&isCurrent()&&!document.hidden;}catch{return false;}};
   const eligible=record=>current()&&record===active&&connected(record)&&measureRecord(record,viewport()).ratio>0.5;
   const invoke=(record,method)=>{try{return record.player?.[method]?.();}catch{return undefined;}};
-  const nativeFullscreen=()=>document.fullscreenElement||document.webkitFullscreenElement||null;
-  const ownsFullscreen=(container,element)=>!!element&&(element===container||container.contains(element));
-  function fullscreenRecord(){const element=nativeFullscreen();return element?[...records.values()].find(record=>ownsFullscreen(record.container,element))||null:null;}
-  function exitNative(container){
-    const before=nativeFullscreen();if(!ownsFullscreen(container,before))return Promise.resolve();
-    const exit=document.exitFullscreen||document.webkitExitFullscreen;if(!exit)return Promise.resolve();
-    try{return Promise.resolve(exit.call(document)).then(()=>{
-      // An iframe can sit above its container in the native fullscreen stack.
-      // Unwind only our changed levels, never an unrelated fullscreen element.
-      if(nativeFullscreen()!==before)return exitNative(container);
-    }).catch(()=>{});}catch{return Promise.resolve();}
+  function fullscreenRecord(){
+    const element=document.fullscreenElement||document.webkitFullscreenElement;
+    return element?[...records.values()].find(record=>record.iframe===element)||null:null;
   }
   function exitOwnedFullscreen(record=null){
     const owner=fullscreenRecord();
-    if(!owner||(record&&record!==owner))return Promise.resolve();
-    if(nativeExitPending?.container===owner.container)return nativeExitPending.promise;
-    const pending={container:owner.container,promise:exitNative(owner.container)};nativeExitPending=pending;
-    void pending.promise.finally(()=>{if(nativeExitPending===pending)nativeExitPending=null;});return pending.promise;
-  }
-  function fullscreenLabel(record){
-    if(!record.fullscreenButton)return;
-    const pressed=expanded?.record===record||fullscreenRecord()===record,label=pressed?'Quitter le plein écran':'Plein écran';
-    record.fullscreenButton.setAttribute('aria-label',label);record.fullscreenButton.setAttribute('title',label);record.fullscreenButton.setAttribute('aria-pressed',String(pressed));
-  }
-  function restoreExpanded(state){
-    if(!current()||expanded)return;
-    if(root){root.scrollTop=state.scroll.top;root.scrollLeft=state.scroll.left;}
-    try{window.scrollTo(state.scroll.pageLeft,state.scroll.pageTop);}catch{}
-    if(state.trigger?.isConnected!==false)try{state.trigger?.focus?.({preventScroll:true});}catch{}
-  }
-  function closeExpanded(state=expanded,{refreshView=true,restore=true,exit=true}={}){
-    if(!state||expanded!==state)return;
-    expanded=null;state.record.container.classList.remove('is-video-expanded');fullscreenLabel(state.record);
-    if(exit)void exitOwnedFullscreen(state.record).then(()=>{if(restore)restoreExpanded(state);});
-    if(restore)restoreExpanded(state);
-    if(refreshView&&!destroyed)refresh();
-  }
-  function toggleFullscreen(record){
-    if(!current()||!connected(record)||!record.iframe||record.failed)return;
-    if(expanded?.record===record){closeExpanded();return;}
-    if(fullscreenRecord()===record){void exitOwnedFullscreen(record);return;}
-    if(expanded)closeExpanded(expanded,{refreshView:false,restore:false});
-    const nativeState=invoke(record,'getPlayerState');
-    const retryBlocked=record.blocked&&[-1,5].includes(nativeState)&&record.state!==2&&!record.playing&&musicClip!==record.key;
-    if(nativeState===2||record.state===2)record.attempted=true;
-    const state={record,trigger:record.fullscreenButton,native:false,scroll:{top:root?.scrollTop||0,left:root?.scrollLeft||0,pageTop:window.scrollY||0,pageLeft:window.scrollX||0}};
-    expanded=state;record.container.classList.add('is-video-expanded');fullscreenLabel(record);
-    const request=record.container.requestFullscreen||record.container.webkitRequestFullscreen;
-    // Called directly from this button's genuine click, before any audio call.
-    if(request)try{
-      void Promise.resolve(request.call(record.container)).then(()=>{
-        if(expanded!==state||!current()||!connected(record)){
-          if(expanded===state)closeExpanded(state,{refreshView:false,restore:false});
-          if(expanded?.record.container!==record.container)void exitNative(record.container);
-          return;
-        }
-        if(ownsFullscreen(record.container,nativeFullscreen()))state.native=true;
-        refresh();
-      }).catch(()=>{
-        if(expanded!==state)return;
-        if(!current()||!connected(record))closeExpanded(state,{refreshView:false,restore:false});else refresh();
-      });
-    }catch{/* The same class supplies an expanded view if native entry is denied. */}
-    // This is a new explicit click, not an automatic autoplay retry. Preserve
-    // deliberate pauses and music interruptions even when expanding the view.
-    if(retryBlocked){record.blocked=false;record.attempted=false;}
-    refresh();
+    if(!owner||(record&&record!==owner)||nativeExitPending===owner.iframe)return;
+    const exit=document.exitFullscreen||document.webkitExitFullscreen;
+    if(!exit)return;
+    const iframe=owner.iframe;nativeExitPending=iframe;
+    try{void Promise.resolve(exit.call(document)).catch(()=>{}).finally(()=>{if(nativeExitPending===iframe)nativeExitPending=null;});}
+    catch{nativeExitPending=null;}
   }
   function fullscreenChanged(){
     // Let native layout settle, and avoid re-entering release() if exitFullscreen
     // dispatches its event synchronously while a player is being removed.
-    queueMicrotask(()=>{
-      if(destroyed)return;
-      const state=expanded,element=nativeFullscreen();
-      if(state){
-        if(ownsFullscreen(state.record.container,element))state.native=true;
-        else if(state.native||element)closeExpanded(state,{refreshView:false,exit:false});
-      }
-      refresh();
-    });
-  }
-  function fullscreenKey(event){
-    if(expanded&&event.key==='Escape'){event.preventDefault();event.stopPropagation();closeExpanded();}
+    queueMicrotask(()=>{if(!destroyed)refresh();});
   }
   function stop(record){invoke(record,'pauseVideo');record.playing=false;record.container.classList.remove('is-playing');}
   function stopOthers(record){for(const other of records.values())if(other!==record)stop(other);}
@@ -136,13 +70,11 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     invoke(record,'unMute');record.playPending=true;invoke(record,'playVideo');
   }
   function release(record){
-    if(expanded?.record===record)closeExpanded(expanded,{refreshView:false,restore:false});
     exitOwnedFullscreen(record);
     record.token++;stop(record);observer?.unobserve(record.observed||record.container);
     try{record.player?.destroy?.();}catch{/* Removing the iframe still stops playback. */}
     record.player=null;record.ready=false;record.attempted=false;record.musicPauseConfirmed=false;record.playPending=false;record.state=null;
     record.iframe?.remove();record.iframe=null;
-    record.fullscreenButton?.removeEventListener('click',record.toggleFullscreen);record.tools?.remove();record.tools=null;record.fullscreenButton=null;
     observe(record);
   }
   function unavailable(record,error){
@@ -161,9 +93,6 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     iframe.setAttribute('allow','autoplay; encrypted-media; picture-in-picture; fullscreen');
     iframe.setAttribute('allowfullscreen','');iframe.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
     record.iframe=iframe;record.blocked=false;record.container.append(iframe);observe(record);
-    const tools=document.createElement('div'),button=document.createElement('button');tools.className='loge-video-tools';button.className='loge-video-fullscreen';button.type='button';
-    button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    record.tools=tools;record.fullscreenButton=button;record.toggleFullscreen=()=>toggleFullscreen(record);button.addEventListener('click',record.toggleFullscreen);tools.append(button);record.container.append(tools);fullscreenLabel(record);
     const live=()=>!destroyed&&records.get(record.key)===record&&record.token===token&&record.iframe===iframe;
     youtubeAPI().then(YT=>{
       if(!live())return;
@@ -215,30 +144,25 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     const visible=list.filter(record=>record.ratio>0.5&&!record.failed).sort((a,b)=>b.ratio-a.ratio||(a===active?-1:b===active?1:0));
     const next=visible[0]||null;
     if(next!==active){
-      if(active)stop(active);active=next;
-      // Expanding an existing player is not a new playback selection. Its
-      // manual pause, autoplay refusal and music interruption remain intact.
-      if(!expanded||expanded.record!==active){
-        musicClip=null;if(active){active.attempted=false;active.blocked=false;}
-      }
+      if(active)stop(active);active=next;musicClip=null;
+      if(active){active.attempted=false;active.blocked=false;}
     }
     // Keep at most the current/nearest player and two adjacent players warm.
-    const anchor=expanded?.record||fullscreenRecord()||active||list.filter(record=>!record.failed).sort((a,b)=>b.ratio-a.ratio||a.distance-b.distance)[0];
+    const anchor=fullscreenRecord()||active||list.filter(record=>!record.failed).sort((a,b)=>b.ratio-a.ratio||a.distance-b.distance)[0];
     const index=list.indexOf(anchor),start=Math.max(0,Math.min(index-1,list.length-3));
     const keep=new Set(index<0?[]:list.slice(start,start+3));
     for(const record of records.values())if(!keep.has(record)&&record.iframe)release(record);
     for(const record of keep)warm(record);
-    for(const record of records.values())fullscreenLabel(record);
     if(active)play(active);
   }
   function viewport(){
     const screen={top:0,left:0,right:window.innerWidth,bottom:window.innerHeight};
-    if(expanded||fullscreenRecord())return screen;
+    if(fullscreenRecord())return screen;
     const box=root?.getBoundingClientRect?.();
     return box?{top:Math.max(0,box.top),left:Math.max(0,box.left),right:Math.min(screen.right,box.right),bottom:Math.min(screen.bottom,box.bottom)}:screen;
   }
   function measureRecord(record,viewport){
-    const full=expanded?.record||fullscreenRecord();
+    const full=fullscreenRecord();
     if(!connected(record)||(full&&record!==full))return {ratio:0,distance:Infinity};
     const box=(record.iframe||record.container).getBoundingClientRect(),width=box.width??box.right-box.left,height=box.height??box.bottom-box.top;
     const area=Math.max(0,Math.min(box.right,viewport.right)-Math.max(box.left,viewport.left))*Math.max(0,Math.min(box.bottom,viewport.bottom)-Math.max(box.top,viewport.top));
@@ -250,7 +174,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
       Object.assign(record,measureRecord(record,view));
     }
   }
-  function refresh(){if(destroyed)return;if(expanded&&(!current()||!connected(expanded.record)))closeExpanded(expanded,{refreshView:false,restore:false});if(!current())exitOwnedFullscreen();measure();reconcile();}
+  function refresh(){if(destroyed)return;if(!current())exitOwnedFullscreen();measure();reconcile();}
   const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(()=>{
     if(destroyed||paused)return;
     refresh();
@@ -283,7 +207,6 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
   scrollTarget.addEventListener('scroll',refresh,{passive:true});window.addEventListener('resize',refresh,{passive:true});
   document.addEventListener('visibilitychange',visibility);window.addEventListener('wc:music',music);
   document.addEventListener('fullscreenchange',fullscreenChanged);document.addEventListener('webkitfullscreenchange',fullscreenChanged);
-  document.addEventListener('keydown',fullscreenKey);
   return {
     add(post,container){
       if(destroyed||!post||!container)return;
@@ -296,16 +219,14 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     },
     remove(id){const record=records.get(String(id));if(!record)return;release(record);observer?.unobserve(record.observed);record.label?.remove();records.delete(record.key);if(active===record){active=null;musicClip=null;}refresh();},
     refresh,
-    pause(){if(destroyed)return;paused=true;closeExpanded(expanded,{refreshView:false,restore:false});exitOwnedFullscreen();observer?.disconnect();for(const record of records.values())stop(record);},
+    pause(){if(destroyed)return;paused=true;exitOwnedFullscreen();observer?.disconnect();for(const record of records.values())stop(record);},
     resume(){if(destroyed)return;paused=false;for(const record of records.values())observe(record);if(active)active.attempted=false;refresh();},
     destroy(){
       if(destroyed)return;destroyed=true;observer?.disconnect();
-      closeExpanded(expanded,{refreshView:false,restore:false});
       exitOwnedFullscreen();
       scrollTarget.removeEventListener('scroll',refresh);window.removeEventListener('resize',refresh);
       document.removeEventListener('visibilitychange',visibility);window.removeEventListener('wc:music',music);
       document.removeEventListener('fullscreenchange',fullscreenChanged);document.removeEventListener('webkitfullscreenchange',fullscreenChanged);
-      document.removeEventListener('keydown',fullscreenKey);
       for(const record of records.values()){release(record);record.label?.remove();}records.clear();active=null;
     }
   };

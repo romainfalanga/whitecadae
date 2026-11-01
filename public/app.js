@@ -186,7 +186,7 @@ async function route() {
     try{
       const module=await import('/loge.js');
       if(!stale(epoch)){window.WCLoge=module;return module.page(path,{app,api,esc,state,navigate,accountEntryMarkup,isCurrent:()=>!stale(epoch)});}
-    }catch(error){if(!stale(epoch))app.innerHTML='<p>La Loge n’a pas pu être chargée. Réessaie lorsque la connexion est revenue.</p>';}
+    }catch(error){if(!stale(epoch)){window.WCLoge?.leave();app.innerHTML='<p>La Loge n’a pas pu être chargée. Réessaie lorsque la connexion est revenue.</p>';}}
     return;
   }
   // Playlist is kept in the repository but temporarily unavailable.
@@ -322,7 +322,7 @@ function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
   if(value==='57')return '/signes';
   if(value==='echelon'||value==='/parcours')return '/echelon';
-  if(/^\/loge-virtuelle(?:\/(?:publications|membres)\/[1-9]\d*)?(?:\?(?:comment=[1-9]\d*|onglet=(?:reflexions|interventions)))?(?:#comment-[1-9]\d*)?$/.test(value||''))return value;
+  if(/^\/loge-virtuelle(?:\/(?:publications|membres)\/[1-9]\d*)?(?:\?(?:comment=[1-9]\d*|onglet=(?:reflexions|interventions|favoris)))?(?:#comment-[1-9]\d*)?$/.test(value||''))return value;
   return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|game-master-blanc|sans-vin-divin)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 

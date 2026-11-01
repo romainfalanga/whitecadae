@@ -56,7 +56,7 @@ test('Loge write routes reject cross-site or non-JSON traffic before accessing a
 });
 
 test('login returns preserve Loge posts, profiles and focused comments without accepting arbitrary destinations',()=>{
-  const valid=['/loge-virtuelle','/loge-virtuelle/publications/1','/loge-virtuelle/publications/45?comment=128','/loge-virtuelle/membres/3?onglet=interventions','/loge-virtuelle/membres/3?onglet=reflexions'];
+  const valid=['/loge-virtuelle','/loge-virtuelle/publications/1','/loge-virtuelle/publications/45?comment=128','/loge-virtuelle/membres/3?onglet=interventions','/loge-virtuelle/membres/3?onglet=reflexions','/loge-virtuelle/membres/3?onglet=favoris'];
   const invalid=['//hostile.local/loge-virtuelle','https://hostile.local/loge-virtuelle','/loge-virtuelle?retour=https://hostile.local','/loge-virtuelle/membres/0','/loge-virtuelle/membres/3?onglet=secrets','/loge-virtuelle/publications/1?comment=not-a-number'];
   for(const value of [...valid,...invalid]){
     const result=runInNewContext(destination+'\naccountDestination()',{URLSearchParams,location:{search:'?retour='+encodeURIComponent(value)}});

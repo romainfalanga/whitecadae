@@ -248,7 +248,7 @@ test('short comment-write limits are atomic, do not spend publication quota and 
 
 test('the wired Worker rejects foreign origins and non-JSON Loge writes before accessing any database',async()=>{
   const env={get DB(){throw Error('Origin and content type must be rejected first');}};
-  for(const [endpoint,method]of [['/api/loge/posts','POST'],['/api/loge/posts/1','PUT'],['/api/loge/posts/1','DELETE'],['/api/loge/posts/1/comments','POST'],['/api/loge/comments/1','PUT']]){
+  for(const [endpoint,method]of [['/api/loge/posts','POST'],['/api/loge/posts/1','PUT'],['/api/loge/posts/1','DELETE'],['/api/loge/posts/1/comments','POST'],['/api/loge/comments/1','PUT'],['/api/loge/posts/1/favorite','PUT']]){
     for(const extra of [{Origin:'https://foreign.test'},{Origin:'null'},{'Sec-Fetch-Site':'cross-site'},{'Content-Type':'text/plain'}]){
       const response=await worker.fetch(new Request('https://test.local'+endpoint,{method,headers:{'Content-Type':'application/json',...extra},body:'{}'}),env);
       assert.equal(response.status,extra['Content-Type']?415:403,method+' '+endpoint);assert.match(response.headers.get('Cache-Control'),/no-store/);
@@ -269,7 +269,7 @@ test('additive schema and lazy initialization preserve old data; foreign keys in
   const f=setup();try{
     f.sql.prepare('INSERT INTO playlists(user_id,name,tracks) VALUES(11,?,?)').run('Untouched playlist','["orange"]');
     const before={users:f.sql.prepare('SELECT * FROM users ORDER BY id').all(),progress:f.sql.prepare('SELECT * FROM riddle_progress ORDER BY user_id,riddle_id').all(),playlists:f.sql.prepare('SELECT * FROM playlists').all()};
-    f.sql.exec('DROP TABLE loge_comments;DROP TABLE loge_publication_limits;DROP TABLE loge_posts');
+    f.sql.exec('DROP TABLE loge_favorites;DROP TABLE loge_comments;DROP TABLE loge_publication_limits;DROP TABLE loge_posts');
     assert.equal((await f.call()).status,200);
     const migration=readFileSync(new URL('../migrations/0047_loge_virtuelle.sql',import.meta.url),'utf8');
     f.sql.exec(migration);f.sql.exec(migration);for(const sql of LOGE_SCHEMA)f.sql.exec(sql);
@@ -279,5 +279,127 @@ test('additive schema and lazy initialization preserve old data; foreign keys in
     assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_posts').get().n,1);
     f.sql.exec('PRAGMA foreign_keys=ON;DELETE FROM users WHERE id=11');
     assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_posts').get().n,0);assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_comments').get().n,0);assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_publication_limits WHERE user_id=11').get().n,0);assert.deepEqual(f.sql.prepare('PRAGMA foreign_key_check').all(),[]);
+  }finally{f.sql.close();}
+});
+
+test('title-only publications work with the historical description constraint and edits preserve existing text and retry fingerprints',async()=>{
+  const f=setup();try{
+    const body={title:'Une trajectoire',url:'https://youtu.be/dQw4w9WgXcQ',requestId:crypto.randomUUID()};
+    const created=await f.post(body);assert.equal(created.status,201);const id=created.data.post.id;
+    assert.equal(created.data.post.isFavorite,false);assert.equal(f.sql.prepare('SELECT description FROM loge_posts WHERE id=?').get(id).description,body.title);
+    const changed=await f.call(path(id),{method:'PUT',body:{title:'Un autre titre',revision:1}});assert.equal(changed.status,200);assert.equal(changed.data.post.description,body.title);
+    const retry=await f.post(body);assert.equal(retry.status,200);assert.equal(retry.data.post.id,id);assert.equal(retry.data.post.title,'Un autre titre');
+    assert.equal((await f.post({...body,title:'Autre envoi'})).status,409);
+    const legacy=makePost({title:'Titre historique',description:'Texte historique à conserver.'});const old=await f.post(legacy,{token:'qa11'});assert.equal(old.status,201);
+    const updated=await f.call(path(old.data.post.id),{method:'PUT',token:'qa11',body:{title:'Titre seul',revision:1}});assert.equal(updated.status,200);assert.equal(updated.data.post.description,legacy.description);
+    assert.equal((await f.post(legacy,{token:'qa11'})).status,200);
+    for(const description of ['',null,123,'x'.repeat(5001)])assert.equal((await f.call(path(id),{method:'PUT',body:{title:'Valide',description,revision:2}})).status,400);
+    const explicit=await f.call(path(id),{method:'PUT',body:{title:'Valide',description:'Description du client historique',revision:2}});assert.equal(explicit.status,200);assert.equal(explicit.data.post.description,'Description du client historique');
+  }finally{f.sql.close();}
+});
+
+const favorite=(f,id,value,options={})=>f.call(path(id)+'/favorite',{method:'PUT',body:{favorite:value},...options});
+test('favorites keep the real level and identity gates and expose each member’s saved list only to that member',async()=>{
+  const f=setup();try{
+    const id=f.seedPost();
+    for(const [token,status]of [['invalid',401],['qa9',403],['qa99',403]]){
+      assert.equal((await favorite(f,id,true,{token})).status,status);
+      assert.equal((await f.call('/api/loge/membres/11?tab=favoris&level=33&admin=true',{token})).status,status);
+    }
+    assert.equal((await favorite(f,id,true,{accountHeader:false})).status,409);
+    assert.equal((await favorite(f,id,true,{headers:{'X-WC-User':'12'}})).status,409);
+    assert.equal((await favorite(f,id,true)).status,200);
+    for(const member of [11,404404]){const other=await f.call('/api/loge/membres/'+member+'?tab=favoris',{token:'qa11'});assert.equal(other.status,403);assert.doesNotMatch(JSON.stringify(other.data),/posts|youtube|Réflexion/);}
+    assert.deepEqual((await f.call('/api/loge/membres/12?tab=favoris',{token:'qa11'})).data.posts,[]);
+    f.level(11,32);assert.equal((await favorite(f,id,false)).status,403);assert.equal((await f.call('/api/loge/membres/11?tab=favoris')).status,403);
+    assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_favorites').get().n,1);
+    f.level(11,33);assert.equal((await f.call('/api/loge/membres/11?tab=favoris')).data.posts[0].id,id);
+  }finally{f.sql.close();}
+});
+
+test('favorite desired states are idempotent, viewer scoped, concurrent-safe and independent of both write quotas',async()=>{
+  const f=setup();try{
+    const id=f.seedPost();const attempts=await Promise.all(Array.from({length:8},()=>favorite(f,id,true)));
+    assert.ok(attempts.every(response=>response.status===200&&response.data.postId===id&&response.data.isFavorite===true));
+    const saved=f.sql.prepare('SELECT * FROM loge_favorites').get();assert.equal(saved.user_id,11);assert.equal(saved.post_id,id);
+    await favorite(f,id,true);assert.equal(f.sql.prepare('SELECT id FROM loge_favorites').get().id,saved.id);
+    for(const value of [null,1,0,'true',[],{}])assert.equal((await favorite(f,id,value)).status,400);
+    assert.equal((await f.call(path(id)+'/favorite',{method:'PUT',body:{}})).status,400);
+    assert.equal((await f.call(path(id)+'/favorite',{method:'POST',body:{favorite:false}})).status,405);
+    assert.equal((await favorite(f,99999,true)).status,404);
+    assert.equal((await favorite(f,id,true,{token:'qa11'})).status,200);
+    const forge=await f.call(path(id)+'/favorite',{method:'PUT',body:{favorite:false,user_id:12}});assert.deepEqual(forge.data,{postId:id,isFavorite:false});
+    assert.deepEqual((await favorite(f,id,false)).data,{postId:id,isFavorite:false});
+    assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_favorites WHERE user_id=12').get().n,1);
+    assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_publication_limits').get().n,0);
+    const created=await f.post();assert.equal(created.status,201);const quota=created.data.nextPublicationAt;
+    await favorite(f,id,true);await favorite(f,id,false);assert.equal((await f.call()).data.nextPublicationAt,quota);assert.equal((await f.post()).status,429);
+    assert.equal(f.sql.prepare('SELECT write_count FROM loge_publication_limits WHERE user_id=11').get().write_count,0);
+  }finally{f.sql.close();}
+});
+
+test('every post representation reports only the viewer’s favorite state without a public count',async()=>{
+  const f=setup();try{
+    const body=makePost(),created=await f.post(body),id=created.data.post.id;assert.equal(created.data.post.isFavorite,false);
+    await favorite(f,id,true);f.seedComment(id,12,'Une intervention');
+    assert.equal((await f.post(body)).data.post.isFavorite,true);
+    assert.equal((await f.call(path(id),{method:'PUT',body:{title:'Titre modifié',revision:1}})).data.post.isFavorite,true);
+    for(const endpoint of ['/api/loge',path(id),'/api/loge/membres/11?tab=reflexions','/api/loge/membres/11?tab=favoris']){
+      const response=await f.call(endpoint),item=response.data.post||response.data.posts[0];assert.equal(item.isFavorite,true,endpoint);assert.doesNotMatch(JSON.stringify(response.data),/favoriteCount|user_id|favorite_id/);
+    }
+    assert.equal((await f.call(path(id),{token:'qa11'})).data.post.isFavorite,false);
+    assert.equal((await f.call('/api/loge',{token:'qa11'})).data.posts[0].isFavorite,false);
+    assert.equal((await f.call('/api/loge/membres/11?tab=reflexions',{token:'qa11'})).data.posts[0].isFavorite,false);
+    assert.equal((await f.call('/api/loge/membres/12?tab=interventions')).data.interventions[0].post.isFavorite,true);
+  }finally{f.sql.close();}
+});
+
+test('favorite pagination follows save IDs rather than post IDs and remains stable across new saves and repeated true writes',async()=>{
+  const f=setup();try{
+    const ids=Array.from({length:47},(_,i)=>f.seedPost(i%2?12:11,'Post '+i));
+    const order=[...ids.filter((_,i)=>i%2),...ids.filter((_,i)=>i%2===0)];
+    for(const id of order)await favorite(f,id,true);
+    const endpoint='/api/loge/membres/11?tab=favoris';const first=(await f.call(endpoint)).data;
+    assert.equal(first.posts.length,20);assert.deepEqual(first.posts.map(item=>item.id),order.toReversed().slice(0,20));
+    assert.notEqual(first.next,first.posts.at(-1).id,'cursor must identify the saved row, not its target post');
+    const before=f.sql.prepare('SELECT id FROM loge_favorites WHERE user_id=11 AND post_id=?').get(first.posts[0].id).id;
+    await favorite(f,first.posts[0].id,true);assert.equal(f.sql.prepare('SELECT id FROM loge_favorites WHERE user_id=11 AND post_id=?').get(first.posts[0].id).id,before);
+    const newest=f.seedPost(26,'Nouveau');await favorite(f,newest,true);
+    const second=(await f.call(endpoint+'&after='+first.next)).data,third=(await f.call(endpoint+'&after='+second.next)).data;
+    const combined=[...first.posts,...second.posts,...third.posts];assert.deepEqual(combined.map(item=>item.id),order.toReversed());assert.ok(combined.every(item=>item.isFavorite===true));assert.equal(third.next,null);
+    assert.equal((await f.call(endpoint)).data.posts[0].id,newest);
+    assert.equal((await f.call(endpoint+'&after=-1')).status,400);assert.equal((await f.call(endpoint+'&after=1%20OR%201=1')).status,400);
+  }finally{f.sql.close();}
+});
+
+test('removed publications vanish from saved lists, clean up saved rows and cannot be saved during a deletion race',async()=>{
+  const f=setup();try{
+    const id=f.seedPost();await favorite(f,id,true);await favorite(f,id,true,{token:'qa11'});
+    await f.call(path(id),{method:'PUT',body:{title:'Révision actuelle',revision:1}});
+    assert.equal((await f.call(path(id),{method:'DELETE',body:{revision:1}})).status,409);assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_favorites').get().n,2);
+    assert.equal((await f.call(path(id),{method:'DELETE',body:{revision:2}})).status,200);assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_favorites').get().n,0);
+    assert.deepEqual((await f.call('/api/loge/membres/11?tab=favoris')).data.posts,[]);assert.equal((await favorite(f,id,true)).status,404);
+    const legacy=f.seedPost();await favorite(f,legacy,true);f.sql.prepare("UPDATE loge_posts SET deleted_at=unixepoch(),title='',description='',youtube_id='' WHERE id=?").run(legacy);
+    assert.deepEqual((await f.call('/api/loge/membres/11?tab=favoris')).data.posts,[]);
+    const race=f.seedPost(),prepare=f.env.DB.prepare;let armed=true;
+    f.env.DB.prepare=(query)=>{
+      const decorate=statement=>({...statement,bind(...args){return decorate(statement.bind(...args));},async run(){if(armed&&query.startsWith('INSERT INTO loge_favorites')){armed=false;f.sql.prepare("UPDATE loge_posts SET deleted_at=unixepoch(),title='',description='',youtube_id='' WHERE id=?").run(race);}return statement.run();}});
+      return decorate(prepare(query));
+    };
+    assert.equal((await favorite(f,race,true)).status,404);assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_favorites WHERE post_id=?').get(race).n,0);
+  }finally{f.sql.close();}
+});
+
+test('the favorites migration is additive and lazy; reset planning and user/post cascades include private saved rows',async()=>{
+  const f=setup();try{
+    const id=f.seedPost(12,'Texte intact'),before=f.sql.prepare('SELECT * FROM loge_posts WHERE id=?').get(id);
+    f.sql.exec('DROP TABLE loge_favorites');assert.equal((await favorite(f,id,true)).status,200);
+    const migration=readFileSync(new URL('../migrations/0048_loge_favorites.sql',import.meta.url),'utf8');f.sql.exec(migration);f.sql.exec(migration);
+    for(const sql of LOGE_SCHEMA)f.sql.exec(sql);
+    assert.deepEqual(f.sql.prepare('SELECT * FROM loge_posts WHERE id=?').get(id),before);
+    assert.equal(accountResetPlan(f.sql).report.tables.loge_favorites,1);assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_favorites').get().n,1);
+    assert.equal(f.sql.prepare('PRAGMA foreign_key_list(loge_favorites)').all().filter(key=>key.on_delete==='CASCADE').length,2);
+    f.sql.exec('PRAGMA foreign_keys=ON;DELETE FROM users WHERE id=11');assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_favorites').get().n,0);assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_posts').get().n,1);
+    await favorite(f,id,true,{token:'qa25'});f.sql.prepare('DELETE FROM loge_posts WHERE id=?').run(id);assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_favorites').get().n,0);assert.deepEqual(f.sql.prepare('PRAGMA foreign_key_check').all(),[]);
   }finally{f.sql.close();}
 });

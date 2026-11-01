@@ -660,3 +660,14 @@ CREATE TABLE IF NOT EXISTS loge_publication_limits (
     write_count INTEGER NOT NULL DEFAULT 0,
     write_claim_token TEXT NOT NULL DEFAULT ''
   );
+
+-- 0048: private saved Loge publications. Existing publication text is preserved.
+CREATE TABLE IF NOT EXISTS loge_favorites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    post_id INTEGER NOT NULL REFERENCES loge_posts(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(user_id,post_id)
+);
+CREATE INDEX IF NOT EXISTS idx_loge_favorites_user ON loge_favorites(user_id,id DESC);
+CREATE INDEX IF NOT EXISTS idx_loge_favorites_post ON loge_favorites(post_id);

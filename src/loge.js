@@ -46,7 +46,16 @@ export const LOGE_SCHEMA=[
     write_window_at INTEGER NOT NULL DEFAULT 0,
     write_count INTEGER NOT NULL DEFAULT 0,
     write_claim_token TEXT NOT NULL DEFAULT ''
-  )`
+  )`,
+  `CREATE TABLE IF NOT EXISTS loge_favorites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    post_id INTEGER NOT NULL REFERENCES loge_posts(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(user_id,post_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_loge_favorites_user ON loge_favorites(user_id,id DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_loge_favorites_post ON loge_favorites(post_id)`
 ];
 const ready=new WeakMap();
 export async function ensureLogeTables(env){
@@ -63,7 +72,7 @@ const authorFields=`u.username,u.avatar_data IS NOT NULL AS has_avatar`;
 const postFields=`p.*,${authorFields},(SELECT count(*) FROM loge_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count`;
 const postSelect=`SELECT ${postFields} FROM loge_posts p JOIN users u ON u.id=p.author_id`;
 const commentSelect=`SELECT c.*,${authorFields} FROM loge_comments c JOIN users u ON u.id=c.author_id JOIN loge_posts p ON p.id=c.post_id`;
-const postView=row=>({id:row.id,author:person(row),title:row.title,description:row.description,youtubeUrl:'https://www.youtube.com/watch?v='+row.youtube_id,createdAt:iso(row.created_at),updatedAt:iso(row.updated_at),revision:row.revision,commentCount:row.comment_count});
+const postView=row=>({id:row.id,author:person(row),title:row.title,description:row.description,youtubeUrl:'https://www.youtube.com/watch?v='+row.youtube_id,createdAt:iso(row.created_at),updatedAt:iso(row.updated_at),revision:row.revision,commentCount:row.comment_count,isFavorite:!!row.is_favorite});
 const commentView=row=>({id:row.id,postId:row.post_id,author:person(row),body:row.body,createdAt:iso(row.created_at),updatedAt:iso(row.updated_at),revision:row.revision});
 const cursor=url=>integer(Number(url.searchParams.get('after')||0));
 const safeId=value=>{const id=Number(value);if(!Number.isSafeInteger(id)||id<1)fail('Page introuvable.',404);return id;};
@@ -94,9 +103,21 @@ async function selfOf(env,userId){
   const row=await env.DB.prepare('SELECT id,username,avatar_data IS NOT NULL AS has_avatar FROM users WHERE id=?1').bind(userId).first();
   if(!row)fail('Membre introuvable.',404);return person(row);
 }
-async function visiblePost(env,id){
+async function favoriteIds(env,userId,ids){
+  if(!ids.length)return new Set();
+  const unique=[...new Set(ids)];
+  const rows=(await env.DB.prepare(`SELECT post_id FROM loge_favorites WHERE user_id=?1 AND post_id IN (${unique.map((_,i)=>'?'+(i+2)).join(',')})`).bind(userId,...unique).all()).results||[];
+  return new Set(rows.map(row=>row.post_id));
+}
+async function withFavorites(env,userId,rows){
+  const saved=await favoriteIds(env,userId,rows.map(row=>row.id));
+  return rows.map(row=>({...row,is_favorite:saved.has(row.id)}));
+}
+async function visiblePost(env,id,viewerId=null){
   const row=await env.DB.prepare(postSelect+' WHERE p.id=?1 AND p.deleted_at IS NULL').bind(id).first();
-  if(!row)fail('Publication introuvable.',404);return row;
+  if(!row)fail('Publication introuvable.',404);
+  if(viewerId!==null)row.is_favorite=(await favoriteIds(env,viewerId,[id])).has(id);
+  return row;
 }
 async function ownedPost(env,id,userId){
   const row=await visiblePost(env,id);if(row.author_id!==userId)fail('Publication introuvable.',404);return row;
@@ -136,11 +157,13 @@ function reserveComment(env,userId,claim,nonce=null){
 }
 
 async function createPost(request,env,user,json){
-  const body=await bodyOf(request),title=titleOf(body.title),description=clean(body.description,5000),video=youtubeId(body.url),nonce=requestId(body.requestId);
+  const body=await bodyOf(request),title=titleOf(body.title),description=Object.hasOwn(body,'description')?clean(body.description,5000):title,video=youtubeId(body.url),nonce=requestId(body.requestId);
+  // Existing D1 tables require a nonempty description. A title-only client
+  // fills that legacy column without rebuilding tables or changing old text.
   if(!video)fail('Ce lien YouTube n’est pas valide.');
   const hash=await fingerprint([title,description,video]);
   const repeated=await env.DB.prepare('SELECT id,request_fingerprint,deleted_at FROM loge_posts WHERE author_id=?1 AND request_id=?2').bind(user.id,nonce).first();
-  if(repeated){sameRequest(repeated,hash);const time=await timing(env,user.id);return json({post:postView(await visiblePost(env,repeated.id)),nextPublicationAt:time.nextPublicationAt});}
+  if(repeated){sameRequest(repeated,hash);const time=await timing(env,user.id);return json({post:postView(await visiblePost(env,repeated.id,user.id)),nextPublicationAt:time.nextPublicationAt});}
   const claim=crypto.randomUUID();
   // D1 batches are transactional. The unique claim ties this INSERT to the
   // successful conditional reservation, even with simultaneous submissions.
@@ -157,17 +180,17 @@ async function createPost(request,env,user,json){
   ]);
   const row=await env.DB.prepare('SELECT id,request_fingerprint,deleted_at FROM loge_posts WHERE author_id=?1 AND request_id=?2').bind(user.id,nonce).first();
   const time=await timing(env,user.id);
-  if(row){sameRequest(row,hash);return json({post:postView(await visiblePost(env,row.id)),nextPublicationAt:time.nextPublicationAt},results[1].meta.changes?201:200);}
+  if(row){sameRequest(row,hash);return json({post:postView(await visiblePost(env,row.id,user.id)),nextPublicationAt:time.nextPublicationAt},results[1].meta.changes?201:200);}
   return json({error:'Tu peux publier une vidéo tous les sept jours.',nextPublicationAt:time.nextPublicationAt,serverNow:time.serverNow},429,{'Retry-After':String(Math.max(1,time.retryAfter))});
 }
 async function updatePost(request,env,user,id,json){
   await ownedPost(env,id,user.id);
   const body=await bodyOf(request);immutableVideo(body);
-  const title=titleOf(body.title),description=clean(body.description,5000),revision=integer(body.revision,1);
-  const result=await env.DB.prepare(`UPDATE loge_posts SET title=?1,description=?2,revision=revision+1,updated_at=unixepoch()
+  const title=titleOf(body.title),description=Object.hasOwn(body,'description')?clean(body.description,5000):null,revision=integer(body.revision,1);
+  const result=await env.DB.prepare(`UPDATE loge_posts SET title=?1,description=COALESCE(?2,description),revision=revision+1,updated_at=unixepoch()
     WHERE id=?3 AND author_id=?4 AND revision=?5 AND deleted_at IS NULL`).bind(title,description,id,user.id,revision).run();
   if(!result.meta.changes)return conflict(env,'post',id,user.id,json);
-  const time=await timing(env,user.id);return json({post:postView(await visiblePost(env,id)),nextPublicationAt:time.nextPublicationAt});
+  const time=await timing(env,user.id);return json({post:postView(await visiblePost(env,id,user.id)),nextPublicationAt:time.nextPublicationAt});
 }
 async function deletePost(request,env,user,id,json){
   await ownedPost(env,id,user.id);
@@ -176,7 +199,8 @@ async function deletePost(request,env,user,id,json){
     env.DB.prepare(`UPDATE loge_posts SET title='',description='',youtube_id='',deleted_at=unixepoch(),updated_at=unixepoch(),revision=revision+1
       WHERE id=?1 AND author_id=?2 AND revision=?3 AND deleted_at IS NULL`).bind(id,user.id,revision),
     env.DB.prepare(`UPDATE loge_comments SET body='',deleted_at=unixepoch(),updated_at=unixepoch(),revision=revision+1
-      WHERE post_id=?1 AND deleted_at IS NULL AND EXISTS(SELECT 1 FROM loge_posts WHERE id=?1 AND author_id=?2 AND revision=?3+1 AND deleted_at IS NOT NULL)`).bind(id,user.id,revision)
+      WHERE post_id=?1 AND deleted_at IS NULL AND EXISTS(SELECT 1 FROM loge_posts WHERE id=?1 AND author_id=?2 AND revision=?3+1 AND deleted_at IS NOT NULL)`).bind(id,user.id,revision),
+    env.DB.prepare('DELETE FROM loge_favorites WHERE post_id=?1 AND EXISTS(SELECT 1 FROM loge_posts WHERE id=?1 AND deleted_at IS NOT NULL)').bind(id)
   ]);
   if(!result.meta.changes)return conflict(env,'post',id,user.id,json);
   const time=await timing(env,user.id);return json({ok:true,nextPublicationAt:time.nextPublicationAt});
@@ -221,10 +245,18 @@ async function listComments(env,postId,url,json){
   const result=page(rows,commentView);return json({comments:result.items,next:result.next});
 }
 async function memberPage(env,user,id,url,json){
-  const member=await selfOf(env,id),self=await selfOf(env,user.id),after=cursor(url),tab=url.searchParams.get('tab')||'reflexions';
+  const tab=url.searchParams.get('tab')||'reflexions';
+  if(tab==='favoris'&&id!==user.id)fail('Cette liste est privée.',403);
+  const member=await selfOf(env,id),self=await selfOf(env,user.id),after=cursor(url);
+  if(tab==='favoris'){
+    const rows=(await env.DB.prepare(`SELECT ${postFields},f.id AS favorite_id FROM loge_favorites f
+      JOIN loge_posts p ON p.id=f.post_id JOIN users u ON u.id=p.author_id
+      WHERE f.user_id=?1 AND p.deleted_at IS NULL AND (?2=0 OR f.id<?2) ORDER BY f.id DESC LIMIT 21`).bind(user.id,after).all()).results||[];
+    return json({member,self,posts:rows.slice(0,LOGE_PAGE_SIZE).map(row=>postView({...row,is_favorite:true})),next:rows.length>LOGE_PAGE_SIZE?rows[LOGE_PAGE_SIZE-1].favorite_id:null});
+  }
   if(tab==='reflexions'){
     const rows=(await env.DB.prepare(postSelect+' WHERE p.author_id=?1 AND p.deleted_at IS NULL AND (?2=0 OR p.id<?2) ORDER BY p.id DESC LIMIT 21').bind(id,after).all()).results||[];
-    const result=page(rows,postView);return json({member,self,posts:result.items,next:result.next});
+    const result=page(await withFavorites(env,user.id,rows),postView);return json({member,self,posts:result.items,next:result.next});
   }
   if(tab!=='interventions')fail('Vue invalide.');
   const rows=(await env.DB.prepare(`SELECT c.*,${authorFields},p.id AS target_post_id,p.title AS post_title,p.author_id AS post_author_id,
@@ -232,7 +264,8 @@ async function memberPage(env,user,id,url,json){
     FROM loge_comments c JOIN users u ON u.id=c.author_id JOIN loge_posts p ON p.id=c.post_id JOIN users pu ON pu.id=p.author_id
     WHERE c.author_id=?1 AND p.author_id<>?1 AND c.deleted_at IS NULL AND p.deleted_at IS NULL AND (?2=0 OR c.id<?2)
     ORDER BY c.id DESC LIMIT 21`).bind(id,after).all()).results||[];
-  const result=page(rows,row=>({...commentView(row),post:{id:row.target_post_id,title:row.post_title,author:person({author_id:row.post_author_id,username:row.post_username,has_avatar:row.post_has_avatar})}}));
+  const favorites=await favoriteIds(env,user.id,rows.map(row=>row.target_post_id));
+  const result=page(rows,row=>({...commentView(row),post:{id:row.target_post_id,title:row.post_title,isFavorite:favorites.has(row.target_post_id),author:person({author_id:row.post_author_id,username:row.post_username,has_avatar:row.post_has_avatar})}}));
   return json({member,self,interventions:result.items,next:result.next});
 }
 
@@ -246,13 +279,25 @@ export async function handleLoge(request,env,url,{getUser,json}){
   if(path==='/api/loge'){
     if(method!=='GET')fail('Méthode indisponible.',405);
     const after=cursor(url),rows=(await env.DB.prepare(postSelect+' WHERE p.deleted_at IS NULL AND (?1=0 OR p.id<?1) ORDER BY p.id DESC LIMIT 21').bind(after).all()).results||[];
-    const result=page(rows,postView),time=await timing(env,user.id);
+    const result=page(await withFavorites(env,user.id,rows),postView),time=await timing(env,user.id);
     return json({self:await selfOf(env,user.id),posts:result.items,next:result.next,nextPublicationAt:time.nextPublicationAt,serverNow:time.serverNow});
   }
   if(path==='/api/loge/posts'){
     if(method!=='POST')fail('Méthode indisponible.',405);return createPost(request,env,user,json);
   }
-  let match=/^\/api\/loge\/posts\/([1-9]\d*)\/comments$/.exec(path);
+  let match=/^\/api\/loge\/posts\/([1-9]\d*)\/favorite$/.exec(path);
+  if(match){
+    if(method!=='PUT')fail('Méthode indisponible.',405);
+    const id=safeId(match[1]);await visiblePost(env,id);
+    const body=await bodyOf(request);if(typeof body.favorite!=='boolean')fail('État de favori invalide.');
+    if(body.favorite)await env.DB.prepare(`INSERT INTO loge_favorites(user_id,post_id)
+      SELECT ?1,?2 WHERE EXISTS(SELECT 1 FROM loge_posts WHERE id=?2 AND deleted_at IS NULL)
+      ON CONFLICT(user_id,post_id) DO NOTHING`).bind(user.id,id).run();
+    else await env.DB.prepare('DELETE FROM loge_favorites WHERE user_id=?1 AND post_id=?2').bind(user.id,id).run();
+    await visiblePost(env,id);
+    return json({postId:id,isFavorite:body.favorite});
+  }
+  match=/^\/api\/loge\/posts\/([1-9]\d*)\/comments$/.exec(path);
   if(match){
     const id=safeId(match[1]);
     if(method==='GET')return listComments(env,id,url,json);
@@ -262,7 +307,7 @@ export async function handleLoge(request,env,url,{getUser,json}){
   match=/^\/api\/loge\/posts\/([1-9]\d*)$/.exec(path);
   if(match){
     const id=safeId(match[1]);
-    if(method==='GET'){const time=await timing(env,user.id);return json({post:postView(await visiblePost(env,id)),self:await selfOf(env,user.id),nextPublicationAt:time.nextPublicationAt});}
+    if(method==='GET'){const time=await timing(env,user.id);return json({post:postView(await visiblePost(env,id,user.id)),self:await selfOf(env,user.id),nextPublicationAt:time.nextPublicationAt});}
     if(method==='PUT')return updatePost(request,env,user,id,json);
     if(method==='DELETE')return deletePost(request,env,user,id,json);
     fail('Méthode indisponible.',405);
