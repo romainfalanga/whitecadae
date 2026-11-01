@@ -15,18 +15,12 @@ class Element extends Bus{
     const classes=new Set();this.classList={add:(...names)=>names.forEach(name=>classes.add(name)),remove:(...names)=>names.forEach(name=>classes.delete(name)),contains:name=>classes.has(name)};
     this.box={top:0,left:0,right:400,bottom:800,width:400,height:800};
   }
-  append(...nodes){for(const node of nodes){node.remove();this.children.push(node);node.parentNode=this;}const doc=this.ownerDocument;if(doc)doc.peakFrames=Math.max(doc.peakFrames||0,doc.querySelectorAll('iframe').length);}
+  append(...nodes){for(const node of nodes){node.remove();this.children.push(node);node.parentNode=this;}}
   remove(){if(this.parentNode){const parent=this.parentNode;parent.children.splice(parent.children.indexOf(this),1);this.parentNode=null;}}
   setAttribute(key,value){this.attributes.set(key,String(value));}
   getAttribute(key){return this.attributes.get(key)??null;}
   get isConnected(){return this===this.ownerDocument||!!this.parentNode?.isConnected;}
-  getBoundingClientRect(){
-    if(this.classList.contains('is-video-expanded'))return {top:0,left:0,right:400,bottom:800,width:400,height:800};
-    if(this.tagName==='IFRAME'&&!this.frameBox){const box=this.parentNode.getBoundingClientRect();return this.parentNode.classList.contains('is-video-expanded')?{...box,bottom:744,height:744}:box;}
-    return this.frameBox||this.box;
-  }
-  contains(node){return node===this||this.children.some(child=>child.contains(node));}
-  focus(options){this.ownerDocument.activeElement=this;this.focusOptions=options;this.ownerDocument.dispatchEvent(new Event('focusin'));}
+  getBoundingClientRect(){return this.tagName==='IFRAME'&&!this.frameBox?this.parentNode.getBoundingClientRect():this.frameBox||this.box;}
   querySelector(selector){return this.querySelectorAll(selector)[0]||null;}
   querySelectorAll(selector){
     const found=[];for(const child of this.children){
@@ -44,7 +38,6 @@ async function harness({apiReady=true,previousReady}={}){
   const document=new Element('document');document.ownerDocument=document;document.hidden=false;
   document.createElement=tag=>new Element(tag,document);document.head=document.createElement('head');document.body=document.createElement('body');document.append(document.head,document.body);
   const window=new Bus();window.innerWidth=400;window.innerHeight=800;window.WCPlayer={pause(){musicPauses++;const event=new Event('wc:music');event.detail={playing:false};window.dispatchEvent(event);}};
-  window.scrollX=0;window.scrollY=0;window.scrollTo=(left,top)=>{window.scrollX=left;window.scrollY=top;};
   let musicPauses=0;const players=[],observers=[],feeds=[];
   class Player{
     constructor(iframe,options){this.iframe=iframe;this.events=options.events;this.calls=[];this.muted=true;this.state=-1;players.push(this);}
@@ -83,7 +76,7 @@ test('warm loading is bounded to three native iframes with safe official API par
     assert.equal(h.document.querySelectorAll('iframe').length,3);await tick();assert.equal(h.players.length,3);
     for(const iframe of h.document.querySelectorAll('iframe')){
       const url=new URL(iframe.src);assert.equal(url.origin,'https://www.youtube-nocookie.com');
-      for(const [key,value]of Object.entries({enablejsapi:'1',origin:'https://whitecadae.fr',playsinline:'1',autoplay:'0',mute:'0',controls:'0',disablekb:'0'}))assert.equal(url.searchParams.get(key),value);
+      for(const [key,value]of Object.entries({enablejsapi:'1',origin:'https://whitecadae.fr',playsinline:'1',autoplay:'0',mute:'0',controls:'1',disablekb:'0',fs:'1'}))assert.equal(url.searchParams.get(key),value);
       assert.match(iframe.getAttribute('allow'),/autoplay/);assert.equal(iframe.getAttribute('referrerpolicy'),'strict-origin-when-cross-origin');
     }
     for(const player of h.players)player.emit('onReady');
@@ -125,7 +118,7 @@ test('audible autoplay has no custom control or muted retry; blocked playback re
     player.emit('onAutoplayBlocked');feed.refresh();feed.pause();feed.resume();
     h.document.hidden=true;h.document.dispatchEvent(new Event('visibilitychange'));h.document.hidden=false;h.document.dispatchEvent(new Event('visibilitychange'));
     assert.equal(player.count('play'),before);assert.equal(player.count('mute'),0);
-    assert.equal(node.querySelectorAll('button').length,0);assert.equal(new URL(node.querySelector('iframe').src).searchParams.get('controls'),'0');
+    assert.equal(node.querySelectorAll('button').length,0);assert.equal(new URL(node.querySelector('iframe').src).searchParams.get('controls'),'1');
     player.emit('onStateChange',1);assert.equal(node.classList.contains('is-playing'),true);assert.equal(player.count('play'),before);assert.equal(player.muted,false);
     player.emit('onStateChange',2);feed.refresh();assert.equal(player.count('play'),before);
   }finally{await h.close();}
@@ -267,98 +260,56 @@ test('visibility measures and observes the actual iframe, including a layout cha
   }finally{await h.close();}
 });
 
-test('native fullscreen preserves the playing iframe and restores focus plus root and page scroll on exit',async()=>{
-  const h=await harness(),root=h.container(),feed=h.feed({root}),media=h.container(0,root),trigger=h.container();trigger.focus();
-  try{
-    root.scrollTop=360;root.scrollLeft=12;h.window.scrollX=4;h.window.scrollY=220;
-    feed.add(h.post(1),media);await tick();const player=h.players[0];player.emit('onReady');player.time=37;
-    const iframe=player.iframe,src=iframe.src,plays=player.count('play');let requests=0,exits=0;
-    media.requestFullscreen=function(){requests++;h.document.fullscreenElement=this;h.document.dispatchEvent(new Event('fullscreenchange'));return Promise.resolve();};
-    h.document.exitFullscreen=()=>{exits++;h.document.fullscreenElement=null;h.document.dispatchEvent(new Event('fullscreenchange'));return Promise.resolve();};
-    assert.equal(feed.fullscreen(1,trigger),true);assert.equal(requests,1);
-    assert.equal(media.classList.contains('is-video-expanded'),true);assert.equal(media.querySelector('iframe'),iframe);assert.equal(h.document.querySelectorAll('iframe').length,1);
-    const exit=media.querySelector('button');assert.equal(exit.textContent,'Quitter le plein écran');assert.equal(h.document.activeElement,exit);assert.equal(media.children.at(-1).children[0],exit);
-    assert.equal(player.count('play'),plays);assert.equal(player.time,37);assert.equal(iframe.src,src);
-    root.scrollTop=0;root.scrollLeft=0;h.window.scrollX=0;h.window.scrollY=0;exit.dispatchEvent(new Event('click'));await tick();
-    assert.equal(exits,1);assert.equal(h.document.fullscreenElement,null);assert.equal(media.classList.contains('is-video-expanded'),false);assert.equal(media.querySelectorAll('button').length,0);
-    assert.equal(media.querySelector('iframe'),iframe);assert.equal(iframe.src,src);assert.equal(player.time,37);assert.equal(player.count('destroy'),0);
-    assert.equal(root.scrollTop,360);assert.equal(root.scrollLeft,12);assert.equal(h.window.scrollY,220);assert.equal(h.window.scrollX,4);assert.equal(h.document.activeElement,trigger);assert.deepEqual(trigger.focusOptions,{preventScroll:true});
-  }finally{await h.close();}
-});
-
-test('browser fullscreen exits and prefixed WebKit events clean up the same expanded view',async()=>{
-  const h=await harness(),feed=h.feed(),media=h.container(),trigger=h.container();
-  try{
-    feed.add(h.post(1),media);await tick();h.players[0].emit('onReady');
-    media.webkitRequestFullscreen=function(){h.document.webkitFullscreenElement=this;h.document.dispatchEvent(new Event('webkitfullscreenchange'));};
-    h.document.webkitExitFullscreen=()=>{h.document.webkitFullscreenElement=null;h.document.dispatchEvent(new Event('webkitfullscreenchange'));};
-    feed.fullscreen(1,trigger);await tick();assert.equal(h.document.webkitFullscreenElement,media);
-    h.document.webkitFullscreenElement=null;h.document.dispatchEvent(new Event('webkitfullscreenchange'));
-    assert.equal(media.classList.contains('is-video-expanded'),false);assert.equal(media.querySelectorAll('button').length,0);assert.equal(h.document.activeElement,trigger);
-    feed.fullscreen(1,trigger);media.querySelector('button').dispatchEvent(new Event('click'));await tick();assert.equal(h.document.webkitFullscreenElement,null);
-  }finally{await h.close();}
-});
-
-test('native iframe fullscreen keeps the expanded container and exits its owned fullscreen stack',async()=>{
-  const h=await harness(),feed=h.feed(),media=h.container();
-  try{
-    feed.add(h.post(1),media);await tick();const player=h.players[0];player.emit('onReady');const iframe=player.iframe,stack=[];let exits=0;
-    const change=()=>{h.document.fullscreenElement=stack.at(-1)||null;h.document.dispatchEvent(new Event('fullscreenchange'));};
-    media.requestFullscreen=()=>{stack.push(media);change();return Promise.resolve();};
-    h.document.exitFullscreen=()=>{exits++;stack.pop();change();return Promise.resolve();};
-    feed.fullscreen(1);await tick();const bar=media.children.at(-1),plays=player.count('play');
-    stack.push(iframe);change();assert.equal(media.classList.contains('is-video-expanded'),true);assert.equal(media.children.at(-1),bar);
-    await h.document.exitFullscreen();assert.equal(h.document.fullscreenElement,media);assert.equal(media.children.at(-1),bar);
-    stack.push(iframe);change();bar.querySelector('button').dispatchEvent(new Event('click'));await tick();
-    assert.equal(exits,3);assert.equal(h.document.fullscreenElement,null);assert.equal(media.classList.contains('is-video-expanded'),false);assert.equal(media.querySelectorAll('button').length,0);
-    assert.equal(media.querySelector('iframe'),iframe);assert.equal(player.count('play'),plays);assert.equal(player.count('destroy'),0);
-  }finally{await h.close();}
-});
-
-test('missing or refused native fullscreen keeps the expanded fallback, with keyboard exit and bounded focus',async()=>{
-  const h=await harness(),feed=h.feed(),media=h.container(),trigger=h.container();
-  try{
-    feed.add(h.post(1),media);await tick();h.players[0].emit('onReady');const iframe=media.querySelector('iframe');
-    h.document.body.style={overflow:'auto'};h.window.scrollY=125;
-    assert.equal(feed.fullscreen(1,trigger),true);assert.equal(media.classList.contains('is-video-expanded'),true);
-    const exit=media.querySelector('button');trigger.focus();assert.equal(h.document.activeElement,exit);
-    const tab=new Event('keydown',{cancelable:true});Object.defineProperty(tab,'key',{value:'Tab'});h.document.dispatchEvent(tab);assert.equal(h.document.activeElement,iframe);assert.equal(tab.defaultPrevented,true);
-    const escape=new Event('keydown',{cancelable:true});Object.defineProperty(escape,'key',{value:'Escape'});h.document.dispatchEvent(escape);
-    assert.equal(escape.defaultPrevented,true);assert.equal(media.classList.contains('is-video-expanded'),false);assert.equal(h.document.activeElement,trigger);assert.equal(h.window.scrollY,125);
-    media.requestFullscreen=()=>Promise.reject(Error('Policy denied'));feed.fullscreen(1,trigger);await tick();
-    assert.equal(media.classList.contains('is-video-expanded'),true);assert.equal(media.querySelector('iframe'),iframe);media.querySelector('button').dispatchEvent(new Event('click'));await tick();
-    assert.equal(media.classList.contains('is-video-expanded'),false);assert.deepEqual(h.document.body.style,{overflow:'auto'});
-  }finally{await h.close();}
-});
-
-test('fullscreen of a distant cold clip ignores reel clipping, warms at most three and suppresses other players',async()=>{
+test('YouTube native fullscreen ignores reel clipping and pauses other visible frames without adding custom UI',async()=>{
   const h=await harness(),root=h.container(),feed=h.feed({root}),media=[];
   try{
-    root.box={top:80,left:0,right:400,bottom:300,width:400,height:220};
+    root.box={top:100,left:0,right:400,bottom:300,width:400,height:200};
     for(let i=0;i<20;i++){const node=h.container(i,root);media.push(node);feed.add(h.post(i),node);}await tick();h.players.forEach(player=>player.emit('onReady'));
-    assert.equal(media[19].querySelector('iframe'),null);feed.fullscreen(19);await tick();
-    assert.equal(h.document.querySelectorAll('iframe').length,3);assert.ok(h.document.peakFrames<=3);
-    const fresh=h.players.slice(-3);fresh.forEach(player=>player.emit('onReady'));
-    const selected=fresh.find(player=>player.iframe===media[19].querySelector('iframe'));
-    assert.ok(selected);assert.equal(selected.count('play'),1);assert.equal(fresh.filter(player=>player.count('play')).length,1);
-    const other=fresh.find(player=>player!==selected);other.emit('onStateChange',1);assert.ok(other.count('pause')>0);assert.equal(other.iframe.parentNode.classList.contains('is-playing'),false);
-    assert.equal(media[19].children.at(-1).querySelector('button').textContent,'Quitter le plein écran');
-    // Entering fullscreen never clears an autoplay refusal or music lock.
-    selected.emit('onAutoplayBlocked');const plays=selected.count('play');feed.fullscreen(19);feed.refresh();assert.equal(selected.count('play'),plays);
+    assert.equal(h.players.filter(player=>player.count('play')).length,0);assert.equal('fullscreen' in feed,false);
+    const selected=h.players[2],iframe=selected.iframe,src=iframe.src;selected.time=37;
+    iframe.frameBox={top:0,left:0,right:400,bottom:800,width:400,height:800};h.players[1].iframe.frameBox={...iframe.frameBox};
+    h.document.fullscreenElement=iframe;h.document.dispatchEvent(new Event('fullscreenchange'));await tick();
+    assert.equal(selected.count('play'),1);assert.equal(iframe.src,src);assert.equal(selected.time,37);
+    assert.equal(h.document.querySelectorAll('iframe').length,3);assert.equal(h.document.querySelectorAll('button').length,0);
+    const other=h.players[1];other.emit('onStateChange',1);assert.equal(other.iframe.parentNode.classList.contains('is-playing'),false);assert.ok(other.count('pause')>0);
+    assert.equal(selected.iframe,media[2].querySelector('iframe'));assert.equal(selected.count('destroy'),0);
+    h.document.fullscreenElement=null;iframe.frameBox=null;other.iframe.frameBox=null;h.document.dispatchEvent(new Event('fullscreenchange'));await tick();
+    assert.ok(selected.count('pause')>0);assert.equal(selected.iframe,media[2].querySelector('iframe'));assert.equal(selected.time,37);
   }finally{await h.close();}
 });
 
-for(const action of ['pause','destroy','remove'])test('late native fullscreen completion cannot revive a view after '+action,async()=>{
-  const h=await harness(),feed=h.feed(),media=h.container(),trigger=h.container();let resolve,exits=0;
+for(const prefixed of [false,true])for(const action of ['pause','remove','destroy'])test((prefixed?'WebKit':'standard')+' native fullscreen exits only the owned player on '+action,async()=>{
+  const h=await harness(),feed=h.feed(),media=h.container();let exits=0;
+  const property=prefixed?'webkitFullscreenElement':'fullscreenElement',event=prefixed?'webkitfullscreenchange':'fullscreenchange',exit=prefixed?'webkitExitFullscreen':'exitFullscreen';
   try{
-    feed.add(h.post(1),media);await tick();h.players[0].emit('onReady');
-    media.requestFullscreen=()=>new Promise(done=>{resolve=done;});
+    feed.add(h.post(1),media);await tick();const player=h.players[0];player.emit('onReady');const iframe=player.iframe;
+    h.document[property]=iframe;h.document.dispatchEvent(new Event(event));await tick();
+    h.document[exit]=()=>{exits++;h.document[property]=null;h.document.dispatchEvent(new Event(event));return prefixed?undefined:Promise.resolve();};
+    if(action==='remove')feed.remove(1);else feed[action]();await tick();
+    assert.equal(exits,1);assert.equal(h.document[property],null);assert.equal(media.querySelectorAll('button').length,0);
+    if(action==='pause'){
+      assert.equal(media.querySelector('iframe'),iframe);const before=player.count('play');player.emit('onStateChange',1);feed.refresh();assert.equal(player.count('play'),before);assert.equal(media.classList.contains('is-playing'),false);
+    }else assert.equal(media.querySelector('iframe'),null);
+    if(action==='destroy'){assert.equal(h.document.count(),0);assert.equal(h.window.count(),0);}
+  }finally{await h.close();}
+});
+
+test('native fullscreen of another element is untouched and removing a different clip keeps the owned fullscreen',async()=>{
+  const h=await harness(),feed=h.feed(),one=h.container(),two=h.container(1),foreign=h.container();let exits=0;
+  try{
+    feed.add(h.post(1),one);feed.add(h.post(2),two);await tick();h.players.forEach(player=>player.emit('onReady'));
     h.document.exitFullscreen=()=>{exits++;h.document.fullscreenElement=null;h.document.dispatchEvent(new Event('fullscreenchange'));return Promise.resolve();};
-    feed.fullscreen(1,trigger);if(action==='remove')feed.remove(1);else feed[action]();
-    assert.equal(media.classList.contains('is-video-expanded'),false);assert.equal(media.querySelectorAll('button').length,0);
-    await tick();
-    h.document.activeElement=null;h.document.fullscreenElement=media;resolve();await tick();
-    assert.equal(h.document.fullscreenElement,null);assert.equal(exits,1);assert.equal(media.classList.contains('is-video-expanded'),false);assert.equal(h.document.activeElement,null);
-    if(action==='destroy'){assert.equal(h.document.count(),0);assert.equal(h.window.count(),0);assert.equal(h.document.querySelectorAll('iframe').length,0);}
+    h.document.fullscreenElement=h.players[0].iframe;feed.remove(2);await tick();assert.equal(exits,0);assert.equal(h.document.fullscreenElement,h.players[0].iframe);
+    h.document.fullscreenElement=foreign;h.document.dispatchEvent(new Event('fullscreenchange'));await tick();feed.pause();feed.destroy();await tick();assert.equal(exits,0);assert.equal(h.document.fullscreenElement,foreign);
+  }finally{await h.close();}
+});
+
+test('a native fullscreen event arriving after navigation suspension is exited without restarting playback',async()=>{
+  let current=true;const h=await harness(),feed=h.feed({isCurrent:()=>current}),media=h.container();let exits=0;
+  try{
+    feed.add(h.post(1),media);await tick();const player=h.players[0];player.emit('onReady');const plays=player.count('play');feed.pause();current=false;
+    h.document.exitFullscreen=()=>{exits++;h.document.fullscreenElement=null;h.document.dispatchEvent(new Event('fullscreenchange'));return Promise.resolve();};
+    h.document.fullscreenElement=player.iframe;h.document.dispatchEvent(new Event('fullscreenchange'));await tick();
+    assert.equal(exits,1);assert.equal(h.document.fullscreenElement,null);assert.equal(player.count('play'),plays);assert.equal(media.classList.contains('is-playing'),false);
   }finally{await h.close();}
 });

@@ -118,7 +118,6 @@ async function perform(key,container,work,onError){
 }
 
 function videoMarkup(post){return `<div class="loge-reel-media" id="loge-video-${esc(post.id)}" data-video-post="${esc(post.id)}"></div>`;}
-function fullscreenButton(post){return button('<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><span>Plein écran</span>',`data-video-fullscreen="${esc(post.id)}" aria-controls="loge-video-${esc(post.id)}" aria-label="Mettre cette vidéo en plein écran"`,true);}
 function canManagePosts(){const view=session.current;return view.kind==='profile'&&view.tab==='reflexions'&&String(view.memberId)===String(session.user);}
 function closeVideo(s=session){for(const view of s?.views?.values()||[]){view.player?.destroy();view.player=null;view.paginationObserver?.disconnect();view.paginationObserver=null;}}
 function bindVideo(id){const view=session.current,post=view.posts.get(String(id)),container=node('loge-video-'+id);if(view.player&&post&&container)view.player.add(post,container);}
@@ -141,8 +140,8 @@ function refreshLayout(view){
 function ownerMenu(kind,id){return `<details class="loge-menu"><summary aria-label="Options de ${kind==='post'?'la publication':'ton commentaire'}">…</summary><div>${button('Modifier',`data-${kind}-edit="${esc(id)}"`,true)}${button('Supprimer',`data-${kind}-delete="${esc(id)}"`,true)}</div></details>`;}
 function postMarkup(post,detail=false){
   const reel=session.current.kind==='feed';
-  if(reel)return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage">${videoMarkup(post)}<footer class="loge-reel-info"><div class="loge-reel-byline">${author(post.author)}${stamp(post.createdAt)}</div><h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2><p class="loge-description is-excerpt" id="loge-post-description-${esc(post.id)}">${esc(post.description)}</p><div class="loge-reel-actions">${fullscreenButton(post)}${button('Commentaires'+(Number.isInteger(post.commentCount)?' ('+post.commentCount+')':''),`data-comments-open="${esc(post.id)}" aria-expanded="false"`,true)}</div>${statusMarkup('loge-post-status-'+post.id)}</footer></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div></article>`;
-  return `<article class="loge-publication${detail?' is-detail':''}" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><header class="loge-post-head">${author(post.author)}${stamp(post.createdAt)}${own(post)&&canManagePosts()?ownerMenu('post',post.id):''}</header><${detail?'h1':'h2'} class="loge-post-title" id="loge-post-title-${esc(post.id)}">${detail?esc(post.title):`<a href="${postPath(post.id)}" data-link>${esc(post.title)}</a>`}</${detail?'h1':'h2'}>${videoMarkup(post)}<p class="loge-description${detail?'':' is-excerpt'}" id="loge-post-description-${esc(post.id)}">${esc(post.description)}</p><footer class="loge-post-actions">${detail?'':`<a href="${postPath(post.id)}" data-link>Commentaires${Number.isInteger(post.commentCount)?' ('+post.commentCount+')':''}</a>`}${fullscreenButton(post)}</footer><div id="loge-post-editor-${esc(post.id)}"></div>${statusMarkup('loge-post-status-'+post.id)}</article>`;
+  if(reel)return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage">${videoMarkup(post)}<footer class="loge-reel-info"><div class="loge-reel-byline">${author(post.author)}${stamp(post.createdAt)}</div><h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2><p class="loge-description is-excerpt" id="loge-post-description-${esc(post.id)}">${esc(post.description)}</p><div class="loge-reel-actions">${button('Commentaires'+(Number.isInteger(post.commentCount)?' ('+post.commentCount+')':''),`data-comments-open="${esc(post.id)}" aria-expanded="false"`,true)}</div>${statusMarkup('loge-post-status-'+post.id)}</footer></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div></article>`;
+  return `<article class="loge-publication${detail?' is-detail':''}" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><header class="loge-post-head">${author(post.author)}${stamp(post.createdAt)}${own(post)&&canManagePosts()?ownerMenu('post',post.id):''}</header><${detail?'h1':'h2'} class="loge-post-title" id="loge-post-title-${esc(post.id)}">${detail?esc(post.title):`<a href="${postPath(post.id)}" data-link>${esc(post.title)}</a>`}</${detail?'h1':'h2'}>${videoMarkup(post)}<p class="loge-description${detail?'':' is-excerpt'}" id="loge-post-description-${esc(post.id)}">${esc(post.description)}</p>${detail?'':`<footer class="loge-post-actions"><a href="${postPath(post.id)}" data-link>Commentaires${Number.isInteger(post.commentCount)?' ('+post.commentCount+')':''}</a></footer>`}<div id="loge-post-editor-${esc(post.id)}"></div>${statusMarkup('loge-post-status-'+post.id)}</article>`;
 }
 function updatePost(post){
   const s=session;s.posts.set(String(post.id),post);
@@ -159,12 +158,6 @@ function insertPost(post,list,detail=false){
   if(before)before.insertAdjacentHTML('beforebegin',postMarkup(post,detail));else{const end=list.querySelector('.loge-feed-pagination');if(end)end.insertAdjacentHTML('beforebegin',postMarkup(post,detail));else list.insertAdjacentHTML('beforeend',postMarkup(post,detail));}
   bindVideo(post.id);
   const card=node('loge-post-'+post.id);
-  card.querySelector('[data-video-fullscreen]')?.addEventListener('click',event=>{
-    const view=session?.current;if(!live(session)||!view)return;
-    if(view.kind==='feed'&&view.activePanel)closeDiscussion();
-    if(!view.player)initMedia(view);
-    view.player?.fullscreen(post.id,event.currentTarget);
-  });
   card.querySelector('[data-comments-open]')?.addEventListener('click',()=>openDiscussion(post.id));
   card.querySelector('[data-post-edit]')?.addEventListener('click',()=>openPostEdit(post.id));
   card.querySelector('[data-post-delete]')?.addEventListener('click',()=>deletePost(post.id));

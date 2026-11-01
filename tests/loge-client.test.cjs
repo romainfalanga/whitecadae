@@ -98,7 +98,7 @@ function fixture({posts=[post()],comments=[],user=self,search=''}={}){
     setTimeout:(fn,delay)=>{timers.set(++timerId,{fn,delay});return timerId;},clearTimeout:id=>timers.delete(id),confirm:()=>f.confirm});
   const youtube=readFileSync(path.join(__dirname,'../public/youtube-video.js'),'utf8').replace(/export /g,'');
   const source=readFileSync(path.join(__dirname,'../public/loge.js'),'utf8').replace(/^import .*\n/gm,'').replace(/export /g,'');
-  sandbox.createLogeVideoFeed=options=>{const items=new Map(),controller={options,items,destroyed:false,paused:false,fullscreenCalls:[],fullscreen(id,trigger){this.fullscreenCalls.push({id,trigger});},add:(post,container)=>items.set(String(post.id),{post,container}),remove:id=>items.delete(String(id)),refresh(){},pause(){this.paused=true;},resume(){this.paused=false;},destroy(){this.destroyed=true;for(const item of items.values())item.container.querySelector('iframe')?.remove();items.clear();}};controllers.push(controller);return controller;};
+  sandbox.createLogeVideoFeed=options=>{const items=new Map(),controller={options,items,destroyed:false,paused:false,add:(post,container)=>items.set(String(post.id),{post,container}),remove:id=>items.delete(String(id)),refresh(){},pause(){this.paused=true;},resume(){this.paused=false;},destroy(){this.destroyed=true;for(const item of items.values())item.container.querySelector('iframe')?.remove();items.clear();}};controllers.push(controller);return controller;};
   vm.runInContext(youtube+'\n'+source+'\nwindow.client={page,leave,clear,navigate,canNavigate};',sandbox);
   const f={app,document,window,state,location,ctx,requests,navigations,music,timers,controllers,scrolls,confirm:true,client:window.client,
     async page(path='/loge-virtuelle',query=search){location.pathname=path;location.search=query;await this.client.page(path,ctx);},
@@ -115,7 +115,7 @@ function fixture({posts=[post()],comments=[],user=self,search=''}={}){
   return f;
 }
 
-test('feed delegates videos to the shared controller without duplicate play or publication-management controls',async()=>{
+test('feed delegates videos to the shared controller and exposes no extra player or publication-management controls',async()=>{
   const item={...post(),title:'<script>bad()</script>',description:'<img src=x onerror=bad()>',author:{id:12,username:'<b>Bob</b>',avatar:'https://evil.test/avatar'}};
   const f=fixture({posts:[item]});await f.page();
   assert.match(f.app.innerHTML,/&lt;script&gt;bad/);assert.match(f.app.innerHTML,/&lt;img src=x onerror=bad/);assert.equal(f.app.querySelector('script'),null);
@@ -126,20 +126,6 @@ test('feed delegates videos to the shared controller without duplicate play or p
   f.click(f.find('[data-comments-open]'));await flush();assert(f.node('loge-comments-list'));assert.equal(controller.paused,true);
   f.click(f.find('[data-discussion-close]'));assert.equal(controller.paused,false);
   f.client.clear();assert.equal(controller.destroyed,true);assert.equal(controller.options.isCurrent(),false);
-});
-
-test('fullscreen controls stay outside videos and delegate from feed, profiles and detail without leaving a discussion paused',async()=>{
-  const f=fixture();await f.page();
-  for(const destination of ['/loge-virtuelle','/loge-virtuelle/membres/11','/loge-virtuelle/publications/7']){
-    if(destination!=='/loge-virtuelle')await f.navigate(destination);
-    const open=f.find('[data-video-fullscreen]'),controller=f.controllers.at(-1);
-    assert.equal(f.node('loge-video-7').querySelector('[data-video-fullscreen]'),null);
-    if(destination==='/loge-virtuelle'){f.click(f.find('[data-comments-open]'));await flush();assert.equal(controller.paused,true);}
-    f.click(open);assert.equal(controller.paused,false);
-    assert.equal(controller.fullscreenCalls.length,1);assert.equal(controller.fullscreenCalls[0].id,7);assert.equal(controller.fullscreenCalls[0].trigger,open);
-    assert.equal(f.app.querySelector('[data-post-edit]')!==null,destination.includes('/membres/11'));
-  }
-  f.client.clear();
 });
 
 test('publication reads all three actual form values, retains an idempotent draft on errors and applies the weekly quota',async()=>{
