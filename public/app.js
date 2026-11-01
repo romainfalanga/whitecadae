@@ -289,15 +289,18 @@ async function pageParoles() {
 
 // La session porte le membre et ce que son échelon a ouvert : on la relit
 // après chaque connexion, sans quoi le menu resterait celui d'avant.
-async function refreshSession() {
+async function refreshSession({isCurrent=()=>true}={}) {
+  if(!isCurrent())return;
   try {
     const data = await api('/api/me');
+    if(!isCurrent())return;
     state.user = data.user;
     state.access = data.access || { interpretations: true };
     state.echelon = data.echelon || 1;
     state.gameEchelon = data.gameEchelon || 1;
     state.attenteMs = data.attenteMs || 0;
   } catch {
+    if(!isCurrent())return;
     // même injoignable, le serveur n'aurait pas refusé le sol
     state.user = null;
     state.access = { interpretations: true };
@@ -314,8 +317,8 @@ async function refreshSession() {
   }
   observedAccount=currentAccount;
   WCPlayer.setPlaylistAccess?.(false); // Playlist is temporarily suspended.
-  try { const music=await api('/api/music');WCPlayer.setAlbums(music.albums); }
-  catch { WCPlayer.setAlbums([]); }
+  try { const music=await api('/api/music');if(isCurrent())WCPlayer.setAlbums(music.albums); }
+  catch { if(isCurrent())WCPlayer.setAlbums([]); }
 }
 
 function accountDestination() {

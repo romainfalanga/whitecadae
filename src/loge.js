@@ -259,13 +259,20 @@ async function memberPage(env,user,id,url,json){
     const result=page(await withFavorites(env,user.id,rows),postView);return json({member,self,posts:result.items,next:result.next});
   }
   if(tab!=='interventions')fail('Vue invalide.');
-  const rows=(await env.DB.prepare(`SELECT c.*,${authorFields},p.id AS target_post_id,p.title AS post_title,p.author_id AS post_author_id,
-    pu.username AS post_username,pu.avatar_data IS NOT NULL AS post_has_avatar
+  const rows=(await env.DB.prepare(`SELECT c.*,${authorFields},p.id AS target_post_id,p.title AS post_title,p.description AS post_description,
+    p.youtube_id AS post_youtube_id,p.created_at AS post_created_at,p.updated_at AS post_updated_at,p.revision AS post_revision,p.author_id AS post_author_id,
+    pu.username AS post_username,pu.avatar_data IS NOT NULL AS post_has_avatar,
+    (SELECT count(*) FROM loge_comments pc WHERE pc.post_id=p.id AND pc.deleted_at IS NULL) AS post_comment_count
     FROM loge_comments c JOIN users u ON u.id=c.author_id JOIN loge_posts p ON p.id=c.post_id JOIN users pu ON pu.id=p.author_id
     WHERE c.author_id=?1 AND p.author_id<>?1 AND c.deleted_at IS NULL AND p.deleted_at IS NULL AND (?2=0 OR c.id<?2)
     ORDER BY c.id DESC LIMIT 21`).bind(id,after).all()).results||[];
   const favorites=await favoriteIds(env,user.id,rows.map(row=>row.target_post_id));
-  const result=page(rows,row=>({...commentView(row),post:{id:row.target_post_id,title:row.post_title,isFavorite:favorites.has(row.target_post_id),author:person({author_id:row.post_author_id,username:row.post_username,has_avatar:row.post_has_avatar})}}));
+  const result=page(rows,row=>({...commentView(row),post:postView({
+    id:row.target_post_id,author_id:row.post_author_id,username:row.post_username,has_avatar:row.post_has_avatar,
+    title:row.post_title,description:row.post_description,youtube_id:row.post_youtube_id,
+    created_at:row.post_created_at,updated_at:row.post_updated_at,revision:row.post_revision,
+    comment_count:row.post_comment_count,is_favorite:favorites.has(row.target_post_id)
+  })}));
   return json({member,self,interventions:result.items,next:result.next});
 }
 

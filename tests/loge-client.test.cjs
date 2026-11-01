@@ -27,6 +27,7 @@ function fixture({posts=[post()],comments=[],user=self,search='',observeUI=false
     }
     get isConnected(){return this===document||!!this.parent?.isConnected;}
     append(child){if(child.parent)child.remove();child.parent=this;this.children.push(child);}
+    insertBefore(child,before){if(child===before)return;if(child.parent)child.remove();child.parent=this;const index=before?this.children.indexOf(before):this.children.length;this.children.splice(index,0,child);}
     replaceChildren(...children){for(const child of this.children)if(typeof child!=='string')child.parent=null;this.children=[];for(const child of children)this.append(child);}
     get className(){return this.attrs.class||'';}
     set className(value){this.attrs.class=value;}
@@ -280,7 +281,7 @@ test('comments update the reel count and late panel acknowledgements refresh whe
 test('Loge scenes keep one layout across profile tabs and only entering the Loge pauses music',async()=>{
   const f=fixture();await f.page();await flush();assert(f.document.body.classList.contains('loge-immersive'));assert.equal(f.music.length,1);
   await f.navigate('/loge-virtuelle/membres/11?onglet=reflexions');assert(f.document.body.classList.contains('loge-immersive'));assert.equal(f.music.length,1);
-  await f.navigate('/loge-virtuelle/membres/11?onglet=interventions');assert.equal(f.document.body.classList.contains('loge-immersive'),true);assert(f.app.querySelector('.is-loge-layout'));assert.equal(f.app.querySelector('.is-video-view'),null);
+  await f.navigate('/loge-virtuelle/membres/11?onglet=interventions');assert.equal(f.document.body.classList.contains('loge-immersive'),true);assert(f.app.querySelector('.is-loge-layout'));assert(f.app.querySelector('.is-video-view'));
   await f.navigate('/loge-virtuelle/membres/11?onglet=favoris');assert(f.document.body.classList.contains('loge-immersive'));assert.equal(f.music.length,1);
   await f.navigate('/loge-virtuelle/publications/7');assert(f.document.body.classList.contains('loge-immersive'));assert.equal(f.document.getElementById('loge-comments-list'),null);
   f.client.leave();assert.equal(f.document.body.classList.contains('loge-immersive'),false);assert.equal(f.controllers.filter(controller=>!controller.destroyed).length,0);
@@ -339,13 +340,68 @@ test('site header measurements and menu pauses are observed without leaking acro
   f.client.clear();assert.equal(f.document.body.style.getPropertyValue('--loge-site-header-height'),'');assert.equal(f.observers.resize[0].closed,true);assert.equal(menu.closed,true);
 });
 
-test('the three profile sections keep the same navigation and restore the interventions list scroll position',async()=>{
+test('the four Loge sections keep the same navigation and restore the interventions list scroll position',async()=>{
   const f=fixture();await f.page('/loge-virtuelle/membres/11');let tabs;
   for(const tab of ['reflexions','interventions','favoris']){
-    await f.navigate('/loge-virtuelle/membres/11?onglet='+tab);const nav=f.find('.loge-tabs');assert.deepEqual(nav.querySelectorAll('a').map(link=>link.textContent),['Réflexions','Interventions','Favoris']);
+    await f.navigate('/loge-virtuelle/membres/11?onglet='+tab);const nav=f.find('.loge-tabs');assert.deepEqual(nav.querySelectorAll('a').map(link=>link.textContent),['Loge','Réflexions','Interventions','Favoris']);
     assert.equal(nav.querySelectorAll('a[aria-current="page"]').length,1);assert.equal(f.find('a[aria-current="page"]').getAttribute('href'),'/loge-virtuelle/membres/11?onglet='+tab);
     assert(f.app.querySelector('.is-loge-layout'));assert.equal(f.app.querySelector('a[aria-label="Mon profil"]'),null);tabs=nav;
     if(tab==='interventions')f.node('loge-profile-list').scrollTop=240;
   }
   await f.navigate('/loge-virtuelle/membres/11?onglet=interventions');assert.equal(f.node('loge-profile-list').scrollTop,240);assert.notEqual(tabs,f.find('.loge-tabs'));f.client.clear();
+});
+
+test('the feed and own histories share four destinations, one active section and a stable page heading',async()=>{
+  const f=fixture();await f.page();await flush();
+  const destinations=['/loge-virtuelle','/loge-virtuelle/membres/11?onglet=reflexions','/loge-virtuelle/membres/11?onglet=interventions','/loge-virtuelle/membres/11?onglet=favoris'];
+  for(const destination of destinations){
+    await f.navigate(destination);const navigation=f.find('.loge-tabs'),links=navigation.querySelectorAll('a');
+    assert.deepEqual(links.map(link=>link.getAttribute('href')),destinations);
+    assert.equal(navigation.querySelectorAll('a[aria-current="page"]').length,1);
+    assert.equal(navigation.querySelector('a[aria-current="page"]').getAttribute('href'),destination);
+    assert.equal(f.find('h1').textContent,'Loge virtuelle');assert(f.find('.is-video-view'));assert.equal(f.app.querySelector('a[aria-label="Mon profil"]'),null);
+  }
+  await f.navigate('/loge-virtuelle/membres/12?onglet=interventions');
+  assert.deepEqual(f.find('.loge-tabs').querySelectorAll('a').map(link=>link.getAttribute('href')),destinations,'the main navigation always points to the signed-in member’s histories');
+  const member=f.find('.loge-member-tabs');assert.equal(member.querySelectorAll('a').length,2);assert.equal(member.querySelector('a[aria-current="page"]').getAttribute('href'),'/loge-virtuelle/membres/12?onglet=interventions');
+  assert.equal(f.app.querySelector('a[href="/loge-virtuelle/membres/12?onglet=favoris"]'),null);f.client.clear();
+});
+
+test('interventions play the shared videos once per post, retain every exchange and keep server cursor order',async()=>{
+  const bob={id:12,username:'Bob'},first={...post(3,bob),commentCount:3},second={...post(9,bob),commentCount:1};
+  const a={...comment(40),postId:3,body:'Ma piste récente',post:first},b={...comment(39),postId:9,post:second},c={...comment(38),postId:3,body:'Ma première piste',post:first};
+  const f=fixture({posts:[first,second],comments:[a,c]});f.queue({self,member:self,interventions:[a,b,c],next:38});
+  await f.page('/loge-virtuelle/membres/11','?onglet=interventions');
+  const list=f.node('loge-profile-list'),player=f.controllers.at(-1);assert.deepEqual(list.querySelectorAll('[data-post-id]').map(card=>card.dataset.postId),['3','9']);
+  assert.deepEqual([...player.items.keys()],['3','9']);assert.equal(player.options.root,list);
+  assert.equal(list.querySelectorAll('[data-intervention-id]').length,3);assert.equal(f.node('loge-interventions-post-3').hidden,false);
+  assert(f.find('a[href="/loge-virtuelle/publications/3?comment=38"]'));assert.equal(f.app.querySelector('[data-post-edit]'),null);
+  const card=f.node('loge-post-3'),actions=f.find('.loge-reel-actions',card);assert.equal(actions.querySelectorAll('button').length,2);assert.equal(f.find('[data-comment-count]',actions).textContent,'3');
+  f.click(f.find('[data-comments-open="3"]'));await flush();assert.equal(f.requests.filter(r=>r.url.includes('/comments')).at(-1).url,'/api/loge/posts/3/comments?focus=40');assert.equal(player.paused,true);
+  f.click(f.find('[data-discussion-close]'));assert.equal(player.paused,false);
+  f.queue({postId:3,isFavorite:true});f.click(f.find('[data-favorite="3"]'));await flush();assert.equal(f.find('[data-favorite="3"]').getAttribute('aria-pressed'),'true');
+  f.queue({self,member:self,interventions:[c,{...comment(37),postId:9,post:second}],next:null});f.click('loge-profile-more');await flush();
+  assert.equal(f.requests.find(r=>r.url.includes('&after=')).url,'/api/loge/membres/11?tab=interventions&after=38');assert.equal(list.querySelectorAll('[data-post-id]').length,2);assert.equal(list.querySelectorAll('[data-intervention-id]').length,4);f.client.clear();
+});
+
+test('editing and deleting intervention comments synchronizes their context and removes a video only after its last intervention',async()=>{
+  const bob={id:12,username:'Bob'},video={...post(7,bob),commentCount:2},a={...comment(8),post:video},b={...comment(9),body:'Autre piste',post:video};
+  const f=fixture({posts:[video],comments:[a,b]});f.queue({self,member:self,interventions:[b,a],next:null});await f.page('/loge-virtuelle/membres/11','?onglet=interventions');
+  f.click(f.find('[data-comments-open="7"]'));await flush();f.click(f.find('[data-comment-edit="8"]'));
+  const form=f.find('form',f.node('loge-comment-editor-8'));f.fill(form,'body','Piste corrigée');f.submit(form);await flush();
+  assert.equal(f.find('[data-intervention-id="8"]').querySelector('span').textContent,'Piste corrigée');
+  f.click(f.find('[data-comment-delete="8"]'));await flush();assert.equal(f.app.querySelector('[data-intervention-id="8"]'),null);assert(f.node('loge-post-7'));
+  f.click(f.find('[data-comment-delete="9"]'));await flush();assert.equal(f.app.querySelector('[data-post-id]'),null);assert.equal(f.controllers.at(-1).items.size,0);assert.match(f.node('loge-profile-empty').textContent,/Aucune intervention/);f.client.clear();
+});
+
+
+test('new interventions and deletions order each video by its most recent remaining exchange',async()=>{
+  const bob={id:12,username:'Bob'},a={...post(3,bob),commentCount:2},b={...post(9,bob),commentCount:1};
+  const comments=[{...comment(30),postId:3,post:a},{...comment(20),postId:9,post:b},{...comment(10),postId:3,post:a}];
+  const f=fixture({posts:[a,b],comments});f.queue({self,member:self,interventions:comments,next:null});await f.page('/loge-virtuelle/membres/11','?onglet=interventions');
+  const ids=()=>f.node('loge-profile-list').querySelectorAll('[data-post-id]').map(card=>card.dataset.postId);assert.deepEqual(ids(),['3','9']);
+  f.click(f.find('[data-comments-open="3"]'));await flush();f.click(f.find('[data-comment-delete="30"]'));await flush();assert.deepEqual(ids(),['9','3']);
+  const form=f.find('form',f.node('loge-comment-compose'));f.fill(form,'body','Une nouvelle piste');f.queue({comment:{...comment(40),postId:3,body:'Une nouvelle piste'}});f.submit(form);await flush();assert.deepEqual(ids(),['3','9']);
+  assert.deepEqual(f.node('loge-interventions-post-3').querySelectorAll('[data-intervention-id]').map(link=>link.dataset.interventionId),['40','10']);
+  assert.equal(f.controllers.filter(player=>!player.destroyed).length,1);f.client.clear();
 });

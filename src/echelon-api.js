@@ -23,10 +23,16 @@ async function saveIds(env,id,ids){
   const q=env.DB.prepare("INSERT INTO riddle_progress (user_id,riddle_id,solved_at) VALUES (?1,?2,datetime('now')) ON CONFLICT(user_id,riddle_id) DO UPDATE SET solved_at=COALESCE(solved_at,datetime('now'))");
   await env.DB.batch([...new Set(ids)].map(key=>q.bind(id,key)));
 }
-async function stateFor(env,id){
-  const rows=await gameRows(env,id),state=buildGameState(rows);
-  if(id){const existing=new Set(rows.filter(r=>r.solved_at).map(r=>r.riddle_id));await saveIds(env,id,state.pages.map(p=>'@eg/seen/'+p.id).filter(key=>!existing.has(key)));}
-  return {...state,anonyme:!id,...await attemptStatus(env,id)};
+async function stateFor(env,id,rows){
+  rows??=await gameRows(env,id);
+  const state=buildGameState(rows),existing=new Set(rows.filter(r=>r.solved_at).map(r=>r.riddle_id));
+  // Discovery persistence and the deadline read are independent. Both remain
+  // confirmed before responding, without adding their database latency.
+  const [,attempt]=await Promise.all([
+    id?saveIds(env,id,state.pages.map(p=>'@eg/seen/'+p.id).filter(key=>!existing.has(key))):undefined,
+    attemptStatus(env,id).then(status=>Date.now()+status.attenteMs)
+  ]);
+  return {...state,anonyme:!id,attenteMs:Math.max(0,attempt-Date.now())};
 }
 export async function attemptStatus(env,id){
   if(!id)return {attenteMs:0};
@@ -94,6 +100,6 @@ export async function handleEchelon(request,env,path,{getUser,json}){
   const ids=[];
   for(const v of fresh){const ans=n.answers.find(a=>a.id===v.id);for(let i=0;i<ans.parties.length;i++)if(v.masque&(1<<i))ids.push(v.id+'.p'+i);if(v.complet)ids.push(v.id);}
   await saveIds(env,id,ids);
-  const state=await stateFor(env,id);
-  return json({ok:true,gained:Math.max(0,state.echelon-progressLevel(p)),opened:newlyOpened(rows,await gameRows(env,id),user),echo:prise.echo||[],state});
+  const updatedRows=await gameRows(env,id),state=await stateFor(env,id,updatedRows);
+  return json({ok:true,gained:Math.max(0,state.echelon-progressLevel(p)),opened:newlyOpened(rows,updatedRows,user),echo:prise.echo||[],state});
 }

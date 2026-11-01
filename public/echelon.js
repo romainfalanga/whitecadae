@@ -93,16 +93,27 @@ window.WCGame=(()=>{
   async function submit(p,payload){
     if(sending||pause?.blocked())return;
     sending=true;pause?.start();
-    const token=serial,anchor=document.getElementById(p.id),top=anchor?.getBoundingClientRect().top;
+    const token=serial,userId=state.user?.id,current=()=>token===serial&&state.user?.id===userId;
+    const anchor=document.getElementById(p.id),top=anchor?.getBoundingClientRect().top;
     try{
       const result=await api('/api/signes/guess',{method:'POST',body:{id:p.id,...payload}});
-      if(token!==serial)return;
-      accept(result.state);sync();pause?.sync(result.state.attenteMs);
+      if(!current())return;
+      pause?.sync(result.state.attenteMs);
+      if(result.gained){
+        // The server has persisted the gain. Let the celebration paint before
+        // rebuilding the territory or scrolling a completed workshop.
+        feedback('',p.id,result.gained);
+        await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+        if(!current())return;
+      }
+      accept(result.state);sync();
       if(result.ok){const input=document.getElementById(`input-${p.id}`);if(input)input.value='';}
       if(top!==undefined){const after=document.getElementById(p.id);if(after&&p.kind==='workshop'&&!pageBy(p.id)?.open){after.scrollIntoView({block:'start'});after.querySelector('h2')?.focus({preventScroll:true});}else if(after)window.scrollBy(0,after.getBoundingClientRect().top-top);}
-      feedback(result.message||'Une partie de ce signe est trouvée.',p.id,result.gained,result.ok?'info':'error');
-      if(result.gained){await refreshSession();if(token===serial)renderNav();}
-    }catch(err){if(token===serial){feedback(err.message,p.id,0,'error');if(err.data?.attenteMs!==undefined)pause?.sync(err.data.attenteMs);}}
+      if(!result.gained)feedback(result.message||'Une partie de ce signe est trouvée.',p.id,0,result.ok?'info':'error');
+      // Session/music refresh must not hold the attempt open or turn a confirmed
+      // success into an error when an unrelated refresh fails.
+      if(result.gained)refreshSession({isCurrent:current}).then(()=>{if(current())renderNav();}).catch(()=>{});
+    }catch(err){if(current()){feedback(err.message,p.id,0,'error');if(err.data?.attenteMs!==undefined)pause?.sync(err.data.attenteMs);}}
     finally{if(token===serial){sending=false;pause?.refresh();}}
   }
   async function page(){answersVisible=false;const epoch=newEpoch(),token=++serial;currentPath=location.pathname;app.innerHTML='<div class="loading">Chargement…</div>';try{data=await api('/api/signes');if(token!==serial||stale(epoch))return;activeBoard=isLyricLab()&&pageBy('eg-22')?.open?'eg-22':data.nodes.some(n=>n.id===location.hash.slice(1)&&n.open)?location.hash.slice(1):null;render();const anchor=location.hash.slice(1),y=positions.get(currentPath);if(anchor&&/^[a-z0-9-]+$/.test(anchor))document.getElementById(anchor)?.scrollIntoView();else if(y)requestAnimationFrame(()=>window.scrollTo(0,y));}catch(err){if(token===serial)app.innerHTML=`<h1>Signes</h1><p>${e(err.message)}</p><a href="/signes" data-link>Réessayer</a>`;}}

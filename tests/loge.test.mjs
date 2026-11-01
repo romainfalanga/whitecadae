@@ -45,7 +45,7 @@ test('the Loge checks the real level on every endpoint, including administrators
       const response=await f.call('/api/loge?level=33&admin=true',{token});assert.equal(response.status,status,token);assert.match(response.headers.get('Cache-Control'),/no-store/);
     }
     const created=await f.post();assert.equal(created.status,201);const id=created.data.post.id;
-    for(const endpoint of ['/api/loge',path(id),path(id)+'/comments','/api/loge/membres/11']){
+    for(const endpoint of ['/api/loge',path(id),path(id)+'/comments','/api/loge/membres/11','/api/loge/membres/12?tab=interventions']){
       assert.equal((await f.call(endpoint,{token:'qa9'})).status,403);
       assert.equal((await f.call(endpoint,{token:'invalid'})).status,401);
     }
@@ -212,6 +212,30 @@ test('profiles list interventions on other members posts only and removed posts 
     assert.deepEqual((await f.call('/api/loge/membres/12?tab=interventions')).data.interventions.map(comment=>comment.id),[underC]);
     assert.equal((await f.call(path(a)+'/comments')).status,404);assert.equal((await f.call('/api/loge/comments/'+underA,{method:'PUT',token:'qa11',body:{body:'Cannot restore',revision:1}})).status,404);
     assert.equal(f.sql.prepare('SELECT body FROM loge_comments WHERE id=?').get(underA).body,'');assert.notEqual(f.sql.prepare('SELECT body FROM loge_comments WHERE id=?').get(underB).body,'');
+  }finally{f.sql.close();}
+});
+
+test('interventions embed the complete visible post while retaining distinct comment metadata and viewer favorites',async()=>{
+  const f=setup();try{
+    const id=f.seedPost(26,'La publication complète'),commentId=f.seedComment(id,12,'Le texte exact de mon intervention');
+    f.sql.prepare("UPDATE loge_posts SET description='Une description du clip',youtube_id='aqz-KE-bpKQ',created_at=1700000000,updated_at=1700000100,revision=3 WHERE id=?").run(id);
+    f.sql.prepare('UPDATE loge_comments SET created_at=1700000200,updated_at=1700000300,revision=2 WHERE id=?').run(commentId);
+    f.sql.prepare("UPDATE users SET avatar_data='YXV0ZXVy',avatar_mime='image/png' WHERE id=26").run();
+    f.seedComment(id,11,'Un autre commentaire visible');
+    const removed=f.seedComment(id,11,'Commentaire supprimé');
+    f.sql.prepare("UPDATE loge_comments SET deleted_at=unixepoch(),body='' WHERE id=?").run(removed);
+    await favorite(f,id,true);
+    const intervention=(await f.call('/api/loge/membres/12?tab=interventions')).data.interventions[0];
+    assert.deepEqual(intervention.post,(await f.call(path(id))).data.post);
+    assert.deepEqual(intervention,{
+      id:commentId,postId:id,author:(await f.call('/api/loge/membres/12')).data.member,
+      body:'Le texte exact de mon intervention',createdAt:'2023-11-14T22:16:40.000Z',updatedAt:'2023-11-14T22:18:20.000Z',revision:2,
+      post:{id,author:(await f.call('/api/loge/membres/26')).data.member,title:'La publication complète',description:'Une description du clip',
+        youtubeUrl:'https://www.youtube.com/watch?v=aqz-KE-bpKQ',createdAt:'2023-11-14T22:13:20.000Z',updatedAt:'2023-11-14T22:15:00.000Z',revision:3,commentCount:2,isFavorite:true}
+    });
+    const otherViewer=(await f.call('/api/loge/membres/12?tab=interventions',{token:'qa11'})).data.interventions[0];
+    assert.deepEqual(otherViewer.post,{...intervention.post,isFavorite:false});
+    assert.doesNotMatch(JSON.stringify(intervention),/youtube_id|post_youtube_id|author_id|avatar_data|request_fingerprint|favoriteCount/);
   }finally{f.sql.close();}
 });
 

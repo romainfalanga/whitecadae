@@ -35,7 +35,7 @@ test('Playlist stays absent despite stale access flags and private queues stay d
     runInNewContext(navSource+'\nrenderNav()',{nav,document:{getElementById:()=>null},state:{user:{id:1},access:{playlist}},location:{pathname:'/'}});
     assert.equal(nav.innerHTML.includes('href="/playlist"'),false);
   }
-  const refresh=source.slice(source.indexOf('async function refreshSession()'),source.indexOf('\nfunction accountDestination()'));
+  const refresh=source.slice(source.indexOf('async function refreshSession('),source.indexOf('\nfunction accountDestination()'));
   const calls=[],state={};
   const context={state,observedAccount:1,window:{WCPlaylists:{clear:()=>calls.push('clear')}},accountChannel:{postMessage:()=>calls.push('broadcast')},WCPlayer:{setPlaylistAccess:value=>calls.push(value),setAlbums:()=>calls.push('albums')},api:async path=>path==='/api/me'?{user:{id:2},access:{playlist:true}}:{albums:[]}};
   await runInNewContext(refresh+'\nrefreshSession()',context);
