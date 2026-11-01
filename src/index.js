@@ -14,6 +14,7 @@ import {handlePrivate} from './private-api.js';
 import {validAvatar} from './avatar-validation.js';
 import {handlePlaylists} from './playlists.js';
 import {handlePlaylistAudio} from './playlist-audio.js';
+import {handleLoge} from './loge.js';
 export {BrainstormLive} from './brainstorm-live.js';
 
 const SESSION_COOKIE = 'wc_session';
@@ -160,7 +161,7 @@ function checkWriteOrigin(request,url){
   if(['GET','HEAD','OPTIONS'].includes(request.method))return null;
   const origin=request.headers.get('Origin'),site=request.headers.get('Sec-Fetch-Site');
   if((origin&&origin!==url.origin)||site==='cross-site')return json({error:'Origine de requête non autorisée.'},403);
-  if(request.body&&/^\/api\/(signes|echelon|57\/guess|register|login|logout|account|admin|mechanisms|life-tree|ace-circles|private|playlists)(?:\/|$)/.test(url.pathname)&&!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type')||''))return json({error:'Une requête JSON est requise.'},415);
+  if(request.body&&/^\/api\/(signes|echelon|57\/guess|register|login|logout|account|admin|mechanisms|life-tree|ace-circles|private|playlists|loge)(?:\/|$)/.test(url.pathname)&&!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type')||''))return json({error:'Une requête JSON est requise.'},415);
   return null;
 }
 
@@ -175,6 +176,7 @@ async function handleApi(request, env, url) {
   };
 
   let p;
+  if(path==='/api/loge'||path.startsWith('/api/loge/'))return handleLoge(request,env,url,{getUser,json});
   if(path==='/api/playlists/audio')return handlePlaylistAudio(request,env,url,{getUser,json});
   if(path==='/api/playlists'||path.startsWith('/api/playlists/'))return handlePlaylists(request,env,url,{getUser,json});
   if(/^\/api\/(game-master-orange|game-master-blanc|mechanisms|life-tree|ace-circles|private)(?:\/|$)/.test(path))return handlePrivate(request,env,url,{getUser,json});

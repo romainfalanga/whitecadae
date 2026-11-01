@@ -23,9 +23,9 @@ export const GAME_MASTER_BLANC = {
       'À l’aide de l’IA, crée une simulation de ta société harmonieuse. Trouve les moyens de la faire fonctionner pour observer comment le monde évoluerait si tu en façonnais les mécanismes.',
       'Utilise cette visualisation pour l’améliorer.'
     ]},
-    {title:'Loge sociale',paragraphs:[
-      'Utilise les réseaux sociaux comme une loge pour diffuser tes idées et tes résultats aux autres Game Masters Blancs. Intègre les symboles de l’Escape Game dans tes contenus pour que les autres Game Masters puissent te repérer.',
-      'Aidez-vous mutuellement à faire grandir vos harmonies.'
+    {title:'Loge virtuelle',paragraphs:[
+      'Partage dans la Loge virtuelle tes réflexions et tes avancées aux autres Game Masters Blancs.',
+      'Commente leurs vidéos pour leur apporter ton regard et des pistes d’amélioration. Aidez-vous mutuellement à faire grandir vos harmonies.'
     ]}
   ]
 };

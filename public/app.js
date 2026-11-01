@@ -28,6 +28,7 @@ accountChannel?.addEventListener('message',event=>{
   if(event.data?.type!=='account-changed'||event.data.userId===state.user?.id)return;
   window.WCPrivate?.leave();
   window.WCPlaylists?.clear();
+  window.WCLoge?.clear();
   app.innerHTML='<div class="loading">Le compte connecté a changé…</div>';
   refreshSession().then(route);
 });
@@ -154,6 +155,7 @@ function coupePageTimer() {
 async function route() {
   window.WCPrivate?.leave();
   window.WCPlaylists?.leave();
+  window.WCLoge?.leave();
   if (window.WCGame) WCGame.leave();
   if (window.WCJourney) WCJourney.leave();
   if (window.WCRoadmap) WCRoadmap.leave();
@@ -173,6 +175,15 @@ async function route() {
   if (path === '/escape-game-orange') return navigate('/', true);
   if (path === '/57') return navigate('/musique#album-57', true);
   if (path === '/musique') return pageMusique();
+  if(/^\/loge-virtuelle(?:\/|$)/.test(path)){
+    const epoch=renderEpoch;
+    app.innerHTML='<div class="loading">Chargement…</div>';
+    try{
+      const module=await import('/loge.js');
+      if(!stale(epoch)){window.WCLoge=module;return module.page(path,{app,api,esc,state,navigate,accountEntryMarkup,isCurrent:()=>!stale(epoch)});}
+    }catch(error){if(!stale(epoch))app.innerHTML='<p>La Loge n’a pas pu être chargée. Réessaie lorsque la connexion est revenue.</p>';}
+    return;
+  }
   // Playlist is kept in the repository but temporarily unavailable.
   if (/^\/playlist(?:\/|$)/.test(path)) return navigate('/',true);
   if (path === '/paroles') return pageParoles();
@@ -217,6 +228,7 @@ function renderNav() {
   if(state.user&&state.access.horloge)liens.splice(3,0,'<a href="/signes/horloge" data-link>Horloge</a>');
   if(state.user&&state.access.gameMaster)liens.push('<a href="/game-master-orange" data-link>Game Master Orange</a>');
   if(state.user&&state.access.gameMasterBlanc)liens.push('<a href="/game-master-blanc" data-link>Game Master Blanc</a>');
+  if(state.user&&state.access.loge)liens.push('<a href="/loge-virtuelle" data-link>Loge virtuelle</a>');
   nav.innerHTML = liens.join('\n       ');
   nav.querySelectorAll('a').forEach((a) => { if (a.getAttribute('href') === location.pathname) a.setAttribute('aria-current', 'page'); });
 
@@ -292,6 +304,7 @@ async function refreshSession() {
   if(observedAccount!==undefined&&observedAccount!==currentAccount){
     WCPlayer.setPlaylistAccess?.(false);
     window.WCPlaylists?.clear();
+    window.WCLoge?.clear();
     accountChannel?.postMessage({type:'account-changed',userId:currentAccount});
   }
   observedAccount=currentAccount;
@@ -304,6 +317,7 @@ function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
   if(value==='57')return '/signes';
   if(value==='echelon'||value==='/parcours')return '/echelon';
+  if(/^\/loge-virtuelle(?:\/(?:publications|membres)\/[1-9]\d*)?(?:\?(?:comment=[1-9]\d*|onglet=(?:reflexions|interventions)))?(?:#comment-[1-9]\d*)?$/.test(value||''))return value;
   return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|game-master-blanc|sans-vin-divin)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 

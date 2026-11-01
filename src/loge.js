@@ -1,0 +1,280 @@
+import {gameRows} from './echelon-api.js';
+import {gameLevel} from './echelon.js';
+import {fail,objectBody,text,integer} from './private-data.js';
+import {youtubeId} from '../public/youtube-video.js';
+
+export const LOGE_WEEK_SECONDS=168*60*60;
+export const LOGE_PAGE_SIZE=20;
+export const LOGE_COMMENT_WRITES_PER_MINUTE=45;
+export const LOGE_SCHEMA=[
+  `CREATE TABLE IF NOT EXISTS loge_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    request_id TEXT NOT NULL,
+    request_fingerprint TEXT NOT NULL,
+    youtube_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1 CHECK(revision>=1),
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    deleted_at INTEGER,
+    UNIQUE(author_id,request_id),
+    CHECK(deleted_at IS NOT NULL OR (length(youtube_id)=11 AND length(title) BETWEEN 1 AND 140 AND length(description) BETWEEN 1 AND 5000))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_loge_posts_author ON loge_posts(author_id,id DESC)`,
+  `CREATE TABLE IF NOT EXISTS loge_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id INTEGER NOT NULL REFERENCES loge_posts(id) ON DELETE CASCADE,
+    author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    request_id TEXT NOT NULL,
+    request_fingerprint TEXT NOT NULL,
+    body TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1 CHECK(revision>=1),
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    deleted_at INTEGER,
+    UNIQUE(author_id,request_id),
+    CHECK(deleted_at IS NOT NULL OR length(body) BETWEEN 1 AND 2000)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_loge_comments_post ON loge_comments(post_id,id)`,
+  `CREATE INDEX IF NOT EXISTS idx_loge_comments_author ON loge_comments(author_id,id DESC)`,
+  `CREATE TABLE IF NOT EXISTS loge_publication_limits (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    next_publish_at INTEGER NOT NULL DEFAULT 0,
+    claim_token TEXT NOT NULL DEFAULT '',
+    write_window_at INTEGER NOT NULL DEFAULT 0,
+    write_count INTEGER NOT NULL DEFAULT 0,
+    write_claim_token TEXT NOT NULL DEFAULT ''
+  )`
+];
+const ready=new WeakMap();
+export async function ensureLogeTables(env){
+  if(!ready.has(env.DB)){
+    const pending=env.DB.batch(LOGE_SCHEMA.map(sql=>env.DB.prepare(sql))).catch(error=>{ready.delete(env.DB);throw error;});
+    ready.set(env.DB,pending);
+  }
+  await ready.get(env.DB);
+}
+
+const iso=value=>new Date(value*1000).toISOString();
+const person=row=>({id:row.author_id??row.id,username:row.username,avatar:row.has_avatar?`/api/roadmap/avatar/${row.author_id??row.id}`:null});
+const authorFields=`u.username,u.avatar_data IS NOT NULL AS has_avatar`;
+const postFields=`p.*,${authorFields},(SELECT count(*) FROM loge_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count`;
+const postSelect=`SELECT ${postFields} FROM loge_posts p JOIN users u ON u.id=p.author_id`;
+const commentSelect=`SELECT c.*,${authorFields} FROM loge_comments c JOIN users u ON u.id=c.author_id JOIN loge_posts p ON p.id=c.post_id`;
+const postView=row=>({id:row.id,author:person(row),title:row.title,description:row.description,youtubeUrl:'https://www.youtube.com/watch?v='+row.youtube_id,createdAt:iso(row.created_at),updatedAt:iso(row.updated_at),revision:row.revision,commentCount:row.comment_count});
+const commentView=row=>({id:row.id,postId:row.post_id,author:person(row),body:row.body,createdAt:iso(row.created_at),updatedAt:iso(row.updated_at),revision:row.revision});
+const cursor=url=>integer(Number(url.searchParams.get('after')||0));
+const safeId=value=>{const id=Number(value);if(!Number.isSafeInteger(id)||id<1)fail('Page introuvable.',404);return id;};
+const page=(rows,view)=>({items:rows.slice(0,LOGE_PAGE_SIZE).map(view),next:rows.length>LOGE_PAGE_SIZE?rows[LOGE_PAGE_SIZE-1].id:null});
+const clean=(value,max,required=true)=>{
+  const out=text(value,max,required);
+  if(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(out))fail('Texte invalide.');
+  return out;
+};
+function titleOf(value){const out=clean(value,140);if(/[\r\n\t]/.test(out))fail('Titre invalide.');return out;}
+function requestId(value){
+  if(typeof value!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))fail('Identifiant de publication invalide.');
+  return value.toLowerCase();
+}
+async function fingerprint(values){
+  const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(values)));
+  return Array.from(new Uint8Array(hash),byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+async function bodyOf(request){
+  if(!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type')||''))fail('Une requête JSON est requise.',415);
+  return objectBody(request,32768);
+}
+async function timing(env,userId){
+  const row=await env.DB.prepare(`SELECT unixepoch() AS now,COALESCE((SELECT next_publish_at FROM loge_publication_limits WHERE user_id=?1),0) AS next_at`).bind(userId).first();
+  return {nextPublicationAt:row.next_at>row.now?iso(row.next_at):null,serverNow:iso(row.now),retryAfter:Math.max(0,row.next_at-row.now)};
+}
+async function selfOf(env,userId){
+  const row=await env.DB.prepare('SELECT id,username,avatar_data IS NOT NULL AS has_avatar FROM users WHERE id=?1').bind(userId).first();
+  if(!row)fail('Membre introuvable.',404);return person(row);
+}
+async function visiblePost(env,id){
+  const row=await env.DB.prepare(postSelect+' WHERE p.id=?1 AND p.deleted_at IS NULL').bind(id).first();
+  if(!row)fail('Publication introuvable.',404);return row;
+}
+async function ownedPost(env,id,userId){
+  const row=await visiblePost(env,id);if(row.author_id!==userId)fail('Publication introuvable.',404);return row;
+}
+async function visibleComment(env,id){
+  const row=await env.DB.prepare(commentSelect+' WHERE c.id=?1 AND c.deleted_at IS NULL AND p.deleted_at IS NULL').bind(id).first();
+  if(!row)fail('Commentaire introuvable.',404);return row;
+}
+async function ownedComment(env,id,userId){
+  const row=await visibleComment(env,id);if(row.author_id!==userId)fail('Commentaire introuvable.',404);return row;
+}
+function sameRequest(row,hash){
+  if(row.request_fingerprint!==hash)fail('Cet envoi a déjà été utilisé avec un autre contenu.',409);
+  if(row.deleted_at!==null)fail('Ce contenu a été supprimé.',404);
+}
+const immutableVideo=body=>{if(['url','youtubeUrl','youtubeId','youtube_id','videoId'].some(field=>Object.hasOwn(body,field)))fail('La vidéo d’une publication ne peut pas être remplacée.');};
+async function conflict(env,type,id,userId,json){
+  if(type==='post')await ownedPost(env,id,userId);else await ownedComment(env,id,userId);
+  throw json({error:'Ce contenu a changé. Recharge-le avant de réessayer.',conflict:true},409);
+}
+async function commentLimitRefusal(env,userId,json){
+  const row=await env.DB.prepare('SELECT unixepoch() AS now,write_window_at FROM loge_publication_limits WHERE user_id=?1').bind(userId).first();
+  const wait=Math.max(1,(row?.write_window_at||0)+60-(row?.now||0));
+  return json({error:'Prends quelques instants avant de réessayer.'},429,{'Retry-After':String(wait)});
+}
+function reserveComment(env,userId,claim,nonce=null){
+  // The post quota and the short comment-write budget are independent columns.
+  // A repeated create request never consumes another comment-write slot.
+  const notRetried=nonce?'NOT EXISTS(SELECT 1 FROM loge_comments WHERE author_id=?1 AND request_id=?3)':'1';
+  return env.DB.prepare(`INSERT INTO loge_publication_limits(user_id,write_window_at,write_count,write_claim_token)
+    SELECT ?1,unixepoch(),1,?2 WHERE ${notRetried}
+    ON CONFLICT(user_id) DO UPDATE SET
+      write_window_at=CASE WHEN write_window_at<=unixepoch()-60 THEN unixepoch() ELSE write_window_at END,
+      write_count=CASE WHEN write_window_at<=unixepoch()-60 THEN 1 ELSE write_count+1 END,
+      write_claim_token=excluded.write_claim_token
+    WHERE (write_window_at<=unixepoch()-60 OR write_count<${LOGE_COMMENT_WRITES_PER_MINUTE}) AND ${notRetried}`).bind(...(nonce?[userId,claim,nonce]:[userId,claim]));
+}
+
+async function createPost(request,env,user,json){
+  const body=await bodyOf(request),title=titleOf(body.title),description=clean(body.description,5000),video=youtubeId(body.url),nonce=requestId(body.requestId);
+  if(!video)fail('Ce lien YouTube n’est pas valide.');
+  const hash=await fingerprint([title,description,video]);
+  const repeated=await env.DB.prepare('SELECT id,request_fingerprint,deleted_at FROM loge_posts WHERE author_id=?1 AND request_id=?2').bind(user.id,nonce).first();
+  if(repeated){sameRequest(repeated,hash);const time=await timing(env,user.id);return json({post:postView(await visiblePost(env,repeated.id)),nextPublicationAt:time.nextPublicationAt});}
+  const claim=crypto.randomUUID();
+  // D1 batches are transactional. The unique claim ties this INSERT to the
+  // successful conditional reservation, even with simultaneous submissions.
+  const results=await env.DB.batch([
+    env.DB.prepare(`INSERT INTO loge_publication_limits(user_id,next_publish_at,claim_token)
+      SELECT ?1,unixepoch()+${LOGE_WEEK_SECONDS},?2
+      WHERE NOT EXISTS(SELECT 1 FROM loge_posts WHERE author_id=?1 AND request_id=?3)
+      ON CONFLICT(user_id) DO UPDATE SET next_publish_at=excluded.next_publish_at,claim_token=excluded.claim_token
+      WHERE next_publish_at<=unixepoch() AND NOT EXISTS(SELECT 1 FROM loge_posts WHERE author_id=?1 AND request_id=?3)`).bind(user.id,claim,nonce),
+    env.DB.prepare(`INSERT INTO loge_posts(author_id,request_id,request_fingerprint,youtube_id,title,description,created_at,updated_at)
+      SELECT ?1,?2,?3,?4,?5,?6,q.next_publish_at-${LOGE_WEEK_SECONDS},q.next_publish_at-${LOGE_WEEK_SECONDS}
+      FROM loge_publication_limits q WHERE q.user_id=?1 AND q.claim_token=?7
+      AND NOT EXISTS(SELECT 1 FROM loge_posts WHERE author_id=?1 AND request_id=?2)`).bind(user.id,nonce,hash,video,title,description,claim)
+  ]);
+  const row=await env.DB.prepare('SELECT id,request_fingerprint,deleted_at FROM loge_posts WHERE author_id=?1 AND request_id=?2').bind(user.id,nonce).first();
+  const time=await timing(env,user.id);
+  if(row){sameRequest(row,hash);return json({post:postView(await visiblePost(env,row.id)),nextPublicationAt:time.nextPublicationAt},results[1].meta.changes?201:200);}
+  return json({error:'Tu peux publier une vidéo tous les sept jours.',nextPublicationAt:time.nextPublicationAt,serverNow:time.serverNow},429,{'Retry-After':String(Math.max(1,time.retryAfter))});
+}
+async function updatePost(request,env,user,id,json){
+  await ownedPost(env,id,user.id);
+  const body=await bodyOf(request);immutableVideo(body);
+  const title=titleOf(body.title),description=clean(body.description,5000),revision=integer(body.revision,1);
+  const result=await env.DB.prepare(`UPDATE loge_posts SET title=?1,description=?2,revision=revision+1,updated_at=unixepoch()
+    WHERE id=?3 AND author_id=?4 AND revision=?5 AND deleted_at IS NULL`).bind(title,description,id,user.id,revision).run();
+  if(!result.meta.changes)return conflict(env,'post',id,user.id,json);
+  const time=await timing(env,user.id);return json({post:postView(await visiblePost(env,id)),nextPublicationAt:time.nextPublicationAt});
+}
+async function deletePost(request,env,user,id,json){
+  await ownedPost(env,id,user.id);
+  const body=await bodyOf(request),revision=integer(body.revision,1);
+  const [result]=await env.DB.batch([
+    env.DB.prepare(`UPDATE loge_posts SET title='',description='',youtube_id='',deleted_at=unixepoch(),updated_at=unixepoch(),revision=revision+1
+      WHERE id=?1 AND author_id=?2 AND revision=?3 AND deleted_at IS NULL`).bind(id,user.id,revision),
+    env.DB.prepare(`UPDATE loge_comments SET body='',deleted_at=unixepoch(),updated_at=unixepoch(),revision=revision+1
+      WHERE post_id=?1 AND deleted_at IS NULL AND EXISTS(SELECT 1 FROM loge_posts WHERE id=?1 AND author_id=?2 AND revision=?3+1 AND deleted_at IS NOT NULL)`).bind(id,user.id,revision)
+  ]);
+  if(!result.meta.changes)return conflict(env,'post',id,user.id,json);
+  const time=await timing(env,user.id);return json({ok:true,nextPublicationAt:time.nextPublicationAt});
+}
+async function createComment(request,env,user,postId,json){
+  await visiblePost(env,postId);
+  const body=await bodyOf(request),content=clean(body.body,2000),nonce=requestId(body.requestId),hash=await fingerprint([postId,content]);
+  const repeated=await env.DB.prepare('SELECT id,request_fingerprint,deleted_at FROM loge_comments WHERE author_id=?1 AND request_id=?2').bind(user.id,nonce).first();
+  if(repeated){sameRequest(repeated,hash);return json({comment:commentView(await visibleComment(env,repeated.id))});}
+  const claim=crypto.randomUUID();
+  const results=await env.DB.batch([
+    reserveComment(env,user.id,claim,nonce),
+    env.DB.prepare(`INSERT INTO loge_comments(post_id,author_id,request_id,request_fingerprint,body)
+      SELECT ?1,?2,?3,?4,?5 WHERE EXISTS(SELECT 1 FROM loge_posts WHERE id=?1 AND deleted_at IS NULL)
+      AND EXISTS(SELECT 1 FROM loge_publication_limits WHERE user_id=?2 AND write_claim_token=?6)
+      AND NOT EXISTS(SELECT 1 FROM loge_comments WHERE author_id=?2 AND request_id=?3)`).bind(postId,user.id,nonce,hash,content,claim)
+  ]);
+  const row=await env.DB.prepare('SELECT id,request_fingerprint,deleted_at FROM loge_comments WHERE author_id=?1 AND request_id=?2').bind(user.id,nonce).first();
+  if(row){sameRequest(row,hash);return json({comment:commentView(await visibleComment(env,row.id))},results[1].meta.changes?201:200);}
+  await visiblePost(env,postId);return commentLimitRefusal(env,user.id,json);
+}
+async function updateComment(request,env,user,id,json,remove=false){
+  await ownedComment(env,id,user.id);
+  const body=await bodyOf(request),revision=integer(body.revision,1),content=remove?'':clean(body.body,2000);
+  const reserved=await reserveComment(env,user.id,crypto.randomUUID()).run();
+  if(!reserved.meta.changes)return commentLimitRefusal(env,user.id,json);
+  const result=await env.DB.prepare(`UPDATE loge_comments SET body=?1,revision=revision+1,updated_at=unixepoch()${remove?',deleted_at=unixepoch()':''}
+    WHERE id=?2 AND author_id=?3 AND revision=?4 AND deleted_at IS NULL
+    AND EXISTS(SELECT 1 FROM loge_posts WHERE id=loge_comments.post_id AND deleted_at IS NULL)`).bind(content,id,user.id,revision).run();
+  if(!result.meta.changes)return conflict(env,'comment',id,user.id,json);
+  return json(remove?{ok:true}:{comment:commentView(await visibleComment(env,id))});
+}
+async function listComments(env,postId,url,json){
+  await visiblePost(env,postId);let after=cursor(url);
+  if(url.searchParams.has('focus')){
+    const focus=integer(Number(url.searchParams.get('focus')),1),target=await visibleComment(env,focus);
+    if(target.post_id!==postId)fail('Commentaire introuvable.',404);
+    const previous=(await env.DB.prepare('SELECT id FROM loge_comments WHERE post_id=?1 AND deleted_at IS NULL AND id<?2 ORDER BY id DESC LIMIT 10').bind(postId,focus).all()).results||[];
+    after=(previous.at(-1)?.id??focus)-1;
+  }
+  const rows=(await env.DB.prepare(commentSelect+' WHERE c.post_id=?1 AND c.deleted_at IS NULL AND p.deleted_at IS NULL AND c.id>?2 ORDER BY c.id LIMIT 21').bind(postId,after).all()).results||[];
+  const result=page(rows,commentView);return json({comments:result.items,next:result.next});
+}
+async function memberPage(env,user,id,url,json){
+  const member=await selfOf(env,id),self=await selfOf(env,user.id),after=cursor(url),tab=url.searchParams.get('tab')||'reflexions';
+  if(tab==='reflexions'){
+    const rows=(await env.DB.prepare(postSelect+' WHERE p.author_id=?1 AND p.deleted_at IS NULL AND (?2=0 OR p.id<?2) ORDER BY p.id DESC LIMIT 21').bind(id,after).all()).results||[];
+    const result=page(rows,postView);return json({member,self,posts:result.items,next:result.next});
+  }
+  if(tab!=='interventions')fail('Vue invalide.');
+  const rows=(await env.DB.prepare(`SELECT c.*,${authorFields},p.id AS target_post_id,p.title AS post_title,p.author_id AS post_author_id,
+    pu.username AS post_username,pu.avatar_data IS NOT NULL AS post_has_avatar
+    FROM loge_comments c JOIN users u ON u.id=c.author_id JOIN loge_posts p ON p.id=c.post_id JOIN users pu ON pu.id=p.author_id
+    WHERE c.author_id=?1 AND p.author_id<>?1 AND c.deleted_at IS NULL AND p.deleted_at IS NULL AND (?2=0 OR c.id<?2)
+    ORDER BY c.id DESC LIMIT 21`).bind(id,after).all()).results||[];
+  const result=page(rows,row=>({...commentView(row),post:{id:row.target_post_id,title:row.post_title,author:person({author_id:row.post_author_id,username:row.post_username,has_avatar:row.post_has_avatar})}}));
+  return json({member,self,interventions:result.items,next:result.next});
+}
+
+export async function handleLoge(request,env,url,{getUser,json}){
+  const user=await getUser(request,env);if(!user)fail('Connecte-toi pour ouvrir cette page.',401);
+  if(gameLevel(await gameRows(env,user.id))<33)fail('Cette page n’est pas encore disponible dans ton parcours.',403);
+  const writing=!['GET','HEAD','OPTIONS'].includes(request.method);
+  if(writing?request.headers.get('X-WC-User')!==String(user.id):request.headers.has('X-WC-User')&&request.headers.get('X-WC-User')!==String(user.id))fail('Le compte connecté a changé. Recharge la page.',409);
+  await ensureLogeTables(env);
+  const path=url.pathname.replace(/\/+$/,''),method=request.method;
+  if(path==='/api/loge'){
+    if(method!=='GET')fail('Méthode indisponible.',405);
+    const after=cursor(url),rows=(await env.DB.prepare(postSelect+' WHERE p.deleted_at IS NULL AND (?1=0 OR p.id<?1) ORDER BY p.id DESC LIMIT 21').bind(after).all()).results||[];
+    const result=page(rows,postView),time=await timing(env,user.id);
+    return json({self:await selfOf(env,user.id),posts:result.items,next:result.next,nextPublicationAt:time.nextPublicationAt,serverNow:time.serverNow});
+  }
+  if(path==='/api/loge/posts'){
+    if(method!=='POST')fail('Méthode indisponible.',405);return createPost(request,env,user,json);
+  }
+  let match=/^\/api\/loge\/posts\/([1-9]\d*)\/comments$/.exec(path);
+  if(match){
+    const id=safeId(match[1]);
+    if(method==='GET')return listComments(env,id,url,json);
+    if(method==='POST')return createComment(request,env,user,id,json);
+    fail('Méthode indisponible.',405);
+  }
+  match=/^\/api\/loge\/posts\/([1-9]\d*)$/.exec(path);
+  if(match){
+    const id=safeId(match[1]);
+    if(method==='GET'){const time=await timing(env,user.id);return json({post:postView(await visiblePost(env,id)),self:await selfOf(env,user.id),nextPublicationAt:time.nextPublicationAt});}
+    if(method==='PUT')return updatePost(request,env,user,id,json);
+    if(method==='DELETE')return deletePost(request,env,user,id,json);
+    fail('Méthode indisponible.',405);
+  }
+  match=/^\/api\/loge\/comments\/([1-9]\d*)$/.exec(path);
+  if(match){
+    const id=safeId(match[1]);
+    if(method==='PUT')return updateComment(request,env,user,id,json);
+    if(method==='DELETE')return updateComment(request,env,user,id,json,true);
+    fail('Méthode indisponible.',405);
+  }
+  match=/^\/api\/loge\/membres\/([1-9]\d*)$/.exec(path);
+  if(match){if(method!=='GET')fail('Méthode indisponible.',405);return memberPage(env,user,safeId(match[1]),url,json);}
+  fail('Page introuvable.',404);
+}

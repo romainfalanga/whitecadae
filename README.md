@@ -12,6 +12,7 @@ Application JavaScript sans framework : Cloudflare Worker, assets statiques, D1 
 - `/echelon` : parcours de 33 échelons, réglages du compte et membres jusqu’à l’échelon courant inclus.
 - `/chanson/:slug` : paroles accessibles depuis le lecteur selon les droits du morceau.
 - `/game-master-orange` : accompagnement mutuel des joueurs, à l’échelon 7.
+- `/loge-virtuelle` : fil des Game Masters Blancs à l’échelon 33, avec vidéos YouTube, commentaires et profils Réflexions / Interventions.
 - `/game-master-blanc` : prolongement du parcours à l’échelon 33, avec les six rubriques sur la vidéographie, les versions harmonieuses et la loge sociale. Le contenu est transmis uniquement après vérification du score côté serveur.
 
 Mécanismes, Vidéographie et Carré d’AS sont retirés du site, du menu, de l’accueil et du calendrier des déblocages. Leurs anciennes adresses, y compris les sous-pages, `/matiere` et `/arbre-de-vie`, ramènent à l’accueil. Les indicateurs d’accès correspondants restent désactivés à tous les échelons, y compris pour les administrateurs. Game Master Orange rejoint le parcours à l’échelon 7, puis Game Master Blanc à l’échelon 33. Les données et API personnelles historiques sont conservées avec leurs contrôles d’accès pour compatibilité ; aucune migration ni suppression de données n’est exécutée.
@@ -39,7 +40,7 @@ Le signe `n-0-3` (Katikas) est retiré du score, sans suppression de son histori
 | 18 | Les probabilités |
 | 25 | Fais Mieux |
 | 30 | Un fil entre deux infinis |
-| 33 | Game Master Blanc |
+| 33 | Game Master Blanc et Loge virtuelle |
 
 Wanheda et Quand je vois je pense sont retirés du catalogue, des récompenses, des paroles publiques et des accès audio directs. L’album 18 juillet 2019 ne conserve qu’Un fil entre deux infinis ; ses anciennes variantes continues ne sont plus servies. Horloge conserve deux ateliers pour ce morceau à partir de 30 : « 18 juillet 2019 » et « 3:18 », sans duplication de la durée ni atelier « 3:54 ».
 
@@ -50,6 +51,10 @@ L’ordre d’écoute de 57 est 13h20, 30 vins divins, Sans indices dans les dé
 Playlist est temporairement suspendue : aucun menu, aucune découverte ou récompense, et aucune entrée API ni audio active, même pour les administrateurs. Son code, ses fichiers audio et les playlists déjà enregistrées sont conservés. Le commutateur source `src/features.js` maintient les accès serveur fermés ; la route et les liens du client sont désactivés. Les tests fonctionnels utilisent uniquement une dépendance interne explicite, jamais un paramètre de requête ou une variable publique.
 
 Lors de sa réactivation, les playlists restent enregistrées par compte dans D1 (30 maximum, noms de 80 caractères maximum), avec révision pour éviter d’écraser une modification concurrente. La table est créée de façon additive au premier accès, sans modification des comptes ni des signes. Chaque lecture et écriture vérifie le niveau et les morceaux autorisés. Le lecteur persistant utilise un flux MP3 continu à ordre fixe, seekable par plages d’octets, y compris entre albums ; les sources homogènes sont préparées par `scripts/build-playlist-audio.mjs`. Les octets restent protégés et hors cache. Voir [docs/playlists.md](docs/playlists.md) pour le plan, les contrôles et les limites de validation mobile.
+
+## Loge virtuelle
+
+La Loge est indépendante de l’ancienne Vidéographie. Le serveur contrôle le niveau réel 33 pour toutes ses API. Chaque membre publie au maximum une vidéo toutes les 168 heures avec un titre, une description et un lien YouTube ; la vidéo reste hébergée chez YouTube. Une suppression ne réinitialise pas le délai. Les profils réunissent les réflexions et les commentaires laissés sur les publications des autres membres. Voir [docs/loge-virtuelle.md](docs/loge-virtuelle.md) pour les règles et les vérifications.
 
 ## Roadmap
 
