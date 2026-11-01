@@ -25,7 +25,8 @@ export const GAME_MASTER_BLANC = {
     ]},
     {title:'Loge virtuelle',paragraphs:[
       'Partage dans la Loge virtuelle tes réflexions et tes avancées aux autres Game Masters Blancs.',
-      'Commente leurs vidéos pour leur apporter ton regard et des pistes d’amélioration. Aidez-vous mutuellement à faire grandir vos harmonies.'
+      'Commente leurs vidéos pour leur apporter ton regard et des pistes d’amélioration. Cherche à comprendre les idées de ton interlocuteur plutôt qu’à défendre ou à prouver les tiennes.',
+      'Ces échanges vous permettent de grandir ensemble. Enrichissez mutuellement vos arborescences de réflexion et aidez-vous à les faire grandir de manière harmonieuse.'
     ]}
   ]
 };

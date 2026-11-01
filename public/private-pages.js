@@ -86,7 +86,9 @@ function gameMaster(){
   bind('gm-share',async()=>{const data={title:'Escape Game Orange',url:location.origin+'/'};if(navigator.share){try{await navigator.share(data);}catch(e){if(e.name!=='AbortError')throw e;}}else{await navigator.clipboard.writeText(data.url);status('Le lien est copié.');}});
 }
 function gameMasterBlanc(content){
-  shell(`<div class="gm-layout gm-white"><header class="private-heading gm-heading"><h1 class="gm-title"><span>Game Master</span><span>Blanc</span></h1></header><article class="gm-letter"><p class="gm-opening">${content.opening.map(text=>`<span>${esc(text)}</span>`).join(' ')}</p><div class="gm-copy">${content.sections.map((section,index)=>`<section class="gm-section" aria-labelledby="gm-white-section-${index}"><h2 id="gm-white-section-${index}">${esc(section.title)}</h2>${section.paragraphs.map(text=>`<p>${esc(text)}</p>`).join('')}</section>`).join('')}</div></article></div>`);
+  // Keep the last two words together, including on browsers without pretty wrapping.
+  const prose=text=>esc(text.replace(/\s+(\S+)$/, '\u00a0$1'));
+  shell(`<div class="gm-layout gm-white"><header class="private-heading gm-heading"><h1 class="gm-title"><span>Game Master</span><span>Blanc</span></h1></header><article class="gm-letter"><p class="gm-opening">${content.opening.map(text=>`<span>${esc(text)}</span>`).join(' ')}</p><div class="gm-copy">${content.sections.map((section,index)=>`<section class="gm-section" aria-labelledby="gm-white-section-${index}"><h2 id="gm-white-section-${index}">${esc(section.title)}</h2>${section.paragraphs.map(text=>`<p>${prose(text)}</p>`).join('')}</section>`).join('')}</div></article></div>`);
 }
 function noticeMarkup(){const n=session.consent.notice;return `<div class="private-note"><p>${esc(n.purpose)}</p><p>${esc(n.storage)}</p><p>${esc(n.retention)}</p><p>${esc(n.care)}</p></div>`;}
 async function consent(){

@@ -75,6 +75,10 @@ test('the private page uses the final API and renders no final text on refusal o
     assert.equal((app.innerHTML.match(/class="gm-section"/g)||[]).length,6);
     assert.match(app.innerHTML,/<p class="gm-opening"><span>Façonne ton paradis pour le rejoindre\.<\/span> <span>Deviens ton propre Game Master\.<\/span><\/p>/);
     assert.ok(app.innerHTML.indexOf('gm-opening')<app.innerHTML.indexOf('gm-white-section-0'));
+    const paragraphs=[...app.innerHTML.matchAll(/<section class="gm-section"[^>]*>[\s\S]*?<\/section>/g)].flatMap(section=>[...section[0].matchAll(/<p>([^<]+)<\/p>/g)].map(match=>match[1]));
+    assert.equal(paragraphs.length,13);
+    assert.ok(paragraphs.every(text=>/\S+\u00a0\S+$/.test(text)),'last words stay together without fixed line breaks');
+    assert.match(paragraphs[0],/en\u00a0vidéo\.$/);
     assert.doesNotMatch(app.innerHTML,/gm-orbit/);
     assert.doesNotMatch(app.innerHTML,/Rejoindre les Game Masters|discord|<a |href="\/videographie|[→↗]/);
     assert.ok(calls.every(path=>path==='/api/game-master-blanc'));

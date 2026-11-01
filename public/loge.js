@@ -1,3 +1,4 @@
+import {LOGE_THEMES_ENABLED} from './loge-features.js';
 import {youtubeId} from './youtube-video.js';
 import {createLogeVideoFeed} from './loge-video.js';
 import {themeOverviewMarkup,proposalMarkup,historyMarkup} from './loge-themes-ui.js';
@@ -54,7 +55,7 @@ function topbar(view){const other=view.kind==='profile'&&String(view.memberId)!=
 function composerMarkup(){return '<section id="loge-compose" class="loge-compose loge-composer-sheet" role="dialog" aria-modal="true" aria-labelledby="loge-compose-title" hidden></section>';}
 function logeNavigation(view){
   const ownProfile=view.kind==='profile'&&String(view.memberId)===String(session.user),active=view.kind==='theme'?'theme':ownProfile&&view.tab==='reflexions'?'reflexions':'loge';
-  return `<nav class="loge-tabs" aria-label="Navigation de la Loge">${[['loge','Loge',base],['reflexions','Mes réflexions',memberPath(session.user)+'?onglet=reflexions'],['theme','Thème',themePath()]].map(([tab,label,href])=>`<a href="${href}" data-link ${active===tab?'aria-current="page"':''}>${label}</a>`).join('')}</nav>`;
+  return `<nav class="loge-tabs" aria-label="Navigation de la Loge">${[['loge','Loge',base],['reflexions','Mes réflexions',memberPath(session.user)+'?onglet=reflexions'],...(LOGE_THEMES_ENABLED?[['theme','Thème',themePath()]]:[])].map(([tab,label,href])=>`<a href="${href}" data-link ${active===tab?'aria-current="page"':''}>${label}</a>`).join('')}</nav>`;
 }
 function login(s){
   if(!live(s))return;
@@ -103,7 +104,7 @@ function acceptSelf(result){
   if(result.self&&String(result.self.id)!==String(s.user)){login(s);throw new DOMException('Compte changé','AbortError');}
   if(result.self)s.self=result.self;
   const incomingTheme='currentTheme' in result?result.currentTheme:'current' in result&&'nextWeek' in result?result.current:null;
-  if(incomingTheme&&(!s.currentTheme||incomingTheme.week>=s.currentTheme.week))s.currentTheme=incomingTheme;
+  if(LOGE_THEMES_ENABLED&&incomingTheme&&(!s.currentTheme||incomingTheme.week>=s.currentTheme.week))s.currentTheme=incomingTheme;
   if('nextPublicationAt' in result)s.nextPublicationAt=result.nextPublicationAt;
   const server=dateValue(result.serverNow);if(server)s.clockOffset=server.getTime()-Date.now();
   armThemeBoundary(s);
@@ -166,7 +167,7 @@ function refreshLayout(view){
 function ownerMenu(kind,id){return `<details class="loge-menu"><summary aria-label="Options de ${kind==='post'?'la publication':'ton commentaire'}">…</summary><div>${button('Modifier',`data-${kind}-edit="${esc(id)}"`,true)}${button('Supprimer',`data-${kind}-delete="${esc(id)}"`,true)}</div></details>`;}
 function postMarkup(post){
   const manage=own(post)&&canManagePosts(),count=Number.isInteger(post.commentCount)?post.commentCount:0;
-  return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage">${videoMarkup(post)}<footer class="loge-reel-info"><div class="loge-reel-copy"><div class="loge-reel-byline"><a class="loge-reel-username" href="${memberPath(post.author.id)}" data-link>${esc(post.author.username)}</a>${manage?ownerMenu('post',post.id):''}</div><h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2>${post.theme?`<a class="loge-post-theme" href="${themePath(post.theme.id)}" data-link>${esc(post.theme.title)}</a>`:''}${statusMarkup('loge-post-status-'+post.id)}</div><div class="loge-reel-actions" role="group" aria-label="Actions de la vidéo"><button type="button" class="loge-reel-icon" data-comments-open="${esc(post.id)}" aria-label="Commentaires (${count})" aria-expanded="false">${icon('comment')}<small data-comment-count>${count}</small></button></div><div class="loge-intervention-context" id="loge-interventions-post-${esc(post.id)}" hidden></div></footer></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div>${manage?`<div id="loge-post-editor-${esc(post.id)}" class="loge-edit-sheet" role="dialog" aria-modal="true" aria-label="Modifier le titre" hidden></div>`:''}</article>`;
+  return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage">${videoMarkup(post)}<footer class="loge-reel-info"><div class="loge-reel-copy"><div class="loge-reel-byline"><a class="loge-reel-username" href="${memberPath(post.author.id)}" data-link>${esc(post.author.username)}</a>${manage?ownerMenu('post',post.id):''}</div><h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2>${LOGE_THEMES_ENABLED&&post.theme?`<a class="loge-post-theme" href="${themePath(post.theme.id)}" data-link>${esc(post.theme.title)}</a>`:''}${statusMarkup('loge-post-status-'+post.id)}</div><div class="loge-reel-actions" role="group" aria-label="Actions de la vidéo"><button type="button" class="loge-reel-icon" data-comments-open="${esc(post.id)}" aria-label="Commentaires (${count})" aria-expanded="false">${icon('comment')}<small data-comment-count>${count}</small></button></div><div class="loge-intervention-context" id="loge-interventions-post-${esc(post.id)}" hidden></div></footer></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div>${manage?`<div id="loge-post-editor-${esc(post.id)}" class="loge-edit-sheet" role="dialog" aria-modal="true" aria-label="Modifier le titre" hidden></div>`:''}</article>`;
 }
 function removeProfileClip(postId){
   const view=session.current,list=node('loge-profile-list');if(!list)return;
@@ -195,7 +196,7 @@ function insertPost(post,list,detail=false){
   card.querySelector('[data-post-edit]')?.addEventListener('click',()=>openPostEdit(post.id));
   card.querySelector('[data-post-delete]')?.addEventListener('click',()=>deletePost(post.id));
 }
-function postFields(draft,create=false){return `<label>Titre<input name="title" required maxlength="140" value="${esc(draft.title)}" autocomplete="off"></label>${create?`<label>Vidéo YouTube<input name="url" type="url" required maxlength="2048" value="${esc(draft.url)}" placeholder="Colle le lien de ta vidéo" inputmode="url" autocomplete="off"></label><div id="loge-theme-choice-slot">${themeChoiceMarkup(draft)}</div>`:''}`;}
+function postFields(draft,create=false){return `<label>Titre<input name="title" required maxlength="140" value="${esc(draft.title)}" autocomplete="off"></label>${create?`<label>Vidéo YouTube<input name="url" type="url" required maxlength="2048" value="${esc(draft.url)}" placeholder="Colle le lien de ta vidéo" inputmode="url" autocomplete="off"></label>${LOGE_THEMES_ENABLED?`<div id="loge-theme-choice-slot">${themeChoiceMarkup(draft)}</div>`:''}`:''}`;}
 function composerVisibility(open){
   const view=session.current,root=node('loge-compose');if(!root)return;root.hidden=!open;view.root.classList.toggle('has-compose',open);
   if(open)view.player?.pause();else if(!view.editingId&&!document.body.classList.contains('nav-open'))view.player?.resume();updateQuota();
@@ -419,13 +420,13 @@ async function moreFeed(){
   finally{view.loading=false;if(live(s)&&s.current===view&&node('loge-feed-more'))node('loge-feed-more').disabled=false;}
 }
 function armThemeBoundary(s=session){
-  if(!live(s))return;clearTimeout(s.themeTimer);s.themeTimer=null;
+  if(!LOGE_THEMES_ENABLED||!live(s))return;clearTimeout(s.themeTimer);s.themeTimer=null;
   const end=Number(s.currentTheme?.endsAt)*1000,remaining=end-Date.now()-s.clockOffset;
   if(Number.isFinite(remaining)&&remaining>0){s.themeAttemptedWeek=null;s.themeTimer=setTimeout(()=>refreshThemeBoundary(s),Math.min(remaining+50,2147483647));}
   else if(Number.isFinite(remaining)&&s.currentTheme&&s.themeAttemptedWeek!==s.currentTheme.week&&!s.themeRefreshing){s.themeAttemptedWeek=s.currentTheme.week;s.themeTimer=setTimeout(()=>refreshThemeBoundary(s),50);}
 }
 async function refreshThemeBoundary(s=session){
-  if(!live(s)||s.themeRefreshing)return;const view=s.current;if(!view)return;s.themeRefreshing=true;
+  if(!LOGE_THEMES_ENABLED||!live(s)||s.themeRefreshing)return;const view=s.current;if(!view)return;s.themeRefreshing=true;
   try{
     const result=await request('/api/loge/themes',{}, {view,background:true});if(!live(s))return;
     acceptSelf(result);for(const cached of s.views.values())if(cached.kind==='theme')cached.dirty=true;
@@ -437,10 +438,12 @@ async function refreshThemeBoundary(s=session){
   finally{if(live(s)){s.themeRefreshing=false;armThemeBoundary(s);}}
 }
 function themeChoiceMarkup(draft){
+  if(!LOGE_THEMES_ENABLED)return '';
   const theme=session.currentTheme;if(!theme?.themeId||theme.endsAt*1000<=Date.now()+session.clockOffset)return '';
   return `<label class="loge-theme-choice"><input type="checkbox" name="themeWeek" value="${esc(theme.week)}" ${draft.themeWeek===theme.week?'checked':''}><span>Cette réflexion concerne le thème de la semaine : ${esc(theme.title)}</span></label>`;
 }
 function syncComposerTheme(){
+  if(!LOGE_THEMES_ENABLED)return;
   const slot=node('loge-theme-choice-slot');if(!slot||session.pending.has('create-post'))return;
   const draft=getDraft('create-post',{title:'',url:'',themeWeek:null});slot.innerHTML=themeChoiceMarkup(draft);
   const choice=slot.querySelector('input');if(choice)choice.addEventListener('change',()=>{draft.themeWeek=choice.checked?choice.value:null;});
@@ -541,7 +544,7 @@ function parseDestination(destination){
   let url;try{url=new URL(destination,location.origin||'https://whitecadae.fr');}catch{return null;}
   if(url.origin!==(location.origin||'https://whitecadae.fr'))return null;
   const path=url.pathname.replace(/\/+$/,'')||'/';
-  if(path===base+'/theme'){const id=url.searchParams.get('theme');if(id!==null&&(!/^[1-9]\d*$/.test(id)||!Number.isSafeInteger(Number(id))))return null;return {key:themePath(id),kind:'theme',themeId:id?Number(id):null,endpoint:'/api/loge/themes'};}
+  if(path===base+'/theme'){if(!LOGE_THEMES_ENABLED)return null;const id=url.searchParams.get('theme');if(id!==null&&(!/^[1-9]\d*$/.test(id)||!Number.isSafeInteger(Number(id))))return null;return {key:themePath(id),kind:'theme',themeId:id?Number(id):null,endpoint:'/api/loge/themes'};}
   if(path===base)return {key:base,kind:'feed',endpoint:'/api/loge',openCompose:url.searchParams.has('publier')};
   const member=/^\/loge-virtuelle\/membres\/([1-9]\d*)$/.exec(path);
   if(member){const tab=['interventions','favoris'].includes(url.searchParams.get('onglet'))?url.searchParams.get('onglet'):'reflexions';return {key:memberPath(member[1])+'?onglet='+tab,kind:'profile',memberId:member[1],tab,endpoint:'/api/loge/membres/'+member[1]+'?tab='+tab};}
@@ -619,12 +622,12 @@ export function clear(){leave();drafts.clear();}
 export async function page(path,ctx){
   leave();if(!ctx.state.user){ctx.navigate('/connexion?retour='+encodeURIComponent(path+location.search),true);return;}
   if(!parseDestination(path+location.search)){ctx.navigate(base,true);return;}
-  if(!document.querySelector('link[href="/loge-themes.css"]')){const css=document.createElement('link');css.rel='stylesheet';css.href='/loge-themes.css';document.head.append(css);}
+  if(LOGE_THEMES_ENABLED&&!document.querySelector('link[href="/loge-themes.css"]')){const css=document.createElement('link');css.rel='stylesheet';css.href='/loge-themes.css';document.head.append(css);}
   if(!document.querySelector('link[href="/loge.css"]')){const css=document.createElement('link');css.rel='stylesheet';css.href='/loge.css';document.head.append(css);}
   const s=session={ctx,user:ctx.state.user.id,controller:new AbortController(),closed:false,blocked:false,pending:new Set(),views:new Map(),current:null,navigationVersion:0,nextPublicationAt:null,clockOffset:0,quotaTimer:null};
   for(const key of ['posts','comments','interventions','next','loading','member'])Object.defineProperty(s,key,{get:()=>s.current?.[key],set:value=>{if(s.current)s.current[key]=value;}});
   Object.defineProperty(s,'view',{get:()=>s.current?.kind});
-  s.themeFocus=()=>{if(live(s)&&!document.hidden&&s.currentTheme?.endsAt*1000<=Date.now()+s.clockOffset)void refreshThemeBoundary(s);};window.addEventListener('focus',s.themeFocus);document.addEventListener('visibilitychange',s.themeFocus);
+  s.themeFocus=()=>{if(live(s)&&!document.hidden&&s.currentTheme?.endsAt*1000<=Date.now()+s.clockOffset)void refreshThemeBoundary(s);};if(LOGE_THEMES_ENABLED){window.addEventListener('focus',s.themeFocus);document.addEventListener('visibilitychange',s.themeFocus);}
   s.resize=()=>{if(live(s)&&document.body.classList.contains('loge-immersive')){siteHeaderSize();refreshLayout(s.current);for(const field of s.current?.root?.querySelectorAll('textarea')||[])if(field.closest('.loge-comments-panel'))growComment(field);}};window.addEventListener('resize',s.resize);
   const header=document.querySelector('.site-header');if(header&&typeof ResizeObserver==='function'){s.headerObserver=new ResizeObserver(()=>{if(live(s))s.resize();});s.headerObserver.observe(header);}
   s.navOpen=document.body.classList.contains('nav-open');s.menuPaused=null;if(typeof MutationObserver==='function'){s.menuObserver=new MutationObserver(()=>menuState(s));s.menuObserver.observe(document.body,{attributes:true,attributeFilter:['class']});}

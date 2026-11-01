@@ -36,7 +36,8 @@ test('Loge joins Game Master Blanc only at 33 real levels and existing accounts 
     const text=await(await call('/api/game-master-blanc')).json();
     assert.deepEqual(text.page.sections.at(-1),{title:'Loge virtuelle',paragraphs:[
       'Partage dans la Loge virtuelle tes réflexions et tes avancées aux autres Game Masters Blancs.',
-      'Commente leurs vidéos pour leur apporter ton regard et des pistes d’amélioration. Aidez-vous mutuellement à faire grandir vos harmonies.'
+      'Commente leurs vidéos pour leur apporter ton regard et des pistes d’amélioration. Cherche à comprendre les idées de ton interlocuteur plutôt qu’à défendre ou à prouver les tiennes.',
+      'Ces échanges vous permettent de grandir ensemble. Enrichissez mutuellement vos arborescences de réflexion et aidez-vous à les faire grandir de manière harmonieuse.'
     ]});
     f.sql.prepare('DELETE FROM riddle_progress WHERE user_id=1 AND riddle_id=?').run(ids.at(-1));
     assert.equal((await call('/api/loge')).status,403);
