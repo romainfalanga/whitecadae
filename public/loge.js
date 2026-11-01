@@ -32,7 +32,7 @@ function siteHeaderSize(){const header=document.querySelector('.site-header'),he
 function menuState(s){
   if(!live(s))return;const open=document.body.classList.contains('nav-open');if(open===s.navOpen)return;s.navOpen=open;
   if(open){const view=s.current;s.menuPaused={view,player:view?.player,version:s.navigationVersion};view?.player?.pause();}
-  else{const saved=s.menuPaused;s.menuPaused=null;const view=s.current;if(view&&saved?.player&&saved.view===view&&saved.player===view.player&&saved.version===s.navigationVersion&&!view.activePanel&&!view.editingId&&node('loge-compose')?.hidden)saved.player?.resume();}
+  else{const saved=s.menuPaused;s.menuPaused=null;const view=s.current;if(view&&saved?.player&&saved.view===view&&saved.player===view.player&&saved.version===s.navigationVersion&&!view.editingId&&node('loge-compose')?.hidden)saved.player?.resume();}
 }
 function immersion(enabled){
   const active=document.body.classList.contains('loge-immersive');
@@ -142,14 +142,14 @@ async function perform(key,container,work,onError){
   finally{s.pending.delete(key);if(live(s)){setBusy(container,false);if(s.current===view&&view.version===version)updateQuota();}}
 }
 
-function videoMarkup(post){return `<div class="loge-reel-media" id="loge-video-${esc(post.id)}" data-video-post="${esc(post.id)}"></div>`;}
+function videoMarkup(post){return `<div class="loge-reel-media" id="loge-video-${esc(post.id)}" data-video-post="${esc(post.id)}"></div><div class="loge-timeline" id="loge-timeline-${esc(post.id)}" hidden><input type="range" min="0" max="0" step="0.1" value="0" aria-label="Position dans la vidéo" disabled><span data-video-time>0:00 / 0:00</span></div>`;}
 function canManagePosts(){const view=session.current;return view.kind==='profile'&&view.tab==='reflexions'&&String(view.memberId)===String(session.user);}
 function closeVideo(s=session){for(const view of s?.views?.values()||[]){view.player?.destroy();view.player=null;view.paginationObserver?.disconnect();view.paginationObserver=null;}}
-function bindVideo(id){const view=session.current,post=view.posts.get(String(id)),container=node('loge-video-'+id);if(view.player&&post&&container)view.player.add(post,container);}
+function bindVideo(id){const view=session.current,post=view.posts.get(String(id)),container=node('loge-video-'+id);if(view.player&&post&&container)view.player.add(post,container,node('loge-timeline-'+post.id));}
 function initMedia(view){
   const s=session;if(!live(s)||s.current!==view)return;
   view.player?.destroy();view.player=createLogeVideoFeed({root:videoView(view)?view.root.querySelector('.loge-reels'):null,isCurrent:()=>live(s)&&s.current===view&&!view.destroyed,onError:()=>{}});
-  for(const post of view.posts.values()){const container=view.root.querySelector('[data-video-post="'+post.id+'"]');if(container)view.player.add(post,container);}
+  for(const post of view.posts.values()){const container=view.root.querySelector('[data-video-post="'+post.id+'"]');if(container)view.player.add(post,container,node('loge-timeline-'+post.id));}
   refreshLayout(view);
 }
 function refreshLayout(view){
@@ -210,9 +210,9 @@ function insertPost(post,list,detail=false){
 function postFields(draft,create=false){return `<label>Titre<input name="title" required maxlength="140" value="${esc(draft.title)}" autocomplete="off"></label>${create?`<label>Vidéo YouTube<input name="url" type="url" required maxlength="2048" value="${esc(draft.url)}" placeholder="Colle le lien de ta vidéo" inputmode="url" autocomplete="off"></label>`:''}`;}
 function composerVisibility(open){
   const view=session.current,root=node('loge-compose');if(!root)return;root.hidden=!open;view.root.classList.toggle('has-compose',open);
-  if(open)view.player?.pause();else if(!view.activePanel&&!view.editingId)view.player?.resume();updateQuota();
+  if(open)view.player?.pause();else if(!view.editingId&&!document.body.classList.contains('nav-open'))view.player?.resume();updateQuota();
 }
-function closePostEditor(id){const view=session.current,root=node('loge-post-editor-'+id);if(root)root.hidden=true;view.editingId=null;view.root.classList.remove('has-editor');if(!view.activePanel&&node('loge-compose')?.hidden)view.player?.resume();node('loge-post-'+id)?.querySelector('summary')?.focus({preventScroll:true});}
+function closePostEditor(id){const view=session.current,root=node('loge-post-editor-'+id);if(root)root.hidden=true;view.editingId=null;view.root.classList.remove('has-editor');if(node('loge-compose')?.hidden&&!document.body.classList.contains('nav-open'))view.player?.resume();node('loge-post-'+id)?.querySelector('summary')?.focus({preventScroll:true});}
 function openComposer(){
   const s=session;if(!live(s))return;
   const root=node('loge-compose');if(!root)return;
@@ -343,7 +343,7 @@ function closeDiscussion(){
   const card=node('loge-post-'+panel.postId);card?.classList.remove('is-comments-open');
   const slot=node('loge-panel-slot-'+panel.postId);if(slot)slot.hidden=true;
   const toggle=card?.querySelector('[data-comments-open]');toggle?.setAttribute('aria-expanded','false');toggle?.focus({preventScroll:true});
-  view.activePanel=null;view.player?.resume();refreshLayout(view);
+  view.activePanel=null;refreshLayout(view);
 }
 async function openDiscussion(postId){
   const s=session,view=s.current;if(!videoView(view))return;
@@ -352,7 +352,7 @@ async function openDiscussion(postId){
   let panel=view.panels.get(String(postId));
   if(!panel){panel={postId,root:document.createElement('section'),next:null,loaded:false,loading:false,focusComment:view.kind==='post'?view.focusComment:view.interventionFocus.get(String(postId))||null,scrollTop:0};panel.root.className='loge-comments-panel';panel.root.setAttribute('aria-labelledby','loge-comments-title');panel.root.innerHTML=commentsMarkup(true);view.panels.set(String(postId),panel);}
   if(panel.dirty){panel.root.innerHTML=commentsMarkup(true);panel.loaded=false;panel.bound=false;panel.next=null;panel.dirty=false;}
-  view.activePanel=panel;view.player?.pause();node('loge-panel-slot-'+postId).hidden=false;node('loge-panel-slot-'+postId).append(panel.root);
+  view.activePanel=panel;node('loge-panel-slot-'+postId).hidden=false;node('loge-panel-slot-'+postId).append(panel.root);
   const card=node('loge-post-'+postId);card.classList.add('is-comments-open');card.querySelector('[data-comments-open]').setAttribute('aria-expanded','true');
   if(!panel.bound){bindComments(panel);panel.bound=true;}else node('loge-comments-scroll').scrollTop=panel.scrollTop;
   refreshLayout(view);panel.root.querySelector('[data-discussion-close]')?.focus({preventScroll:true});
@@ -368,7 +368,7 @@ async function loadComments(id,after=null){
     const list=node('loge-comments-list');for(const comment of result.comments)insertComment(comment,list);
     if(!list.querySelector('[data-comment-id]'))list.innerHTML='<p class="loge-empty" id="loge-comments-empty">Aucun commentaire pour le moment.</p>';
     panel.loaded=true;panel.next=result.next;const next=node('loge-comments-more');next.hidden=result.next==null;next.disabled=false;
-    if(panel.focusComment){const target=node('loge-comment-'+panel.focusComment);if(target){target.classList.add('is-focused');target.setAttribute('tabindex','-1');target.scrollIntoView({block:'center'});target.focus({preventScroll:true});}panel.focusComment=null;}
+    if(panel.focusComment){const target=node('loge-comment-'+panel.focusComment);if(target){target.classList.add('is-focused');target.setAttribute('tabindex','-1');target.scrollIntoView({block:'nearest',inline:'nearest'});target.focus({preventScroll:true});}panel.focusComment=null;}
     return true;
   }catch(error){
     if(live(s)&&s.current===view&&view.activePanel===panel&&error.status===404&&after===null&&panel.focusComment){panel.focusComment=null;panel.loading=false;const loaded=await loadComments(id);if(loaded&&live(s)&&s.current===view)notice('loge-comments-status','Ce commentaire n’est plus disponible. Les autres échanges sont affichés.');return loaded;}
@@ -463,7 +463,7 @@ function saveView(view){
   view.player?.pause();view.paginationObserver?.disconnect();view.paginationObserver=null;
 }
 function restoreView(view){
-  const s=session,scroll=()=>{if(!live(s)||s.current!==view)return;const reels=view.root.querySelector('.loge-reels')||view.root.querySelector('.loge-feed');if(reels)reels.scrollTop=view.reelScroll;window.scrollTo?.(0,view.scrollY);if(view.player){view.player.resume();view.player.refresh();}else initMedia(view);if(document.body.classList.contains('nav-open')||view.activePanel||view.editingId||node('loge-compose')&&!node('loge-compose').hidden)view.player?.pause();feedPagination(view);};
+  const s=session,scroll=()=>{if(!live(s)||s.current!==view)return;const reels=view.root.querySelector('.loge-reels')||view.root.querySelector('.loge-feed');if(reels)reels.scrollTop=view.reelScroll;window.scrollTo?.(0,view.scrollY);if(view.player){view.player.resume();view.player.refresh();}else initMedia(view);if(document.body.classList.contains('nav-open')||view.editingId||node('loge-compose')&&!node('loge-compose').hidden)view.player?.pause();feedPagination(view);};
   if(typeof requestAnimationFrame==='function')requestAnimationFrame(scroll);else scroll();
 }
 function trimViews(){

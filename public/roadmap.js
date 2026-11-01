@@ -1,9 +1,13 @@
-// Compare occupied, visible rungs only: a hidden population must not affect colour.
-// Equal populations share orange. Never round: nearby populations keep nearby hues.
+// Include every visible rung, including the empty ones omitted by the API.
+// Equal positive populations share orange; empty rungs stay red. Never round hues.
 function roadmapColors(steps,visibleLevel){
-  const occupied=steps.filter(step=>Number.isInteger(step.level)&&step.level>=1&&step.level<=visibleLevel&&Number.isSafeInteger(step.count)&&step.count>0);
-  const counts=occupied.map(step=>step.count),low=Math.min(...counts),high=Math.max(...counts);
-  return new Map(occupied.map(step=>[step.level,low===high?28:8+40*(step.count-low)/(high-low)]));
+  if(!Number.isSafeInteger(visibleLevel)||visibleLevel<1)return new Map();
+  const visible=Array.from({length:visibleLevel},(_,index)=>{
+    const level=index+1,count=steps.find(step=>step.level===level)?.count;
+    return {level,count:Number.isSafeInteger(count)&&count>=0?count:0};
+  });
+  const counts=visible.map(step=>step.count),low=Math.min(...counts),high=Math.max(...counts);
+  return new Map(visible.map(step=>[step.level,high===0?8:low===high?28:8+40*(step.count-low)/(high-low)]));
 }
 
 window.WCRoadmap=(()=>{

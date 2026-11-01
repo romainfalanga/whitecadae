@@ -102,7 +102,7 @@ function fixture({posts=[post()],comments=[],user=self,search='',observeUI=false
     setTimeout:(fn,delay)=>{timers.set(++timerId,{fn,delay});return timerId;},clearTimeout:id=>timers.delete(id),confirm:()=>f.confirm,...(observeUI?{ResizeObserver:observerType('resize'),MutationObserver:observerType('menu')}:{})});
   const youtube=readFileSync(path.join(__dirname,'../public/youtube-video.js'),'utf8').replace(/export /g,'');
   const source=readFileSync(path.join(__dirname,'../public/loge.js'),'utf8').replace(/^import .*\n/gm,'').replace(/export /g,'');
-  sandbox.createLogeVideoFeed=options=>{const items=new Map(),controller={options,items,destroyed:false,paused:false,add:(post,container)=>items.set(String(post.id),{post,container}),remove:id=>items.delete(String(id)),refresh(){},pause(){this.paused=true;},resume(){this.paused=false;},destroy(){this.destroyed=true;for(const item of items.values())item.container.querySelector('iframe')?.remove();items.clear();}};controllers.push(controller);return controller;};
+  sandbox.createLogeVideoFeed=options=>{const items=new Map(),controller={options,items,destroyed:false,paused:false,pauseCalls:0,resumeCalls:0,add:(post,container,timeline)=>items.set(String(post.id),{post,container,timeline}),remove:id=>items.delete(String(id)),refresh(){},pause(){this.pauseCalls++;this.paused=true;},resume(){this.resumeCalls++;this.paused=false;},destroy(){this.destroyed=true;for(const item of items.values())item.container.querySelector('iframe')?.remove();items.clear();}};controllers.push(controller);return controller;};
   vm.runInContext(youtube+'\n'+source+'\nwindow.client={page,leave,clear,navigate,canNavigate};',sandbox);
   const f={app,document,window,state,location,ctx,requests,navigations,music,timers,controllers,scrolls,observers,confirm:true,client:window.client,
     async page(path='/loge-virtuelle',query=search){location.pathname=path;location.search=query;await this.client.page(path,ctx);},
@@ -127,7 +127,7 @@ test('feed delegates videos to the shared controller and exposes no extra player
   assert.equal(f.app.querySelector('[data-post-edit]'),null);assert.equal(f.find('a[href="/loge-virtuelle/membres/12"]').textContent.includes('<b>Bob</b>'),true);
   const controller=f.controllers.at(-1);assert.equal(controller.items.size,1);assert.equal(controller.options.root,f.node('loge-feed'));assert.equal(controller.options.isCurrent(),true);
   assert.equal(f.app.querySelector('[data-video-open]'),null);assert.doesNotMatch(f.app.textContent,/Fermer le lecteur|ouvre-la sur YouTube|Voir la vidéo/);
-  f.click(f.find('[data-comments-open]'));await flush();assert(f.node('loge-comments-list'));assert.equal(controller.paused,true);
+  f.click(f.find('[data-comments-open]'));await flush();assert(f.node('loge-comments-list'));assert.equal(controller.paused,false);
   f.click(f.find('[data-discussion-close]'));assert.equal(controller.paused,false);
   f.client.clear();assert.equal(controller.destroyed,true);assert.equal(controller.options.isCurrent(),false);
 });
@@ -310,7 +310,7 @@ test('private favorites retain server order and cursor, and removing a favorite 
 
 test('favorite tabs and comment panels reuse cached scenes with one active controller and restored swipe position',async()=>{
   const f=fixture({posts:[{...post(),isFavorite:true}]});await f.page();await flush();await f.navigate('/loge-virtuelle/membres/11?onglet=favoris');await flush();
-  const list=f.node('loge-profile-list');list.scrollTop=520;f.click(f.find('[data-comments-open="7"]'));await flush();assert(f.node('loge-comments-list'));assert.equal(f.controllers.at(-1).paused,true);
+  const list=f.node('loge-profile-list');list.scrollTop=520;f.click(f.find('[data-comments-open="7"]'));await flush();assert(f.node('loge-comments-list'));assert.equal(f.controllers.at(-1).paused,false);
   const form=f.find('form',f.node('loge-comment-compose'));f.fill(form,'body','Brouillon de réponse');f.click(f.find('[data-discussion-close]'));
   await f.navigate('/loge-virtuelle/membres/11?onglet=interventions');const count=f.requests.length;await f.navigate('/loge-virtuelle/membres/11?onglet=favoris');assert.equal(f.node('loge-profile-list'),list);assert.equal(list.scrollTop,520);assert.equal(f.requests.length,count);
   f.click(f.find('[data-comments-open="7"]'));await flush();assert.equal(f.find('form',f.node('loge-comment-compose')),form);assert.equal(form.elements.namedItem('body').value,'Brouillon de réponse');assert.equal(f.controllers.filter(controller=>!controller.destroyed).length,1);f.client.clear();assert.equal(f.document.body.classList.contains('loge-immersive'),false);
@@ -334,7 +334,7 @@ test('site header measurements and menu pauses are observed without leaking acro
   height=93;f.observers.resize[0].emit();assert.equal(f.document.body.style.getPropertyValue('--loge-site-header-height'),'93px');
   const player=f.controllers.at(-1),menu=f.observers.menu[0];f.document.body.classList.add('nav-open');menu.emit();assert.equal(player.paused,true);
   f.document.body.classList.remove('nav-open');menu.emit();assert.equal(player.paused,false);
-  f.click(f.find('[data-comments-open]'));await flush();f.document.body.classList.add('nav-open');menu.emit();f.document.body.classList.remove('nav-open');menu.emit();assert.equal(player.paused,true);
+  f.click(f.find('[data-comments-open]'));await flush();f.document.body.classList.add('nav-open');menu.emit();f.document.body.classList.remove('nav-open');menu.emit();assert.equal(player.paused,false);
   f.click(f.find('[data-discussion-close]'));assert.equal(player.paused,false);
   f.document.body.classList.add('nav-open');menu.emit();f.document.body.classList.remove('nav-open');await f.navigate('/loge-virtuelle/membres/11?onglet=favoris');menu.emit();assert.equal(player.destroyed,true);assert.equal(f.controllers.filter(controller=>!controller.destroyed).length,1);
   f.client.clear();assert.equal(f.document.body.style.getPropertyValue('--loge-site-header-height'),'');assert.equal(f.observers.resize[0].closed,true);assert.equal(menu.closed,true);
@@ -377,7 +377,7 @@ test('interventions play the shared videos once per post, retain every exchange 
   assert.equal(list.querySelectorAll('[data-intervention-id]').length,3);assert.equal(f.node('loge-interventions-post-3').hidden,false);
   assert(f.find('a[href="/loge-virtuelle/publications/3?comment=38"]'));assert.equal(f.app.querySelector('[data-post-edit]'),null);
   const card=f.node('loge-post-3'),actions=f.find('.loge-reel-actions',card);assert.equal(actions.querySelectorAll('button').length,2);assert.equal(f.find('[data-comment-count]',actions).textContent,'3');
-  f.click(f.find('[data-comments-open="3"]'));await flush();assert.equal(f.requests.filter(r=>r.url.includes('/comments')).at(-1).url,'/api/loge/posts/3/comments?focus=40');assert.equal(player.paused,true);
+  f.click(f.find('[data-comments-open="3"]'));await flush();assert.equal(f.requests.filter(r=>r.url.includes('/comments')).at(-1).url,'/api/loge/posts/3/comments?focus=40');assert.equal(player.paused,false);
   f.click(f.find('[data-discussion-close]'));assert.equal(player.paused,false);
   f.queue({postId:3,isFavorite:true});f.click(f.find('[data-favorite="3"]'));await flush();assert.equal(f.find('[data-favorite="3"]').getAttribute('aria-pressed'),'true');
   f.queue({self,member:self,interventions:[c,{...comment(37),postId:9,post:second}],next:null});f.click('loge-profile-more');await flush();
@@ -404,4 +404,18 @@ test('new interventions and deletions order each video by its most recent remain
   const form=f.find('form',f.node('loge-comment-compose'));f.fill(form,'body','Une nouvelle piste');f.queue({comment:{...comment(40),postId:3,body:'Une nouvelle piste'}});f.submit(form);await flush();assert.deepEqual(ids(),['3','9']);
   assert.deepEqual(f.node('loge-interventions-post-3').querySelectorAll('[data-intervention-id]').map(link=>link.dataset.interventionId),['40','10']);
   assert.equal(f.controllers.filter(player=>!player.destroyed).length,1);f.client.clear();
+});
+
+
+test('comments retain the same media and timeline without pausing, restarting or replacing the shared player',async()=>{
+  const f=fixture({comments:[comment()]});await f.page();const player=f.controllers.at(-1),record=player.items.get('7'),media=record.container,timeline=f.node('loge-timeline-7');
+  assert.equal(record.timeline,timeline);assert.equal(timeline.hidden,true);assert.equal(timeline.querySelector('input').disabled,true);
+  const pauses=player.pauseCalls,resumes=player.resumeCalls,total=f.controllers.length;
+  for(let index=0;index<2;index++){
+    f.click(f.find('[data-comments-open="7"]'));await flush();
+    assert.equal(f.node('loge-video-7'),media);assert.equal(f.node('loge-timeline-7'),timeline);assert.equal(player.paused,false);
+    assert.equal(player.pauseCalls,pauses);assert.equal(player.resumeCalls,resumes);assert.equal(f.controllers.length,total);
+    f.click(f.find('[data-discussion-close]'));assert.equal(player.pauseCalls,pauses);assert.equal(player.resumeCalls,resumes);
+  }
+  f.click('loge-open-compose');assert.equal(player.paused,true);f.client.clear();assert.equal(player.destroyed,true);
 });

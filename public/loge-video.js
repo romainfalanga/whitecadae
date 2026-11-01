@@ -34,14 +34,61 @@ function youtubeAPI(){
   return pending;
 }
 
-// Use YouTube's official player settings, without custom controls or overlays.
+// Keep YouTube's native controls hidden; the optional external timeline uses
+// only the official time, duration and seek APIs and never covers the iframe.
 // Audible autoplay is attempted once; browser policy can require a native gesture.
 export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}}={}){
-  const records=new Map();let active=null,destroyed=false,paused=false,musicClip=null,musicPlaying=false,nativeExitPending=null;
+  const records=new Map();let active=null,destroyed=false,paused=false,musicClip=null,musicPlaying=false,nativeExitPending=null,progressTimer=null;
   const connected=record=>record.container.isConnected!==false;
   const current=()=>{try{return !destroyed&&!paused&&isCurrent()&&!document.hidden;}catch{return false;}};
   const eligible=record=>current()&&record===active&&connected(record)&&measureRecord(record,viewport()).ratio>0.5;
   const invoke=(record,method)=>{try{return record.player?.[method]?.();}catch{return undefined;}};
+  const clock=seconds=>{const value=Math.floor(Math.max(0,seconds));return Math.floor(value/60)+':'+String(value%60).padStart(2,'0');};
+  const timelineEligible=record=>record.ready&&!record.failed&&record.timeline?.isConnected!==false&&eligible(record)&&!(musicClip===record.key&&!record.playing);
+  function duration(record){const value=invoke(record,'getDuration');return Number.isFinite(value)&&value>0?value:0;}
+  function paintTimeline(record,time,length){
+    const value=Math.min(length,Math.max(0,Number.isFinite(time)?time:0)),description=clock(value)+' / '+clock(length);
+    record.range.max=String(length);record.range.value=String(value);record.range.setAttribute('aria-valuetext',description);
+    if(record.timeLabel)record.timeLabel.textContent=description;
+  }
+  function syncTimeline(record){
+    if(!record.range)return;
+    const length=timelineEligible(record)?duration(record):0;
+    record.timeline.hidden=!length;record.range.disabled=!length;
+    if(!length){record.scrubbing=false;paintTimeline(record,0,0);return;}
+    if(!record.scrubbing)paintTimeline(record,invoke(record,'getCurrentTime'),length);
+  }
+  function clearProgress(){if(progressTimer!==null){clearInterval(progressTimer);progressTimer=null;}}
+  function trackProgress(){
+    const record=active;
+    if(!record?.range||!timelineEligible(record)||record.blocked||!(record.playing||record.playPending)){clearProgress();return;}
+    if(progressTimer===null)progressTimer=setInterval(()=>{
+      const latest=active;
+      if(!latest?.range||!timelineEligible(latest)||latest.blocked||!(latest.playing||latest.playPending)){clearProgress();if(latest)syncTimeline(latest);return;}
+      syncTimeline(latest);
+    },250);
+  }
+  function refreshTimelines(){for(const record of records.values())syncTimeline(record);trackProgress();}
+  function attachTimeline(record,timeline){
+    record.range?.removeEventListener('input',record.previewSeek);record.range?.removeEventListener('change',record.commitSeek);
+    if(record.timeline){record.timeline.hidden=true;if(record.range)record.range.disabled=true;}
+    record.timeline=timeline;record.range=timeline?.querySelector('input[type="range"]');record.timeLabel=timeline?.querySelector('[data-video-time]');record.scrubbing=false;
+    if(!record.range)return;
+    const seekValue=()=>{
+      if(records.get(record.key)!==record||!timelineEligible(record))return null;
+      const length=duration(record),value=Number(record.range.value);
+      return length&&Number.isFinite(value)?{value:Math.min(length,Math.max(0,value)),length}:null;
+    };
+    record.previewSeek=()=>{const seek=seekValue();if(!seek){syncTimeline(record);return;}record.scrubbing=true;paintTimeline(record,seek.value,seek.length);};
+    record.commitSeek=()=>{
+      const seek=seekValue();record.scrubbing=false;
+      if(!seek){syncTimeline(record);return;}
+      const playing=invoke(record,'getPlayerState')===1&&record.playing;
+      try{record.player.seekTo(seek.value,true);if(!playing)record.player.pauseVideo();}catch{/* A stale or unavailable API must not restart playback. */}
+      paintTimeline(record,seek.value,seek.length);
+    };
+    record.range.addEventListener('input',record.previewSeek);record.range.addEventListener('change',record.commitSeek);syncTimeline(record);
+  }
   function fullscreenRecord(){
     const element=document.fullscreenElement||document.webkitFullscreenElement;
     return element?[...records.values()].find(record=>record.iframe===element)||null:null;
@@ -60,7 +107,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     // dispatches its event synchronously while a player is being removed.
     queueMicrotask(()=>{if(!destroyed)refresh();});
   }
-  function stop(record){invoke(record,'pauseVideo');record.playing=false;record.container.classList.remove('is-playing');}
+  function stop(record){invoke(record,'pauseVideo');record.playing=false;record.playPending=false;record.container.classList.remove('is-playing');syncTimeline(record);if(record===active)clearProgress();}
   function stopOthers(record){for(const other of records.values())if(other!==record)stop(other);}
   function play(record){
     if(!record.ready||record.failed||record.blocked||!eligible(record)||musicClip===record.key||record.attempted)return;
@@ -75,6 +122,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     try{record.player?.destroy?.();}catch{/* Removing the iframe still stops playback. */}
     record.player=null;record.ready=false;record.attempted=false;record.musicPauseConfirmed=false;record.playPending=false;record.state=null;
     record.iframe?.remove();record.iframe=null;
+    syncTimeline(record);
     observe(record);
   }
   function unavailable(record,error){
@@ -118,12 +166,14 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
             record.playing=false;record.container.classList.remove('is-playing');
             if(event.data===2&&musicClip===record.key)record.musicPauseConfirmed=true;
           }
+          refreshTimelines();
         },
         onAutoplayBlocked:()=>{
           if(!live())return;
           // No muted fallback or automatic retry: leave the native iframe
           // available for a real user gesture after the browser's refusal.
           record.playPending=false;record.blocked=true;
+          refreshTimelines();
         },
         onError:event=>{if(live())unavailable(record,Error('Vidéo indisponible ('+event.data+').'));}
       }});
@@ -174,7 +224,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
       Object.assign(record,measureRecord(record,view));
     }
   }
-  function refresh(){if(destroyed)return;if(!current())exitOwnedFullscreen();measure();reconcile();}
+  function refresh(){if(destroyed)return;if(!current())exitOwnedFullscreen();measure();reconcile();refreshTimelines();}
   const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(()=>{
     if(destroyed||paused)return;
     refresh();
@@ -187,6 +237,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
   function visibility(){
     if(document.hidden){for(const record of records.values())stop(record);}
     else if(current()){if(active)active.attempted=false;refresh();}
+    refreshTimelines();
   }
   function music(event){
     if(typeof event.detail?.playing!=='boolean')return;
@@ -202,32 +253,34 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
       active.musicPauseConfirmed=!active.playPending&&(state===2||(state===undefined&&active.state===2)||(active.blocked&&[-1,0,5].includes(state)));
     }
     for(const record of records.values())stop(record);
+    refreshTimelines();
   }
   const scrollTarget=root||window;
   scrollTarget.addEventListener('scroll',refresh,{passive:true});window.addEventListener('resize',refresh,{passive:true});
   document.addEventListener('visibilitychange',visibility);window.addEventListener('wc:music',music);
   document.addEventListener('fullscreenchange',fullscreenChanged);document.addEventListener('webkitfullscreenchange',fullscreenChanged);
   return {
-    add(post,container){
+    add(post,container,timeline=null){
       if(destroyed||!post||!container)return;
       const key=String(post.id),existing=records.get(key);
-      if(existing&&existing.container===container&&existing.post.youtubeUrl===post.youtubeUrl){existing.post=post;if(existing.iframe)existing.iframe.title='Vidéo : '+(post.title||'');refresh();return;}
+      if(existing&&existing.container===container&&existing.post.youtubeUrl===post.youtubeUrl){existing.post=post;if(existing.timeline!==timeline)attachTimeline(existing,timeline);if(existing.iframe)existing.iframe.title='Vidéo : '+(post.title||'');refresh();return;}
       if(existing)this.remove(key);
       const record={key,post:{...post},container,video:youtubeId(post.youtubeUrl),ratio:0,distance:Infinity,token:0,blocked:false};records.set(key,record);
+      attachTimeline(record,timeline);
       if(!record.video)unavailable(record,Error('Lien vidéo invalide.'));
       observe(record);refresh();
     },
-    remove(id){const record=records.get(String(id));if(!record)return;release(record);observer?.unobserve(record.observed);record.label?.remove();records.delete(record.key);if(active===record){active=null;musicClip=null;}refresh();},
+    remove(id){const record=records.get(String(id));if(!record)return;release(record);attachTimeline(record,null);observer?.unobserve(record.observed);record.label?.remove();records.delete(record.key);if(active===record){active=null;musicClip=null;}refresh();},
     refresh,
-    pause(){if(destroyed)return;paused=true;exitOwnedFullscreen();observer?.disconnect();for(const record of records.values())stop(record);},
+    pause(){if(destroyed)return;paused=true;exitOwnedFullscreen();observer?.disconnect();for(const record of records.values())stop(record);refreshTimelines();},
     resume(){if(destroyed)return;paused=false;for(const record of records.values())observe(record);if(active)active.attempted=false;refresh();},
     destroy(){
-      if(destroyed)return;destroyed=true;observer?.disconnect();
+      if(destroyed)return;destroyed=true;clearProgress();observer?.disconnect();
       exitOwnedFullscreen();
       scrollTarget.removeEventListener('scroll',refresh);window.removeEventListener('resize',refresh);
       document.removeEventListener('visibilitychange',visibility);window.removeEventListener('wc:music',music);
       document.removeEventListener('fullscreenchange',fullscreenChanged);document.removeEventListener('webkitfullscreenchange',fullscreenChanged);
-      for(const record of records.values()){release(record);record.label?.remove();}records.clear();active=null;
+      for(const record of records.values()){release(record);attachTimeline(record,null);record.label?.remove();}records.clear();active=null;
     }
   };
 }

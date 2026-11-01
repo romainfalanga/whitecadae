@@ -24,7 +24,7 @@ class Element extends Bus{
   querySelector(selector){return this.querySelectorAll(selector)[0]||null;}
   querySelectorAll(selector){
     const found=[];for(const child of this.children){
-      if(selector==='script[data-loge-youtube-api]'&&child.tagName==='SCRIPT'&&child.attributes.has('data-loge-youtube-api')||selector.toUpperCase()===child.tagName)found.push(child);
+      if(selector==='script[data-loge-youtube-api]'&&child.tagName==='SCRIPT'&&child.attributes.has('data-loge-youtube-api')||selector==='input[type="range"]'&&child.tagName==='INPUT'&&child.getAttribute('type')==='range'||selector==='[data-video-time]'&&child.attributes.has('data-video-time')||selector.toUpperCase()===child.tagName)found.push(child);
       found.push(...child.querySelectorAll(selector));
     }return found;
   }
@@ -34,18 +34,21 @@ class Element extends Bus{
   }
 }
 async function harness({apiReady=true,previousReady}={}){
-  const names=['window','document','location','IntersectionObserver'],original=new Map(names.map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
+  const names=['window','document','location','IntersectionObserver','setInterval','clearInterval'],original=new Map(names.map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
   const document=new Element('document');document.ownerDocument=document;document.hidden=false;
   document.createElement=tag=>new Element(tag,document);document.head=document.createElement('head');document.body=document.createElement('body');document.append(document.head,document.body);
   const window=new Bus();window.innerWidth=400;window.innerHeight=800;window.WCPlayer={pause(){musicPauses++;const event=new Event('wc:music');event.detail={playing:false};window.dispatchEvent(event);}};
-  let musicPauses=0;const players=[],observers=[],feeds=[];
+  let musicPauses=0,timerSequence=0;const players=[],observers=[],feeds=[],timers=new Map();
   class Player{
-    constructor(iframe,options){this.iframe=iframe;this.events=options.events;this.calls=[];this.muted=true;this.state=-1;players.push(this);}
+    constructor(iframe,options){this.iframe=iframe;this.events=options.events;this.calls=[];this.muted=true;this.state=-1;this.time=0;this.duration=180;this.seeks=[];players.push(this);}
     emit(type,data){if(type==='onStateChange')this.state=data;this.events[type]?.({target:this,data});}
     mute(){this.calls.push('mute');this.muted=true;}
     unMute(){this.calls.push('unMute');this.muted=false;}
     isMuted(){return this.muted;}
     getPlayerState(){return this.state;}
+    getCurrentTime(){return this.time;}
+    getDuration(){return this.duration;}
+    seekTo(value,allowSeekAhead){this.seeks.push([value,allowSeekAhead]);this.time=value;}
     playVideo(){this.calls.push('play');}
     pauseVideo(){this.calls.push('pause');}
     destroy(){this.calls.push('destroy');this.iframe.remove();}
@@ -59,14 +62,15 @@ async function harness({apiReady=true,previousReady}={}){
     disconnect(){this.targets.clear();}
     emit(entries){this.callback(entries.map(([target,ratio])=>({target,isIntersecting:ratio>0,intersectionRatio:ratio})));}
   }
-  Object.assign(globalThis,{window,document,location:{origin:'https://whitecadae.fr'},IntersectionObserver:Observer});
+  Object.assign(globalThis,{window,document,location:{origin:'https://whitecadae.fr'},IntersectionObserver:Observer,setInterval:(callback,delay)=>{const id=++timerSequence;timers.set(id,{callback,delay});return id;},clearInterval:id=>timers.delete(id)});
   const {createLogeVideoFeed}=await import('../public/loge-video.js?test='+(++moduleId));
   function feed(options={}){const value=createLogeVideoFeed(options);feeds.push(value);return value;}
   function container(index=0,parent=document.body){const node=document.createElement('div');node.index=index;node.box={top:index*800,left:0,right:400,bottom:(index+1)*800,width:400,height:800};parent.append(node);return node;}
   const post=id=>({id,youtubeUrl:'https://youtu.be/M7lc1UVf-VE',title:'Réflexion '+id});
   function api(){window.YT=YT;window.onYouTubeIframeAPIReady?.();}
+  function timeline(parent=document.body){const node=document.createElement('div'),range=document.createElement('input'),label=document.createElement('span');node.hidden=true;range.setAttribute('type','range');range.setAttribute('aria-label','Position dans la vidéo');range.min='0';range.max='0';range.step='.1';range.value='0';range.disabled=true;label.setAttribute('data-video-time','');node.append(range,label);parent.append(node);return {node,range,label};}
   async function close(){for(const value of feeds)value.destroy();if(!window.YT?.Player)api();await tick();for(const [name,descriptor]of original){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
-  return {feed,post,container,document,window,players,observers,api,YT,close,get musicPauses(){return musicPauses;}};
+  return {feed,post,container,timeline,timers,progress:()=>{for(const {callback}of [...timers.values()])callback();},document,window,players,observers,api,YT,close,get musicPauses(){return musicPauses;}};
 }
 
 test('warm loading is bounded to three native iframes with safe official API parameters',async()=>{
@@ -311,5 +315,82 @@ test('a native fullscreen event arriving after navigation suspension is exited w
     h.document.exitFullscreen=()=>{exits++;h.document.fullscreenElement=null;h.document.dispatchEvent(new Event('fullscreenchange'));return Promise.resolve();};
     h.document.fullscreenElement=player.iframe;h.document.dispatchEvent(new Event('fullscreenchange'));await tick();
     assert.equal(exits,1);assert.equal(h.document.fullscreenElement,null);assert.equal(player.count('play'),plays);assert.equal(media.classList.contains('is-playing'),false);
+  }finally{await h.close();}
+});
+
+test('the external timeline tracks official duration and time, previews a drag, and commits a clamped seek',async()=>{
+  const h=await harness(),feed=h.feed(),media=h.container(),timeline=h.timeline();
+  try{
+    feed.add(h.post(1),media,timeline.node);assert.equal(timeline.node.hidden,true);assert.equal(timeline.range.disabled,true);
+    await tick();const player=h.players[0];player.duration=125;player.time=7.9;player.emit('onReady');player.emit('onStateChange',1);
+    assert.equal(timeline.node.hidden,false);assert.equal(timeline.range.disabled,false);assert.equal(timeline.range.max,'125');assert.equal(timeline.range.value,'7.9');
+    assert.equal(timeline.label.textContent,'0:07 / 2:05');assert.equal(timeline.range.getAttribute('aria-valuetext'),'0:07 / 2:05');
+    assert.equal(h.timers.size,1);assert.equal([...h.timers.values()][0].delay,250);
+    player.time=65.2;h.progress();assert.equal(timeline.range.value,'65.2');assert.equal(timeline.label.textContent,'1:05 / 2:05');
+    timeline.range.value='92';timeline.range.dispatchEvent(new Event('input'));assert.equal(player.seeks.length,0);assert.equal(timeline.label.textContent,'1:32 / 2:05');
+    player.time=66;h.progress();assert.equal(timeline.range.value,'92');
+    const plays=player.count('play'),pauses=player.count('pause');timeline.range.dispatchEvent(new Event('change'));
+    assert.deepEqual(player.seeks,[[92,true]]);assert.equal(player.count('play'),plays);assert.equal(player.count('pause'),pauses);
+    timeline.range.value='999';timeline.range.dispatchEvent(new Event('change'));assert.deepEqual(player.seeks.at(-1),[125,true]);
+    timeline.range.value='-50';timeline.range.dispatchEvent(new Event('change'));assert.deepEqual(player.seeks.at(-1),[0,true]);
+    for(const bad of ['NaN','Infinity','-Infinity']){timeline.range.value=bad;timeline.range.dispatchEvent(new Event('change'));}assert.equal(player.seeks.length,3);
+    assert.equal(media.querySelectorAll('input').length,0);assert.equal(media.querySelectorAll('button').length,0);assert.equal(new URL(player.iframe.src).searchParams.get('controls'),'0');
+  }finally{await h.close();}
+});
+
+test('manual pause keeps seeking available without replaying, while suspension, music and detachment stop progress and seeks',async()=>{
+  const h=await harness(),feed=h.feed(),media=h.container(),timeline=h.timeline();
+  const seek=value=>{timeline.range.value=String(value);timeline.range.dispatchEvent(new Event('change'));};
+  try{
+    feed.add(h.post(1),media,timeline.node);await tick();const player=h.players[0];player.emit('onReady');player.emit('onStateChange',1);
+    player.emit('onStateChange',2);assert.equal(h.timers.size,0);assert.equal(timeline.node.hidden,false);
+    const plays=player.count('play'),pauses=player.count('pause');seek(33);assert.deepEqual(player.seeks,[[33,true]]);assert.equal(player.count('play'),plays);assert.equal(player.count('pause'),pauses+1);assert.equal(h.timers.size,0);
+    player.emit('onStateChange',1);assert.equal(h.timers.size,1);feed.pause();assert.equal(h.timers.size,0);assert.equal(timeline.node.hidden,true);assert.equal(timeline.range.disabled,true);seek(44);assert.equal(player.seeks.length,1);
+    feed.resume();player.emit('onStateChange',1);assert.equal(h.timers.size,1);
+    h.document.hidden=true;h.document.dispatchEvent(new Event('visibilitychange'));assert.equal(h.timers.size,0);seek(45);assert.equal(player.seeks.length,1);
+    h.document.hidden=false;h.document.dispatchEvent(new Event('visibilitychange'));player.emit('onStateChange',1);
+    const music=new Event('wc:music');music.detail={playing:true};h.window.dispatchEvent(music);assert.equal(h.timers.size,0);assert.equal(timeline.range.disabled,true);seek(46);assert.equal(player.seeks.length,1);
+    player.emit('onStateChange',2);player.emit('onStateChange',1);assert.equal(h.timers.size,1);assert.equal(timeline.node.hidden,false);
+    media.remove();h.progress();assert.equal(h.timers.size,0);assert.equal(timeline.range.disabled,true);seek(47);assert.equal(player.seeks.length,1);
+  }finally{await h.close();}
+});
+
+test('unknown, nonfinite and failing durations stay hidden until valid metadata arrives and errors stop the timeline',async()=>{
+  const h=await harness(),feed=h.feed(),media=h.container(),timeline=h.timeline();
+  try{
+    feed.add(h.post(1),media,timeline.node);await tick();const player=h.players[0];player.duration=0;player.emit('onReady');player.emit('onStateChange',1);
+    assert.equal(timeline.node.hidden,true);assert.equal(timeline.range.disabled,true);assert.equal(h.timers.size,1);
+    for(const value of [NaN,Infinity,-1,undefined]){player.duration=value;h.progress();timeline.range.value='10';timeline.range.dispatchEvent(new Event('change'));assert.equal(timeline.node.hidden,true);assert.equal(player.seeks.length,0);}
+    player.getDuration=()=>{throw Error('Not ready');};h.progress();assert.equal(timeline.node.hidden,true);
+    player.getDuration=()=>61;player.getCurrentTime=()=>{throw Error('Not ready');};h.progress();assert.equal(timeline.node.hidden,false);assert.equal(timeline.label.textContent,'0:00 / 1:01');
+    player.emit('onError',150);assert.equal(timeline.node.hidden,true);assert.equal(timeline.range.disabled,true);assert.equal(h.timers.size,0);
+    timeline.range.value='20';timeline.range.dispatchEvent(new Event('change'));assert.equal(player.seeks.length,0);
+  }finally{await h.close();}
+});
+
+test('many warm clips share one active progress timer and inactive, replaced or removed timelines cannot seek',async()=>{
+  const h=await harness(),feed=h.feed(),media=[],timelines=[];
+  try{
+    for(let i=0;i<20;i++){media.push(h.container(i));timelines.push(h.timeline());feed.add(h.post(i),media[i],timelines[i].node);}await tick();h.players.forEach(player=>player.emit('onReady'));
+    const first=h.players[0];first.emit('onStateChange',1);assert.equal(h.document.querySelectorAll('iframe').length,3);assert.equal(h.timers.size,1);
+    assert.equal(timelines.filter(timeline=>!timeline.node.hidden).length,1);
+    timelines[1].range.value='30';timelines[1].range.dispatchEvent(new Event('change'));assert.equal(h.players[1].seeks.length,0);
+    const old=timelines[0],replacement=h.timeline();feed.add(h.post(0),media[0],replacement.node);assert.equal(old.node.hidden,true);assert.equal(old.range.count(),0);
+    old.range.value='30';old.range.dispatchEvent(new Event('change'));assert.equal(first.seeks.length,0);assert.equal(h.timers.size,1);
+    for(const node of media)node.box={...node.box,top:(node.index-10)*800,bottom:(node.index-9)*800};feed.refresh();await tick();h.players.slice(3).forEach(player=>player.emit('onReady'));
+    assert.equal(h.document.querySelectorAll('iframe').length,3);assert.equal(h.timers.size,1);assert.equal(replacement.range.disabled,true);
+    replacement.range.value='30';replacement.range.dispatchEvent(new Event('change'));assert.equal(first.seeks.length,0);
+    const selected=h.players.slice(3).find(player=>player.count('play'));selected.emit('onStateChange',1);feed.remove(10);assert.equal(h.timers.size,0);assert.equal(timelines[10].range.count(),0);assert.equal(timelines[10].range.disabled,true);
+    feed.destroy();assert.equal(h.timers.size,0);assert.ok(timelines.every(timeline=>timeline.range.count()===0));assert.equal(replacement.range.count(),0);
+  }finally{await h.close();}
+});
+
+test('blocked autoplay clears progress polling and a detached timeline never issues a seek',async()=>{
+  const h=await harness(),feed=h.feed(),media=h.container(),timeline=h.timeline();
+  try{
+    feed.add(h.post(1),media,timeline.node);await tick();const player=h.players[0];player.emit('onReady');assert.equal(h.timers.size,1);
+    player.emit('onAutoplayBlocked');assert.equal(h.timers.size,0);assert.equal(timeline.node.hidden,false);
+    player.emit('onStateChange',1);assert.equal(h.timers.size,1);timeline.node.remove();h.progress();assert.equal(h.timers.size,0);
+    timeline.range.value='30';timeline.range.dispatchEvent(new Event('change'));assert.equal(player.seeks.length,0);feed.destroy();assert.equal(timeline.range.count(),0);
   }finally{await h.close();}
 });
