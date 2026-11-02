@@ -126,6 +126,7 @@ function fixture({posts=[post()],comments=[],user=self,search='',observeUI=false
     fill(form,name,value,{input=true}={}){const field=form.elements.namedItem(name);assert(field,'Missing field '+name);field.value=value;if(input)field.dispatchEvent(new Event('input'));},
     queue(value){queued.push(value);},
     defer(){let resolve;const promise=new Promise(r=>resolve=r);queued.push(promise);return resolve;},
+    writeComment(){const root=this.node('loge-comment-compose');if(root.hidden)this.click(this.find('[data-comment-write]'));return this.find('form',root);},
     stopCurrent(){current=false;},get focused(){return focused;}
   };
   return f;
@@ -169,7 +170,7 @@ test('invalid YouTube URLs and quota refusals preserve the composer without send
 test('comments create, edit and delete through their bound forms and keep focused deep links',async()=>{
   const f=fixture({comments:[comment()]});await f.page('/loge-virtuelle/publications/7','?comment=8');
   assert.match(f.requests[1].url,/comments\?focus=8$/);assert.equal(f.focused,f.node('loge-comment-8'));assert.equal(f.node('loge-comment-8').classList.contains('is-focused'),true);
-  const compose=f.find('form',f.node('loge-comment-compose'));f.fill(compose,'body','  Une autre piste  ',{input:false});f.submit(compose);await flush();
+  const compose=f.writeComment();f.fill(compose,'body','  Une autre piste  ',{input:false});f.submit(compose);await flush();
   assert.equal(f.requests.at(-1).body.body,'Une autre piste');assert(f.node('loge-comment-18'));assert.equal(compose.elements.namedItem('body').value,'');
   f.click(f.find('[data-comment-edit="18"]'));const edit=f.find('form',f.node('loge-comment-editor-18'));f.fill(edit,'body','Piste corrigée',{input:false});f.submit(edit);await flush();
   assert.equal(f.requests.at(-1).body.revision,1);assert.equal(f.node('loge-comment-body-18').textContent,'Piste corrigée');
@@ -242,7 +243,7 @@ test('late profile replies cannot replace a newer tab and posts are manageable o
   assert(f.node('loge-feed'));assert.doesNotMatch(f.app.textContent,/Chargement/);
   await f.navigate('/loge-virtuelle/membres/12?onglet=interventions');const target=f.node('loge-profile-list');
   release({self,member:self,posts:[post()],next:null});await opening;assert.equal(f.node('loge-profile-list'),target);assert.equal(f.app.querySelector('[data-post-edit]'),null);
-  await f.navigate('/loge-virtuelle/publications/7');assert.equal(f.app.querySelector('[data-post-edit]'),null);assert.equal(f.document.getElementById('loge-comment-compose'),null);f.click(f.find('[data-comments-open]'));await flush();assert(f.find('form',f.node('loge-comment-compose')));
+  await f.navigate('/loge-virtuelle/publications/7');assert.equal(f.app.querySelector('[data-post-edit]'),null);assert.equal(f.document.getElementById('loge-comment-compose'),null);f.click(f.find('[data-comments-open]'));await flush();assert(f.writeComment());
   f.queue({self,member:{id:12,username:'Bob'},posts:[post(7,{id:12,username:'Bob'})],next:null});await f.navigate('/loge-virtuelle/membres/12?onglet=reflexions');assert.equal(f.app.querySelector('[data-post-edit]'),null);
   f.client.clear();
 });
@@ -285,10 +286,10 @@ test('a late creation synchronizes the quota immediately and refetches the affec
 });
 
 test('comments update the reel count and late panel acknowledgements refresh when the discussion reopens',async()=>{
-  const f=fixture();await f.page();const open=f.find('[data-comments-open]');f.click(open);await flush();let compose=f.find('form',f.node('loge-comment-compose'));f.fill(compose,'body','Une piste');f.submit(compose);await flush();assert.equal(open.getAttribute('aria-label'),'Commentaires (1)');
+  const f=fixture();await f.page();const open=f.find('[data-comments-open]');f.click(open);await flush();let compose=f.writeComment();f.fill(compose,'body','Une piste');f.submit(compose);await flush();assert.equal(open.getAttribute('aria-label'),'Commentaires (1)');
   f.click(f.find('[data-comment-delete="18"]'));await flush();assert.equal(open.getAttribute('aria-label'),'Commentaires (0)');
-  f.fill(compose,'body','Un envoi tardif');const release=f.defer();f.submit(compose);f.click(f.find('[data-discussion-close]'));release({comment:{...comment(29),body:'Un envoi tardif'}});await flush();
-  f.queue({comments:[{...comment(29),body:'Un envoi tardif'}],next:null});f.click(open);await flush();assert.equal(f.node('loge-comment-body-29').textContent,'Un envoi tardif');compose=f.find('form',f.node('loge-comment-compose'));assert.equal(compose.elements.namedItem('body').value,'');f.client.clear();
+  compose=f.writeComment();f.fill(compose,'body','Un envoi tardif');const release=f.defer();f.submit(compose);f.click(f.find('[data-discussion-close]'));release({comment:{...comment(29),body:'Un envoi tardif'}});await flush();
+  f.queue({comments:[{...comment(29),body:'Un envoi tardif'}],next:null});f.click(open);await flush();assert.equal(f.node('loge-comment-body-29').textContent,'Un envoi tardif');compose=f.writeComment();assert.equal(compose.elements.namedItem('body').value,'');f.client.clear();
 });
 
 test('Loge scenes keep one layout across profile tabs and only entering the Loge pauses music',async()=>{
@@ -305,9 +306,9 @@ test('Loge scenes keep one layout across profile tabs and only entering the Loge
 test('favorite tabs and comment panels reuse cached scenes with one active controller and restored swipe position',async()=>{
   const f=fixture({posts:[{...post(),isFavorite:true}]});await f.page();await flush();await f.navigate('/loge-virtuelle/membres/11?onglet=favoris');await flush();
   const list=f.node('loge-profile-list');list.scrollTop=520;f.click(f.find('[data-comments-open="7"]'));await flush();assert(f.node('loge-comments-list'));assert.equal(f.controllers.at(-1).paused,false);
-  const form=f.find('form',f.node('loge-comment-compose'));f.fill(form,'body','Brouillon de réponse');f.click(f.find('[data-discussion-close]'));
+  const form=f.writeComment();f.fill(form,'body','Brouillon de réponse');f.click(f.find('[data-discussion-close]'));
   await f.navigate('/loge-virtuelle/membres/11?onglet=interventions');const count=f.requests.length;await f.navigate('/loge-virtuelle/membres/11?onglet=favoris');assert.equal(f.node('loge-profile-list'),list);assert.equal(list.scrollTop,520);assert.equal(f.requests.length,count);
-  f.click(f.find('[data-comments-open="7"]'));await flush();assert.equal(f.find('form',f.node('loge-comment-compose')),form);assert.equal(form.elements.namedItem('body').value,'Brouillon de réponse');assert.equal(f.controllers.filter(controller=>!controller.destroyed).length,1);f.client.clear();assert.equal(f.document.body.classList.contains('loge-immersive'),false);
+  f.click(f.find('[data-comments-open="7"]'));await flush();assert.equal(f.writeComment(),form);assert.equal(form.elements.namedItem('body').value,'Brouillon de réponse');assert.equal(f.controllers.filter(controller=>!controller.destroyed).length,1);f.client.clear();assert.equal(f.document.body.classList.contains('loge-immersive'),false);
 });
 
 test('publication forms accept Shorts and send only the title, immutable URL and creation nonce',async()=>{
@@ -333,7 +334,7 @@ test('the feed and own reflections share only two destinations and expose no fav
   const destinations=['/loge-virtuelle','/loge-virtuelle/membres/11?onglet=reflexions'];
   for(const destination of destinations){
     await f.navigate(destination);const navigation=f.find('.loge-tabs'),links=navigation.querySelectorAll('a');
-    assert.deepEqual(links.map(link=>link.getAttribute('href')),destinations);assert.deepEqual(links.map(link=>link.textContent),['Loge','Mes réflexions']);assert.equal(f.app.querySelector('[data-favorite]'),null);
+    assert.deepEqual(links.map(link=>link.getAttribute('href')),destinations);assert.deepEqual(links.map(link=>link.textContent),['Loge Virtuelle','Mes réflexions']);assert.equal(f.app.querySelector('[data-favorite]'),null);
     assert.equal(navigation.querySelectorAll('a[aria-current="page"]').length,1);
     assert.equal(navigation.querySelector('a[aria-current="page"]').getAttribute('href'),destination);
     assert.equal(f.find('h1').textContent,'Loge virtuelle');assert(f.find('.is-video-view'));assert.equal(f.app.querySelector('a[aria-label="Mon profil"]'),null);
@@ -377,7 +378,7 @@ test('new interventions and deletions order each video by its most recent remain
   const f=fixture({posts:[a,b],comments});f.queue({self,member:self,interventions:comments,next:null});await f.page('/loge-virtuelle/membres/11','?onglet=interventions');
   const ids=()=>f.node('loge-profile-list').querySelectorAll('[data-post-id]').map(card=>card.dataset.postId);assert.deepEqual(ids(),['3','9']);
   f.click(f.find('[data-comments-open="3"]'));await flush();f.click(f.find('[data-comment-delete="30"]'));await flush();assert.deepEqual(ids(),['9','3']);
-  const form=f.find('form',f.node('loge-comment-compose'));f.fill(form,'body','Une nouvelle piste');f.queue({comment:{...comment(40),postId:3,body:'Une nouvelle piste'}});f.submit(form);await flush();assert.deepEqual(ids(),['3','9']);
+  const form=f.writeComment();f.fill(form,'body','Une nouvelle piste');f.queue({comment:{...comment(40),postId:3,body:'Une nouvelle piste'}});f.submit(form);await flush();assert.deepEqual(ids(),['3','9']);
   assert.deepEqual(f.node('loge-interventions-post-3').querySelectorAll('[data-intervention-id]').map(link=>link.dataset.interventionId),['40','10']);
   assert.equal(f.controllers.filter(player=>!player.destroyed).length,1);f.client.clear();
 });
@@ -460,7 +461,7 @@ test('the week boundary refreshes the winner and preserves a publication draft w
 });
 
 test('comment writing starts with five lines, grows while typing and resets after publishing',async()=>{
-  const f=fixture();await f.page();f.click(f.find('[data-comments-open]'));await flush();const form=f.find('form',f.node('loge-comment-compose')),field=form.elements.namedItem('body');
+  const f=fixture();await f.page();f.click(f.find('[data-comments-open]'));await flush();const form=f.writeComment(),field=form.elements.namedItem('body');
   assert.equal(field.getAttribute('rows'),'5');assert.equal(field.style.getPropertyValue('height'),'144px');field.scrollHeight=280;f.fill(form,'body','Une réflexion sur plusieurs lignes');assert.equal(field.style.getPropertyValue('height'),'280px');
   field.scrollHeight=800;f.fill(form,'body','Encore du texte');assert.equal(field.style.getPropertyValue('height'),'360px');assert.equal(field.style.getPropertyValue('overflow-y'),'auto');
   field.scrollHeight=0;f.submit(form);await flush();assert.equal(field.value,'');assert.equal(field.style.getPropertyValue('height'),'144px');f.client.clear();
@@ -487,7 +488,7 @@ test('temporarily suspended themes expose no entry points, metadata, tagging or 
   const f=fixture({themeData:currentThemes(),posts:[{...post(),theme:{id:2,title:'Grandir ensemble',week:'2026-11-02'}}]});
   for(const destination of ['/loge-virtuelle','/loge-virtuelle/membres/11?onglet=reflexions','/loge-virtuelle/publications/7']){
     if(destination==='/loge-virtuelle')await f.page();else await f.navigate(destination);
-    assert.deepEqual(f.find('.loge-tabs').querySelectorAll('a').map(a=>a.textContent),['Loge','Mes réflexions']);
+    assert.deepEqual(f.find('.loge-tabs').querySelectorAll('a').map(a=>a.textContent),['Loge Virtuelle','Mes réflexions']);
     assert.doesNotMatch(f.app.textContent,/Thème|Grandir ensemble/);assert.equal(f.app.querySelector('.loge-post-theme'),null);
     f.click('loge-open-compose');const form=f.node('loge-new-form');assert.equal(form.elements.namedItem('themeWeek'),null);assert.equal(f.app.querySelector('#loge-theme-choice-slot'),null);
     f.click(form.querySelector('[data-compose-close]'));
@@ -505,4 +506,38 @@ test('suspended Theme links redirect to the Loge without fetching theme data',as
     const f=fixture();await f.page(pathname,query);assert.deepEqual(f.navigations,[['/loge-virtuelle',true]]);assert.equal(f.requests.length,0);
     await f.page('/loge-virtuelle','');assert.equal(f.client.canNavigate(pathname+query),false);assert.equal(f.app.querySelector('.loge-themes-scroll'),null);f.client.clear();
   }
+});
+
+
+test('comments open for reading, paginate independently, and only an explicit write action opens the large editor',async()=>{
+  const f=fixture({comments:[comment()]});await f.page();await flush();const player=f.controllers.at(-1),record=player.items.get('7'),pauses=player.pauseCalls,resumes=player.resumeCalls,release=f.defer();
+  f.click(f.find('[data-comments-open]'));assert.equal(f.node('loge-comment-compose').hidden,true);assert.equal(f.node('loge-comment-compose').innerHTML,'');assert.equal(f.node('loge-comments-scroll').hidden,false);assert.match(f.node('loge-comments-status').textContent,/Chargement/);
+  release({comments:[comment()],next:8});await flush();assert.equal(f.node('loge-comment-body-8').textContent,'Une réponse');assert.equal(f.node('loge-comments-more').hidden,false);assert.notEqual(f.focused?.tag,'textarea');
+  f.queue({comments:[comment(9)],next:null});f.click('loge-comments-more');await flush();assert.equal(f.node('loge-comment-body-9').textContent,'Une réponse');assert.equal(f.node('loge-comment-compose').hidden,true);
+  const scroll=f.node('loge-comments-scroll');scroll.scrollTop=96;const form=f.writeComment(),field=form.elements.namedItem('body');assert.equal(f.focused,field);assert.equal(field.getAttribute('rows'),'5');assert.equal(scroll.hidden,true);assert.equal(f.node('loge-comment-compose').hidden,false);assert(f.find('.loge-comments-panel').classList.contains('is-writing'));
+  f.fill(form,'body','Brouillon à conserver');f.click(form.querySelector('[data-comment-cancel]'));assert.equal(scroll.hidden,false);assert.equal(scroll.scrollTop,96);assert.equal(f.node('loge-comment-compose').hidden,true);assert.equal(f.focused,f.find('[data-comment-write]'));
+  assert.equal(f.writeComment(),form);assert.equal(field.value,'Brouillon à conserver');f.queue(error(503,'Envoi à réessayer'));f.submit(form);await flush();const failed=f.requests.at(-1);assert.equal(f.node('loge-comment-compose').hidden,false);assert.equal(field.value,'Brouillon à conserver');assert.match(f.node('loge-comment-create-status').textContent,/réessayer/);
+  f.submit(form);await flush();assert.equal(f.requests.at(-1).body.requestId,failed.body.requestId);assert.equal(f.node('loge-comment-compose').hidden,true);assert.equal(scroll.hidden,false);assert.equal(f.node('loge-comment-18').scrolled,true);assert.match(f.node('loge-comments-status').textContent,/publié/);assert.equal(field.value,'');
+  assert.equal(player.items.get('7'),record);assert.equal(player.pauseCalls,pauses);assert.equal(player.resumeCalls,resumes);assert.equal(player.destroyed,false);f.client.clear();
+});
+
+test('closing and navigating preserve comment drafts while every reopened discussion starts with its history',async()=>{
+  const f=fixture();await f.page();await flush();f.click(f.find('[data-comments-open]'));await flush();let form=f.writeComment();f.fill(form,'body','Ma réflexion en cours');f.click(f.find('[data-discussion-close]'));
+  f.click(f.find('[data-comments-open]'));await flush();assert.equal(f.node('loge-comment-compose').hidden,true);assert.equal(f.node('loge-comments-scroll').hidden,false);form=f.writeComment();assert.equal(form.elements.namedItem('body').value,'Ma réflexion en cours');
+  await f.navigate('/loge-virtuelle/membres/11?onglet=reflexions');await f.navigate('/loge-virtuelle');assert.equal(f.node('loge-comment-compose').hidden,true);assert.equal(f.node('loge-comments-scroll').hidden,false);assert.equal(f.writeComment().elements.namedItem('body').value,'Ma réflexion en cours');f.client.clear();
+});
+
+test('a late comment acknowledgement cannot close a reopened writer or erase a newer draft',async()=>{
+  const f=fixture();await f.page();await flush();f.click(f.find('[data-comments-open]'));await flush();let form=f.writeComment();f.fill(form,'body','Premier envoi');const release=f.defer();f.submit(form);const first=f.requests.at(-1);
+  f.click(f.find('[data-discussion-close]'));f.click(f.find('[data-comments-open]'));await flush();form=f.writeComment();f.fill(form,'body','Nouveau brouillon');const field=form.elements.namedItem('body');release({comment:{...comment(25),body:'Premier envoi'}});await flush();
+  assert.equal(f.node('loge-comment-compose').hidden,false);assert.equal(field.value,'Nouveau brouillon');assert.equal(f.focused,field);assert.equal(f.node('loge-comment-body-25').textContent,'Premier envoi');
+  f.submit(form);await flush();assert.equal(f.requests.at(-1).body.body,'Nouveau brouillon');assert.notEqual(f.requests.at(-1).body.requestId,first.body.requestId);assert.equal(f.node('loge-comment-compose').hidden,true);f.client.clear();
+});
+
+
+test('Escape returns to comment history without closing the panel and a pending failure remains visible there',async()=>{
+  const f=fixture();await f.page();await flush();f.click(f.find('[data-comments-open]'));await flush();const form=f.writeComment();f.fill(form,'body','Une réponse conservée');const release=f.defer();f.submit(form);
+  const key=new Event('keydown',{cancelable:true,bubbles:true});Object.defineProperty(key,'key',{value:'Escape'});f.find('.loge-comments-panel').dispatchEvent(key);
+  assert.equal(key.defaultPrevented,true);assert.equal(key.cancelBubble,true);assert.equal(f.node('loge-comment-compose').hidden,true);assert.equal(f.node('loge-comments-scroll').hidden,false);assert.equal(f.node('loge-panel-slot-7').hidden,false);
+  release(error(503,'Impossible de publier pour le moment'));await flush();assert.match(f.node('loge-comments-status').textContent,/Impossible de publier/);assert.equal(f.writeComment().elements.namedItem('body').value,'Une réponse conservée');f.client.clear();
 });

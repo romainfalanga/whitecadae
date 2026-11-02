@@ -87,7 +87,11 @@ function gameMaster(){
 }
 function gameMasterBlanc(content){
   // Keep the last two words together, including on browsers without pretty wrapping.
-  const prose=text=>esc(text.replace(/\s+(\S+)$/, '\u00a0$1'));
+  const prose=text=>{
+    const community=/^(.*\s)(Game Masters Blancs\.)$/.exec(text);
+    if(community)return `${esc(community[1])}<span class="gm-community-name">${esc(community[2].replaceAll(' ','\u00a0'))}</span>`;
+    return esc(text.replace(/\s+(\S+)$/, '\u00a0$1'));
+  };
   shell(`<div class="gm-layout gm-white"><header class="private-heading gm-heading"><h1 class="gm-title"><span>Game Master</span><span>Blanc</span></h1></header><article class="gm-letter"><p class="gm-opening">${content.opening.map(text=>`<span>${esc(text)}</span>`).join(' ')}</p><div class="gm-copy">${content.sections.map((section,index)=>`<section class="gm-section" aria-labelledby="gm-white-section-${index}"><h2 id="gm-white-section-${index}">${esc(section.title)}</h2>${section.paragraphs.map(text=>`<p>${prose(text)}</p>`).join('')}</section>`).join('')}</div></article></div>`);
 }
 function noticeMarkup(){const n=session.consent.notice;return `<div class="private-note"><p>${esc(n.purpose)}</p><p>${esc(n.storage)}</p><p>${esc(n.retention)}</p><p>${esc(n.care)}</p></div>`;}

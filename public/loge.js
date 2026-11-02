@@ -55,7 +55,7 @@ function topbar(view){const other=view.kind==='profile'&&String(view.memberId)!=
 function composerMarkup(){return '<section id="loge-compose" class="loge-compose loge-composer-sheet" role="dialog" aria-modal="true" aria-labelledby="loge-compose-title" hidden></section>';}
 function logeNavigation(view){
   const ownProfile=view.kind==='profile'&&String(view.memberId)===String(session.user),active=view.kind==='theme'?'theme':ownProfile&&view.tab==='reflexions'?'reflexions':'loge';
-  return `<nav class="loge-tabs" aria-label="Navigation de la Loge">${[['loge','Loge',base],['reflexions','Mes réflexions',memberPath(session.user)+'?onglet=reflexions'],...(LOGE_THEMES_ENABLED?[['theme','Thème',themePath()]]:[])].map(([tab,label,href])=>`<a href="${href}" data-link ${active===tab?'aria-current="page"':''}>${label}</a>`).join('')}</nav>`;
+  return `<nav class="loge-tabs" aria-label="Navigation de la Loge">${[['loge','Loge Virtuelle',base],['reflexions','Mes réflexions',memberPath(session.user)+'?onglet=reflexions'],...(LOGE_THEMES_ENABLED?[['theme','Thème',themePath()]]:[])].map(([tab,label,href])=>`<a href="${href}" data-link ${active===tab?'aria-current="page"':''}>${label}</a>`).join('')}</nav>`;
 }
 function login(s){
   if(!live(s))return;
@@ -316,27 +316,38 @@ function growComment(field){
   field.style.setProperty('height',Math.min(limit,height)+'px');field.style.setProperty('overflow-y',height>limit?'auto':'hidden');
 }
 function growingComment(form){const field=form.elements.namedItem('body');growComment(field);field?.addEventListener('input',()=>growComment(field));}
-function bindCommentComposer(id){
-  const draft=getDraft('create-comment-'+id,{body:''}),root=node('loge-comment-compose');
-  root.innerHTML=`<form><label>Écrire un commentaire<textarea name="body" required maxlength="2000" rows="5">${esc(draft.body)}</textarea></label><div class="loge-form-actions"><button class="loge-button" type="submit">Publier le commentaire</button></div>${statusMarkup('loge-comment-create-status')}</form>`;
-  const form=root.querySelector('form');rememberFields(form,draft,['body']);growingComment(form);
-  form.onsubmit=event=>{event.preventDefault();if(!form.reportValidity())return;readFields(form,draft,['body']);perform('create-comment-'+id,form,async()=>{
-    const result=await request(`/api/loge/posts/${encodeURIComponent(id)}/comments`,{method:'POST',body:{body:draft.body.trim(),requestId:draft.requestId}});
-    invalidateOtherViews();if(!session.comments.has(String(result.comment.id)))commentCount(id,1);node('loge-comments-empty')?.remove();insertComment(result.comment,node('loge-comments-list'));if(session.current.tab==='interventions')insertIntervention({...result.comment,post:session.posts.get(String(id))},node('loge-profile-list'));draft.body='';draft.requestId=crypto.randomUUID();form.elements.namedItem('body').value='';growComment(form.elements.namedItem('body'));
-    notice('loge-comment-create-status','Ton commentaire est publié.');
-  },error=>notice('loge-comment-create-status',error.message,true));};
+function commentWriting(panel,writing,{focus=true}={}){
+  const root=panel.root,scroll=root.querySelector('.loge-comments-scroll'),compose=root.querySelector('.loge-comment-composer'),open=root.querySelector('[data-comment-write]');
+  const wasWriting=!!panel.writing;if(writing&&!wasWriting)panel.writingVersion=(panel.writingVersion||0)+1;
+  if(writing&&!compose.innerHTML)bindCommentComposer(panel);
+  if(writing&&!panel.writing)panel.readScrollTop=scroll.scrollTop||0;
+  panel.writing=writing;root.classList.toggle('is-writing',writing);scroll.hidden=writing;compose.hidden=!writing;open.hidden=writing;open.setAttribute('aria-expanded',String(writing));
+  if(writing){const field=compose.querySelector('textarea');growComment(field);if(focus)field?.focus({preventScroll:true});}
+  else{if(wasWriting)scroll.scrollTop=panel.readScrollTop||0;if(focus)open.focus({preventScroll:true});}
+}
+function bindCommentComposer(panel){
+  const id=panel.postId,draft=getDraft('create-comment-'+id,{body:''}),root=panel.root.querySelector('.loge-comment-composer');
+  root.innerHTML=`<form><label>Écrire un commentaire<textarea name="body" required maxlength="2000" rows="5">${esc(draft.body)}</textarea></label><div class="loge-form-actions">${button('Annuler','data-comment-cancel',true)}<button class="loge-button" type="submit">Publier le commentaire</button></div>${statusMarkup('loge-comment-create-status')}</form>`;
+  const form=root.querySelector('form');rememberFields(form,draft,['body']);growingComment(form);form.querySelector('[data-comment-cancel]').onclick=()=>commentWriting(panel,false);
+  form.onsubmit=event=>{event.preventDefault();if(!form.reportValidity())return;readFields(form,draft,['body']);const submitted={body:draft.body.trim(),requestId:draft.requestId},writingVersion=panel.writingVersion;perform('create-comment-'+id,form,async()=>{
+    const result=await request(`/api/loge/posts/${encodeURIComponent(id)}/comments`,{method:'POST',body:submitted});
+    invalidateOtherViews();if(!session.comments.has(String(result.comment.id)))commentCount(id,1);node('loge-comments-empty')?.remove();insertComment(result.comment,node('loge-comments-list'));if(session.current.tab==='interventions')insertIntervention({...result.comment,post:session.posts.get(String(id))},node('loge-profile-list'));
+    const unchanged=draft.requestId===submitted.requestId&&draft.body.trim()===submitted.body;
+    draft.requestId=crypto.randomUUID();if(unchanged){draft.body='';form.elements.namedItem('body').value='';growComment(form.elements.namedItem('body'));if(panel.writing&&panel.writingVersion===writingVersion){commentWriting(panel,false);node('loge-comment-'+result.comment.id)?.scrollIntoView({block:'nearest',inline:'nearest'});}}
+    notice('loge-comments-status','Ton commentaire est publié.');
+  },error=>notice(panel.writing?'loge-comment-create-status':'loge-comments-status',error.message,true));};
 }
 
 function invalidateOtherViews(){const s=session;for(const view of s.views.values())if(view!==s.current){view.dirty=true;view.version++;}}
-function commentsMarkup(drawer=false){return `<header class="loge-comments-heading"><h2 id="loge-comments-title">Commentaires</h2>${drawer?button('Fermer','data-discussion-close aria-label="Fermer les commentaires"',true):''}</header><div class="loge-comments-scroll" id="loge-comments-scroll"><div id="loge-comments-list"></div>${button('Voir d’autres commentaires','id="loge-comments-more"',true)}${statusMarkup('loge-comments-status')}</div><div id="loge-comment-compose" class="loge-comment-composer"></div>`;}
+function commentsMarkup(drawer=false){return `<header class="loge-comments-heading"><h2 id="loge-comments-title">Commentaires</h2>${drawer?button('Fermer','data-discussion-close aria-label="Fermer les commentaires"',true):''}</header><div class="loge-comments-scroll" id="loge-comments-scroll"><div id="loge-comments-list"></div>${button('Voir d’autres commentaires','id="loge-comments-more"',true)}${statusMarkup('loge-comments-status')}</div>${button('Écrire un commentaire','data-comment-write aria-expanded="false" aria-controls="loge-comment-compose"',true)}<div id="loge-comment-compose" class="loge-comment-composer" hidden></div>`;}
 function bindComments(panel){
   const s=session;node('loge-comments-more').onclick=()=>loadComments(panel.postId,panel.next);
-  panel.root.querySelector('[data-discussion-close]')?.addEventListener('click',()=>closeDiscussion());bindCommentComposer(panel.postId);
-  panel.root.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();closeDiscussion();}});
+  panel.root.querySelector('[data-discussion-close]')?.addEventListener('click',()=>closeDiscussion());panel.root.querySelector('[data-comment-write]').onclick=()=>commentWriting(panel,true);
+  panel.root.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();if(panel.writing)commentWriting(panel,false);else closeDiscussion();}});
 }
 function closeDiscussion(){
   const view=session?.current,panel=view?.activePanel;if(!panel||!videoView(view))return;
-  panel.scrollTop=node('loge-comments-scroll')?.scrollTop||0;panel.root.remove();
+  commentWriting(panel,false,{focus:false});panel.scrollTop=node('loge-comments-scroll')?.scrollTop||0;panel.root.remove();
   const card=node('loge-post-'+panel.postId);card?.classList.remove('is-comments-open');
   const slot=node('loge-panel-slot-'+panel.postId);if(slot)slot.hidden=true;
   const toggle=card?.querySelector('[data-comments-open]');toggle?.setAttribute('aria-expanded','false');toggle?.focus({preventScroll:true});
@@ -351,21 +362,21 @@ async function openDiscussion(postId){
   if(panel.dirty){panel.root.innerHTML=commentsMarkup(true);panel.loaded=false;panel.bound=false;panel.next=null;panel.dirty=false;}
   view.activePanel=panel;node('loge-panel-slot-'+postId).hidden=false;node('loge-panel-slot-'+postId).append(panel.root);
   const card=node('loge-post-'+postId);card.classList.add('is-comments-open');card.querySelector('[data-comments-open]').setAttribute('aria-expanded','true');
-  if(!panel.bound){bindComments(panel);panel.bound=true;}else node('loge-comments-scroll').scrollTop=panel.scrollTop;
+  if(!panel.bound){bindComments(panel);panel.bound=true;}else node('loge-comments-scroll').scrollTop=panel.scrollTop;commentWriting(panel,false,{focus:false});
   refreshLayout(view);panel.root.querySelector('[data-discussion-close]')?.focus({preventScroll:true});
   if(!panel.loaded)await loadComments(postId);
 }
 async function loadComments(id,after=null){
   const s=session,view=s.current,panel=view.activePanel;if(!panel||String(panel.postId)!==String(id)||panel.loading)return;
-  panel.loading=true;const more=node('loge-comments-more');if(more)more.disabled=true;
+  panel.loading=true;const more=node('loge-comments-more');if(more)more.disabled=true;notice('loge-comments-status','Chargement des commentaires…');
   try{
     const query=new URLSearchParams();if(after!==null)query.set('after',after);else if(panel.focusComment)query.set('focus',panel.focusComment);
     const result=await request(`/api/loge/posts/${encodeURIComponent(id)}/comments${query.size?'?'+query:''}`);
     if(s.current!==view||view.activePanel!==panel)return;
     const list=node('loge-comments-list');for(const comment of result.comments)insertComment(comment,list);
     if(!list.querySelector('[data-comment-id]'))list.innerHTML='<p class="loge-empty" id="loge-comments-empty">Aucun commentaire pour le moment.</p>';
-    panel.loaded=true;panel.next=result.next;const next=node('loge-comments-more');next.hidden=result.next==null;next.disabled=false;
-    if(panel.focusComment){const target=node('loge-comment-'+panel.focusComment);if(target){target.classList.add('is-focused');target.setAttribute('tabindex','-1');target.scrollIntoView({block:'nearest',inline:'nearest'});target.focus({preventScroll:true});}panel.focusComment=null;}
+    notice('loge-comments-status','');panel.loaded=true;panel.next=result.next;const next=node('loge-comments-more');next.hidden=result.next==null;next.disabled=false;
+    if(panel.focusComment){const target=node('loge-comment-'+panel.focusComment);if(target){target.classList.add('is-focused');target.setAttribute('tabindex','-1');if(!panel.writing){target.scrollIntoView({block:'nearest',inline:'nearest'});target.focus({preventScroll:true});}}panel.focusComment=null;}
     return true;
   }catch(error){
     if(live(s)&&s.current===view&&view.activePanel===panel&&error.status===404&&after===null&&panel.focusComment){panel.focusComment=null;panel.loading=false;const loaded=await loadComments(id);if(loaded&&live(s)&&s.current===view)notice('loge-comments-status','Ce commentaire n’est plus disponible. Les autres échanges sont affichés.');return loaded;}
@@ -569,7 +580,7 @@ async function fetchView(view){
   try{return await view.fetching;}finally{view.fetching=null;}
 }
 function saveView(view){
-  if(!view?.root)return;view.scrollY=window.scrollY||0;view.reelScroll=viewScroller(view)?.scrollTop||0;
+  if(!view?.root)return;if(view.activePanel?.writing)commentWriting(view.activePanel,false,{focus:false});view.scrollY=window.scrollY||0;view.reelScroll=viewScroller(view)?.scrollTop||0;
   view.player?.pause();view.paginationObserver?.disconnect();view.paginationObserver=null;
 }
 function restoreView(view){

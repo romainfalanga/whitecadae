@@ -19,13 +19,9 @@ export const GAME_MASTER_BLANC = {
       'Dans ta plateforme de vidéographie, donne à l’IA accès à tes réflexions pour qu’elle puisse t’aider à mieux te comprendre en schématisant ton fonctionnement.',
       'Crée ta version harmonieuse en IA pour dialoguer avec elle et mieux visualiser la personne que tu cherches à devenir.'
     ]},
-    {title:'Ta société harmonieuse IA',paragraphs:[
-      'À l’aide de l’IA, crée une simulation de ta société harmonieuse. Trouve les moyens de la faire fonctionner pour observer comment le monde évoluerait si tu en façonnais les mécanismes.',
-      'Utilise cette visualisation pour l’améliorer.'
-    ]},
     {title:'Loge virtuelle',paragraphs:[
       'Partage dans la Loge virtuelle tes réflexions et tes avancées aux autres Game Masters Blancs.',
-      'Commente leurs vidéos pour leur apporter ton regard et des pistes d’amélioration. Cherche à comprendre les idées de ton interlocuteur plutôt qu’à défendre ou à prouver les tiennes.',
+      'Aide les autres à avancer en leur apportant ton regard et des pistes d’amélioration. Cherche à comprendre les idées de ton interlocuteur plutôt qu’à défendre ou à prouver les tiennes.',
       'Ces échanges vous permettent de grandir ensemble. Enrichissez mutuellement vos arborescences de réflexion et aidez-vous à les faire grandir de manière harmonieuse.'
     ]}
   ]
