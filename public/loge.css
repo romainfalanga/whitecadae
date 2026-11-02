@@ -44,3 +44,12 @@ body.loge-immersive{overflow:hidden;background:#000}body.loge-immersive #music-p
 .loge-comments-panel>[data-comment-write]{flex:none;align-self:stretch;justify-content:center;margin-top:.65rem;min-height:44px}
 .loge-comments-panel.is-writing .loge-comment-composer{border-top:0;padding-top:0;margin-top:.3rem}
 .loge-comments-panel.is-writing .loge-comment-composer form{min-height:0}
+
+/* A software keyboard can shrink only VisualViewport, leaving 100dvh and the
+   240px video row unchanged. Lift just the active discussion above that layout. */
+body.loge-immersive.loge-comment-keyboard main#app{z-index:70}
+.loge-comments-panel.is-keyboard-editing{position:fixed;z-index:95;top:var(--loge-comment-viewport-top);left:var(--loge-comment-viewport-left);width:var(--loge-comment-viewport-width);height:var(--loge-comment-viewport-height);max-height:var(--loge-comment-viewport-height);padding:.65rem max(.8rem,env(safe-area-inset-right,0px)) .65rem max(.8rem,env(safe-area-inset-left,0px));margin:0;background:#111114;box-shadow:0 0 0 100vmax #000a;overflow:hidden;overscroll-behavior:contain}
+.loge-comments-panel.is-keyboard-editing textarea{min-height:72px;max-height:max(72px,calc(var(--loge-comment-viewport-height) - 180px));scroll-margin:12px}
+.loge-comments-panel .loge-comment-composer .loge-form-actions,.loge-comments-panel .loge-edit-form .loge-form-actions{margin:0;padding-top:1rem;gap:.75rem;flex:none}
+.loge-comments-panel.is-keyboard-editing .loge-comment-composer form{display:flex;flex-direction:column;min-height:100%;padding-bottom:.5rem}
+.loge-comments-panel.is-keyboard-editing .loge-comment-composer,.loge-comments-panel.is-keyboard-editing .loge-comments-scroll{min-height:0;overflow-y:auto;scroll-padding:12px;-webkit-overflow-scrolling:touch}

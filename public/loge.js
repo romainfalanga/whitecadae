@@ -1,3 +1,4 @@
+import {createLogeCommentViewport} from './loge-comment-viewport.js';
 import {LOGE_THEMES_ENABLED} from './loge-features.js';
 import {youtubeId} from './youtube-video.js';
 import {createLogeVideoFeed} from './loge-video.js';
@@ -311,11 +312,11 @@ function deleteComment(id){
   },error=>refreshAfterConflict('comment',id,error));
 }
 function growComment(field){
-  if(!field)return;const panel=field.closest('.loge-comments-panel'),available=panel?.getBoundingClientRect?.().height,limit=Math.max(144,Math.min(360,(window.visualViewport?.height||window.innerHeight||800)*.45,available>0?available-136:360));
-  field.style.setProperty('height','auto');const height=Math.max(144,field.scrollHeight||144);
+  if(!field)return;const panel=field.closest('.loge-comments-panel'),available=panel?.getBoundingClientRect?.().height,editing=panel?.classList.contains('is-keyboard-editing'),minimum=editing?Math.min(144,Math.max(72,(available||window.visualViewport?.height||300)-180)):144,limit=Math.max(minimum,Math.min(360,(window.visualViewport?.height||window.innerHeight||800)*.45,available>0?available-(editing?180:136):360));
+  field.style.setProperty('height','auto');const height=Math.max(minimum,field.scrollHeight||minimum);
   field.style.setProperty('height',Math.min(limit,height)+'px');field.style.setProperty('overflow-y',height>limit?'auto':'hidden');
 }
-function growingComment(form){const field=form.elements.namedItem('body');growComment(field);field?.addEventListener('input',()=>growComment(field));}
+function growingComment(form){const field=form.elements.namedItem('body');growComment(field);field?.addEventListener('input',()=>{growComment(field);session?.commentViewport?.refresh();});}
 function commentWriting(panel,writing,{focus=true}={}){
   const root=panel.root,scroll=root.querySelector('.loge-comments-scroll'),compose=root.querySelector('.loge-comment-composer'),open=root.querySelector('[data-comment-write]');
   const wasWriting=!!panel.writing;if(writing&&!wasWriting)panel.writingVersion=(panel.writingVersion||0)+1;
@@ -324,6 +325,7 @@ function commentWriting(panel,writing,{focus=true}={}){
   panel.writing=writing;root.classList.toggle('is-writing',writing);scroll.hidden=writing;compose.hidden=!writing;open.hidden=writing;open.setAttribute('aria-expanded',String(writing));
   if(writing){const field=compose.querySelector('textarea');growComment(field);if(focus)field?.focus({preventScroll:true});}
   else{if(wasWriting)scroll.scrollTop=panel.readScrollTop||0;if(focus)open.focus({preventScroll:true});}
+  session?.commentViewport?.refresh();
 }
 function bindCommentComposer(panel){
   const id=panel.postId,draft=getDraft('create-comment-'+id,{body:''}),root=panel.root.querySelector('.loge-comment-composer');
@@ -351,7 +353,7 @@ function closeDiscussion(){
   const card=node('loge-post-'+panel.postId);card?.classList.remove('is-comments-open');
   const slot=node('loge-panel-slot-'+panel.postId);if(slot)slot.hidden=true;
   const toggle=card?.querySelector('[data-comments-open]');toggle?.setAttribute('aria-expanded','false');toggle?.focus({preventScroll:true});
-  view.activePanel=null;refreshLayout(view);
+  view.activePanel=null;session?.commentViewport?.refresh();refreshLayout(view);
 }
 async function openDiscussion(postId){
   const s=session,view=s.current;if(!videoView(view))return;
@@ -615,7 +617,7 @@ export async function navigate(destination){
     if(s.current!==view){s.current?.player?.destroy();if(s.current)s.current.player=null;s.current=view;}
     immersion(logeView(view));
     if(!view.root||view.renderedGeneration!==view.dataGeneration){renderView(view,result);}else{s.ctx.app.replaceChildren(view.root);document.title=view.title;}
-    restoreView(view);if(view.openCompose)openComposer();
+    s.commentViewport?.refresh();restoreView(view);if(view.openCompose)openComposer();
     if(view.kind==='post'&&view.focusComment&&!view.activePanel)await openDiscussion(view.postId);
     if(!live(s)||s.current!==view)return;s.views.delete(view.key);s.views.set(view.key,view);prefetchSibling(view);trimViews();
   }catch(error){
@@ -627,7 +629,7 @@ export async function navigate(destination){
 }
 export function leave(){
   const s=session;immersion(false);if(!s)return;
-  closeVideo(s);s.headerObserver?.disconnect();s.menuObserver?.disconnect();s.closed=true;s.controller.abort();clearTimeout(s.quotaTimer);clearTimeout(s.themeTimer);window.removeEventListener('focus',s.themeFocus);document.removeEventListener('visibilitychange',s.themeFocus);window.removeEventListener('resize',s.resize);document.removeEventListener('keydown',s.keydown);session=null;
+  s.commentViewport?.destroy();closeVideo(s);s.headerObserver?.disconnect();s.menuObserver?.disconnect();s.closed=true;s.controller.abort();clearTimeout(s.quotaTimer);clearTimeout(s.themeTimer);window.removeEventListener('focus',s.themeFocus);document.removeEventListener('visibilitychange',s.themeFocus);window.removeEventListener('resize',s.resize);document.removeEventListener('keydown',s.keydown);session=null;
 }
 export function clear(){leave();drafts.clear();}
 export async function page(path,ctx){
@@ -638,6 +640,7 @@ export async function page(path,ctx){
   const s=session={ctx,user:ctx.state.user.id,controller:new AbortController(),closed:false,blocked:false,pending:new Set(),views:new Map(),current:null,navigationVersion:0,nextPublicationAt:null,clockOffset:0,quotaTimer:null};
   for(const key of ['posts','comments','interventions','next','loading','member'])Object.defineProperty(s,key,{get:()=>s.current?.[key],set:value=>{if(s.current)s.current[key]=value;}});
   Object.defineProperty(s,'view',{get:()=>s.current?.kind});
+  s.commentViewport=createLogeCommentViewport({isCurrent:()=>live(s),getPanel:()=>s.current?.activePanel?.root,onGeometry:field=>growComment(field)});
   s.themeFocus=()=>{if(live(s)&&!document.hidden&&s.currentTheme?.endsAt*1000<=Date.now()+s.clockOffset)void refreshThemeBoundary(s);};if(LOGE_THEMES_ENABLED){window.addEventListener('focus',s.themeFocus);document.addEventListener('visibilitychange',s.themeFocus);}
   s.resize=()=>{if(live(s)&&document.body.classList.contains('loge-immersive')){siteHeaderSize();refreshLayout(s.current);for(const field of s.current?.root?.querySelectorAll('textarea')||[])if(field.closest('.loge-comments-panel'))growComment(field);}};window.addEventListener('resize',s.resize);
   const header=document.querySelector('.site-header');if(header&&typeof ResizeObserver==='function'){s.headerObserver=new ResizeObserver(()=>{if(live(s))s.resize();});s.headerObserver.observe(header);}

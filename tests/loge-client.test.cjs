@@ -115,7 +115,8 @@ function fixture({posts=[post()],comments=[],user=self,search='',observeUI=false
   sandbox.createLogeVideoFeed=options=>{const items=new Map(),controller={options,items,destroyed:false,paused:false,pauseCalls:0,resumeCalls:0,add:(post,container,timeline)=>items.set(String(post.id),{post,container,timeline}),remove:id=>items.delete(String(id)),refresh(){},pause(){this.pauseCalls++;this.paused=true;},resume(){this.resumeCalls++;this.paused=false;},destroy(){this.destroyed=true;for(const item of items.values())item.container.querySelector('iframe')?.remove();items.clear();}};controllers.push(controller);return controller;};
   const themeUI=readFileSync(path.join(__dirname,'../public/loge-themes-ui.js'),'utf8').replace(/export /g,'');
   vm.runInContext('Object.assign(globalThis,(()=>{'+themeUI+';return {themeOverviewMarkup,proposalMarkup,historyMarkup};})());',sandbox);
-  vm.runInContext(youtube+'\n'+source+'\nwindow.client={page,leave,clear,navigate,canNavigate};',sandbox);
+  const keyboard=readFileSync(path.join(__dirname,'../public/loge-comment-viewport.js'),'utf8').replace(/export /g,'');
+  vm.runInContext(keyboard+'\n'+youtube+'\n'+source+'\nwindow.client={page,leave,clear,navigate,canNavigate};',sandbox);
   const f={app,document,window,state,location,ctx,themes,requests,navigations,music,timers,controllers,scrolls,observers,confirm:true,client:window.client,
     async page(path='/loge-virtuelle',query=search){location.pathname=path;location.search=query;await this.client.page(path,ctx);},
     async navigate(destination){const target=new URL(destination,location.origin);location.pathname=target.pathname;location.search=target.search;location.hash=target.hash;await this.client.navigate(destination);},
@@ -540,4 +541,13 @@ test('Escape returns to comment history without closing the panel and a pending 
   const key=new Event('keydown',{cancelable:true,bubbles:true});Object.defineProperty(key,'key',{value:'Escape'});f.find('.loge-comments-panel').dispatchEvent(key);
   assert.equal(key.defaultPrevented,true);assert.equal(key.cancelBubble,true);assert.equal(f.node('loge-comment-compose').hidden,true);assert.equal(f.node('loge-comments-scroll').hidden,false);assert.equal(f.node('loge-panel-slot-7').hidden,false);
   release(error(503,'Impossible de publier pour le moment'));await flush();assert.match(f.node('loge-comments-status').textContent,/Impossible de publier/);assert.equal(f.writeComment().elements.namedItem('body').value,'Une réponse conservée');f.client.clear();
+});
+
+test('mobile comment writing follows the keyboard viewport, restores reading layout and cleans up on leaving',async()=>{
+  const f=fixture({comments:[comment()]});f.window.innerWidth=390;f.window.innerHeight=844;const viewport=new EventTarget();Object.assign(viewport,{width:390,height:844,offsetTop:0,offsetLeft:0});f.window.visualViewport=viewport;
+  await f.page();await flush();const player=f.controllers.at(-1),record=player.items.get('7'),pauses=player.pauseCalls,resumes=player.resumeCalls;f.click(f.find('[data-comments-open]'));await flush();const form=f.writeComment();f.fill(form,'body','Un commentaire à poursuivre');
+  viewport.height=300;viewport.offsetTop=36;viewport.dispatchEvent(new Event('resize'));const panel=f.find('.loge-comments-panel');assert.equal(panel.classList.contains('is-keyboard-editing'),true);assert.equal(panel.style.getPropertyValue('--loge-comment-viewport-height'),'300px');assert.equal(panel.style.getPropertyValue('--loge-comment-viewport-top'),'36px');assert.equal(f.document.body.classList.contains('loge-comment-keyboard'),true);
+  f.click(form.querySelector('[data-comment-cancel]'));assert.equal(panel.classList.contains('is-keyboard-editing'),false);assert.equal(panel.style.getPropertyValue('--loge-comment-viewport-height'),'');assert.equal(f.node('loge-comments-scroll').hidden,false);assert.equal(f.document.body.classList.contains('loge-comment-keyboard'),false);
+  assert.equal(f.writeComment().elements.namedItem('body').value,'Un commentaire à poursuivre');assert.equal(panel.classList.contains('is-keyboard-editing'),true);assert.equal(player.items.get('7'),record);assert.equal(player.pauseCalls,pauses);assert.equal(player.resumeCalls,resumes);
+  f.client.leave();assert.equal(f.timers.size,0);assert.equal(panel.classList.contains('is-keyboard-editing'),false);assert.equal(f.document.body.classList.contains('loge-comment-keyboard'),false);viewport.offsetTop=72;viewport.dispatchEvent(new Event('scroll'));assert.equal(panel.style.getPropertyValue('--loge-comment-viewport-top'),'');f.client.clear();
 });

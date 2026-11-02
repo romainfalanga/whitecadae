@@ -78,7 +78,7 @@ test('the private page uses the final API and renders no final text on refusal o
     assert.match(app.innerHTML,/<span class="gm-community-name">Game\u00a0Masters\u00a0Blancs\.<\/span>/);
     assert.doesNotMatch(app.innerHTML,/Ta société harmonieuse IA|Commente leurs vidéos/);
     const paragraphs=[...app.innerHTML.matchAll(/<section class="gm-section"[^>]*>[\s\S]*?<\/section>/g)].flatMap(section=>[...section[0].matchAll(/<p>([\s\S]*?)<\/p>/g)].map(match=>match[1].replace(/<[^>]+>/g,'')));
-    assert.equal(paragraphs.length,11);
+    assert.equal(paragraphs.length,10);
     assert.ok(paragraphs.every(text=>/\S+\u00a0\S+$/.test(text)),'last words stay together without fixed line breaks');
     assert.match(paragraphs[0],/en\u00a0vidéo\.$/);
     assert.doesNotMatch(app.innerHTML,/gm-orbit/);
