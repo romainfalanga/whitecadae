@@ -55,13 +55,11 @@ body.loge-immersive.loge-comment-keyboard main#app{z-index:70}
 .loge-comments-panel.is-keyboard-editing .loge-comment-composer,.loge-comments-panel.is-keyboard-editing .loge-comments-scroll{min-height:0;overflow-y:auto;scroll-padding:12px;-webkit-overflow-scrolling:touch}
 
 .loge-post-date{margin:.3rem 0 0;font:400 .68rem/1.4 var(--sans);color:var(--loge-muted);font-variant-numeric:tabular-nums}
-.loge-comment-content{position:relative;width:fit-content;max-width:100%;min-width:0}
-.loge-comment-content.is-own{padding-inline-end:36px}
-.loge-comment-content.is-own:has(.loge-comment-menu[open]){width:100%}
-.loge-comment-menu{position:static;width:auto;margin:0;min-height:0}
-.loge-comment-menu summary{position:absolute;top:.1rem;right:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;min-height:32px;margin:0;padding:0;border-radius:50%}
+.loge-comment-content{position:relative;width:100%;min-width:0}
+.loge-comment-menu{position:relative;width:100%;margin:.15rem 0 0;min-height:36px}
+.loge-comment-menu summary{position:static;display:flex;align-items:center;justify-content:center;width:32px;height:32px;min-height:32px;margin:0;padding:0;border-radius:50%}
 .loge-comment-menu summary svg{display:block;width:22px;height:22px;fill:currentColor}
-.loge-comment-menu>div{position:static;inset:auto;display:flex;flex-direction:row;flex-wrap:wrap;gap:.4rem;min-width:0;width:calc(100% + 36px);max-width:calc(100% + 36px);margin:.2rem 0 .35rem;padding:.4rem;box-shadow:none}
-.loge-comment-menu>div .loge-button{flex:1 1 90px;justify-content:center;min-height:40px}
+.loge-comment-menu>div{position:absolute;inset:0 0 auto 38px;display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:.35rem;min-width:0;width:auto;margin:0;padding:0;border:0;background:transparent;box-shadow:none}
+.loge-comment-menu>div .loge-button{flex:0 0 auto;justify-content:center;min-height:32px;padding:.35rem .5rem;font-size:.73rem;white-space:nowrap}
 .loge-comments-panel.is-keyboard-editing .loge-comment-composer,.loge-comments-panel.is-keyboard-editing .loge-comments-scroll{flex:0 1 auto}
 .loge-comments-panel.is-keyboard-editing .loge-comment-composer textarea{margin-top:0}
