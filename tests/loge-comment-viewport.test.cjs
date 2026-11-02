@@ -35,14 +35,14 @@ test('keyboard resize and visual viewport scroll lift the editor into the visibl
   const f=fixture();f.focus();assert.equal(f.panel.classList.contains('is-keyboard-editing'),false);
   f.viewport.height=330;f.viewport.offsetTop=42;f.viewport.emit('resize');f.flush();
   assert.equal(f.panel.classList.contains('is-keyboard-editing'),true);assert.equal(f.document.body.classList.contains('loge-comment-keyboard'),true);
-  assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-height'),'330px');assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-top'),'42px');assert.equal(f.field.reveal.block,'nearest');assert.equal(f.document.activeElement,f.field);
-  f.viewport.offsetTop=102;f.viewport.offsetLeft=5;f.viewport.emit('scroll');f.flush();assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-top'),'102px');assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-left'),'5px');
-  f.viewport.height=844;f.viewport.offsetTop=0;f.viewport.emit('resize');assert.equal(f.panel.classList.contains('is-keyboard-editing'),false);assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-height'),'');assert.equal(f.document.body.classList.contains('loge-comment-keyboard'),false);f.controller.destroy();
+  assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-height'),'330px');assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-top'),'42px');assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-bottom'),'472px');assert.equal(f.field.reveal.block,'nearest');assert.equal(f.document.activeElement,f.field);
+  f.viewport.offsetTop=102;f.viewport.offsetLeft=5;f.viewport.emit('scroll');f.flush();assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-top'),'102px');assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-left'),'5px');assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-bottom'),'412px');
+  f.viewport.height=844;f.viewport.offsetTop=0;f.viewport.emit('resize');assert.equal(f.panel.classList.contains('is-keyboard-editing'),false);assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-height'),'');assert.equal(f.document.body.classList.contains('loge-comment-keyboard'),false);assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-bottom'),'');f.controller.destroy();
 });
 
 test('both resized viewports, landscape rotation and a second viewport event retain the lifted editor until keyboard expansion',()=>{
   const f=fixture();f.focus();f.window.innerHeight=340;f.viewport.height=340;f.window.emit('resize');assert.equal(f.panel.classList.contains('is-keyboard-editing'),true);
-  f.window.innerWidth=844;f.window.innerHeight=220;f.viewport.width=844;f.viewport.height=220;f.viewport.emit('resize');f.viewport.offsetTop=12;f.viewport.emit('scroll');f.flush();assert.equal(f.panel.classList.contains('is-keyboard-editing'),true);assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-width'),'844px');
+  f.window.innerWidth=844;f.window.innerHeight=220;f.viewport.width=844;f.viewport.height=220;f.viewport.emit('resize');f.viewport.offsetTop=12;f.viewport.emit('scroll');f.flush();assert.equal(f.panel.classList.contains('is-keyboard-editing'),true);assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-width'),'844px');assert.equal(f.panel.style.getPropertyValue('--loge-comment-viewport-bottom'),'-12px');
   f.window.innerHeight=390;f.viewport.height=390;f.viewport.emit('resize');assert.equal(f.panel.classList.contains('is-keyboard-editing'),false);f.controller.destroy();
 });
 

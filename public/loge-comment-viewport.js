@@ -16,7 +16,7 @@ export function createLogeCommentViewport({isCurrent,getPanel,onGeometry=()=>{}}
   const coarse=()=>window.matchMedia?.('(pointer: coarse)').matches||window.innerWidth<=1100;
   const geometry=()=>({height:Math.max(1,viewport?.height||window.innerHeight||800),top:Math.max(0,viewport?.offsetTop||0),left:Math.max(0,viewport?.offsetLeft||0),width:Math.max(1,viewport?.width||window.innerWidth||400)});
   const listen=(target,event,fn)=>{target?.addEventListener(event,fn,{passive:true});return ()=>target?.removeEventListener(event,fn);};
-  function reset(){if(panel){panel.classList.remove('is-keyboard-editing');for(const name of ['height','top','left','width'])panel.style.removeProperty('--loge-comment-viewport-'+name);}document.body.classList.remove('loge-comment-keyboard');active=false;panel=null;}
+  function reset(){if(panel){panel.classList.remove('is-keyboard-editing');for(const name of ['height','top','left','width','bottom'])panel.style.removeProperty('--loge-comment-viewport-'+name);}document.body.classList.remove('loge-comment-keyboard');active=false;panel=null;}
   function reveal(){frame=null;if(closed||!active||!isCurrent()||!field||field.closest('.loge-comments-panel')!==panel)return;
     const scroller=field.closest('.loge-comment-composer')||field.closest('.loge-comments-scroll'),rect=field.getBoundingClientRect?.(),bounds=scroller?.getBoundingClientRect?.();
     if(rect&&bounds&&(rect.top<bounds.top+8||rect.bottom>bounds.bottom-8))field.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
@@ -39,7 +39,8 @@ export function createLogeCommentViewport({isCurrent,getPanel,onGeometry=()=>{}}
     lastWidth=g.width;lastHeight=g.height;
     if(!isCurrent()||!current||!field||!keyboard){const oldField=field,wasActive=active;reset();if(wasActive)onGeometry(oldField);return;}
     if(panel&&panel!==current)reset();panel=current;active=true;panel.classList.add('is-keyboard-editing');document.body.classList.add('loge-comment-keyboard');
-    for(const [name,value]of Object.entries(g))panel.style.setProperty('--loge-comment-viewport-'+name,value+'px');
+    const anchored={...g,bottom:(window.innerHeight||g.height)-g.top-g.height};
+    for(const [name,value]of Object.entries(anchored))panel.style.setProperty('--loge-comment-viewport-'+name,value+'px');
     onGeometry(field);
     if(frame===null)frame=window.requestAnimationFrame?window.requestAnimationFrame(reveal):setTimeout(reveal,0);
   }

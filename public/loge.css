@@ -48,8 +48,20 @@ body.loge-immersive{overflow:hidden;background:#000}body.loge-immersive #music-p
 /* A software keyboard can shrink only VisualViewport, leaving 100dvh and the
    240px video row unchanged. Lift just the active discussion above that layout. */
 body.loge-immersive.loge-comment-keyboard main#app{z-index:70}
-.loge-comments-panel.is-keyboard-editing{position:fixed;z-index:95;top:var(--loge-comment-viewport-top);left:var(--loge-comment-viewport-left);width:var(--loge-comment-viewport-width);height:var(--loge-comment-viewport-height);max-height:var(--loge-comment-viewport-height);padding:.65rem max(.8rem,env(safe-area-inset-right,0px)) .65rem max(.8rem,env(safe-area-inset-left,0px));margin:0;background:#111114;box-shadow:0 0 0 100vmax #000a;overflow:hidden;overscroll-behavior:contain}
-.loge-comments-panel.is-keyboard-editing textarea{min-height:72px;max-height:max(72px,calc(var(--loge-comment-viewport-height) - 180px));scroll-margin:12px}
+.loge-comments-panel.is-keyboard-editing{position:fixed;z-index:95;top:auto;bottom:var(--loge-comment-viewport-bottom);left:var(--loge-comment-viewport-left);width:var(--loge-comment-viewport-width);height:auto;max-height:var(--loge-comment-viewport-height);padding:8px max(.8rem,env(safe-area-inset-right,0px)) 8px max(.8rem,env(safe-area-inset-left,0px));margin:0;background:#111114;box-shadow:0 0 0 100vmax #000a;overflow:hidden;overscroll-behavior:contain}
+.loge-comments-panel.is-keyboard-editing textarea{min-height:72px;max-height:max(72px,calc(var(--loge-comment-viewport-height) - 124px));scroll-margin:12px}
 .loge-comments-panel .loge-comment-composer .loge-form-actions,.loge-comments-panel .loge-edit-form .loge-form-actions{margin:0;padding-top:1rem;gap:.75rem;flex:none}
-.loge-comments-panel.is-keyboard-editing .loge-comment-composer form{display:flex;flex-direction:column;min-height:100%;padding-bottom:.5rem}
+.loge-comments-panel.is-keyboard-editing .loge-comment-composer form{display:flex;flex-direction:column;min-height:0;height:auto;padding-bottom:0}
 .loge-comments-panel.is-keyboard-editing .loge-comment-composer,.loge-comments-panel.is-keyboard-editing .loge-comments-scroll{min-height:0;overflow-y:auto;scroll-padding:12px;-webkit-overflow-scrolling:touch}
+
+.loge-post-date{margin:.3rem 0 0;font:400 .68rem/1.4 var(--sans);color:var(--loge-muted);font-variant-numeric:tabular-nums}
+.loge-comment-content{position:relative;width:fit-content;max-width:100%;min-width:0}
+.loge-comment-content.is-own{padding-inline-end:36px}
+.loge-comment-content.is-own:has(.loge-comment-menu[open]){width:100%}
+.loge-comment-menu{position:static;width:auto;margin:0;min-height:0}
+.loge-comment-menu summary{position:absolute;top:.1rem;right:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;min-height:32px;margin:0;padding:0;border-radius:50%}
+.loge-comment-menu summary svg{display:block;width:22px;height:22px;fill:currentColor}
+.loge-comment-menu>div{position:static;inset:auto;display:flex;flex-direction:row;flex-wrap:wrap;gap:.4rem;min-width:0;width:calc(100% + 36px);max-width:calc(100% + 36px);margin:.2rem 0 .35rem;padding:.4rem;box-shadow:none}
+.loge-comment-menu>div .loge-button{flex:1 1 90px;justify-content:center;min-height:40px}
+.loge-comments-panel.is-keyboard-editing .loge-comment-composer,.loge-comments-panel.is-keyboard-editing .loge-comments-scroll{flex:0 1 auto}
+.loge-comments-panel.is-keyboard-editing .loge-comment-composer textarea{margin-top:0}

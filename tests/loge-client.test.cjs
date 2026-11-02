@@ -551,3 +551,20 @@ test('mobile comment writing follows the keyboard viewport, restores reading lay
   assert.equal(f.writeComment().elements.namedItem('body').value,'Un commentaire à poursuivre');assert.equal(panel.classList.contains('is-keyboard-editing'),true);assert.equal(player.items.get('7'),record);assert.equal(player.pauseCalls,pauses);assert.equal(player.resumeCalls,resumes);
   f.client.leave();assert.equal(f.timers.size,0);assert.equal(panel.classList.contains('is-keyboard-editing'),false);assert.equal(f.document.body.classList.contains('loge-comment-keyboard'),false);viewport.offsetTop=72;viewport.dispatchEvent(new Event('scroll'));assert.equal(panel.style.getPropertyValue('--loge-comment-viewport-top'),'');f.client.clear();
 });
+
+test('video footers show the platform publication date in Paris time in the feed and own reflections',async()=>{
+  const item={...post(),createdAt:'2026-11-01T23:15:00Z',youtubePublishedAt:'2001-01-01T00:00:00Z'},f=fixture({posts:[item]});await f.page();await flush();
+  for(const destination of ['/loge-virtuelle','/loge-virtuelle/membres/11?onglet=reflexions']){
+    await f.navigate(destination);const date=f.find('.loge-post-date'),time=date.querySelector('time');assert.equal(time.getAttribute('datetime'),'2026-11-01T23:15:00.000Z');assert.match(date.textContent,/2 novembre 2026/);assert.match(date.textContent,/00:15/);assert.doesNotMatch(date.textContent,/2001/);
+  }
+  f.client.clear();const unsafe=fixture({posts:[{...post(),createdAt:'" onmouseover="alert(1)'}]});await unsafe.page();assert.equal(unsafe.app.querySelector('.loge-post-date'),null);assert.doesNotMatch(unsafe.app.innerHTML,/onmouseover/);unsafe.client.clear();
+});
+
+test('comment options stay with their bubble, use centered SVG dots and retain ownership and edit controls',async()=>{
+  const f=fixture({comments:[{...comment(),body:'Court'},{...comment(9,{id:12,username:'Bob'}),body:'Autre avis'}]});await f.page();f.click(f.find('[data-comments-open]'));await flush();
+  const own=f.node('loge-comment-8'),other=f.node('loge-comment-9'),content=f.find('.loge-comment-content',own),menu=f.find('.loge-comment-menu',content),summary=menu.querySelector('summary');
+  assert(content.classList.contains('is-own'));assert.equal(menu.parent,content);assert.equal(own.querySelector('.loge-comment-meta').querySelector('details'),null);assert.equal(other.querySelector('.loge-comment-menu'),null);
+  assert.equal(summary.getAttribute('aria-label'),'Options de ton commentaire');assert.equal(summary.querySelectorAll('circle').length,3);assert.deepEqual(summary.querySelectorAll('circle').map(circle=>circle.getAttribute('cy')),['12','12','12']);assert.equal(summary.textContent,'');
+  menu.setAttribute('open','');f.click(f.find('[data-comment-edit="8"]',menu));assert.equal(menu.getAttribute('open'),null);const edit=f.find('form',f.node('loge-comment-editor-8'));f.fill(edit,'body','Avis corrigé');f.submit(edit);await flush();assert.equal(f.node('loge-comment-body-8').textContent,'Avis corrigé');
+  const writer=f.writeComment();assert.equal(writer.querySelector('label'),null);assert.equal(writer.elements.namedItem('body').getAttribute('aria-label'),'Écrire un commentaire');assert.doesNotMatch(writer.textContent,/Écrire un commentaire/);f.click(writer.querySelector('[data-comment-cancel]'));assert.equal(f.find('[data-comment-write]').textContent,'Écrire un commentaire');f.client.clear();
+});
