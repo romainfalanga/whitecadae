@@ -15,6 +15,7 @@ import {validAvatar} from './avatar-validation.js';
 import {handlePlaylists} from './playlists.js';
 import {handlePlaylistAudio} from './playlist-audio.js';
 import {handleLoge,ensureLogeTables} from './loge.js';
+import {cleanupLogeStream} from './loge-stream.js';
 import {settleThemeWeeks} from './loge-themes.js';
 export {BrainstormLive} from './brainstorm-live.js';
 
@@ -25,7 +26,8 @@ const PBKDF2_ITERATIONS = 100000;
 export default {
   async scheduled(controller, env) {
     await ensureLogeTables(env);
-    await settleThemeWeeks(env, controller.scheduledTime);
+    if(controller.cron !== '*/15 * * * *') await settleThemeWeeks(env, controller.scheduledTime);
+    await cleanupLogeStream(env);
   },
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -127,10 +129,10 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' https://www.youtube.com",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
-  "media-src 'self'",
+  "img-src 'self' data: https://*.cloudflarestream.com https://videodelivery.net",
+  "media-src 'self' blob: https://*.cloudflarestream.com https://videodelivery.net",
   "font-src 'self'",
-  "connect-src 'self'",
+  "connect-src 'self' https://*.cloudflarestream.com https://videodelivery.net https://upload.videodelivery.net https://*.upload.videodelivery.net",
   "worker-src 'self'",
   "manifest-src 'self'",
   "frame-src https://www.youtube-nocookie.com",

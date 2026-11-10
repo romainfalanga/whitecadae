@@ -1,3 +1,4 @@
+import {createStreamPlayer} from './loge-stream-player.js';
 import {youtubeId} from './youtube-video.js';
 
 let apiPromise=null,frameSequence=0;
@@ -37,7 +38,7 @@ function youtubeAPI(){
 // Keep YouTube's native controls hidden; the optional external timeline uses
 // only the official time, duration and seek APIs and never covers the iframe.
 // Videos start only through the native player after a deliberate user action.
-export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}}={}){
+export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{},getPlayback}={}){
   const records=new Map();let active=null,destroyed=false,paused=false,musicClip=null,musicPlaying=false,nativeExitPending=null,progressTimer=null;
   const connected=record=>record.container.isConnected!==false;
   const current=()=>{try{return !destroyed&&!paused&&isCurrent()&&!document.hidden;}catch{return false;}};
@@ -91,7 +92,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
   }
   function fullscreenRecord(){
     const element=document.fullscreenElement||document.webkitFullscreenElement;
-    return element?[...records.values()].find(record=>record.iframe===element)||null:null;
+    return [...records.values()].find(record=>element&&(record.iframe===element||record.stream&&record.container.closest?.('.loge-reel-stage')===element)||record.stream&&record.player?.isFullscreen?.())||null;
   }
   function exitOwnedFullscreen(record=null){
     const owner=fullscreenRecord();
@@ -124,8 +125,27 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     if(!record.label){record.label=document.createElement('p');record.label.className='loge-video-unavailable';record.label.textContent='Vidéo indisponible.';record.container.append(record.label);}
     try{onError(error,record.post);}catch{/* Presentation errors cannot revive playback. */}
   }
+  function warmStream(record){
+    const token=++record.token;
+    const live=()=>!destroyed&&records.get(record.key)===record&&record.token===token;
+    const player=createStreamPlayer({container:record.container,post:record.post,getPlayback,
+      isEligible:()=>live()&&eligible(record),
+      onReady:()=>{if(!live())return;record.ready=true;refresh();},
+      onState:state=>{
+        if(!live())return;
+        record.state=state;
+        if(state===1){
+          if(!eligible(record)){stop(record);return;}
+          stopOthers(record);window.WCPlayer?.pause();record.playing=true;record.blocked=false;record.container.classList.add('is-playing');
+        }else{record.playing=false;record.container.classList.remove('is-playing');if(state===2&&musicClip===record.key)record.musicPauseConfirmed=true;}
+        refreshTimelines();
+      }
+    });
+    record.player=player;record.iframe=player.element;observe(record);
+  }
   function warm(record){
     if(record.iframe||record.failed||!connected(record))return;
+    if(record.stream){warmStream(record);return;}
     const token=++record.token,iframe=document.createElement('iframe');
     const src=new URL('https://www.youtube-nocookie.com/embed/'+record.video);
     for(const [key,value]of Object.entries({enablejsapi:'1',origin:location.origin,playsinline:'1',autoplay:'0',mute:'0',controls:'0',disablekb:'0',fs:'1',rel:'0'}))src.searchParams.set(key,value);
@@ -205,6 +225,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
   function measureRecord(record,viewport){
     const full=fullscreenRecord();
     if(!connected(record)||(full&&record!==full))return {ratio:0,distance:Infinity};
+    if(full===record&&record.stream)return {ratio:1,distance:0};
     const box=(record.iframe||record.container).getBoundingClientRect(),width=box.width??box.right-box.left,height=box.height??box.bottom-box.top;
     const area=Math.max(0,Math.min(box.right,viewport.right)-Math.max(box.left,viewport.left))*Math.max(0,Math.min(box.bottom,viewport.bottom)-Math.max(box.top,viewport.top));
     return {ratio:width>0&&height>0?area/(width*height):0,distance:Math.abs((box.top+box.bottom-viewport.top-viewport.bottom)/2)};
@@ -254,11 +275,11 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     add(post,container,timeline=null){
       if(destroyed||!post||!container)return;
       const key=String(post.id),existing=records.get(key);
-      if(existing&&existing.container===container&&existing.post.youtubeUrl===post.youtubeUrl){existing.post=post;if(existing.timeline!==timeline)attachTimeline(existing,timeline);if(existing.iframe)existing.iframe.title='Vidéo : '+(post.title||'');refresh();return;}
+      if(existing&&existing.container===container&&existing.post.videoProvider===post.videoProvider&&existing.post.youtubeUrl===post.youtubeUrl){existing.post=post;if(existing.timeline!==timeline)attachTimeline(existing,timeline);if(existing.iframe)existing.iframe.title='Vidéo : '+(post.title||'');refresh();return;}
       if(existing)this.remove(key);
-      const record={key,post:{...post},container,video:youtubeId(post.youtubeUrl),ratio:0,distance:Infinity,token:0,blocked:false};records.set(key,record);
+      const record={key,post:{...post},container,stream:post.videoProvider==='stream',video:youtubeId(post.youtubeUrl),ratio:0,distance:Infinity,token:0,blocked:false};records.set(key,record);
       attachTimeline(record,timeline);
-      if(!record.video)unavailable(record,Error('Lien vidéo invalide.'));
+      if(!record.stream&&!record.video)unavailable(record,Error('Lien vidéo invalide.'));
       observe(record);refresh();
     },
     remove(id){const record=records.get(String(id));if(!record)return;release(record);attachTimeline(record,null);observer?.unobserve(record.observed);record.label?.remove();records.delete(record.key);if(active===record){active=null;musicClip=null;}refresh();},

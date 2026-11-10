@@ -3,3 +3,4 @@ node_modules/
 .dev.vars
 dist/
 public/deploy-info.json
+public/vendor/hls.light.mjs

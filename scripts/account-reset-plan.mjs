@@ -4,7 +4,7 @@ import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
-const preserved=new Set(['albums','songs','lyric_lines','site_content_migrations','d1_migrations','sqlite_sequence','_cf_KV']);
+const preserved=new Set(['albums','songs','lyric_lines','site_content_migrations','d1_migrations','sqlite_sequence','_cf_KV','loge_stream_uploads']);
 const additionalUserTables=new Set(['auth_attempts','carres','echelon_draft_history']);
 const quote=name=>'"'+name.replaceAll('"','""')+'"';
 export function accountResetPlan(db){

@@ -231,7 +231,7 @@ test('interventions embed the complete visible post while retaining distinct com
       id:commentId,postId:id,author:(await f.call('/api/loge/membres/12')).data.member,
       body:'Le texte exact de mon intervention',createdAt:'2023-11-14T22:16:40.000Z',updatedAt:'2023-11-14T22:18:20.000Z',revision:2,
       post:{id,author:(await f.call('/api/loge/membres/26')).data.member,title:'La publication complète',description:'Une description du clip',
-        youtubeUrl:'https://www.youtube.com/watch?v=aqz-KE-bpKQ',createdAt:'2023-11-14T22:13:20.000Z',updatedAt:'2023-11-14T22:15:00.000Z',revision:3,commentCount:2,isFavorite:true,theme:null}
+        videoProvider:'youtube',youtubeUrl:'https://www.youtube.com/watch?v=aqz-KE-bpKQ',createdAt:'2023-11-14T22:13:20.000Z',updatedAt:'2023-11-14T22:15:00.000Z',revision:3,commentCount:2,isFavorite:true,theme:null}
     });
     const otherViewer=(await f.call('/api/loge/membres/12?tab=interventions',{token:'qa11'})).data.interventions[0];
     assert.deepEqual(otherViewer.post,{...intervention.post,isFavorite:false});

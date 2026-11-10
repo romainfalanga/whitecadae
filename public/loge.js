@@ -1,6 +1,6 @@
 import {createLogeCommentViewport} from './loge-comment-viewport.js';
 import {LOGE_THEMES_ENABLED} from './loge-features.js';
-import {youtubeId} from './youtube-video.js';
+import {ensureLogeUpload,validateLogeFile} from './loge-upload.js';
 import {createLogeVideoFeed} from './loge-video.js';
 import {themeOverviewMarkup,proposalMarkup,historyMarkup} from './loge-themes-ui.js';
 
@@ -74,7 +74,7 @@ function savedDraft(user,path,options,result){
   if(options.method==='POST'&&(path==='/api/loge/posts'||thread)){
     const key=prefix+(thread?'create-comment-'+thread[1]:'create-post'),draft=drafts.get(key);
     if(draft&&draft.requestId===body.requestId){
-      const unchanged=same(draft,thread?['body']:['title'])&&(thread||youtubeId(draft.url)===youtubeId(body.url)&&String(draft.themeWeek||'')===String(body.themeWeek||''));
+      const unchanged=same(draft,thread?['body']:['title'])&&(thread||String(draft.uploadId||'')===String(body.uploadId||'')&&String(draft.themeWeek||'')===String(body.themeWeek||''));
       if(thread){if(unchanged)draft.body='';draft.requestId=crypto.randomUUID();}
       else if(unchanged)drafts.delete(key);else draft.requestId=crypto.randomUUID();
     }
@@ -154,7 +154,7 @@ function closeVideo(s=session){for(const view of s?.views?.values()||[]){view.pl
 function bindVideo(id){const view=session.current,post=view.posts.get(String(id)),container=node('loge-video-'+id);if(view.player&&post&&container)view.player.add(post,container,node('loge-timeline-'+post.id));}
 function initMedia(view){
   const s=session;if(!live(s)||s.current!==view)return;
-  view.player?.destroy();view.player=createLogeVideoFeed({root:videoView(view)?viewScroller(view):null,isCurrent:()=>live(s)&&s.current===view&&!view.destroyed,onError:()=>{}});
+  view.player?.destroy();view.player=createLogeVideoFeed({root:videoView(view)?viewScroller(view):null,isCurrent:()=>live(s)&&s.current===view&&!view.destroyed,getPlayback:id=>request('/api/loge/posts/'+encodeURIComponent(id)+'/playback',{}, {view,background:true}),onError:()=>{}});
   for(const post of view.posts.values()){const container=view.root.querySelector('[data-video-post="'+post.id+'"]');if(container)view.player.add(post,container,node('loge-timeline-'+post.id));}
   refreshLayout(view);
 }
@@ -197,31 +197,85 @@ function insertPost(post,list,detail=false){
   card.querySelector('[data-post-edit]')?.addEventListener('click',()=>openPostEdit(post.id));
   card.querySelector('[data-post-delete]')?.addEventListener('click',()=>deletePost(post.id));
 }
-function postFields(draft,create=false){return `<label>Titre<input name="title" required maxlength="140" value="${esc(draft.title)}" autocomplete="off"></label>${create?`<label>Vidéo YouTube<input name="url" type="url" required maxlength="2048" value="${esc(draft.url)}" placeholder="Colle le lien de ta vidéo" inputmode="url" autocomplete="off"></label>${LOGE_THEMES_ENABLED?`<div id="loge-theme-choice-slot">${themeChoiceMarkup(draft)}</div>`:''}`:''}`;}
+function postFields(draft,create=false){return `<label>Titre<input name="title" required maxlength="140" value="${esc(draft.title)}" autocomplete="off"></label>${create?`<label>Vidéo<input name="video" type="file" accept="video/*" aria-describedby="loge-upload-hint loge-upload-file"></label><p id="loge-upload-hint" class="loge-note">200 Mo maximum · 30 minutes maximum</p><p id="loge-upload-file" class="loge-note">${esc(draft.file?.name||'')}</p><progress id="loge-upload-progress" max="100" value="${draft.uploadProgress||0}" aria-label="Envoi de la vidéo" hidden></progress>${LOGE_THEMES_ENABLED?`<div id="loge-theme-choice-slot">${themeChoiceMarkup(draft)}</div>`:''}`:''}`;}
+function stopComposerUpload(s=session){
+  if(!s?.composerUpload)return;
+  const active=s.composerUpload;s.composerUpload=null;active.controller.abort();
+  if(active.draft.file)active.draft.uploadMessage='Brouillon conservé. Clique sur Publier pour reprendre.';
+}
+function uploadDisplay(draft){
+  const progress=node('loge-upload-progress');if(progress){progress.hidden=draft.uploadStatus!=='uploading';progress.value=draft.uploadProgress||0;}
+  const selected=node('loge-upload-file');if(selected)selected.textContent=draft.file?.name||'';
+  notice('loge-new-status',draft.uploadMessage||'');const restart=node('loge-new-form')?.querySelector('[data-upload-restart]');if(restart)restart.hidden=!draft.blockedUploadId;
+}
 function composerVisibility(open){
-  const view=session.current,root=node('loge-compose');if(!root)return;root.hidden=!open;view.root.classList.toggle('has-compose',open);
+  const view=session.current,root=node('loge-compose');if(!root)return;if(!open){view.composerVersion=(view.composerVersion||0)+1;stopComposerUpload();}root.hidden=!open;view.root.classList.toggle('has-compose',open);
   if(open)view.player?.pause();else if(!view.editingId&&!document.body.classList.contains('nav-open'))view.player?.resume();updateQuota();
 }
 function closePostEditor(id){const view=session.current,root=node('loge-post-editor-'+id);if(root)root.hidden=true;view.editingId=null;view.root.classList.remove('has-editor');if(node('loge-compose')?.hidden&&!document.body.classList.contains('nav-open'))view.player?.resume();node('loge-post-'+id)?.querySelector('summary')?.focus({preventScroll:true});}
 function openComposer(){
   const s=session;if(!live(s))return;
   const root=node('loge-compose');if(!root)return;
-  if(root.innerHTML){composerVisibility(root.hidden);return;}
-  const draft=getDraft('create-post',{title:'',url:'',themeWeek:null});
-  composerVisibility(true);root.innerHTML=`<h2 id="loge-compose-title">Publier une réflexion</h2><p id="loge-quota" class="loge-note"></p><form id="loge-new-form">${postFields(draft,true)}<div class="loge-form-actions"><button class="loge-button" type="submit" id="loge-new-submit">Publier</button>${button('Fermer','data-compose-close',true)}</div>${statusMarkup('loge-new-status')}</form>`;
-  const form=node('loge-new-form');rememberFields(form,draft,['title','url']);syncComposerTheme();
+  const draft=getDraft('create-post',{title:'',file:null,themeWeek:null});
+  if(root.logeDraft!==draft){root.innerHTML='';root.logeDraft=draft;}
+  if(root.innerHTML){const form=node('loge-new-form');if(form&&!form.dataset.busy)form.elements.namedItem('title').value=draft.title;composerVisibility(root.hidden);uploadDisplay(draft);return;}
+  composerVisibility(true);root.innerHTML=`<h2 id="loge-compose-title">Publier une réflexion</h2><p id="loge-quota" class="loge-note"></p><form id="loge-new-form">${postFields(draft,true)}<div class="loge-form-actions"><button class="loge-button" type="submit" id="loge-new-submit">Publier</button>${button('Fermer','data-compose-close',true)}</div>${statusMarkup('loge-new-status')}${button('Annuler l’envoi précédent et recommencer','data-upload-restart hidden',true)}</form>`;
+  const form=node('loge-new-form');rememberFields(form,draft,['title']);syncComposerTheme();uploadDisplay(draft);
   if(session.currentTheme?.endsAt*1000<=Date.now()+session.clockOffset)void refreshThemeBoundary(session);
+  const uploadRequest=async(path,options={})=>{
+    if(!live(s))throw new DOMException('Navigation','AbortError');
+    try{return await s.ctx.api(path,{...options,headers:{'X-WC-User':String(s.user)},signal:s.controller.signal});}
+    catch(error){if(session===s){if(error.status===401)login(s);else if(error.status===403)deny(s,error);}throw error;}
+  };
+  const filePicker=form.elements.namedItem('video');
+  filePicker.addEventListener('click',()=>{filePicker.value='';});
+  filePicker.addEventListener('change',()=>{
+    const file=form.elements.namedItem('video').files?.[0];if(!file)return;
+    try{validateLogeFile(file);}catch(error){notice('loge-new-status',error.message,true);return;}
+    stopComposerUpload(s);
+    if(draft.uploadId||draft.blockedUploadId){draft.abandonedUploads||=[];draft.abandonedUploads.push(draft.uploadId||draft.blockedUploadId);}
+    Object.assign(draft,{file,requestId:crypto.randomUUID(),uploadId:null,uploadURL:null,uploadSent:false,durationChecked:false,uploadStatus:null,uploadProgress:0,uploadMessage:'',blockedUploadId:null});uploadDisplay(draft);
+    // Keep failed cancellations queued so a retry cannot silently lose track of them.
+    void cancelReplacedUploads().catch(()=>{});
+  });
+  async function cancelReplacedUploads(){for(const id of [...(draft.abandonedUploads||[])]){await uploadRequest('/api/loge/uploads/'+encodeURIComponent(id),{method:'DELETE',body:{}});draft.abandonedUploads=draft.abandonedUploads.filter(value=>value!==id);}}
+  form.querySelector('[data-upload-restart]').onclick=async()=>{
+    const view=s.current,version=s.navigationVersion,composeVersion=view.composerVersion||0,id=draft.blockedUploadId;if(!id)return;let restart=false;
+    await perform('restart-upload',form,async()=>{
+      await uploadRequest('/api/loge/uploads/'+encodeURIComponent(id),{method:'DELETE',body:{}});
+      if(!live(s)||s.current!==view||s.navigationVersion!==version||(view.composerVersion||0)!==composeVersion||root.hidden)return;
+      Object.assign(draft,{requestId:crypto.randomUUID(),uploadId:null,uploadURL:null,uploadSent:false,uploadStatus:null,uploadProgress:0,uploadMessage:'',blockedUploadId:null});uploadDisplay(draft);restart=true;
+    },error=>{if(!root.hidden&&(view.composerVersion||0)===composeVersion)notice('loge-new-status',error.message,true);});
+    if(restart&&live(s)&&s.current===view&&!root.hidden)form.onsubmit({preventDefault(){}});
+  };
   form.querySelector('[data-compose-close]').onclick=()=>{composerVisibility(false);node('loge-open-compose')?.focus({preventScroll:true});};
   form.onsubmit=event=>{
-    event.preventDefault();if(!form.reportValidity())return;readFields(form,draft,['title','url']);
-    const url=form.elements.namedItem('url').value.trim();if(!youtubeId(url)){notice('loge-new-status','Utilise un lien vidéo YouTube valide.',true);return;}
+    event.preventDefault();if(!form.reportValidity())return;readFields(form,draft,['title']);
+    try{validateLogeFile(draft.file);}catch(error){notice('loge-new-status',error.message,true);return;}
+    const view=s.current,version=s.navigationVersion;let uploadController;
     perform('create-post',form,async()=>{
-      const choice=form.elements.namedItem('themeWeek');draft.themeWeek=choice?.checked?choice.value:null;
-      const result=await request('/api/loge/posts',{method:'POST',body:{title:draft.title.trim(),url,requestId:draft.requestId,...(draft.themeWeek?{themeWeek:draft.themeWeek}:{})}});
-      acceptSelf(result);invalidateOtherViews();forgetDraft('create-post');root.innerHTML='';composerVisibility(false);
-      const list=node('loge-feed')||(canManagePosts()?node('loge-profile-list'):session.current.kind==='theme'&&session.current.selectedTheme&&result.post.theme&&String(session.current.selectedTheme.id)===String(result.post.theme.id)?node('loge-theme-posts'):null);if(list){node('loge-feed-empty')?.remove();node('loge-profile-empty')?.remove();node('loge-theme-posts-empty')?.remove();insertPost(result.post,list);node('loge-post-'+result.post.id)?.scrollIntoView({block:'start'});}
-      notice('loge-status','Ta réflexion est publiée.');updateQuota();
-    },error=>{notice('loge-new-status',error.message,true);if(error.status===409&&/thème|semaine/i.test(error.message))void refreshThemeBoundary(session);});
+      const controller=new AbortController(),active={controller,draft};uploadController=controller;s.composerUpload=active;
+      const abort=()=>controller.abort();s.controller.signal.addEventListener('abort',abort,{once:true});
+      const current=()=>live(s)&&s.current===view&&s.navigationVersion===version&&!root.hidden&&!controller.signal.aborted;
+      const check=()=>{if(!current())throw new DOMException('Navigation','AbortError');};
+      // The close action stays available while the upload is in progress.
+      form.querySelector('[data-compose-close]').disabled=false;
+      try{
+        await cancelReplacedUploads();check();
+        const uploadId=await ensureLogeUpload(draft,{request:uploadRequest,signal:controller.signal,onState:(status,progress)=>{
+          if(!current()){controller.abort();return;}
+          const messages={checking:'Vérification de la vidéo…',preparing:'Préparation de l’envoi…',uploading:`Envoi de la vidéo : ${progress||0} %`,processing:'Vidéo reçue. Préparation en cours…',ready:'Vidéo prête. Publication…'};
+          draft.uploadMessage=messages[status]||'';uploadDisplay(draft);
+        }});check();
+        const choice=form.elements.namedItem('themeWeek');draft.themeWeek=choice?.checked?choice.value:null;
+        const result=await request('/api/loge/posts',{method:'POST',body:{title:draft.title.trim(),uploadId,requestId:draft.requestId,...(draft.themeWeek?{themeWeek:draft.themeWeek}:{})}});
+        // The publication may have reached the server before a close/navigation.
+        if(!current()){lateMutation(s,'/api/loge/posts',{method:'POST',body:{title:draft.title.trim(),uploadId,requestId:draft.requestId,...(draft.themeWeek?{themeWeek:draft.themeWeek}:{})}},result);return;}
+        acceptSelf(result);invalidateOtherViews();forgetDraft('create-post');root.innerHTML='';composerVisibility(false);
+        const list=node('loge-feed')||(canManagePosts()?node('loge-profile-list'):session.current.kind==='theme'&&session.current.selectedTheme&&result.post.theme&&String(session.current.selectedTheme.id)===String(result.post.theme.id)?node('loge-theme-posts'):null);if(list){node('loge-feed-empty')?.remove();node('loge-profile-empty')?.remove();node('loge-theme-posts-empty')?.remove();insertPost(result.post,list);node('loge-post-'+result.post.id)?.scrollIntoView({block:'start'});}
+        notice('loge-status','Ta réflexion est publiée.');updateQuota();
+      }finally{s.controller.signal.removeEventListener('abort',abort);if(s.composerUpload===active)s.composerUpload=null;}
+    },error=>{if(uploadController?.signal.aborted||s.navigationVersion!==version)return;if(error.status===409&&error.data?.uploadId){draft.blockedUploadId=error.data.uploadId;form.querySelector('[data-upload-restart]').hidden=false;}draft.uploadMessage=error.message;notice('loge-new-status',error.message,true);const submit=node('loge-new-submit');if(submit)submit.textContent='Réessayer';if(error.status===409&&/thème|semaine/i.test(error.message))void refreshThemeBoundary(session);});
   };
   updateQuota();form.elements.namedItem('title').focus({preventScroll:true});
 }
@@ -358,6 +412,12 @@ function closeDiscussion(){
 async function openDiscussion(postId){
   const s=session,view=s.current;if(!videoView(view))return;
   if(String(view.activePanel?.postId)===String(postId)){closeDiscussion();return;}
+  const cardBefore=node('loge-post-'+postId),media=node('loge-video-'+postId),full=document.fullscreenElement||document.webkitFullscreenElement,nativeVideo=media?.querySelector('video'),navigation=s.navigationVersion;
+  if(full&&(full===cardBefore?.querySelector('.loge-reel-stage')||full===media?.querySelector('iframe')||full===nativeVideo)){
+    const exit=document.exitFullscreen||document.webkitExitFullscreen;
+    if(exit)try{await exit.call(document);}catch{notice('loge-status','Quitte le plein écran pour ouvrir les commentaires.',true);return;}
+  }else if(nativeVideo?.webkitDisplayingFullscreen){try{nativeVideo.webkitExitFullscreen?.();}catch{return;}}
+  if(!live(s)||s.current!==view||s.navigationVersion!==navigation)return;
   closeDiscussion();
   let panel=view.panels.get(String(postId));
   if(!panel){panel={postId,root:document.createElement('section'),next:null,loaded:false,loading:false,focusComment:view.kind==='post'?view.focusComment:view.interventionFocus.get(String(postId))||null,scrollTop:0};panel.root.className='loge-comments-panel';panel.root.setAttribute('aria-labelledby','loge-comments-title');panel.root.innerHTML=commentsMarkup(true);view.panels.set(String(postId),panel);}
@@ -458,7 +518,7 @@ function themeChoiceMarkup(draft){
 function syncComposerTheme(){
   if(!LOGE_THEMES_ENABLED)return;
   const slot=node('loge-theme-choice-slot');if(!slot||session.pending.has('create-post'))return;
-  const draft=getDraft('create-post',{title:'',url:'',themeWeek:null});slot.innerHTML=themeChoiceMarkup(draft);
+  const draft=getDraft('create-post',{title:'',file:null,themeWeek:null});slot.innerHTML=themeChoiceMarkup(draft);
   const choice=slot.querySelector('input');if(choice)choice.addEventListener('change',()=>{draft.themeWeek=choice.checked?choice.value:null;});
 }
 function bindThemeProposal(view,proposal){
@@ -605,7 +665,7 @@ function prefetchSibling(view){
 export function canNavigate(destination){return live(session)&&!!parseDestination(destination);}
 export async function navigate(destination){
   const s=session,spec=parseDestination(destination);if(!live(s)||!spec)return;
-  const token=++s.navigationVersion,previous=s.current;
+  stopComposerUpload(s);const token=++s.navigationVersion,previous=s.current;
   if(previous)saveView(previous);
   let view=s.views.get(spec.key);if(!view){view=makeView(spec);if(previous?.kind==='profile'&&previous.memberId===view.memberId)view.scrollY=window.scrollY||0;s.views.set(spec.key,view);}
   if(!view.root&&previous?.kind==='profile'&&view.kind==='profile'&&String(previous.memberId)===String(view.memberId))view.scrollY=window.scrollY||0;
@@ -628,7 +688,7 @@ export async function navigate(destination){
   }
 }
 export function leave(){
-  const s=session;immersion(false);if(!s)return;
+  const s=session;immersion(false);if(!s)return;stopComposerUpload(s);
   s.commentViewport?.destroy();closeVideo(s);s.headerObserver?.disconnect();s.menuObserver?.disconnect();s.closed=true;s.controller.abort();clearTimeout(s.quotaTimer);clearTimeout(s.themeTimer);window.removeEventListener('focus',s.themeFocus);document.removeEventListener('visibilitychange',s.themeFocus);window.removeEventListener('resize',s.resize);document.removeEventListener('keydown',s.keydown);session=null;
 }
 export function clear(){leave();drafts.clear();}

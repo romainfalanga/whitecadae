@@ -17,7 +17,7 @@ for(const [name,before,deadline] of [
     const id=Number(f.sql.prepare('INSERT INTO loge_themes(title,normalized,created_by) VALUES(?,?,?)').run('Progresser','progresser',11).lastInsertRowid);
     const candidate=Number(f.sql.prepare('INSERT INTO loge_theme_candidates(theme_id,target_week,starts_at,opens_at,proposed_by) VALUES(?,?,?,?,?)').run(id,week.nextKey,week.nextStart,week.start,11).lastInsertRowid);
     f.sql.prepare('INSERT INTO loge_theme_votes(candidate_id,user_id) VALUES(?,?)').run(candidate,12);
-    const config=JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8').replace(/^\s*\/\/.*$/gm,''));assert.deepEqual(config.triggers.crons,['0 22,23 * * SUN']);
+    const config=JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8').replace(/^\s*\/\/.*$/gm,''));assert.deepEqual(config.triggers.crons,['0 22,23 * * SUN','*/15 * * * *']);
     now=Date.parse(deadline)-1000;await worker.scheduled({scheduledTime:now,cron:config.triggers.crons[0]},f.env);
     assert.equal(f.sql.prepare('SELECT theme_id FROM loge_theme_weeks WHERE week_start=?').get(week.nextKey),undefined,'never freeze a future vote early');
     now=Date.parse(deadline);await worker.scheduled({scheduledTime:now,cron:config.triggers.crons[0]},f.env);
