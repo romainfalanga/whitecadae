@@ -53,7 +53,7 @@ async function quota(env,userId,json){
   if(row)throw json({error:'Tu peux publier une vidéo tous les sept jours.',nextPublicationAt:iso(row.next_publish_at),serverNow:iso(row.now)},429,{'Retry-After':String(Math.max(1,row.next_publish_at-row.now))});
 }
 function uploadView(row){return {uploadId:row.id,uploadURL:row.upload_url,expiresAt:iso(row.expires_at),maxBytes:LOGE_UPLOAD_MAX_BYTES,maxDurationSeconds:LOGE_UPLOAD_MAX_SECONDS};}
-function validUploadURL(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&/^(?:[a-z0-9-]+\.)*upload\.videodelivery\.net$/.test(u.hostname);}catch{return false;}}
+function validUploadURL(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&(u.hostname==='upload.cloudflarestream.com'||/^(?:[a-z0-9-]+\.)*upload\.videodelivery\.net$/.test(u.hostname));}catch{return false;}}
 async function replayUpload(env,row,body,json){
   if(row.filename!==body.filename||row.declared_size!==body.size)fail('Cet envoi a déjà été utilisé avec un autre fichier.',409);
   if(row.state==='published')return json({...uploadView(row),status:'ready',postId:row.post_id});

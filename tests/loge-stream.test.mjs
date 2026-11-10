@@ -20,7 +20,7 @@ function setup(){
       created.push(params);const id=(++sequence).toString(16).padStart(32,'0');
       videos.set(id,{id,creator:params.creator,meta:params.meta,status:{state:'pendingupload'},readyToStream:false,requireSignedURLs:params.requireSignedURLs,size:0,duration:-1,
         thumbnail:`https://customer-example.cloudflarestream.com/${id}/thumbnails/thumbnail.jpg`,hlsPlaybackUrl:`https://customer-example.cloudflarestream.com/${id}/manifest/video.m3u8`});
-      return {id,uploadURL:`https://upload.videodelivery.net/${id}`};
+      return {id,uploadURL:`https://upload.cloudflarestream.com/${id}`};
     },
     video(id){return {
       async details(){if(!videos.has(id))throw Object.assign(new Error('missing'),{status:404});return structuredClone(videos.get(id));},
@@ -228,4 +228,27 @@ test('explicit provider rejection releases the slot and delete during provisioni
     assert.equal((await f.upload()).status,410);
     assert.deepEqual(await cleanupLogeStream(f.env),{deleted:1,failed:0});assert.equal(f.deleted.length,1);
   }finally{f.sql.close();}
+});
+
+test('direct uploads accept the real Stream host and legacy host, but reject lookalikes and credentials',async()=>{
+  for(const [url,accepted] of [
+    ['https://upload.cloudflarestream.com/upload-id?direct_user=true',true],
+    ['https://upload.videodelivery.net/upload-id',true],
+    ['https://region.upload.videodelivery.net/upload-id',true],
+    ['https://upload.cloudflarestream.com.evil.test/upload-id',false],
+    ['https://evil.cloudflarestream.com/upload-id',false],
+    ['https://user:secret@upload.cloudflarestream.com/upload-id',false],
+    ['http://upload.cloudflarestream.com/upload-id',false],
+    ['https://upload.cloudflarestream.com:8443/upload-id',false]
+  ]){
+    const f=setup();try{
+      const create=f.env.STREAM.createDirectUpload;
+      f.env.STREAM.createDirectUpload=async params=>({...await create(params),uploadURL:url});
+      const result=await f.upload();assert.equal(result.status,accepted?201:503,url);
+      const row=f.sql.prepare('SELECT * FROM loge_stream_uploads').get();
+      assert.equal(row.state,accepted?'waiting':'deleting');
+      assert.equal(row.upload_url,accepted?url:null);
+      if(accepted){assert.equal(result.data.uploadURL,url);assert.equal((await f.call('/api/loge')).data.nextPublicationAt,null);}
+    }finally{f.sql.close();}
+  }
 });
