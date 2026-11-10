@@ -13,7 +13,7 @@ export const GAME_MASTER_BLANC = {
     ]},
     {title:'Ta société harmonieuse',paragraphs:[
       'Imagine une société harmonieuse et façonne-la dans ta vidéographie.',
-      'Veille à ce que ta version harmonieuse soit cohérente avec cette société et puisse y trouver sa place.',
+      'Veille à ce que ta version harmonieuse soit cohérente avec cette société.',
       'Trouve les expansions harmonieuses qui permettront d’y parvenir.'
     ]},
     {title:'Loge virtuelle',paragraphs:[

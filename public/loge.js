@@ -1,6 +1,6 @@
 import {createLogeCommentViewport} from './loge-comment-viewport.js';
 import {LOGE_THEMES_ENABLED} from './loge-features.js';
-import {ensureLogeUpload,validateLogeFile} from './loge-upload.js';
+import {videoLabel} from './video-model.js';
 import {createLogeVideoFeed} from './loge-video.js';
 import {themeOverviewMarkup,proposalMarkup,historyMarkup} from './loge-themes-ui.js';
 
@@ -75,7 +75,7 @@ function savedDraft(user,path,options,result){
   if(options.method==='POST'&&(path==='/api/loge/posts'||thread)){
     const key=prefix+(thread?'create-comment-'+thread[1]:'create-post'),draft=drafts.get(key);
     if(draft&&draft.requestId===body.requestId){
-      const unchanged=same(draft,thread?['body']:['title'])&&(thread||String(draft.uploadId||'')===String(body.uploadId||'')&&String(draft.themeWeek||'')===String(body.themeWeek||''));
+      const unchanged=same(draft,thread?['body']:['title'])&&(thread||String(draft.eventId||'')===String(body.eventId||'')&&String(draft.themeWeek||'')===String(body.themeWeek||''));
       if(thread){if(unchanged)draft.body='';draft.requestId=crypto.randomUUID();}
       else if(unchanged)drafts.delete(key);else draft.requestId=crypto.randomUUID();
     }
@@ -180,7 +180,7 @@ function refreshLayout(view){
 function ownerMenu(kind,id){return `<details class="loge-menu${kind==='comment'?' loge-comment-menu':''}"><summary aria-label="Options de ${kind==='post'?'la publication':'ton commentaire'}">${kind==='comment'?'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>':'…'}</summary><div>${button('Modifier',`data-${kind}-edit="${esc(id)}"`,true)}${button('Supprimer',`data-${kind}-delete="${esc(id)}"`,true)}</div></details>`;}
 function postMarkup(post){
   const manage=own(post)&&canManagePosts(),count=Number.isInteger(post.commentCount)?post.commentCount:0;
-  return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage">${videoMarkup(post)}<footer class="loge-reel-info"><div class="loge-reel-copy"><div class="loge-reel-byline"><a class="loge-reel-username" href="${memberPath(post.author.id)}" data-link>${esc(post.author.username)}</a>${manage?ownerMenu('post',post.id):''}</div><h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2>${dateValue(post.createdAt)?`<p class="loge-post-date">${stamp(post.createdAt)}</p>`:''}${LOGE_THEMES_ENABLED&&post.theme?`<a class="loge-post-theme" href="${themePath(post.theme.id)}" data-link>${esc(post.theme.title)}</a>`:''}${statusMarkup('loge-post-status-'+post.id)}</div><div class="loge-reel-actions" role="group" aria-label="Actions de la vidéo"><button type="button" class="loge-reel-icon" data-comments-open="${esc(post.id)}" aria-label="Commentaires (${count})" aria-expanded="false">${icon('comment')}<small data-comment-count>${count}</small></button></div><div class="loge-intervention-context" id="loge-interventions-post-${esc(post.id)}" hidden></div></footer></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div>${manage?`<div id="loge-post-editor-${esc(post.id)}" class="loge-edit-sheet" role="dialog" aria-modal="true" aria-label="Modifier le titre" hidden></div>`:''}</article>`;
+  return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage">${videoMarkup(post)}<footer class="loge-reel-info"><div class="loge-reel-copy"><div class="loge-reel-byline"><a class="loge-reel-username" href="${memberPath(post.author.id)}" data-link>${esc(post.author.username)}</a>${manage?ownerMenu('post',post.id):''}</div>${post.category?`<p class="loge-post-category">${esc(videoLabel(post.category))}</p>`:''}<h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2>${dateValue(post.createdAt)?`<p class="loge-post-date">${stamp(post.createdAt)}</p>`:''}${LOGE_THEMES_ENABLED&&post.theme?`<a class="loge-post-theme" href="${themePath(post.theme.id)}" data-link>${esc(post.theme.title)}</a>`:''}${statusMarkup('loge-post-status-'+post.id)}</div><div class="loge-reel-actions" role="group" aria-label="Actions de la vidéo"><button type="button" class="loge-reel-icon" data-comments-open="${esc(post.id)}" aria-label="Commentaires (${count})" aria-expanded="false">${icon('comment')}<small data-comment-count>${count}</small></button></div><div class="loge-intervention-context" id="loge-interventions-post-${esc(post.id)}" hidden></div></footer></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div>${manage?`<div id="loge-post-editor-${esc(post.id)}" class="loge-edit-sheet" role="dialog" aria-modal="true" aria-label="Modifier le titre" hidden></div>`:''}</article>`;
 }
 function removeProfileClip(postId){
   const view=session.current,list=node('loge-profile-list');if(!list)return;
@@ -209,83 +209,56 @@ function insertPost(post,list,detail=false){
   card.querySelector('[data-post-edit]')?.addEventListener('click',()=>openPostEdit(post.id));
   card.querySelector('[data-post-delete]')?.addEventListener('click',()=>deletePost(post.id));
 }
-function postFields(draft,create=false){return `<label>Titre<input name="title" required maxlength="140" value="${esc(draft.title)}" autocomplete="off"></label>${create?`<label>Vidéo<input name="video" type="file" accept="video/*" aria-describedby="loge-upload-hint loge-upload-file"></label><p id="loge-upload-hint" class="loge-note">200 Mo maximum · 30 minutes maximum</p><p id="loge-upload-file" class="loge-note">${esc(draft.file?.name||'')}</p><progress id="loge-upload-progress" max="100" value="${draft.uploadProgress||0}" aria-label="Envoi de la vidéo" hidden></progress>${LOGE_THEMES_ENABLED?`<div id="loge-theme-choice-slot">${themeChoiceMarkup(draft)}</div>`:''}`:''}`;}
-function stopComposerUpload(s=session){
-  if(!s?.composerUpload)return;
-  const active=s.composerUpload;s.composerUpload=null;active.controller.abort();
-  if(active.draft.file)active.draft.uploadMessage='Brouillon conservé. Clique sur Publier pour reprendre.';
+function postFields(draft,create=false){return `<label>Titre<input name="title" required maxlength="140" value="${esc(draft.title)}" autocomplete="off"></label>${create&&LOGE_THEMES_ENABLED?`<div id="loge-theme-choice-slot">${themeChoiceMarkup(draft)}</div>`:''}`;}
+const newPostDraft=()=>getDraft('create-post',{title:'',eventId:null,autoTitle:'',themeWeek:null});
+function choiceDate(video){
+  const date=/^\d{4}-\d{2}-\d{2}$/.test(video.date||'')?new Date(video.date+'T12:00:00Z'):null;
+  return date&&Number.isFinite(date.getTime())?date.toLocaleDateString('fr-FR',{...(video.precision==='month'?{}:{day:'numeric'}),month:'long',year:'numeric',timeZone:'UTC'}):'';
 }
-function uploadDisplay(draft){
-  const progress=node('loge-upload-progress');if(progress){progress.hidden=draft.uploadStatus!=='uploading';progress.value=draft.uploadProgress||0;}
-  const selected=node('loge-upload-file');if(selected)selected.textContent=draft.file?.name||'';
-  notice('loge-new-status',draft.uploadMessage||'');const restart=node('loge-new-form')?.querySelector('[data-upload-restart]');if(restart)restart.hidden=!draft.blockedUploadId;
+// Only videos already in the member's videography can be published. One that
+// is already in the Loge stays listed, so its absence is never a mystery.
+function videoChoiceMarkup(video,draft){
+  const taken=!!video.postId;
+  return `<label class="loge-video-choice${taken?' is-published':''}"><input type="radio" name="eventId" value="${esc(video.id)}" ${!taken&&String(draft.eventId)===String(video.id)?'checked':''} ${taken?'disabled':''}><span class="loge-video-choice-mark" aria-hidden="true"></span><span class="loge-video-choice-body"><strong>${esc(video.title||'Sans titre')}</strong><small>${esc([videoLabel(video.category),choiceDate(video),taken?'Déjà publiée':''].filter(Boolean).join(' · '))}</small></span></label>`;
 }
 function closePostEditor(id){const view=session.current,root=node('loge-post-editor-'+id);if(root)root.hidden=true;view.editingId=null;view.root.classList.remove('has-editor');if(!document.body.classList.contains('nav-open'))view.player?.resume();node('loge-post-'+id)?.querySelector('summary')?.focus({preventScroll:true});}
 function bindPublishForm(){
   const s=session;if(!live(s)||s.current?.kind!=='publish')return;
   const root=node('loge-compose');if(!root)return;
-  const draft=getDraft('create-post',{title:'',file:null,themeWeek:null});
+  const view=s.current,videos=view.videoChoices||[],draft=newPostDraft();
+  if(draft.eventId&&!videos.some(video=>String(video.id)===String(draft.eventId)&&!video.postId)){draft.eventId=null;draft.requestId=crypto.randomUUID();}
   if(root.logeDraft!==draft){root.innerHTML='';root.logeDraft=draft;}
-  if(root.innerHTML){const form=node('loge-new-form');if(form&&!form.dataset.busy)form.elements.namedItem('title').value=draft.title;syncComposerTheme();uploadDisplay(draft);updateQuota();return;}
-  root.innerHTML=`<h2 id="loge-compose-title">Publier une réflexion</h2><div id="loge-quota" class="loge-quota" hidden></div><form id="loge-new-form">${postFields(draft,true)}<div class="loge-form-actions"><button class="loge-button" type="submit" id="loge-new-submit">Publier</button></div>${statusMarkup('loge-new-status')}${button('Annuler l’envoi précédent et recommencer','data-upload-restart hidden',true)}</form>`;
-  const form=node('loge-new-form');rememberFields(form,draft,['title']);syncComposerTheme();uploadDisplay(draft);
+  if(root.innerHTML){const form=node('loge-new-form');if(form&&!form.dataset.busy)form.elements.namedItem('title').value=draft.title;syncComposerTheme();updateQuota();return;}
+  root.innerHTML=`<h2 id="loge-compose-title">Publier une réflexion</h2><div id="loge-quota" class="loge-quota" hidden></div>${videos.length?`<form id="loge-new-form"><fieldset class="loge-video-choices"><legend>Vidéo de ta vidéographie</legend><div class="loge-video-list">${videos.map(video=>videoChoiceMarkup(video,draft)).join('')}</div>${view.moreVideoChoices?'<p class="loge-note">Tes 100 vidéos les plus récentes sont proposées.</p>':''}</fieldset>${postFields(draft,true)}<div class="loge-form-actions"><button class="loge-button" type="submit" id="loge-new-submit">Publier</button></div>${statusMarkup('loge-new-status')}</form>`:`<div class="loge-video-empty"><p>Ici, tu publies une vidéo déjà ajoutée à ta vidéographie.</p><a class="loge-button" href="/videographie" data-link>Ouvrir ma vidéographie</a></div>`}`;
+  const form=root.querySelector('form');if(!form){updateQuota();return;}
+  rememberFields(form,draft,['title']);syncComposerTheme();
   if(session.currentTheme?.endsAt*1000<=Date.now()+session.clockOffset)void refreshThemeBoundary(session);
-  const uploadRequest=async(path,options={})=>{
-    if(!live(s))throw new DOMException('Navigation','AbortError');
-    try{return await s.ctx.api(path,{...options,headers:{'X-WC-User':String(s.user)},signal:s.controller.signal});}
-    catch(error){if(session===s){if(error.status===401)login(s);else if(error.status===403)deny(s,error);}throw error;}
-  };
-  const filePicker=form.elements.namedItem('video');
-  filePicker.addEventListener('click',()=>{filePicker.value='';});
-  filePicker.addEventListener('change',()=>{
-    const file=form.elements.namedItem('video').files?.[0];if(!file)return;
-    try{validateLogeFile(file);}catch(error){notice('loge-new-status',error.message,true);return;}
-    stopComposerUpload(s);
-    if(draft.uploadId||draft.blockedUploadId){draft.abandonedUploads||=[];draft.abandonedUploads.push(draft.uploadId||draft.blockedUploadId);}
-    Object.assign(draft,{file,requestId:crypto.randomUUID(),uploadId:null,uploadURL:null,uploadSent:false,durationChecked:false,uploadStatus:null,uploadProgress:0,uploadMessage:'',blockedUploadId:null});uploadDisplay(draft);
-    // Keep failed cancellations queued so a retry cannot silently lose track of them.
-    void cancelReplacedUploads().catch(()=>{});
+  for(const radio of form.querySelectorAll('input[name="eventId"]'))radio.addEventListener('change',()=>{
+    if(!radio.checked)return;
+    const video=videos.find(item=>String(item.id)===String(radio.value)),field=form.elements.namedItem('title');
+    // Another video is another publication: never replay the previous nonce.
+    if(String(draft.eventId)!==String(radio.value))draft.requestId=crypto.randomUUID();
+    draft.eventId=radio.value;
+    // Offer the video's own title until the member writes one.
+    if(video&&(!field.value.trim()||field.value===draft.autoTitle)){field.value=String(video.title||'').slice(0,140);draft.title=field.value;draft.autoTitle=field.value;}
+    notice('loge-new-status','');
   });
-  async function cancelReplacedUploads(){for(const id of [...(draft.abandonedUploads||[])]){await uploadRequest('/api/loge/uploads/'+encodeURIComponent(id),{method:'DELETE',body:{}});draft.abandonedUploads=draft.abandonedUploads.filter(value=>value!==id);}}
-  form.querySelector('[data-upload-restart]').onclick=async()=>{
-    const view=s.current,version=s.navigationVersion,id=draft.blockedUploadId;if(!id)return;let restart=false;
-    await perform('restart-upload',form,async()=>{
-      await uploadRequest('/api/loge/uploads/'+encodeURIComponent(id),{method:'DELETE',body:{}});
-      if(!live(s)||s.current!==view||s.navigationVersion!==version||root.hidden)return;
-      Object.assign(draft,{requestId:crypto.randomUUID(),uploadId:null,uploadURL:null,uploadSent:false,uploadStatus:null,uploadProgress:0,uploadMessage:'',blockedUploadId:null});uploadDisplay(draft);restart=true;
-    },error=>{if(s.navigationVersion===version&&!root.hidden)notice('loge-new-status',error.message,true);});
-    if(restart&&live(s)&&s.current===view&&!root.hidden)form.onsubmit({preventDefault(){}});
-  };
   form.onsubmit=event=>{
     event.preventDefault();if(!form.reportValidity())return;readFields(form,draft,['title']);
-    try{validateLogeFile(draft.file);}catch(error){notice('loge-new-status',error.message,true);return;}
-    const view=s.current,version=s.navigationVersion;let uploadController;
+    if(!draft.eventId){notice('loge-new-status','Choisis une vidéo de ta vidéographie.',true);return;}
+    const version=s.navigationVersion;
     perform('create-post',form,async()=>{
-      const controller=new AbortController(),active={controller,draft};uploadController=controller;s.composerUpload=active;
-      const abort=()=>controller.abort();s.controller.signal.addEventListener('abort',abort,{once:true});
-      const current=()=>live(s)&&s.current===view&&s.navigationVersion===version&&!root.hidden&&!controller.signal.aborted;
-      const check=()=>{if(!current())throw new DOMException('Navigation','AbortError');};
-      try{
-        await cancelReplacedUploads();check();
-        const uploadId=await ensureLogeUpload(draft,{request:uploadRequest,signal:controller.signal,onState:(status,progress)=>{
-          if(!current()){controller.abort();return;}
-          const messages={checking:'Vérification de la vidéo…',preparing:'Préparation de l’envoi…',uploading:`Envoi de la vidéo : ${progress||0} %`,processing:'Vidéo reçue. Préparation en cours…',ready:'Vidéo prête. Publication…'};
-          draft.uploadMessage=messages[status]||'';uploadDisplay(draft);
-        }});check();
-        const choice=form.elements.namedItem('themeWeek');draft.themeWeek=choice?.checked?choice.value:null;
-        const result=await request('/api/loge/posts',{method:'POST',body:{title:draft.title.trim(),uploadId,requestId:draft.requestId,...(draft.themeWeek?{themeWeek:draft.themeWeek}:{})}});
-        // The publication may have reached the server before navigation.
-        if(!current()){lateMutation(s,'/api/loge/posts',{method:'POST',body:{title:draft.title.trim(),uploadId,requestId:draft.requestId,...(draft.themeWeek?{themeWeek:draft.themeWeek}:{})}},result);return;}
-        acceptSelf(result);invalidateOtherViews();forgetDraft('create-post');root.innerHTML='';view.dirty=true;
-        s.composerUpload=null;
-        const destination=memberPath(s.user)+'?onglet=reflexions';
-        await s.ctx.navigate(destination);
-        if(live(s)&&s.current?.key===destination){
-          const list=node('loge-profile-list');if(list){node('loge-profile-empty')?.remove();insertPost(result.post,list);node('loge-post-'+result.post.id)?.scrollIntoView({block:'start'});}
-          notice('loge-status','Ta réflexion est publiée.');updateQuota();
-        }
-      }finally{s.controller.signal.removeEventListener('abort',abort);if(s.composerUpload===active)s.composerUpload=null;}
-    },error=>{if(uploadController?.signal.aborted||s.navigationVersion!==version)return;if(error.status===409&&error.data?.uploadId){draft.blockedUploadId=error.data.uploadId;form.querySelector('[data-upload-restart]').hidden=false;}draft.uploadMessage=error.message;notice('loge-new-status',error.message,true);const submit=node('loge-new-submit');if(submit)submit.textContent='Réessayer';if(error.status===409&&/thème|semaine/i.test(error.message))void refreshThemeBoundary(session);});
+      const choice=form.elements.namedItem('themeWeek');draft.themeWeek=choice?.checked?choice.value:null;
+      // A reply that arrives after navigation is reconciled by request().
+      const result=await request('/api/loge/posts',{method:'POST',body:{title:draft.title.trim(),eventId:draft.eventId,requestId:draft.requestId,...(draft.themeWeek?{themeWeek:draft.themeWeek}:{})}});
+      acceptSelf(result);invalidateOtherViews();forgetDraft('create-post');root.innerHTML='';view.dirty=true;
+      const destination=memberPath(s.user)+'?onglet=reflexions';
+      await s.ctx.navigate(destination);
+      if(live(s)&&s.current?.key===destination){
+        const list=node('loge-profile-list');if(list){node('loge-profile-empty')?.remove();insertPost(result.post,list);node('loge-post-'+result.post.id)?.scrollIntoView({block:'start'});}
+        notice('loge-status','Ta réflexion est publiée.');updateQuota();
+      }
+    },error=>{if(s.navigationVersion!==version)return;notice('loge-new-status',error.message,true);const submit=node('loge-new-submit');if(submit)submit.textContent='Réessayer';if(error.status===409&&/thème|semaine/i.test(error.message))void refreshThemeBoundary(session);else if([404,409].includes(error.status))view.dirty=true;});
   };
   updateQuota();
 }
@@ -527,7 +500,7 @@ function themeChoiceMarkup(draft){
 function syncComposerTheme(){
   if(!LOGE_THEMES_ENABLED)return;
   const slot=node('loge-theme-choice-slot');if(!slot||session.pending.has('create-post'))return;
-  const draft=getDraft('create-post',{title:'',file:null,themeWeek:null});slot.innerHTML=themeChoiceMarkup(draft);
+  const draft=newPostDraft();slot.innerHTML=themeChoiceMarkup(draft);
   const choice=slot.querySelector('input');if(choice)choice.addEventListener('change',()=>{draft.themeWeek=choice.checked?choice.value:null;});
 }
 function bindThemeProposal(view,proposal){
@@ -611,6 +584,7 @@ function renderView(view,result){
   const tabs=logeNavigation(view);
   if(view.kind==='publish'){
     document.title='Publier une réflexion · Loge virtuelle · White Cadae';
+    view.videoChoices=Array.isArray(result.videos)?result.videos:[];view.moreVideoChoices=!!result.more;
     shell(`${topbar(view)}${tabs}${composerMarkup()}`);bindPublishForm();
   }else{
     const listId=view.kind==='feed'?'loge-feed':view.kind==='profile'?'loge-profile-list':'loge-detail-post',moreId=view.kind==='profile'?'loge-profile-more':'loge-feed-more';
@@ -629,7 +603,7 @@ function parseDestination(destination){
   if(url.origin!==(location.origin||'https://whitecadae.fr'))return null;
   const path=url.pathname.replace(/\/+$/,'')||'/';
   if(path===base+'/theme'){if(!LOGE_THEMES_ENABLED)return null;const id=url.searchParams.get('theme');if(id!==null&&(!/^[1-9]\d*$/.test(id)||!Number.isSafeInteger(Number(id))))return null;return {key:themePath(id),kind:'theme',themeId:id?Number(id):null,endpoint:'/api/loge/themes'};}
-  if(path===publishPath||path===base&&url.searchParams.has('publier'))return {key:publishPath,kind:'publish',endpoint:'/api/loge',legacyPublish:path!==publishPath};
+  if(path===publishPath||path===base&&url.searchParams.has('publier'))return {key:publishPath,kind:'publish',endpoint:'/api/loge/videos',legacyPublish:path!==publishPath};
   if(path===base)return {key:base,kind:'feed',endpoint:'/api/loge'};
   const member=/^\/loge-virtuelle\/membres\/([1-9]\d*)$/.exec(path);
   if(member){const tab=['interventions','favoris'].includes(url.searchParams.get('onglet'))?url.searchParams.get('onglet'):'reflexions';return {key:memberPath(member[1])+'?onglet='+tab,kind:'profile',memberId:member[1],tab,endpoint:'/api/loge/membres/'+member[1]+'?tab='+tab};}
@@ -680,7 +654,7 @@ export function canNavigate(destination){return live(session)&&!!parseDestinatio
 export async function navigate(destination){
   const s=session,spec=parseDestination(destination);if(!live(s)||!spec)return;
   if(spec.legacyPublish)return s.ctx.navigate(publishPath,true);
-  stopComposerUpload(s);const token=++s.navigationVersion,previous=s.current;
+  const token=++s.navigationVersion,previous=s.current;
   if(previous)saveView(previous);
   let view=s.views.get(spec.key);if(!view){view=makeView(spec);if(previous?.kind==='profile'&&previous.memberId===view.memberId)view.scrollY=window.scrollY||0;s.views.set(spec.key,view);}
   if(!view.root&&previous?.kind==='profile'&&view.kind==='profile'&&String(previous.memberId)===String(view.memberId))view.scrollY=window.scrollY||0;
@@ -702,7 +676,7 @@ export async function navigate(destination){
   }
 }
 export function leave(){
-  const s=session;immersion(false);if(!s)return;stopComposerUpload(s);
+  const s=session;immersion(false);if(!s)return;
   s.commentViewport?.destroy();closeVideo(s);s.headerObserver?.disconnect();s.menuObserver?.disconnect();s.closed=true;s.controller.abort();clearTimeout(s.quotaTimer);clearTimeout(s.themeTimer);window.removeEventListener('focus',s.themeFocus);document.removeEventListener('visibilitychange',s.themeFocus);window.removeEventListener('resize',s.resize);document.removeEventListener('keydown',s.keydown);session=null;
 }
 export function clear(){leave();drafts.clear();}

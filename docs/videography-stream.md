@@ -71,3 +71,33 @@ sur la publication. L’ancienne URL `?publier` est redirigée vers cette destin
 Les tests couvrent droits, isolation des espaces, limites globales, conservation
 des anciennes vidéos, remplacement atomique, concurrence, nettoyage, navigation,
 brouillons, réponses tardives, catégorie initiale et cycle de vie du lecteur.
+
+## Publier dans la Loge depuis la vidéographie
+
+Depuis le 10 novembre 2026, la page Publier ne reçoit plus de fichier : elle
+propose les vidéos Stream déjà présentes dans la vidéographie du membre, avec
+leur catégorie et leur date. Le titre de la vidéo est proposé et reste
+modifiable. Une vidéo déjà publiée reste listée, désactivée. Sans vidéo, la page
+renvoie vers la vidéographie. La limite de sept jours est inchangée.
+
+- `GET /api/loge/videos` liste jusqu’à 100 vidéos récentes du membre (titre
+  déchiffré côté serveur, catégorie, date, publication en cours).
+- `POST /api/loge/posts` reçoit `eventId`. La publication ne copie rien : la
+  table additive `loge_shared_videos` relie la publication au média de la
+  vidéographie, créée automatiquement au premier accès (`0052` est facultative).
+- Les envois directs et les liens YouTube sont refusés pour les nouvelles
+  publications (`LOGE_LEGACY_SOURCES=false` dans `src/features.js`). Les
+  publications existantes restent lisibles ; les tests historiques activent ces
+  sources par une dépendance interne explicite.
+- La catégorie est affichée dans la Loge et suit la fiche de la vidéographie.
+- Supprimer la publication conserve la vidéo dans la vidéographie. Supprimer la
+  fiche, tout l’arbre ou les données privées retire aussi la publication, ses
+  commentaires et ses favoris dans le même lot ; la tâche planifiée répare un
+  lien resté orphelin. Remplacer le fichier d’une vidéo publiée est refusé tant
+  que sa publication existe.
+
+Dans le formulaire de la vidéographie, le choix du fichier est une zone unique
+à toucher : elle affiche ensuite le nom et le poids du fichier et permet de le
+changer. La page d’explication et son bouton « i » sont retirés ;
+`/videographie/comprendre` ramène à la vidéographie.
+

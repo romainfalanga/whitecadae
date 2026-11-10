@@ -90,3 +90,17 @@ body.loge-immersive.loge-comment-keyboard main#app{z-index:70}
 .loge-quota-value{font:400 1.12rem/1.35 var(--serif);color:#f5f5f5}.loge-quota-value::first-letter{text-transform:uppercase}
 .loge-quota-countdown{font:400 .78rem/1.4 var(--sans);color:var(--loge-muted);font-variant-numeric:tabular-nums}
 @media(max-width:520px){.loge-quota{width:100%}}
+.loge-post-category{display:inline-block;max-width:100%;margin:.3rem 0 0;padding:.12rem .5rem;border:1px solid #d8c07a66;border-radius:999px;background:#0009;color:var(--loge-gold);font:500 .62rem/1.5 var(--sans);letter-spacing:.08em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top}
+.loge-video-choices{min-width:0;margin:0 0 1.2rem;padding:0;border:0}.loge-video-choices legend{padding:0;margin-bottom:.55rem;color:#d0d0d7;font-size:.84rem;line-height:1.6}
+.loge-video-list{display:grid;grid-template-columns:minmax(0,1fr);gap:.5rem;max-height:min(48dvh,430px);overflow-y:auto;overscroll-behavior:contain;padding:3px;margin:-3px;scrollbar-width:thin;scrollbar-color:#62626b transparent}
+.loge-page label.loge-video-choice{position:relative;display:flex;align-items:center;gap:.8rem;min-height:60px;margin:0;padding:.7rem .9rem;border:1px solid #ffffff2e;border-radius:10px;background:#0b0b0e;line-height:1.4;cursor:pointer}
+.loge-page .loge-video-choice input{position:absolute;inset:0;width:100%;height:100%;min-height:0;margin:0;padding:0;border:0;opacity:0;cursor:inherit}
+.loge-video-choice-mark{flex:none;width:20px;height:20px;border:1.5px solid #ffffff66;border-radius:50%}
+.loge-video-choice input:checked+.loge-video-choice-mark{border-color:var(--loge-gold);background:radial-gradient(circle,var(--loge-gold) 0 42%,transparent 48%)}
+.loge-page label.loge-video-choice:has(input:checked){border-color:var(--loge-gold);background:#d8c07a14}
+.loge-page label.loge-video-choice:has(input:focus-visible){outline:2px solid var(--loge-gold);outline-offset:3px}
+.loge-page label.loge-video-choice.is-published{cursor:default;opacity:.5}
+.loge-video-choice-body{flex:1;min-width:0}.loge-video-choice-body strong{display:block;color:#f5f5f5;font:500 .92rem/1.4 var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.loge-video-choice-body small{display:block;margin-top:.12rem;color:var(--loge-muted);font:400 .74rem/1.45 var(--sans)}
+.loge-video-empty{padding:1.3rem 1.1rem;border:1px dashed #d8c07a55;border-radius:12px;text-align:center}.loge-video-empty p{margin:0 0 1rem;color:#d0d0d7;font-size:.9rem;line-height:1.7}
+

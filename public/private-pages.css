@@ -210,3 +210,16 @@
 .videography-stream-controls span{flex:none;font-size:.7rem;font-variant-numeric:tabular-nums}
 .videography-stream .loge-stream-frame:fullscreen,.videography-stream .loge-stream-frame:-webkit-full-screen{width:100vw;height:100dvh;aspect-ratio:auto}
 #video-upload-progress{width:100%;accent-color:#d8b377}
+.video-file-field{margin:.8rem 0 .35rem}.video-file-caption{display:block;font-size:.8rem;color:#c9b8a0;margin-bottom:.35rem}
+.private-dialog label.video-file{position:relative;display:flex;align-items:center;gap:.9rem;min-height:76px;margin:0;padding:.9rem 1rem;border:1.5px dashed #a7804699;border-radius:12px;background:linear-gradient(140deg,#2d231745,#101015);cursor:pointer;transition:border-color .15s,background-color .15s}
+.private-dialog label.video-file:hover{border-color:#d8aa65}.private-dialog label.video-file:focus-within{outline:2px solid #dcb67b;outline-offset:3px}
+.private-dialog label.video-file.has-file{border-style:solid;border-color:#d8aa65;background:#3a291b66}
+.private-dialog label.video-file.is-locked{cursor:default;border-color:#51443680;opacity:.75}
+.private-dialog .video-file input[type=file]{position:absolute;inset:0;width:100%;height:100%;padding:0;border:0;opacity:0;cursor:inherit}
+.video-file-icon{display:grid;place-items:center;flex:none;width:44px;height:44px;border:1px solid #d8aa6570;border-radius:50%;background:#d8aa6514;color:#ebc283}
+.video-file-icon svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.video-file-icon-ready,.video-file.has-file .video-file-icon-add{display:none}.video-file.has-file .video-file-icon-ready{display:block}.video-file.has-file .video-file-icon{background:#d8aa65;color:#1d1611;border-color:#d8aa65}
+.video-file-text{flex:1;min-width:0}.video-file-text strong{display:block;font:500 .95rem/1.4 var(--sans);color:#f2d8af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.video-file-text small{display:block;font:400 .76rem/1.5 var(--sans);color:#b8aea4;margin-top:.15rem}
+.video-file-action{position:relative;flex:none;font:500 .76rem var(--sans);color:#d7b583;text-decoration:underline;text-underline-offset:3px}
+@media(prefers-reduced-motion:reduce){.private-dialog label.video-file{transition:none}}

@@ -45,6 +45,7 @@ export function text(value,max=6000,required=false){
   if(typeof value!=='string'||value.length>max||value.includes('\u0000'))fail('Texte invalide ou trop long.');
   const out=value.trim();if(required&&!out)fail('Ce champ est nécessaire.');return out;
 }
+export const lifeEventContext=(owner,id)=>`life:${owner}:${id}`;
 export function identifier(value){if(typeof value!=='string'||!/^[a-zA-Z0-9_-]{8,64}$/.test(value))fail('Identifiant invalide.');return value;}
 export function integer(value,min=0,max=Number.MAX_SAFE_INTEGER){if(!Number.isSafeInteger(value)||value<min||value>max)fail('Valeur invalide.');return value;}
 export async function limitWrites(env,id){

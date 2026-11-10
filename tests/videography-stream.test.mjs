@@ -5,6 +5,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {fixture,setEarnedLevel} from './community-fixture.mjs';
 import worker from '../src/index.js';
 import {cleanupLogeStream,ensureLogeStreamTables,LOGE_STREAM_SCHEMA} from '../src/loge-stream.js';
+import {handleLoge,withdrawOrphanedSharedPosts} from '../src/loge.js';
 const file=extra=>({filename:'reflexion.mp4',size:1000000,requestId:crypto.randomUUID(),...extra});
 const event=(uploadId,extra={})=>({title:'Une réflexion privée',entryType:'creation',medium:'vidéo',videoBranch:'self',url:'',precision:'day',date:'2026-10-01',kind:'autre',impact:'à explorer',themes:['Parcours'],work:'Notes chiffrées',revision:0,...(uploadId?{uploadId}:{}),...extra});
 function setup(){
@@ -24,12 +25,19 @@ function setup(){
     const response=await worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session=qa'+(user-1),'X-WC-User':String(user),...(body===undefined?{}:{'Content-Type':'application/json'}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)})}),f.env);
     return {status:response.status,data:await response.json(),headers:response.headers};
   };
+  // Direct Loge uploads and links are closed in production; the historical
+  // isolation between both spaces is still exercised through the internal switch.
+  const legacyLoge=async(path,method='GET',body,user=11)=>{
+    const request=new Request('https://test.local'+path,{method,headers:{'X-WC-User':String(user),...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});
+    let response;try{response=await handleLoge(request,f.env,new URL(request.url),{legacySources:true,getUser:async()=>f.sql.prepare('SELECT * FROM users WHERE id=?').get(user)||null,json:(data,status=200,headers={})=>Response.json(data,{status,headers})});}catch(error){if(!(error instanceof Response))throw error;response=error;}
+    return {status:response.status,data:await response.json(),headers:response.headers};
+  };
   const upload=(body=file(),user=11)=>call('/api/life-tree/uploads','POST',body,user);
   const put=(id,body,user=11)=>call('/api/life-tree/events/'+id,'PUT',body,user);
   const row=id=>f.sql.prepare('SELECT * FROM loge_stream_uploads WHERE id=?').get(id);
   const ready=id=>{const value=videos.get(row(id).stream_id);Object.assign(value,{readyToStream:true,status:{state:'ready'},duration:50,size:1000000});return value;};
   const attach=async(id='stream-event-0001',extra={})=>{const u=await upload();assert.equal(u.status,201,JSON.stringify(u.data));ready(u.data.uploadId);const body=event(u.data.uploadId,extra),saved=await put(id,body);assert.equal(saved.status,200,JSON.stringify(saved.data));return {id,uploadId:u.data.uploadId,body,event:saved.data.event};};
-  return {...f,call,upload,put,row,ready,attach,videos,creates,deleted,binding};
+  return {...f,call,legacyLoge,upload,put,row,ready,attach,videos,creates,deleted,binding};
 }
 
 test('Vidéographie upload routes enforce login, earned33, account identity, JSON and original ownership',async()=>{
@@ -49,12 +57,12 @@ test('Vidéographie upload routes enforce login, earned33, account identity, JSO
 test('Loge and Vidéographie scopes isolate attachment and active slots while sharing the storage budget',async()=>{
   const f=setup();try{
     const body=file(),uploaded=await f.upload(body),id=uploaded.data.uploadId;f.ready(id);
-    for(const method of ['GET','DELETE'])assert.equal((await f.call('/api/loge/uploads/'+id,method,method==='DELETE'?{}:undefined)).status,404);
-    assert.equal((await f.call('/api/loge/uploads','POST',body)).status,409);
-    assert.equal((await f.call('/api/loge/posts','POST',{title:'Le mauvais espace',uploadId:id,requestId:crypto.randomUUID()})).status,404);
-    const loge=await f.call('/api/loge/uploads','POST',file());assert.equal(loge.status,201);f.ready(loge.data.uploadId);
+    for(const method of ['GET','DELETE'])assert.equal((await f.legacyLoge('/api/loge/uploads/'+id,method,method==='DELETE'?{}:undefined)).status,404);
+    assert.equal((await f.legacyLoge('/api/loge/uploads','POST',body)).status,409);
+    assert.equal((await f.legacyLoge('/api/loge/posts','POST',{title:'Le mauvais espace',uploadId:id,requestId:crypto.randomUUID()})).status,404);
+    const loge=await f.legacyLoge('/api/loge/uploads','POST',file());assert.equal(loge.status,201);f.ready(loge.data.uploadId);
     const blocked=await f.upload();assert.equal(blocked.status,409);assert.equal(blocked.data.uploadId,id);
-    const logeBlocked=await f.call('/api/loge/uploads','POST',file());assert.equal(logeBlocked.status,409);assert.equal(logeBlocked.data.uploadId,loge.data.uploadId);
+    const logeBlocked=await f.legacyLoge('/api/loge/uploads','POST',file());assert.equal(logeBlocked.status,409);assert.equal(logeBlocked.data.uploadId,loge.data.uploadId);
     assert.equal((await f.put('correct-event-01',event(id))).status,200);
     assert.equal((await f.put('wrong-purpose-01',event(loge.data.uploadId))).status,404);
     assert.equal((await f.call('/api/life-tree/uploads/'+loge.data.uploadId)).status,404);
@@ -63,13 +71,13 @@ test('Loge and Vidéographie scopes isolate attachment and active slots while sh
 });
 test('Vidéographie bypasses only the weekly Loge quota and keeps encrypted payload, lists, export and topics coherent',async()=>{
   const f=setup();try{
-    const legacy=await f.call('/api/loge/posts','POST',{title:'La loge',url:'https://youtu.be/dQw4w9WgXcQ',requestId:crypto.randomUUID()});assert.equal(legacy.status,201);
+    const legacy=await f.legacyLoge('/api/loge/posts','POST',{title:'La loge',url:'https://youtu.be/dQw4w9WgXcQ',requestId:crypto.randomUUID()});assert.equal(legacy.status,201);
     const saved=await f.attach();assert.equal(saved.event.creation.videoProvider,'stream');assert.equal(saved.event.creation.url,'');assert.equal(saved.event.creation.uploadId,saved.uploadId);
     const stored=f.sql.prepare('SELECT payload FROM life_events WHERE id=?').get(saved.id).payload;assert.doesNotMatch(stored,/Notes chiffrées|cloudflarestream|videoProvider/);
     for(const path of ['/api/life-tree?videos=1','/api/life-tree?branch=self','/api/life-tree/export']){
       const result=await f.call(path);assert.equal(result.status,200);assert.equal(result.data.events[0].creation.videoProvider,'stream');assert.equal(result.data.events[0].creation.url,'');
     }
-    assert.equal((await f.call('/api/loge/uploads','POST',file())).status,429);
+    assert.equal((await f.legacyLoge('/api/loge/uploads','POST',file())).status,429);
     const second=await f.attach('stream-event-0002');assert.equal(second.event.revision,1);
     f.sql.prepare("INSERT INTO loge_stream_uploads(id,user_id,request_id,filename,declared_size,state,duration_seconds,expires_at) VALUES(?,999,?,'seed.mp4',1,'published',60000,unixepoch()+3600)").run(crypto.randomUUID(),crypto.randomUUID());
     assert.equal((await f.upload(file(),12)).status,429);
@@ -167,8 +175,8 @@ test('bulk erasure queues multiple published videos and an active upload without
   const f=setup();try{
     const first=await f.attach('bulk-video-00001'),second=await f.attach('bulk-video-00002'),pending=(await f.upload()).data.uploadId;
     f.sql.prepare('UPDATE loge_stream_uploads SET created_at=unixepoch()-7200').run();
-    const loge=await f.call('/api/loge/uploads','POST',file());assert.equal(loge.status,201);f.ready(loge.data.uploadId);
-    assert.equal((await f.call('/api/loge/posts','POST',{title:'Loge préservée',uploadId:loge.data.uploadId,requestId:crypto.randomUUID()})).status,201);
+    const loge=await f.legacyLoge('/api/loge/uploads','POST',file());assert.equal(loge.status,201);f.ready(loge.data.uploadId);
+    assert.equal((await f.legacyLoge('/api/loge/posts','POST',{title:'Loge préservée',uploadId:loge.data.uploadId,requestId:crypto.randomUUID()})).status,201);
     assert.equal((await f.call('/api/life-tree','DELETE',{confirm:'SUPPRIMER'})).status,200);
     for(const id of [first.uploadId,second.uploadId,pending])assert.equal(f.row(id).state,'deleting');
     assert.equal(f.row(loge.data.uploadId).state,'published');
@@ -181,5 +189,97 @@ test('a failed cleanup does not block deletion of another orphan and still retai
     f.sql.prepare('DELETE FROM users WHERE id=?').run(11);
     assert.deepEqual(await cleanupLogeStream(f.env),{deleted:1,failed:1});assert.equal(f.row(first.uploadId).state,'deleting');assert.equal(f.row(second.uploadId).state,'deleted');
     assert.equal(f.row(first.uploadId).duration_seconds,50);
+  }finally{f.sql.close();}
+});
+
+const share=(eventId,extra={})=>({title:'Partagée dans la Loge',eventId,requestId:crypto.randomUUID(),...extra});
+const reopenQuota=f=>f.sql.prepare('UPDATE loge_publication_limits SET next_publish_at=0').run();
+test('the Loge only publishes a video already in the member’s videography and shows its category',async()=>{
+  const f=setup();try{
+    assert.equal((await f.call('/api/loge/uploads','POST',file())).status,410);
+    for(const body of [{title:'Lien',url:'https://youtu.be/dQw4w9WgXcQ',requestId:crypto.randomUUID()},{title:'Fichier',uploadId:crypto.randomUUID(),requestId:crypto.randomUUID()},{title:'Rien',requestId:crypto.randomUUID()}])assert.equal((await f.call('/api/loge/posts','POST',body)).status,400);
+    assert.equal(f.creates.length,0);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM loge_posts').get().n,0);
+    const empty=await f.call('/api/loge/videos');assert.equal(empty.status,200);assert.deepEqual(empty.data.videos,[]);assert.equal(empty.data.nextPublicationAt,null);
+    const video=await f.attach('shared-video-001',{videoBranch:'version',title:'Ma version harmonieuse'}),other=await f.attach('other-video-0001',{date:'2026-09-30'});
+    await f.put('legacy-video-001',event(undefined,{url:'https://www.youtube.com/watch?v=M7lc1UVf-VE'}));
+    const choices=(await f.call('/api/loge/videos')).data;
+    assert.deepEqual(choices.videos,[{id:'shared-video-001',title:'Ma version harmonieuse',category:'version',date:'2026-10-01',precision:'day',postId:null},{id:'other-video-0001',title:'Une réflexion privée',category:'self',date:'2026-09-30',precision:'day',postId:null}]);
+    assert.deepEqual((await f.call('/api/loge/videos','GET',undefined,12)).data.videos,[]);
+    for(const [eventId,user] of [['shared-video-001',12],['legacy-video-001',11],['missing-video-01',11]])assert.equal((await f.call('/api/loge/posts','POST',share(eventId),user)).status,404);
+    assert.equal((await f.call('/api/loge/posts','POST',{...share('shared-video-001'),url:'https://youtu.be/dQw4w9WgXcQ'})).status,400);
+    assert.equal(f.sql.prepare('SELECT count(*) AS n FROM loge_publication_limits WHERE next_publish_at>unixepoch()').get().n,0);
+    const body=share('shared-video-001'),created=await f.call('/api/loge/posts','POST',body);assert.equal(created.status,201,JSON.stringify(created.data));
+    const post=created.data.post;assert.equal(post.videoProvider,'stream');assert.equal(post.category,'version');assert.equal(post.youtubeUrl,null);assert.equal(post.title,'Partagée dans la Loge');assert.ok(created.data.nextPublicationAt);
+    const replay=await f.call('/api/loge/posts','POST',body);assert.equal(replay.status,200);assert.equal(replay.data.post.id,post.id);
+    assert.equal((await f.call('/api/loge/posts','POST',{...body,eventId:'other-video-0001'})).status,409);
+    assert.equal(f.creates.length,2,'sharing allocates no second media');assert.equal(f.row(video.uploadId).post_id,null);assert.equal(f.row(video.uploadId).state,'published');
+    for(const user of [11,12]){
+      const playback=await f.call('/api/loge/posts/'+post.id+'/playback','GET',undefined,user);assert.equal(playback.status,200);assert.match(playback.data.hls,/manifest\/video\.m3u8$/);
+      const feed=(await f.call('/api/loge','GET',undefined,user)).data.posts;assert.deepEqual(feed.map(item=>[item.id,item.category,item.videoProvider]),[[post.id,'version','stream']]);
+    }
+    assert.equal((await f.call('/api/loge/videos')).data.videos[0].postId,post.id);
+    assert.equal((await f.call('/api/life-tree/events/shared-video-001')).data.event.loge_post_id,post.id);
+    assert.equal((await f.call('/api/life-tree/events/other-video-0001')).data.event.loge_post_id,undefined);
+    assert.equal((await f.call('/api/loge/posts','POST',share('other-video-0001'))).status,429);
+    reopenQuota(f);assert.equal((await f.call('/api/loge/posts','POST',share('shared-video-001'))).status,409);
+    // The category follows the videography entry; the Loge title is its own.
+    const stored=(await f.call('/api/life-tree/events/shared-video-001')).data.event;
+    assert.equal((await f.put('shared-video-001',event(undefined,{videoBranch:'society',title:'Titre privé modifié',revision:stored.revision}))).status,200);
+    const shown=(await f.call('/api/loge/posts/'+post.id)).data.post;assert.equal(shown.category,'society');assert.equal(shown.title,'Partagée dans la Loge');
+    assert.equal((await f.call('/api/loge/posts/'+post.id,'PUT',{title:'Autre',eventId:'other-video-0001',revision:shown.revision})).status,400);
+    assert.equal(other.event.revision,1);
+  }finally{f.sql.close();}
+});
+test('deleting the Loge post keeps the videography video, which can then be shared again',async()=>{
+  const f=setup();try{
+    const video=await f.attach(),post=(await f.call('/api/loge/posts','POST',share(video.id))).data.post;
+    assert.equal((await f.call('/api/loge/posts/'+post.id,'DELETE',{revision:post.revision})).status,200);
+    assert.equal(f.sql.prepare('SELECT count(*) AS n FROM loge_shared_videos').get().n,0);assert.equal(f.row(video.uploadId).state,'published');
+    assert.deepEqual(await cleanupLogeStream(f.env),{deleted:0,failed:0});await withdrawOrphanedSharedPosts(f.env);assert.equal(f.deleted.length,0);
+    assert.equal((await f.call('/api/life-tree/events/'+video.id+'/playback')).status,200);assert.equal((await f.call('/api/loge/posts/'+post.id+'/playback')).status,404);
+    const listed=(await f.call('/api/loge/videos')).data;assert.equal(listed.videos[0].postId,null);assert.ok(listed.nextPublicationAt,'a deleted post never reopens the weekly slot');
+    assert.equal((await f.call('/api/loge/posts','POST',share(video.id))).status,429);
+    reopenQuota(f);const again=await f.call('/api/loge/posts','POST',share(video.id));assert.equal(again.status,201);assert.notEqual(again.data.post.id,post.id);
+  }finally{f.sql.close();}
+});
+test('a shared video leaves the Loge with its videography entry and cannot be replaced while shared',async()=>{
+  const f=setup();try{
+    const video=await f.attach(),kept=await f.attach('kept-video-00001');
+    const post=(await f.call('/api/loge/posts','POST',share(video.id))).data.post;
+    assert.equal((await f.call('/api/loge/posts/'+post.id+'/comments','POST',{body:'Un regard',requestId:crypto.randomUUID()},12)).status,201);
+    assert.equal((await f.call('/api/loge/posts/'+post.id+'/favorite','PUT',{favorite:true},12)).status,200);
+    f.sql.prepare('UPDATE loge_stream_uploads SET created_at=unixepoch()-7200').run();
+    const replacement=await f.upload();f.ready(replacement.data.uploadId);
+    const refused=await f.put(video.id,event(replacement.data.uploadId,{revision:1}));assert.equal(refused.status,409);assert.match(refused.data.error,/Loge virtuelle/);
+    assert.equal(f.row(video.uploadId).state,'published');assert.equal((await f.call('/api/loge/posts/'+post.id)).status,200);
+    assert.equal((await f.put(video.id,event(undefined,{title:'Seulement le titre',revision:1}))).status,200);
+    assert.equal((await f.call('/api/life-tree/events/'+video.id,'DELETE',{revision:2})).status,200);
+    assert.equal((await f.call('/api/loge/posts/'+post.id)).status,404);assert.equal((await f.call('/api/loge/posts/'+post.id+'/playback')).status,404);
+    assert.deepEqual((await f.call('/api/loge','GET',undefined,12)).data.posts,[]);
+    assert.deepEqual({...f.sql.prepare('SELECT title,youtube_id,deleted_at IS NOT NULL AS deleted FROM loge_posts WHERE id=?').get(post.id)},{title:'',youtube_id:'',deleted:1});
+    assert.equal(f.sql.prepare("SELECT count(*) AS n FROM loge_comments WHERE deleted_at IS NULL OR body<>''").get().n,0);
+    assert.equal(f.sql.prepare('SELECT count(*) AS n FROM loge_favorites').get().n+f.sql.prepare('SELECT count(*) AS n FROM loge_shared_videos').get().n,0);
+    assert.equal(f.row(video.uploadId).state,'deleting');assert.equal(f.row(kept.uploadId).state,'published');
+    // The replacement refused above is still unattached and can now be used elsewhere.
+    assert.equal((await f.put('after-delete-0001',event(replacement.data.uploadId))).status,200);
+  }finally{f.sql.close();}
+});
+test('erasing private data or the whole tree withdraws shared posts, and the scheduled sweep repairs a missed one',async()=>{
+  for(const [path,body] of [['/api/private/data',{confirm:'SUPPRIMER'}],['/api/life-tree',{confirm:'SUPPRIMER'}]]){
+    const f=setup();try{
+      const video=await f.attach(),post=(await f.call('/api/loge/posts','POST',share(video.id))).data.post;
+      const foreign=await f.call('/api/life-tree/uploads','POST',file(),12);f.ready(foreign.data.uploadId);
+      assert.equal((await f.put('foreign-video-01',event(foreign.data.uploadId),12)).status,200);
+      const kept=(await f.call('/api/loge/posts','POST',share('foreign-video-01'),12)).data.post;
+      assert.equal((await f.call(path,'DELETE',body)).status,200);
+      assert.equal((await f.call('/api/loge/posts/'+post.id,'GET',undefined,12)).status,404);assert.equal((await f.call('/api/loge/posts/'+kept.id,'GET',undefined,12)).status,200);
+      assert.deepEqual(f.sql.prepare('SELECT post_id FROM loge_shared_videos').all().map(row=>row.post_id),[kept.id]);
+    }finally{f.sql.close();}
+  }
+  const f=setup();try{
+    const video=await f.attach(),post=(await f.call('/api/loge/posts','POST',share(video.id))).data.post;
+    f.sql.prepare("UPDATE loge_stream_uploads SET state='deleting' WHERE id=?").run(video.uploadId);
+    await withdrawOrphanedSharedPosts(f.env);
+    assert.equal((await f.call('/api/loge/posts/'+post.id,'GET',undefined,12)).status,404);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM loge_shared_videos').get().n,0);
   }finally{f.sql.close();}
 });

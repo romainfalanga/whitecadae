@@ -33,10 +33,25 @@ export const LOGE_STREAM_SCHEMA=[
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_loge_stream_outstanding ON loge_stream_uploads(user_id,purpose) WHERE state IN ('reserved','waiting','processing','ready')`,
   `CREATE INDEX IF NOT EXISTS idx_loge_stream_cleanup ON loge_stream_uploads(state,cleanup_after,expires_at)`
 ];
+// A Loge post shared from the videography points at the member's own published
+// upload instead of owning a media. The row lives exactly as long as the post.
+export const LOGE_SHARED_SCHEMA=[
+  `CREATE TABLE IF NOT EXISTS loge_shared_videos (
+    post_id INTEGER PRIMARY KEY REFERENCES loge_posts(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL,
+    event_id TEXT NOT NULL,
+    upload_id TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_loge_shared_upload ON loge_shared_videos(upload_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_loge_shared_user ON loge_shared_videos(user_id,event_id)`
+];
+// The shared upload must still be the published media of a videography entry.
+export const SHARED_UPLOAD_LIVE=`s.id=v.upload_id AND s.user_id=v.user_id AND s.event_id=v.event_id AND s.purpose='videography' AND s.state='published'
+  AND EXISTS(SELECT 1 FROM life_events e WHERE e.owner_id=s.user_id AND e.id=s.event_id AND e.video_branch IS NOT NULL)`;
 const ready=new WeakMap();
 export const VIDEOGRAPHY_STREAM_INDEX=`CREATE UNIQUE INDEX IF NOT EXISTS idx_stream_video_event ON loge_stream_uploads(user_id,event_id) WHERE purpose='videography' AND state='published'`;
 async function initialize(env){
-  await env.DB.batch([LOGE_STREAM_SCHEMA[0],LOGE_STREAM_SCHEMA[2]].map(sql=>env.DB.prepare(sql)));
+  await env.DB.batch([LOGE_STREAM_SCHEMA[0],LOGE_STREAM_SCHEMA[2],...LOGE_SHARED_SCHEMA].map(sql=>env.DB.prepare(sql)));
   const columns=new Set(((await env.DB.prepare('PRAGMA table_info(loge_stream_uploads)').all()).results||[]).map(row=>row.name));
   for(const [name,definition] of [['purpose',"TEXT NOT NULL DEFAULT 'loge' CHECK(purpose IN ('loge','videography'))"],['event_id','TEXT'],['link_fingerprint','TEXT']]){
     if(!columns.has(name))try{await env.DB.prepare(`ALTER TABLE loge_stream_uploads ADD COLUMN ${name} ${definition}`).run();}catch(error){
@@ -198,12 +213,18 @@ function signedURL(raw,id,token,kind){
   if(!url.pathname.startsWith('/'+id+'/')||(kind==='hls'&&!url.pathname.endsWith('/manifest/video.m3u8'))||(kind==='poster'&&!/^\/[a-f0-9]{32}\/thumbnails\/thumbnail\.(?:jpg|png|webp)$/i.test(url.pathname)))unavailable();
   url.pathname='/'+token+url.pathname.slice(id.length+1);return url.href;
 }
+async function postUpload(env,postId){
+  return await env.DB.prepare(`SELECT s.* FROM loge_stream_uploads s JOIN loge_posts p ON p.id=s.post_id
+    WHERE p.id=?1 AND p.deleted_at IS NULL AND s.purpose='loge' AND s.state='published' AND p.author_id=s.user_id`).bind(postId).first()
+    ||await env.DB.prepare(`SELECT s.* FROM loge_shared_videos v JOIN loge_posts p ON p.id=v.post_id JOIN loge_stream_uploads s ON ${SHARED_UPLOAD_LIVE}
+    WHERE v.post_id=?1 AND p.deleted_at IS NULL AND p.author_id=v.user_id`).bind(postId).first();
+}
 export async function logePlayback(env,postId,json){
-  const row=await env.DB.prepare(`SELECT s.* FROM loge_stream_uploads s JOIN loge_posts p ON p.id=s.post_id
-    WHERE p.id=?1 AND p.deleted_at IS NULL AND s.purpose='loge' AND s.state='published' AND p.author_id=s.user_id`).bind(postId).first();
+  const row=await postUpload(env,postId);
   if(!row)fail('Vidéo introuvable.',404);
   const output=await signedStreamPlayback(env,row);
-  if(!await env.DB.prepare("SELECT 1 FROM loge_posts p JOIN loge_stream_uploads s ON s.post_id=p.id WHERE p.id=?1 AND p.deleted_at IS NULL AND s.purpose='loge' AND s.state='published'").bind(postId).first())fail('Vidéo introuvable.',404);
+  // The post, or the videography entry it shares, may vanish while the token is minted.
+  if((await postUpload(env,postId))?.id!==row.id)fail('Vidéo introuvable.',404);
   return json(output);
 }
 export async function signedStreamPlayback(env,row){

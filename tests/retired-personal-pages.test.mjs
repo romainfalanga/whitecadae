@@ -22,10 +22,18 @@ test('old personal URLs and nested pages return home before loading a module or 
   }
 });
 
+test('the removed videography explanation returns to the videography without an info button',async()=>{
+  const calls=[],context={window:{scrollTo(){}},document:{body:{classList:{remove(){}}}},location:{pathname:'/videographie/comprendre',hash:''},closeNav(){},coupePageTimer(){},newEpoch(){},renderNav(){},navigate:(...args)=>calls.push(args)};
+  await runInNewContext(routeSource+'\nroute()',context);assert.deepEqual(calls,[['/videographie',true]]);
+  const direct=[];await page('/videographie/comprendre',{navigate:(...args)=>direct.push(args)});assert.deepEqual(direct,[['/videographie',true]]);
+  const client=readFileSync(new URL('../public/private-pages.js',import.meta.url),'utf8'),help=readFileSync(new URL('../public/private-help.js',import.meta.url),'utf8');
+  assert.doesNotMatch(client,/heading\('Vidéographie'[^)]*videographie/);assert.doesNotMatch(help,/videographie|métacognition/i);
+});
+
 test('login return URLs reject retired pages and preserve the active game destinations',()=>{
   for(const path of [...destinations,'/signes','/signes/horloge','/echelon','/game-master-orange','/game-master-blanc','/loge-virtuelle/publier','/videographie','/videographie/archives','/videographie/comprendre','/playlist']){
     const result=runInNewContext(destinationSource+'\naccountDestination()',{URLSearchParams,location:{search:'?retour='+encodeURIComponent(path)}});
-    assert.equal(result,destinations.includes(path)||path==='/playlist'?'/':path,path);
+    assert.equal(result,destinations.includes(path)||path==='/playlist'?'/':path==='/videographie/comprendre'?'/videographie':path,path);
   }
 });
 

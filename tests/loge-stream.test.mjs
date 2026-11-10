@@ -29,7 +29,7 @@ function setup(){
       async generateToken(){return 'header.'+Buffer.from(JSON.stringify({sub:id,exp:String(Math.floor(Date.now()/1000)+3600)})).toString('base64url')+'.signature';}
     };}
   };
-  const deps={getUser:async request=>f.sql.prepare('SELECT * FROM users WHERE id=?').get(Number(request.headers.get('Test-User')))||null,json:(body,status=200,headers={})=>Response.json(body,{status,headers:{'Cache-Control':'no-store',...headers}})};
+  const deps={legacySources:true,getUser:async request=>f.sql.prepare('SELECT * FROM users WHERE id=?').get(Number(request.headers.get('Test-User')))||null,json:(body,status=200,headers={})=>Response.json(body,{status,headers:{'Cache-Control':'no-store',...headers}})};
   async function call(path='/api/loge/uploads',{method='GET',body,user=11,headers={}}={}){
     const request=new Request('https://whitecadae.fr'+path,{method,headers:{'Test-User':String(user),'X-WC-User':String(user),...(body===undefined?{}:{'Content-Type':'application/json'}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});
     let response;try{response=await handleLoge(request,f.env,new URL(request.url),deps);}catch(e){if(!(e instanceof Response))throw e;response=e;}
