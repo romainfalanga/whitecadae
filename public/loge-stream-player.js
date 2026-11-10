@@ -2,7 +2,7 @@
 // starts from scroll, readiness, navigation restoration, or a comment action.
 let hlsModule;
 function loadHls(){return hlsModule||(hlsModule=import('./vendor/hls.mjs').catch(error=>{hlsModule=null;throw error;}));}
-const glyph={play:'<path d="m9 5 11 7-11 7Z"/>',fullscreen:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>'};
+const glyph={play:'<path d="M8 5 20 12 8 19Z"/>',fullscreen:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>'};
 export function validStreamURL(value){
   try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&(/^(?:customer-[a-z0-9-]+\.)?cloudflarestream\.com$/.test(u.hostname)||u.hostname==='videodelivery.net')?u.href:null;}catch{return null;}
 }

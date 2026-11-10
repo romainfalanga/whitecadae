@@ -2,24 +2,24 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {fixture} from './community-fixture.mjs';
+import {fixture,setEarnedLevel} from './community-fixture.mjs';
 import worker from '../src/index.js';
 import {seal} from '../src/private-data.js';
 import {normalizeMechanism} from '../public/mechanism-model.js';
 const video=(extra={})=>({title:'Une réflexion',entryType:'creation',medium:'vidéo',url:'https://www.youtube.com/watch?v=M7lc1UVf-VE',videoBranch:'self',precision:'day',date:'2026-09-29',kind:'autre',impact:'à explorer',themes:[],work:'Notes privées',revision:0,...extra});
-function setup(){
- const f=fixture();f.sql.exec('PRAGMA foreign_keys=ON');
+function setup(promote=true){
+ const f=fixture();f.sql.exec('PRAGMA foreign_keys=ON');if(promote)for(const id of [16,19,20,23,26])setEarnedLevel(f,id,33);
  f.call=async(path,level=18,method='GET',body)=>{const r=await worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session=qa'+level,'X-WC-User':String(level+1),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),f.env);return {status:r.status,data:await r.json()};};
  f.ok=async(...args)=>{const r=await f.call(...args);assert.equal(r.status,200,JSON.stringify(r.data));return r.data;};
  f.agree=level=>f.ok('/api/private/consent',level,'POST',{consent:true,version:'2026-10-01'});
  return f;
 }
-test('video and AS access use canonical levels 15 and 18, including invitation acceptance at 18',async()=>{
- const f=setup();try{
+test('restored video access requires canonical level 33 while AS invitation thresholds stay unchanged',async()=>{
+ const f=setup(false);setEarnedLevel(f,15,32);setEarnedLevel(f,16,33);try{
   assert.equal((await f.call('/api/life-tree?videos=1',14)).status,403);assert.equal((await f.call('/api/life-tree?videos=1',15)).status,200);
   assert.equal((await f.call('/api/ace-circles',17)).status,403);assert.equal((await f.call('/api/ace-circles',18)).status,200);
   await f.agree(18);await f.agree(19);const id=crypto.randomUUID();await f.ok('/api/ace-circles/invitations',19,'POST',{id,target:19,recipientNotice:true});await f.ok('/api/ace-circles/invitations/'+id,18,'PUT',{action:'accept'});
-  const access=(await f.ok('/api/me',15)).access;assert.equal(access.lifeTree,false);assert.equal(access.aceSquare,false);
+  const access=(await f.ok('/api/me',15)).access;assert.equal(access.lifeTree,false);assert.equal(access.aceSquare,false);assert.equal(access.videographie,true);
  }finally{f.sql.close();}
 });
 test('three categories, concurrent edits, real dates and validated YouTube hosting',async()=>{
@@ -116,6 +116,22 @@ test('session response reads canonical progression once and does not expose priv
  const f=setup();try{
   await f.ok('/api/me');const prepare=f.env.DB.prepare;let canonicalReads=0;
   f.env.DB.prepare=(query,...args)=>{if(/SELECT[\s\S]*FROM riddle_progress/i.test(query))canonicalReads++;return prepare(query,...args);};
-  const me=await f.ok('/api/me');assert.equal(me.gameEchelon,18);assert.equal(canonicalReads,1);assert.doesNotMatch(JSON.stringify(me),/Notes privées|payload|password_hash/);
+  const me=await f.ok('/api/me');assert.equal(me.gameEchelon,33);assert.equal(canonicalReads,1);assert.doesNotMatch(JSON.stringify(me),/Notes privées|payload|password_hash/);
+ }finally{f.sql.close();}
+});
+
+test('restored videography rejects every read/write below 33 and grants final access without reopening retired spaces',async()=>{
+ const f=setup(false);try{
+  setEarnedLevel(f,16,32);
+  for(const [path,method] of [['/api/life-tree?videos=1','GET'],['/api/life-tree?archive=1','GET'],['/api/life-tree/drafts','GET'],['/api/life-tree/events/video-gate','GET'],['/api/life-tree/events/video-gate','PUT'],['/api/life-tree/events/video-gate','DELETE']]){
+   assert.equal((await f.call(path,15,method,method==='GET'?undefined:{})).status,403,path);
+  }
+  assert.equal((await f.call('/api/life-tree?videos=1',99)).status,403,'administrator is not a progression bypass');
+  assert.equal((await f.ok('/api/me',15)).access.videographie,false);
+  setEarnedLevel(f,16,33);
+  const access=(await f.ok('/api/me',15)).access;assert.equal(access.videographie,true);assert.equal(access.lifeTree,false);assert.equal(access.mechanisms,false);assert.equal(access.aceSquare,false);
+  await f.ok('/api/life-tree/events/video-gate',15,'PUT',video());
+  assert.equal((await f.ok('/api/life-tree?videos=1',15)).events.length,1);
+  setEarnedLevel(f,16,32);assert.equal((await f.call('/api/life-tree/events/video-gate',15)).status,403);
  }finally{f.sql.close();}
 });

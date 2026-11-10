@@ -339,7 +339,7 @@ test('the feed and own reflections share only two destinations and expose no fav
   const destinations=['/loge-virtuelle','/loge-virtuelle/membres/11?onglet=reflexions'];
   for(const destination of destinations){
     await f.navigate(destination);const navigation=f.find('.loge-tabs'),links=navigation.querySelectorAll('a');
-    assert.deepEqual(links.map(link=>link.getAttribute('href')),destinations);assert.deepEqual(links.map(link=>link.textContent),['Loge Virtuelle','Mes réflexions']);assert.equal(f.app.querySelector('[data-favorite]'),null);
+    assert.equal(navigation.querySelector('button'),f.node('loge-open-compose'));assert.equal(navigation.querySelector('button').textContent,'Publier');assert.deepEqual(links.map(link=>link.getAttribute('href')),destinations);assert.deepEqual(links.map(link=>link.textContent),['Loge Virtuelle','Mes réflexions']);assert.equal(f.app.querySelector('[data-favorite]'),null);
     assert.equal(navigation.querySelectorAll('a[aria-current="page"]').length,1);
     assert.equal(navigation.querySelector('a[aria-current="page"]').getAttribute('href'),destination);
     assert.equal(f.find('h1').textContent,'Loge virtuelle');assert(f.find('.is-video-view'));assert.equal(f.app.querySelector('a[aria-label="Mon profil"]'),null);

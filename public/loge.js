@@ -52,11 +52,11 @@ function shell(html){
   const view=session.current,root=document.createElement('section');root.className='loge-page'+(logeView(view)?' is-loge-layout':'')+(videoView(view)?' is-video-view':'')+(view.kind==='feed'?' is-feed':'');
   root.innerHTML=html+statusMarkup('loge-status');view.root=root;session.ctx.app.replaceChildren(root);
 }
-function topbar(view){const other=view.kind==='profile'&&String(view.memberId)!==String(session.user);return `<header class="loge-topbar"><h1>${esc(other?view.member.username:'Loge virtuelle')}</h1><button type="button" class="loge-publish" id="loge-open-compose" aria-label="Publier" aria-controls="loge-compose">${icon('plus')}<span>Publier</span></button></header>`;}
+function topbar(view){const other=view.kind==='profile'&&String(view.memberId)!==String(session.user);return `<header class="loge-topbar"><h1>${esc(other?view.member.username:'Loge virtuelle')}</h1></header>`;}
 function composerMarkup(){return '<section id="loge-compose" class="loge-compose loge-composer-sheet" role="dialog" aria-modal="true" aria-labelledby="loge-compose-title" hidden></section>';}
 function logeNavigation(view){
   const ownProfile=view.kind==='profile'&&String(view.memberId)===String(session.user),active=view.kind==='theme'?'theme':ownProfile&&view.tab==='reflexions'?'reflexions':'loge';
-  return `<nav class="loge-tabs" aria-label="Navigation de la Loge">${[['loge','Loge Virtuelle',base],['reflexions','Mes réflexions',memberPath(session.user)+'?onglet=reflexions'],...(LOGE_THEMES_ENABLED?[['theme','Thème',themePath()]]:[])].map(([tab,label,href])=>`<a href="${href}" data-link ${active===tab?'aria-current="page"':''}>${label}</a>`).join('')}</nav>`;
+  return `<nav class="loge-tabs" aria-label="Navigation de la Loge">${[['loge','Loge Virtuelle',base],['reflexions','Mes réflexions',memberPath(session.user)+'?onglet=reflexions'],...(LOGE_THEMES_ENABLED?[['theme','Thème',themePath()]]:[])].map(([tab,label,href])=>`<a href="${href}" data-link ${active===tab?'aria-current="page"':''}>${label}</a>`).join('')}<button type="button" id="loge-open-compose" aria-controls="loge-compose" aria-expanded="false">Publier</button></nav>`;
 }
 function login(s){
   if(!live(s))return;
@@ -209,7 +209,7 @@ function uploadDisplay(draft){
   notice('loge-new-status',draft.uploadMessage||'');const restart=node('loge-new-form')?.querySelector('[data-upload-restart]');if(restart)restart.hidden=!draft.blockedUploadId;
 }
 function composerVisibility(open){
-  const view=session.current,root=node('loge-compose');if(!root)return;if(!open){view.composerVersion=(view.composerVersion||0)+1;stopComposerUpload();}root.hidden=!open;view.root.classList.toggle('has-compose',open);
+  const view=session.current,root=node('loge-compose');if(!root)return;if(!open){view.composerVersion=(view.composerVersion||0)+1;stopComposerUpload();}root.hidden=!open;node('loge-open-compose')?.setAttribute('aria-expanded',String(open));view.root.classList.toggle('has-compose',open);
   if(open)view.player?.pause();else if(!view.editingId&&!document.body.classList.contains('nav-open'))view.player?.resume();updateQuota();
 }
 function closePostEditor(id){const view=session.current,root=node('loge-post-editor-'+id);if(root)root.hidden=true;view.editingId=null;view.root.classList.remove('has-editor');if(node('loge-compose')?.hidden&&!document.body.classList.contains('nav-open'))view.player?.resume();node('loge-post-'+id)?.querySelector('summary')?.focus({preventScroll:true});}

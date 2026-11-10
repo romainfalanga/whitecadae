@@ -2,12 +2,12 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {fixture} from './community-fixture.mjs';
+import {fixture,setEarnedLevel} from './community-fixture.mjs';
 import worker from '../src/index.js';
 import {gameLevel,progress} from '../src/echelon.js';
 
 function setup(){
- const f=fixture();f.sql.exec('PRAGMA foreign_keys=ON');
+ const f=fixture();f.sql.exec('PRAGMA foreign_keys=ON');for(const id of [23,26])setEarnedLevel(f,id,33);
  f.call=async(path,level=22,method='GET',body)=>{
   const r=await worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session=qa'+level,'X-WC-User':String(level+1),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),f.env);
   return {status:r.status,data:await r.json(),cache:r.headers.get('Cache-Control')};

@@ -200,8 +200,8 @@ async function route() {
     return WCRoadmap.page();
   }
   if (path === '/echelon/horloge') return navigate('/signes/horloge'+location.hash,true);
-  if(/^\/(mecanisme|videographie|carre-d-as|arbre-de-vie|matiere)(?:\/|$)/.test(path))return navigate('/',true);
-  if(['/game-master-orange','/game-master-blanc','/signalements'].includes(path)){
+  if(/^\/(mecanisme|carre-d-as|arbre-de-vie|matiere)(?:\/|$)/.test(path))return navigate('/',true);
+  if(['/game-master-orange','/game-master-blanc','/signalements','/videographie','/videographie/archives','/videographie/comprendre'].includes(path)){
     const epoch=renderEpoch;
     app.innerHTML='<div class="loading">Chargement…</div>';
     try{
@@ -233,6 +233,7 @@ function renderNav() {
   if(state.user&&state.access.horloge)liens.splice(3,0,'<a href="/signes/horloge" data-link>Horloge</a>');
   if(state.user&&state.access.gameMaster)liens.push('<a href="/game-master-orange" data-link>Game Master Orange</a>');
   if(state.user&&state.access.gameMasterBlanc)liens.push('<a href="/game-master-blanc" data-link>Game Master Blanc</a>');
+  if(state.user&&state.access.videographie)liens.push('<a href="/videographie" data-link>Vidéographie</a>');
   if(state.user&&state.access.loge)liens.push('<a href="/loge-virtuelle" data-link>Loge virtuelle</a>');
   nav.innerHTML = liens.join('\n       ');
   nav.querySelectorAll('a').forEach((a) => { if (a.getAttribute('href') === location.pathname) a.setAttribute('aria-current', 'page'); });
@@ -327,7 +328,7 @@ function accountDestination() {
   if(value==='echelon'||value==='/parcours')return '/echelon';
   if(/^\/loge-virtuelle\/theme(?:\?theme=[1-9]\d*)?$/.test(value||''))return value;
   if(/^\/loge-virtuelle(?:\/(?:publications|membres)\/[1-9]\d*)?(?:\?(?:comment=[1-9]\d*|onglet=(?:reflexions|interventions|favoris)))?(?:#comment-[1-9]\d*)?$/.test(value||''))return value;
-  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|game-master-blanc|sans-vin-divin)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
+  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|game-master-blanc|videographie(?:\/(?:archives|comprendre))?|sans-vin-divin)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 
 function pageLogin() {

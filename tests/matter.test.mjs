@@ -1,12 +1,12 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {fixture} from './community-fixture.mjs';
+import {fixture,setEarnedLevel} from './community-fixture.mjs';
 import worker from '../src/index.js';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 const event=(extra={})=>({title:'Repère fictif',precision:'month',date:'2020-07',kind:'autre',impact:'ressource',themes:['Création'],revision:0,...extra});
 function setup(){
- const f=fixture();f.sql.exec('PRAGMA foreign_keys=ON');
+ const f=fixture();f.sql.exec('PRAGMA foreign_keys=ON');for(const id of [23,24,26])setEarnedLevel(f,id,33);
  f.call=async(path,level=22,method='GET',body)=>{const response=await worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session=qa'+level,'X-WC-User':String(level+1),'Content-Type':'application/json'},...(body!==undefined?{body:JSON.stringify(body)}:{})}),f.env);return {status:response.status,data:await response.json()};};
  f.ok=async(...args)=>{const result=await f.call(...args);assert.equal(result.status,200,JSON.stringify(result.data));return result.data;};
  f.clear=()=>f.sql.exec('DELETE FROM private_write_limits');

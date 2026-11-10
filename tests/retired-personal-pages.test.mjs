@@ -5,7 +5,7 @@ import {runInNewContext} from 'node:vm';
 import {page} from '../public/private-pages.js';
 
 const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-const destinations=['/mecanisme','/mecanisme/1','/mecanisme/10','/mecanisme/comprendre','/videographie','/videographie/archives','/videographie/comprendre','/carre-d-as','/carre-d-as/fil/123','/carre-d-as/comprendre','/matiere','/arbre-de-vie'];
+const destinations=['/mecanisme','/mecanisme/1','/mecanisme/10','/mecanisme/comprendre','/carre-d-as','/carre-d-as/fil/123','/carre-d-as/comprendre','/matiere','/arbre-de-vie'];
 const routeSource=source.slice(source.indexOf('async function route()'),source.indexOf('\nfunction renderNav()'));
 const destinationSource=source.slice(source.indexOf('function accountDestination()'),source.indexOf('\nfunction pageLogin()'));
 const navSource=source.slice(source.indexOf('function renderNav()'),source.indexOf('/* ---',source.indexOf('function renderNav()')));
@@ -23,7 +23,7 @@ test('old personal URLs and nested pages return home before loading a module or 
 });
 
 test('login return URLs reject retired pages and preserve the active game destinations',()=>{
-  for(const path of [...destinations,'/signes','/signes/horloge','/echelon','/game-master-orange','/game-master-blanc','/playlist']){
+  for(const path of [...destinations,'/signes','/signes/horloge','/echelon','/game-master-orange','/game-master-blanc','/videographie','/videographie/archives','/videographie/comprendre','/playlist']){
     const result=runInNewContext(destinationSource+'\naccountDestination()',{URLSearchParams,location:{search:'?retour='+encodeURIComponent(path)}});
     assert.equal(result,destinations.includes(path)||path==='/playlist'?'/':path,path);
   }
@@ -53,4 +53,13 @@ test('menu ignores former page access flags even with a stale signed-in session'
     if(user)assert.match(nav.innerHTML,/game-master-orange/);
     assert.match(nav.innerHTML,/href="\/musique"/);
   }
+});
+
+test('restored videography menu follows authenticated canonical access, independent of old lifeTree flags',()=>{
+ for(const user of [null,{id:1}])for(const videographie of [false,true]){
+  const nav={querySelectorAll:()=>[]};
+  runInNewContext(navSource+'\nrenderNav()',{nav,document:{getElementById:()=>null},state:{user,access:{videographie,lifeTree:true}},location:{pathname:'/videographie'}});
+  assert.equal(nav.innerHTML.includes('href="/videographie"'),!!user&&videographie);
+  assert.doesNotMatch(nav.innerHTML,/href="\/(mecanisme|carre-d-as)/);
+ }
 });

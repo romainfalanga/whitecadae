@@ -4,7 +4,7 @@ import {PLAYLISTS_ENABLED} from './features.js';
 
 export function contentAccess(user,rows=[]){
   const level=gameLevel(rows),legacy=accessLevel(rows),admin=!!user?.is_admin;
-  return {level,legacy,admin,gameMaster:!!user&&level>=7,playlist:PLAYLISTS_ENABLED&&!!user&&level>=10,gameMasterBlanc:!!user&&level>=33,loge:!!user&&level>=33,mechanisms:false,lifeTree:false,aceSquare:false,conversation:false,topics:false,videographie:false};
+  return {level,legacy,admin,gameMaster:!!user&&level>=7,playlist:PLAYLISTS_ENABLED&&!!user&&level>=10,gameMasterBlanc:!!user&&level>=33,loge:!!user&&level>=33,mechanisms:false,lifeTree:false,aceSquare:false,conversation:false,topics:false,videographie:!!user&&level>=33};
 }
 
 // A single schedule drives the home page, rewards and protected media.

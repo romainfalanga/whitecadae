@@ -20,3 +20,11 @@ export function fixture(){
   },AI:{async run(){calls++;return {text:'Bonjour à tous.',segments:[{start:0,end:1,text:'Bonjour à tous.'}]};}}};
   return {sql,env,objects,get aiCalls(){return calls;}};
 }
+
+// Keep historical fixture identifiers while exercising restored private pages
+// at their new canonical threshold.
+export function setEarnedLevel(f,userId,level){
+  f.sql.prepare('DELETE FROM riddle_progress WHERE user_id=?').run(userId);
+  const ids=NODES.flatMap(n=>n.answers.map(a=>a.id));
+  for(const id of ids.slice(0,Math.max(0,level-1)))f.sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(userId,id,'2026-11-10');
+}

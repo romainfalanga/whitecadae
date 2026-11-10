@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {fixture} from './community-fixture.mjs';
+import {fixture,setEarnedLevel} from './community-fixture.mjs';
 import worker from '../src/index.js';
 import {seal} from '../src/private-data.js';
 import {youtubeId,youtubeLink,youtubeEmbed} from '../public/youtube-video.js';
@@ -20,7 +20,7 @@ test('YouTube links reject arbitrary hosts, credentials, HTML, ambiguous IDs and
   }
 });
 test('YouTube URL stays encrypted, reaches only accepted AS and is revoked with membership',async()=>{
-  const f=fixture();
+  const f=fixture();for(const userId of [19,20])setEarnedLevel(f,userId,33);
   async function call(path,level=18,method='GET',body){const r=await worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session=qa'+level,'X-WC-User':String(level+1),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),f.env);return {status:r.status,body:await r.json(),cache:r.headers.get('Cache-Control')};}
   async function ok(...args){const r=await call(...args);assert.equal(r.status,200,JSON.stringify(r.body));return r.body;}
   try{

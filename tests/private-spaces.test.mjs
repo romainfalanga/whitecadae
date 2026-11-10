@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {fixture} from './community-fixture.mjs';
+import {fixture,setEarnedLevel} from './community-fixture.mjs';
 import worker from '../src/index.js';
 import {NODES} from '../src/echelon.js';
 import {seal,unseal,tagHash} from '../src/private-data.js';
@@ -12,7 +12,7 @@ function setup(){
   for(let id=201;id<=214;id++){
     f.sql.prepare('INSERT INTO users(id,email,username,password_hash) VALUES(?,?,?,?)').run(id,`angel${id}@local.test`,`Ange ${id}`,'unused');
     f.sql.prepare('INSERT INTO sessions(token,user_id,expires_at) VALUES(?,?,?)').run('angel'+id,id,'2099-01-01');
-    for(const riddle of signs.slice(0,19))f.sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(id,riddle,'2026-09-26');
+    for(const riddle of signs.slice(0,32))f.sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(id,riddle,'2026-09-26');
     f.sql.prepare("INSERT INTO privacy_consents(user_id,purpose,version,granted) VALUES(?,'storage','2026-10-01',1)").run(id);
   }
   f.call=async(path,id=201,method='GET',body,headers={})=>{
@@ -33,8 +33,8 @@ async function save(f,owner=201,id=crypto.randomUUID(),extra={}){return (await f
 async function send(f,owner,author,extra={}){const key=extra.id||crypto.randomUUID(),payload=await seal(f.env,`message:${owner}:${author}:${key}`,{text:extra.text||'Un message privé.'});f.sql.prepare('INSERT OR IGNORE INTO ace_messages(owner_id,author_id,payload,request_id,event_id,parent_id) VALUES(?,?,?,?,?,?)').run(owner,author,payload,key,extra.eventId||null,extra.parentId||null);return {ok:true};}
 
 test('exact canonical thresholds; no anonymous, legacy or administrator bypass; old routes remain retired',async()=>{
- const f=setup();try{
-   for(const [path,below,above] of [['/api/game-master-orange',7,8],['/api/life-tree',15,16],['/api/ace-circles',18,19]]){
+ const f=setup();setEarnedLevel(f,201,32);try{
+   for(const [path,below,above] of [['/api/game-master-orange',7,8],['/api/life-tree',201,202],['/api/ace-circles',18,19]]){
      assert.equal((await f.call(path,0)).status,401);assert.equal((await f.call(path,below)).status,403);assert.equal((await f.call(path,above)).status,200);assert.equal((await f.call(path,100)).status,403);
    }
    const caps=(await f.ok('/api/me',201)).access;assert.ok(caps.gameMaster);assert.equal(caps.lifeTree,false);assert.equal(caps.aceSquare,false);
