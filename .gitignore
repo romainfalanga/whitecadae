@@ -4,3 +4,4 @@ node_modules/
 dist/
 public/deploy-info.json
 public/vendor/hls.light.mjs
+public/vendor/hls.mjs

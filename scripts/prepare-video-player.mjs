@@ -5,5 +5,9 @@ import {createRequire} from 'node:module';
 import {dirname,join} from 'node:path';
 const require=createRequire(import.meta.url),root=dirname(require.resolve('hls.js/package.json'));
 const target=new URL('../public/vendor/',import.meta.url);mkdirSync(target,{recursive:true});
-copyFileSync(join(root,'dist/hls.light.mjs'),new URL('hls.light.mjs',target));
+// Stream exposes audio through EXT-X-MEDIA as a separate rendition. The light
+// build omits alternate-audio support and would play these videos silently.
+copyFileSync(join(root,'dist/hls.min.mjs'),new URL('hls.mjs',target));
+// Preserve the previous module URL for clients with an older cached controller.
+copyFileSync(join(root,'dist/hls.min.mjs'),new URL('hls.light.mjs',target));
 copyFileSync(join(root,'LICENSE'),new URL('hls-LICENSE.txt',target));
