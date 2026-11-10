@@ -326,6 +326,7 @@ function accountDestination() {
   const value = new URLSearchParams(location.search).get('retour');
   if(value==='57')return '/signes';
   if(value==='echelon'||value==='/parcours')return '/echelon';
+  if(value==='/loge-virtuelle/publier')return value;
   if(/^\/loge-virtuelle\/theme(?:\?theme=[1-9]\d*)?$/.test(value||''))return value;
   if(/^\/loge-virtuelle(?:\/(?:publications|membres)\/[1-9]\d*)?(?:\?(?:comment=[1-9]\d*|onglet=(?:reflexions|interventions|favoris)))?(?:#comment-[1-9]\d*)?$/.test(value||''))return value;
   return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|game-master-blanc|videographie(?:\/(?:archives|comprendre))?|sans-vin-divin)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';

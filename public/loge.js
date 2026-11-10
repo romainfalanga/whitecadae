@@ -7,6 +7,7 @@ import {themeOverviewMarkup,proposalMarkup,historyMarkup} from './loge-themes-ui
 let session=null;
 const drafts=new Map();
 const base='/loge-virtuelle';
+const publishPath=base+'/publier';
 const memberPath=id=>`${base}/membres/${encodeURIComponent(id)}`;
 const themePath=id=>base+'/theme'+(id?'?theme='+encodeURIComponent(id):'');
 const postPath=id=>`${base}/publications/${encodeURIComponent(id)}`;
@@ -30,13 +31,13 @@ function author(person){
 }
 function notice(id,message,error=false){const el=node(id);if(el){el.textContent=message;el.classList.toggle('is-error',error);}}
 function heading(title,actions=''){return `<header class="loge-heading"><h1>${esc(title)}</h1>${actions?`<nav class="loge-actions" aria-label="Actions de la Loge">${actions}</nav>`:''}</header>`;}
-function videoView(view){return logeView(view);}
-function logeView(view){return !!view&&['feed','profile','post','theme'].includes(view.kind);}
+function videoView(view){return logeView(view)&&view.kind!=='publish';}
+function logeView(view){return !!view&&['feed','profile','post','theme','publish'].includes(view.kind);}
 function siteHeaderSize(){const header=document.querySelector('.site-header'),height=header?.getBoundingClientRect?.().height;document.body.style.setProperty('--loge-site-header-height',(height>0?Math.ceil(height):77)+'px');}
 function menuState(s){
   if(!live(s))return;const open=document.body.classList.contains('nav-open');if(open===s.navOpen)return;s.navOpen=open;
   if(open){const view=s.current;s.menuPaused={view,player:view?.player,version:s.navigationVersion};view?.player?.pause();}
-  else{const saved=s.menuPaused;s.menuPaused=null;const view=s.current;if(view&&saved?.player&&saved.view===view&&saved.player===view.player&&saved.version===s.navigationVersion&&!view.editingId&&node('loge-compose')?.hidden)saved.player?.resume();}
+  else{const saved=s.menuPaused;s.menuPaused=null;const view=s.current;if(view&&saved?.player&&saved.view===view&&saved.player===view.player&&saved.version===s.navigationVersion&&!view.editingId)saved.player?.resume();}
 }
 function immersion(enabled){
   const active=document.body.classList.contains('loge-immersive');
@@ -49,14 +50,14 @@ function icon(kind){
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[kind]||''}</svg>`;
 }
 function shell(html){
-  const view=session.current,root=document.createElement('section');root.className='loge-page'+(logeView(view)?' is-loge-layout':'')+(videoView(view)?' is-video-view':'')+(view.kind==='feed'?' is-feed':'');
+  const view=session.current,root=document.createElement('section');root.className='loge-page'+(logeView(view)?' is-loge-layout':'')+(videoView(view)?' is-video-view':'')+(view.kind==='feed'?' is-feed':'')+(view.kind==='publish'?' is-publish-view':'');
   root.innerHTML=html+statusMarkup('loge-status');view.root=root;session.ctx.app.replaceChildren(root);
 }
 function topbar(view){const other=view.kind==='profile'&&String(view.memberId)!==String(session.user);return `<header class="loge-topbar"><h1>${esc(other?view.member.username:'Loge virtuelle')}</h1></header>`;}
-function composerMarkup(){return '<section id="loge-compose" class="loge-compose loge-composer-sheet" role="dialog" aria-modal="true" aria-labelledby="loge-compose-title" hidden></section>';}
+function composerMarkup(){return '<div class="loge-publish-scroll"><section id="loge-compose" class="loge-compose" aria-labelledby="loge-compose-title"></section></div>';}
 function logeNavigation(view){
-  const ownProfile=view.kind==='profile'&&String(view.memberId)===String(session.user),active=view.kind==='theme'?'theme':ownProfile&&view.tab==='reflexions'?'reflexions':'loge';
-  return `<nav class="loge-tabs" aria-label="Navigation de la Loge">${[['loge','Loge Virtuelle',base],['reflexions','Mes réflexions',memberPath(session.user)+'?onglet=reflexions'],...(LOGE_THEMES_ENABLED?[['theme','Thème',themePath()]]:[])].map(([tab,label,href])=>`<a href="${href}" data-link ${active===tab?'aria-current="page"':''}>${label}</a>`).join('')}<button type="button" id="loge-open-compose" aria-controls="loge-compose" aria-expanded="false">Publier</button></nav>`;
+  const ownProfile=view.kind==='profile'&&String(view.memberId)===String(session.user),active=view.kind==='publish'?'publish':view.kind==='theme'?'theme':ownProfile&&view.tab==='reflexions'?'reflexions':'loge';
+  return `<nav class="loge-tabs" aria-label="Navigation de la Loge">${[['loge','Loge Virtuelle',base],['reflexions','Mes réflexions',memberPath(session.user)+'?onglet=reflexions'],['publish','Publier',publishPath],...(LOGE_THEMES_ENABLED?[['theme','Thème',themePath()]]:[])].map(([tab,label,href])=>`<a href="${href}" data-link ${tab==='publish'?'id="loge-open-compose"':''} ${active===tab?'aria-current="page"':''}>${label}</a>`).join('')}</nav>`;
 }
 function login(s){
   if(!live(s))return;
@@ -115,9 +116,9 @@ function updateQuota(){
   const until=dateValue(s.nextPublicationAt),remaining=until?until.getTime()-Date.now()-s.clockOffset:0;
   const blocked=remaining>0;
   const text=blocked?`Tu pourras publier une nouvelle réflexion le ${dateLabel(s.nextPublicationAt)}.`:'Tu peux publier une réflexion. Une publication est possible tous les sept jours.';
-  const quota=node('loge-quota');if(quota){quota.textContent=text;quota.hidden=!blocked&&!!node('loge-compose')?.hidden;}
+  const quota=node('loge-quota');if(quota){quota.textContent=text;quota.hidden=false;}
   const submit=node('loge-new-submit');if(submit&&!submit.closest('form')?.dataset.busy)submit.disabled=blocked;
-  const open=node('loge-open-compose');if(open){open.disabled=false;open.setAttribute('title',blocked?text:'Publier');}
+  const open=node('loge-open-compose');if(open){open.setAttribute('title',blocked?text:'Publier');}
   if(blocked)s.quotaTimer=setTimeout(updateQuota,Math.min(remaining+50,2147483647));
 }
 function getDraft(key,initial){
@@ -153,12 +154,12 @@ function canManagePosts(){const view=session.current;return view.kind==='profile
 function closeVideo(s=session){for(const view of s?.views?.values()||[]){view.player?.destroy();view.player=null;view.paginationObserver?.disconnect();view.paginationObserver=null;}}
 function bindVideo(id){const view=session.current,post=view.posts.get(String(id)),container=node('loge-video-'+id);if(view.player&&post&&container)view.player.add(post,container,node('loge-timeline-'+post.id));}
 function initMedia(view){
-  const s=session;if(!live(s)||s.current!==view)return;
+  const s=session;if(!live(s)||s.current!==view||!videoView(view))return;
   view.player?.destroy();view.player=createLogeVideoFeed({root:videoView(view)?viewScroller(view):null,isCurrent:()=>live(s)&&s.current===view&&!view.destroyed,getPlayback:id=>request('/api/loge/posts/'+encodeURIComponent(id)+'/playback',{}, {view,background:true}),onError:()=>{}});
   for(const post of view.posts.values()){const container=view.root.querySelector('[data-video-post="'+post.id+'"]');if(container)view.player.add(post,container,node('loge-timeline-'+post.id));}
   refreshLayout(view);
 }
-function viewScroller(view){return view?.root?.querySelector('.loge-reels')||view?.root?.querySelector('.loge-themes-scroll')||view?.root?.querySelector('.loge-feed');}
+function viewScroller(view){return view?.root?.querySelector('.loge-publish-scroll')||view?.root?.querySelector('.loge-reels')||view?.root?.querySelector('.loge-themes-scroll')||view?.root?.querySelector('.loge-feed');}
 function refreshLayout(view){
   if(!view||!live(session)||session.current!==view)return;
   const reels=view.root?.querySelector('.loge-reels');
@@ -208,18 +209,14 @@ function uploadDisplay(draft){
   const selected=node('loge-upload-file');if(selected)selected.textContent=draft.file?.name||'';
   notice('loge-new-status',draft.uploadMessage||'');const restart=node('loge-new-form')?.querySelector('[data-upload-restart]');if(restart)restart.hidden=!draft.blockedUploadId;
 }
-function composerVisibility(open){
-  const view=session.current,root=node('loge-compose');if(!root)return;if(!open){view.composerVersion=(view.composerVersion||0)+1;stopComposerUpload();}root.hidden=!open;node('loge-open-compose')?.setAttribute('aria-expanded',String(open));view.root.classList.toggle('has-compose',open);
-  if(open)view.player?.pause();else if(!view.editingId&&!document.body.classList.contains('nav-open'))view.player?.resume();updateQuota();
-}
-function closePostEditor(id){const view=session.current,root=node('loge-post-editor-'+id);if(root)root.hidden=true;view.editingId=null;view.root.classList.remove('has-editor');if(node('loge-compose')?.hidden&&!document.body.classList.contains('nav-open'))view.player?.resume();node('loge-post-'+id)?.querySelector('summary')?.focus({preventScroll:true});}
-function openComposer(){
-  const s=session;if(!live(s))return;
+function closePostEditor(id){const view=session.current,root=node('loge-post-editor-'+id);if(root)root.hidden=true;view.editingId=null;view.root.classList.remove('has-editor');if(!document.body.classList.contains('nav-open'))view.player?.resume();node('loge-post-'+id)?.querySelector('summary')?.focus({preventScroll:true});}
+function bindPublishForm(){
+  const s=session;if(!live(s)||s.current?.kind!=='publish')return;
   const root=node('loge-compose');if(!root)return;
   const draft=getDraft('create-post',{title:'',file:null,themeWeek:null});
   if(root.logeDraft!==draft){root.innerHTML='';root.logeDraft=draft;}
-  if(root.innerHTML){const form=node('loge-new-form');if(form&&!form.dataset.busy)form.elements.namedItem('title').value=draft.title;composerVisibility(root.hidden);uploadDisplay(draft);return;}
-  composerVisibility(true);root.innerHTML=`<h2 id="loge-compose-title">Publier une réflexion</h2><p id="loge-quota" class="loge-note"></p><form id="loge-new-form">${postFields(draft,true)}<div class="loge-form-actions"><button class="loge-button" type="submit" id="loge-new-submit">Publier</button>${button('Fermer','data-compose-close',true)}</div>${statusMarkup('loge-new-status')}${button('Annuler l’envoi précédent et recommencer','data-upload-restart hidden',true)}</form>`;
+  if(root.innerHTML){const form=node('loge-new-form');if(form&&!form.dataset.busy)form.elements.namedItem('title').value=draft.title;syncComposerTheme();uploadDisplay(draft);updateQuota();return;}
+  root.innerHTML=`<h2 id="loge-compose-title">Publier une réflexion</h2><p id="loge-quota" class="loge-note"></p><form id="loge-new-form">${postFields(draft,true)}<div class="loge-form-actions"><button class="loge-button" type="submit" id="loge-new-submit">Publier</button></div>${statusMarkup('loge-new-status')}${button('Annuler l’envoi précédent et recommencer','data-upload-restart hidden',true)}</form>`;
   const form=node('loge-new-form');rememberFields(form,draft,['title']);syncComposerTheme();uploadDisplay(draft);
   if(session.currentTheme?.endsAt*1000<=Date.now()+session.clockOffset)void refreshThemeBoundary(session);
   const uploadRequest=async(path,options={})=>{
@@ -240,15 +237,14 @@ function openComposer(){
   });
   async function cancelReplacedUploads(){for(const id of [...(draft.abandonedUploads||[])]){await uploadRequest('/api/loge/uploads/'+encodeURIComponent(id),{method:'DELETE',body:{}});draft.abandonedUploads=draft.abandonedUploads.filter(value=>value!==id);}}
   form.querySelector('[data-upload-restart]').onclick=async()=>{
-    const view=s.current,version=s.navigationVersion,composeVersion=view.composerVersion||0,id=draft.blockedUploadId;if(!id)return;let restart=false;
+    const view=s.current,version=s.navigationVersion,id=draft.blockedUploadId;if(!id)return;let restart=false;
     await perform('restart-upload',form,async()=>{
       await uploadRequest('/api/loge/uploads/'+encodeURIComponent(id),{method:'DELETE',body:{}});
-      if(!live(s)||s.current!==view||s.navigationVersion!==version||(view.composerVersion||0)!==composeVersion||root.hidden)return;
+      if(!live(s)||s.current!==view||s.navigationVersion!==version||root.hidden)return;
       Object.assign(draft,{requestId:crypto.randomUUID(),uploadId:null,uploadURL:null,uploadSent:false,uploadStatus:null,uploadProgress:0,uploadMessage:'',blockedUploadId:null});uploadDisplay(draft);restart=true;
-    },error=>{if(!root.hidden&&(view.composerVersion||0)===composeVersion)notice('loge-new-status',error.message,true);});
+    },error=>{if(s.navigationVersion===version&&!root.hidden)notice('loge-new-status',error.message,true);});
     if(restart&&live(s)&&s.current===view&&!root.hidden)form.onsubmit({preventDefault(){}});
   };
-  form.querySelector('[data-compose-close]').onclick=()=>{composerVisibility(false);node('loge-open-compose')?.focus({preventScroll:true});};
   form.onsubmit=event=>{
     event.preventDefault();if(!form.reportValidity())return;readFields(form,draft,['title']);
     try{validateLogeFile(draft.file);}catch(error){notice('loge-new-status',error.message,true);return;}
@@ -258,8 +254,6 @@ function openComposer(){
       const abort=()=>controller.abort();s.controller.signal.addEventListener('abort',abort,{once:true});
       const current=()=>live(s)&&s.current===view&&s.navigationVersion===version&&!root.hidden&&!controller.signal.aborted;
       const check=()=>{if(!current())throw new DOMException('Navigation','AbortError');};
-      // The close action stays available while the upload is in progress.
-      form.querySelector('[data-compose-close]').disabled=false;
       try{
         await cancelReplacedUploads();check();
         const uploadId=await ensureLogeUpload(draft,{request:uploadRequest,signal:controller.signal,onState:(status,progress)=>{
@@ -269,15 +263,20 @@ function openComposer(){
         }});check();
         const choice=form.elements.namedItem('themeWeek');draft.themeWeek=choice?.checked?choice.value:null;
         const result=await request('/api/loge/posts',{method:'POST',body:{title:draft.title.trim(),uploadId,requestId:draft.requestId,...(draft.themeWeek?{themeWeek:draft.themeWeek}:{})}});
-        // The publication may have reached the server before a close/navigation.
+        // The publication may have reached the server before navigation.
         if(!current()){lateMutation(s,'/api/loge/posts',{method:'POST',body:{title:draft.title.trim(),uploadId,requestId:draft.requestId,...(draft.themeWeek?{themeWeek:draft.themeWeek}:{})}},result);return;}
-        acceptSelf(result);invalidateOtherViews();forgetDraft('create-post');root.innerHTML='';composerVisibility(false);
-        const list=node('loge-feed')||(canManagePosts()?node('loge-profile-list'):session.current.kind==='theme'&&session.current.selectedTheme&&result.post.theme&&String(session.current.selectedTheme.id)===String(result.post.theme.id)?node('loge-theme-posts'):null);if(list){node('loge-feed-empty')?.remove();node('loge-profile-empty')?.remove();node('loge-theme-posts-empty')?.remove();insertPost(result.post,list);node('loge-post-'+result.post.id)?.scrollIntoView({block:'start'});}
-        notice('loge-status','Ta réflexion est publiée.');updateQuota();
+        acceptSelf(result);invalidateOtherViews();forgetDraft('create-post');root.innerHTML='';view.dirty=true;
+        s.composerUpload=null;
+        const destination=memberPath(s.user)+'?onglet=reflexions';
+        await s.ctx.navigate(destination);
+        if(live(s)&&s.current?.key===destination){
+          const list=node('loge-profile-list');if(list){node('loge-profile-empty')?.remove();insertPost(result.post,list);node('loge-post-'+result.post.id)?.scrollIntoView({block:'start'});}
+          notice('loge-status','Ta réflexion est publiée.');updateQuota();
+        }
       }finally{s.controller.signal.removeEventListener('abort',abort);if(s.composerUpload===active)s.composerUpload=null;}
     },error=>{if(uploadController?.signal.aborted||s.navigationVersion!==version)return;if(error.status===409&&error.data?.uploadId){draft.blockedUploadId=error.data.uploadId;form.querySelector('[data-upload-restart]').hidden=false;}draft.uploadMessage=error.message;notice('loge-new-status',error.message,true);const submit=node('loge-new-submit');if(submit)submit.textContent='Réessayer';if(error.status===409&&/thème|semaine/i.test(error.message))void refreshThemeBoundary(session);});
   };
-  updateQuota();form.elements.namedItem('title').focus({preventScroll:true});
+  updateQuota();
 }
 async function currentPost(id){const data=await request('/api/loge/posts/'+encodeURIComponent(id));acceptSelf(data);updatePost(data.post);updateQuota();return data.post;}
 async function currentComment(comment){
@@ -504,8 +503,7 @@ async function refreshThemeBoundary(s=session){
     const result=await request('/api/loge/themes',{}, {view,background:true});if(!live(s))return;
     acceptSelf(result);for(const cached of s.views.values())if(cached.kind==='theme')cached.dirty=true;
     if(s.current===view&&view.kind==='theme'){
-      const compose=node('loge-compose'),wasOpen=compose&&!compose.hidden;view.version++;
-      await navigate(view.key);if(live(s)&&s.current===view&&wasOpen)openComposer();
+      view.version++;await navigate(view.key);
     }else if(s.current===view)syncComposerTheme();
   }catch(error){if(live(s)&&error.name!=='AbortError')notice('loge-status','Le thème sera actualisé à la prochaine ouverture.',true);}
   finally{if(live(s)){s.themeRefreshing=false;armThemeBoundary(s);}}
@@ -576,8 +574,8 @@ async function moreThemePosts(){
 function renderThemeView(view,result){
   view.posts.clear();view.comments.clear();view.panels.clear();view.activePanel=null;view.editingId=null;
   view.themeData=result;view.selectedTheme=result.selectedTheme;view.proposals=new Map((result.proposals||[]).map(p=>[String(p.id),p]));view.history=new Map((result.history||[]).map(t=>[String(t.id),t]));view.historyNext=result.historyNext;view.historyQuery='';view.historyVersion=0;
-  shell(`${topbar(view)}${logeNavigation(view)}${composerMarkup()}<div class="loge-themes-scroll">${themeOverviewMarkup(result,view.themeId?result.selectedTheme:null,esc)}<section class="loge-theme-videos"><header><h2>${result.selectedTheme?esc(result.selectedTheme.title):'Réflexions du thème'}</h2></header><div id="loge-theme-posts"><div class="loge-feed-pagination">${button('Voir la suite','id="loge-theme-posts-more"',true)}</div></div></section></div>`);
-  node('loge-open-compose').onclick=openComposer;node('loge-theme-posts-more').onclick=moreThemePosts;
+  shell(`${topbar(view)}${logeNavigation(view)}<div class="loge-themes-scroll">${themeOverviewMarkup(result,view.themeId?result.selectedTheme:null,esc)}<section class="loge-theme-videos"><header><h2>${result.selectedTheme?esc(result.selectedTheme.title):'Réflexions du thème'}</h2></header><div id="loge-theme-posts"><div class="loge-feed-pagination">${button('Voir la suite','id="loge-theme-posts-more"',true)}</div></div></section></div>`);
+  node('loge-theme-posts-more').onclick=moreThemePosts;
   themePostsState(view,{posts:result.posts,next:result.postNext});
   for(const proposal of view.proposals.values())bindThemeProposal(view,proposal);bindThemeHistory(view);
   const form=node('loge-theme-propose-form'),draft=getDraft('theme-proposal',{title:''});form.elements.namedItem('title').value=draft.title;rememberFields(form,draft,['title']);
@@ -600,10 +598,12 @@ function renderView(view,result){
   if(view.kind==='profile'){view.member=result.member;document.title=result.member.username+' · Loge virtuelle · White Cadae';}
   else document.title=(view.kind==='post'?result.post.title+' · ':'')+'Loge virtuelle · White Cadae';
   const tabs=logeNavigation(view);
-  {
+  if(view.kind==='publish'){
+    document.title='Publier une réflexion · Loge virtuelle · White Cadae';
+    shell(`${topbar(view)}${tabs}${composerMarkup()}`);bindPublishForm();
+  }else{
     const listId=view.kind==='feed'?'loge-feed':view.kind==='profile'?'loge-profile-list':'loge-detail-post',moreId=view.kind==='profile'?'loge-profile-more':'loge-feed-more';
-    shell(`${topbar(view)}${tabs}${composerMarkup()}<div id="${listId}" class="loge-reels" aria-label="Réflexions en vidéo"><div class="loge-feed-pagination">${button('Voir la suite',`id="${moreId}"`,true)}</div></div>`);
-    node('loge-open-compose').onclick=openComposer;
+    shell(`${topbar(view)}${tabs}<div id="${listId}" class="loge-reels" aria-label="Réflexions en vidéo"><div class="loge-feed-pagination">${button('Voir la suite',`id="${moreId}"`,true)}</div></div>`);
     if(view.kind==='profile'){node(moreId).onclick=moreProfile;addProfileRows(view,result);}
     else{
       node(moreId).onclick=moreFeed;for(const post of view.kind==='post'?[result.post]:result.posts)insertPost(post,node(listId));
@@ -618,7 +618,8 @@ function parseDestination(destination){
   if(url.origin!==(location.origin||'https://whitecadae.fr'))return null;
   const path=url.pathname.replace(/\/+$/,'')||'/';
   if(path===base+'/theme'){if(!LOGE_THEMES_ENABLED)return null;const id=url.searchParams.get('theme');if(id!==null&&(!/^[1-9]\d*$/.test(id)||!Number.isSafeInteger(Number(id))))return null;return {key:themePath(id),kind:'theme',themeId:id?Number(id):null,endpoint:'/api/loge/themes'};}
-  if(path===base)return {key:base,kind:'feed',endpoint:'/api/loge',openCompose:url.searchParams.has('publier')};
+  if(path===publishPath||path===base&&url.searchParams.has('publier'))return {key:publishPath,kind:'publish',endpoint:'/api/loge',legacyPublish:path!==publishPath};
+  if(path===base)return {key:base,kind:'feed',endpoint:'/api/loge'};
   const member=/^\/loge-virtuelle\/membres\/([1-9]\d*)$/.exec(path);
   if(member){const tab=['interventions','favoris'].includes(url.searchParams.get('onglet'))?url.searchParams.get('onglet'):'reflexions';return {key:memberPath(member[1])+'?onglet='+tab,kind:'profile',memberId:member[1],tab,endpoint:'/api/loge/membres/'+member[1]+'?tab='+tab};}
   const post=/^\/loge-virtuelle\/publications\/([1-9]\d*)$/.exec(path);
@@ -642,11 +643,13 @@ async function fetchView(view){
   try{return await view.fetching;}finally{view.fetching=null;}
 }
 function saveView(view){
-  if(!view?.root)return;if(view.activePanel?.writing)commentWriting(view.activePanel,false,{focus:false});view.scrollY=window.scrollY||0;view.reelScroll=viewScroller(view)?.scrollTop||0;
+  if(!view?.root)return;
+  if(view.kind==='publish'){const compose=view.root.querySelector('[id="loge-compose"]'),form=compose?.querySelector('form');if(form&&compose.logeDraft)readFields(form,compose.logeDraft,['title']);}
+  if(view.activePanel?.writing)commentWriting(view.activePanel,false,{focus:false});view.scrollY=window.scrollY||0;view.reelScroll=viewScroller(view)?.scrollTop||0;
   view.player?.pause();view.paginationObserver?.disconnect();view.paginationObserver=null;
 }
 function restoreView(view){
-  const s=session,scroll=()=>{if(!live(s)||s.current!==view)return;const reels=viewScroller(view);if(reels)reels.scrollTop=view.reelScroll;window.scrollTo?.(0,view.scrollY);if(view.player){view.player.resume();view.player.refresh();}else initMedia(view);if(document.body.classList.contains('nav-open')||view.editingId||node('loge-compose')&&!node('loge-compose').hidden)view.player?.pause();feedPagination(view);};
+  const s=session,scroll=()=>{if(!live(s)||s.current!==view)return;const reels=viewScroller(view);if(reels)reels.scrollTop=view.reelScroll;window.scrollTo?.(0,view.scrollY);if(videoView(view)){if(view.player){view.player.resume();view.player.refresh();}else initMedia(view);if(document.body.classList.contains('nav-open')||view.editingId)view.player?.pause();feedPagination(view);}else if(view.kind==='publish')bindPublishForm();};
   if(typeof requestAnimationFrame==='function')requestAnimationFrame(scroll);else scroll();
 }
 function trimViews(){
@@ -665,11 +668,11 @@ function prefetchSibling(view){
 export function canNavigate(destination){return live(session)&&!!parseDestination(destination);}
 export async function navigate(destination){
   const s=session,spec=parseDestination(destination);if(!live(s)||!spec)return;
+  if(spec.legacyPublish)return s.ctx.navigate(publishPath,true);
   stopComposerUpload(s);const token=++s.navigationVersion,previous=s.current;
   if(previous)saveView(previous);
   let view=s.views.get(spec.key);if(!view){view=makeView(spec);if(previous?.kind==='profile'&&previous.memberId===view.memberId)view.scrollY=window.scrollY||0;s.views.set(spec.key,view);}
   if(!view.root&&previous?.kind==='profile'&&view.kind==='profile'&&String(previous.memberId)===String(view.memberId))view.scrollY=window.scrollY||0;
-  view.openCompose=spec.openCompose;
   try{
     let result=view.data;
     if(!result||view.dirty||Date.now()-view.loadedAt>120000||view.kind==='theme'&&result.current?.endsAt*1000<=Date.now()+s.clockOffset)result=await fetchView(view);
@@ -677,7 +680,7 @@ export async function navigate(destination){
     if(s.current!==view){s.current?.player?.destroy();if(s.current)s.current.player=null;s.current=view;}
     immersion(logeView(view));
     if(!view.root||view.renderedGeneration!==view.dataGeneration){renderView(view,result);}else{s.ctx.app.replaceChildren(view.root);document.title=view.title;}
-    s.commentViewport?.refresh();restoreView(view);if(view.openCompose)openComposer();
+    s.commentViewport?.refresh();restoreView(view);
     if(view.kind==='post'&&view.focusComment&&!view.activePanel)await openDiscussion(view.postId);
     if(!live(s)||s.current!==view)return;s.views.delete(view.key);s.views.set(view.key,view);prefetchSibling(view);trimViews();
   }catch(error){
@@ -705,9 +708,9 @@ export async function page(path,ctx){
   s.resize=()=>{if(live(s)&&document.body.classList.contains('loge-immersive')){siteHeaderSize();refreshLayout(s.current);for(const field of s.current?.root?.querySelectorAll('textarea')||[])if(field.closest('.loge-comments-panel'))growComment(field);}};window.addEventListener('resize',s.resize);
   const header=document.querySelector('.site-header');if(header&&typeof ResizeObserver==='function'){s.headerObserver=new ResizeObserver(()=>{if(live(s))s.resize();});s.headerObserver.observe(header);}
   s.navOpen=document.body.classList.contains('nav-open');s.menuPaused=null;if(typeof MutationObserver==='function'){s.menuObserver=new MutationObserver(()=>menuState(s));s.menuObserver.observe(document.body,{attributes:true,attributeFilter:['class']});}
-  s.keydown=event=>{if(!live(s))return;const compose=node('loge-compose'),editor=s.current?.editingId?node('loge-post-editor-'+s.current.editingId):null,dialog=compose&&!compose.hidden?compose:editor&&!editor.hidden?editor:null;
+  s.keydown=event=>{if(!live(s))return;const editor=s.current?.editingId?node('loge-post-editor-'+s.current.editingId):null,dialog=editor&&!editor.hidden?editor:null;
     if(event.key==='Tab'&&dialog){const controls=[...dialog.querySelectorAll('button,input,textarea,a')].filter(el=>!el.disabled),first=controls[0],last=controls.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}return;}
-    if(event.key!=='Escape')return;if(compose&&!compose.hidden){composerVisibility(false);node('loge-open-compose')?.focus({preventScroll:true});}else if(editor&&!editor.hidden)closePostEditor(s.current.editingId);else if(videoView(s.current))closeDiscussion();};document.addEventListener('keydown',s.keydown);
+    if(event.key!=='Escape')return;if(editor&&!editor.hidden)closePostEditor(s.current.editingId);else if(videoView(s.current))closeDiscussion();};document.addEventListener('keydown',s.keydown);
   immersion(logeView(parseDestination(path+location.search)));ctx.app.innerHTML='<section class="loge-page"><p class="loge-empty" role="status">Chargement…</p></section>';
   await navigate(path+location.search+location.hash);
 }

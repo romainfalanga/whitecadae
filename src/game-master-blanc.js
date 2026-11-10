@@ -5,7 +5,7 @@ export const GAME_MASTER_BLANC = {
   sections:[
     {title:'Vidéographie',paragraphs:[
       'Extériorise tes réflexions et tes idées en vidéo.',
-      'Organise-les pour visualiser tes trajectoires et choisir celles que tu veux voir grandir. Crée ta propre plateforme avec l’IA pour mieux les structurer.'
+      'Utilise la vidéographie de cette plateforme pour organiser tes réflexions, visualiser tes trajectoires et choisir celles que tu veux voir grandir.'
     ]},
     {title:'Ta version harmonieuse',paragraphs:[
       'Imagine ta version harmonieuse et façonne-la dans ta vidéographie.',
@@ -13,11 +13,8 @@ export const GAME_MASTER_BLANC = {
     ]},
     {title:'Ta société harmonieuse',paragraphs:[
       'Imagine une société harmonieuse et façonne-la dans ta vidéographie.',
+      'Veille à ce que ta version harmonieuse soit cohérente avec cette société et puisse y trouver sa place.',
       'Trouve les expansions harmonieuses qui permettront d’y parvenir.'
-    ]},
-    {title:'Ta version harmonieuse IA',paragraphs:[
-      'Dans ta plateforme de vidéographie, donne à l’IA accès à tes réflexions pour qu’elle puisse t’aider à mieux te comprendre en schématisant ton fonctionnement.',
-      'Crée ta version harmonieuse en IA pour dialoguer avec elle et mieux visualiser la personne que tu cherches à devenir.'
     ]},
     {title:'Loge virtuelle',paragraphs:[
       'Partage dans la Loge virtuelle tes réflexions et tes avancées aux autres Game Masters Blancs.',

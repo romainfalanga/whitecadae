@@ -22,12 +22,12 @@ test('restored video access requires canonical level 33 while AS invitation thre
   const access=(await f.ok('/api/me',15)).access;assert.equal(access.lifeTree,false);assert.equal(access.aceSquare,false);assert.equal(access.videographie,true);
  }finally{f.sql.close();}
 });
-test('three categories, concurrent edits, real dates and validated YouTube hosting',async()=>{
+test('four categories, concurrent edits, real dates and validated YouTube hosting',async()=>{
  const f=setup();try{
   await f.agree(15);
-  for(const branch of ['self','ideas','projects'])await f.ok('/api/life-tree/events/video-'+branch,15,'PUT',video({videoBranch:branch}));
-  const all=await f.ok('/api/life-tree?videos=1',15);assert.equal(all.events.length,3);assert.ok(all.events.every(e=>e.topic_id));assert.equal((await f.ok('/api/life-tree?branch=ideas&videos=1',15)).events.length,1);
-  for(const extra of [{videoBranch:'other'},{videoBranch:'society'},{videoBranch:'monthly'},{url:''},{url:'https://youtube.com/watch?v=secret'},{precision:'unknown'},{date:'2026-02-30'},{date:'2099-01-01'}])assert.equal((await f.call('/api/life-tree/events/video-invalid',15,'PUT',video(extra))).status,400);
+  for(const branch of ['self','ideas','projects','society'])await f.ok('/api/life-tree/events/video-'+branch,15,'PUT',video({videoBranch:branch}));
+  const all=await f.ok('/api/life-tree?videos=1',15);assert.equal(all.events.length,4);assert.ok(all.events.every(e=>e.topic_id));assert.equal((await f.ok('/api/life-tree?branch=ideas&videos=1',15)).events.length,1);
+  for(const extra of [{videoBranch:'other'},{videoBranch:'monthly'},{url:''},{url:'https://youtube.com/watch?v=secret'},{precision:'unknown'},{date:'2026-02-30'},{date:'2099-01-01'}])assert.equal((await f.call('/api/life-tree/events/video-invalid',15,'PUT',video(extra))).status,400);
   assert.equal((await f.call('/api/life-tree?branch=monthly&videos=1',15)).status,400);
   assert.equal((await f.call('/api/life-tree/events/video-self',15,'PUT',video({videoBranch:null,revision:1}))).status,400);
   const race=await Promise.all(['one','two'].map(title=>f.call('/api/life-tree/events/video-self',15,'PUT',video({revision:1,title}))));assert.deepEqual(race.map(r=>r.status).sort(),[200,409]);

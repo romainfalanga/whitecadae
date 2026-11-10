@@ -82,3 +82,18 @@ test('late reservation after file replacement is cancelled instead of overwritin
   await new Promise(resolve=>setImmediate(resolve));Object.assign(d,{file:{...file,name:'replacement.mp4'},requestId:'new-request',uploadId:null,durationChecked:false});release({uploadId:'old-reservation',uploadURL:'https://upload.videodelivery.net/token'});
   await assert.rejects(promise,{name:'AbortError'});assert.equal(d.uploadId,null);assert.equal(d.requestId,'new-request');assert.equal(d.durationChecked,false);assert.equal(requests[1].path,'/api/loge/uploads/old-reservation');assert.equal(requests[1].method,'DELETE');assert.equal(d.abandonedUploads.length,0);
 });
+
+test('Videography uses its own upload scope for reservation, polling and ready retry',async()=>{
+  const d=draft(),calls=[];let ready=false;
+  const request=async(path,init={})=>{calls.push([path,init.method||'GET']);if(init.method==='POST')return {uploadId:'life-id',uploadURL:'https://upload.videodelivery.net/token'};return {status:ready?'ready':'processing'};};
+  await ensureLogeUpload(d,options({basePath:'/api/life-tree/uploads',request,upload:async()=>{ready=true;}}));
+  await ensureLogeUpload(d,options({basePath:'/api/life-tree/uploads',request,upload:async()=>assert.fail('already ready')}));
+  assert.deepEqual(calls,[['/api/life-tree/uploads','POST'],['/api/life-tree/uploads/life-id','GET'],['/api/life-tree/uploads/life-id','GET']]);
+});
+
+test('Videography cancels a late replaced reservation in its own scope',async()=>{
+  const d=draft(),calls=[];let release;
+  const pending=ensureLogeUpload(d,options({basePath:'/api/life-tree/uploads',request:(path,init={})=>{calls.push([path,init.method]);return init.method==='POST'?new Promise(resolve=>release=resolve):Promise.resolve({ok:true});}}));
+  await new Promise(resolve=>setImmediate(resolve));d.requestId='replacement';d.file=null;release({uploadId:'abandoned'});
+  await assert.rejects(pending,{name:'AbortError'});assert.deepEqual(calls,[['/api/life-tree/uploads','POST'],['/api/life-tree/uploads/abandoned','DELETE']]);
+});

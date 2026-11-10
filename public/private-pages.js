@@ -4,10 +4,12 @@ import {PRIVATE_HELP} from './private-help.js';
 import {chatViewport} from './private-chat-scroll.js';
 import {normalizeMechanism,mechanismFields} from './mechanism-model.js';
 import {VIDEO_BRANCHES,videoLabel} from './video-model.js';
-import {youtubeId,youtubeLink,youtubeEmbed} from './youtube-video.js';
+import {youtubeId,youtubeEmbed} from './youtube-video.js';
+import {ensureLogeUpload,validateLogeFile} from './loge-upload.js';
+import {createStreamPlayer} from './loge-stream-player.js';
 let session=null;
 export function leave(){
-  if(!session)return;clearInlineComments();session.controller.abort();clearTimeout(session.timer);
+  if(!session)return;clearInlineComments();destroyVideoPlayers();session.dialogCleanup?.();session.controller.abort();clearTimeout(session.timer);
   document.removeEventListener('visibilitychange',session.visibility);
   window.removeEventListener('beforeunload',session.beforeUnload);
   session.dialog?.remove();session.ctx.app.style.visibility='';session.ctx.app.inert=false;session=null;
@@ -37,19 +39,19 @@ async function run(node,action){
 function heading(title,subtitle='',actions='',help=''){return `<header class="private-heading ${help?'has-help ':''}${['Mécanismes','Vidéographie','Carré d’AS'].includes(title)?'center-mobile':''}"><div><h1>${title}</h1>${subtitle?`<p class="private-subtitle">${subtitle}</p>`:''}</div>${help?`<a class="private-info" href="${help}/comprendre" data-link aria-label="Comprendre ${esc(title)}"><span aria-hidden="true">i</span></a>`:''}${actions}</header>`;}
 function helpPage(base){const help=PRIVATE_HELP[base];shell(`<article class="private-explanation">${heading(help.title)}${help.paragraphs.map(p=>`<p>${esc(p)}</p>`).join('')}<footer class="private-explanation-footer"><a class="private-back" href="${base}" data-link>Revenir à ${esc(help.title)}</a></footer></article>`);}
 
-function shell(html){session.ctx.app.innerHTML=`<section class="private-page">${html}<p id="private-status" class="private-status" role="status"></p></section>`;}
+function shell(html){destroyVideoPlayers();session.ctx.app.innerHTML=`<section class="private-page">${html}<p id="private-status" class="private-status" role="status"></p></section>`;}
 function avatar(person){return `<span class="ace-avatar">${person?.avatar?`<img src="${esc(person.avatar)}" alt="" loading="lazy" decoding="async">`:esc(person?.username?.slice(0,1)||'·')}</span>`;}
 function modal(title,html){
-  session.dialog?.remove();session.dialogCheck=null;const dialog=document.createElement('dialog');dialog.className='private-dialog';
+  pauseVideoPlayers();session.dialogCleanup?.();session.dialogCleanup=null;destroyVideoPlayers(session.dialog);session.dialog?.remove();session.dialogCheck=null;const dialog=document.createElement('dialog');dialog.className='private-dialog';
   dialog.innerHTML=`<button type="button" class="private-close" aria-label="Fermer">×</button><h2>${esc(title)}</h2>${html}<p class="private-status" role="status" id="dialog-status"></p>`;
   document.body.append(dialog);session.dialog=dialog;
   const mayClose=()=>!session?.dirty||confirm('Fermer sans enregistrer tes modifications ?');
   dialog.querySelector('.private-close').onclick=()=>{if(mayClose())dialog.close();};
   dialog.addEventListener('cancel',event=>{if(!mayClose())event.preventDefault();});
-  dialog.addEventListener('close',()=>{session&&(session.dirty=false);dialog.remove();if(session?.dialog===dialog)session.dialog=null;});dialog.showModal();return dialog;
+  dialog.addEventListener('close',()=>{destroyVideoPlayers(dialog);if(session?.dialog===dialog){session.dialogCleanup?.();session.dialogCleanup=null;session.dirty=false;session.dialog=null;}dialog.remove();});dialog.showModal();return dialog;
 }
 function closeModal(){session?.dialog?.close();}
-async function verifyIdentity(){const current=await api('/api/me');if(current.user?.id!==session.user){session.ctx.app.innerHTML='';session.dialog?.remove();session.ctx.navigate('/connexion?retour='+encodeURIComponent(location.pathname));return false;}return true;}
+async function verifyIdentity(){const current=await api('/api/me');if(current.user?.id!==session.user){destroyVideoPlayers();session.dialogCleanup?.();session.ctx.app.innerHTML='';session.dialog?.remove();session.ctx.navigate('/connexion?retour='+encodeURIComponent(location.pathname));return false;}return true;}
 export async function page(path,ctx){
   if(!['/game-master-orange','/game-master-blanc','/signalements','/videographie','/videographie/archives','/videographie/comprendre'].includes(path)){leave();return ctx.navigate('/',true);}
   leave();const s=session={ctx,user:ctx.state.user?.id,controller:new AbortController(),timer:null,dialog:null,dirty:false};
@@ -59,8 +61,8 @@ export async function page(path,ctx){
   s.beforeUnload=e=>{if(s.dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',s.beforeUnload);
   s.visibility=async()=>{
     if(!live(s))return;
-    if(document.hidden){ctx.app.style.visibility='hidden';ctx.app.inert=true;if(s.dialog)s.dialog.style.visibility='hidden';clearTimeout(s.timer);}
-    else{try{if(await verifyIdentity()){if(s.poll)await s.poll();ctx.app.style.visibility='';ctx.app.inert=false;if(s.dialog)s.dialog.style.visibility='';schedule();}}catch(e){ctx.app.innerHTML='<p>Reconnecte-toi pour retrouver cet espace.</p>';ctx.app.style.visibility='';ctx.app.inert=false;s.dialog?.remove();}}
+    if(document.hidden){pauseVideoPlayers();ctx.app.style.visibility='hidden';ctx.app.inert=true;if(s.dialog)s.dialog.style.visibility='hidden';clearTimeout(s.timer);}
+    else{try{if(await verifyIdentity()){if(s.poll)await s.poll();ctx.app.style.visibility='';ctx.app.inert=false;if(s.dialog)s.dialog.style.visibility='';schedule();}}catch(e){destroyVideoPlayers();s.dialogCleanup?.();ctx.app.innerHTML='<p>Reconnecte-toi pour retrouver cet espace.</p>';ctx.app.style.visibility='';ctx.app.inert=false;s.dialog?.remove();}}
   };document.addEventListener('visibilitychange',s.visibility);
   try{
     if(path==='/game-master-orange'){await api('/api/game-master-orange');gameMaster();return;}
@@ -68,7 +70,7 @@ export async function page(path,ctx){
     const helpBase=path.endsWith('/comprendre')?path.slice(0,-11):null;
     if(PRIVATE_HELP[helpBase]){await api(helpBase==='/mecanisme'?'/api/mechanisms':helpBase==='/videographie'?'/api/life-tree?videos=1':'/api/ace-circles');helpPage(helpBase);return;}
     const slot=Number(path.split('/')[2])||null,topic=/^\/carre-d-as\/fil\/(\d+)$/.exec(path);
-    const first=path.startsWith('/mecanisme')?'/api/mechanisms'+(slot?'/'+slot:''):path==='/videographie'?'/api/life-tree?videos=1':path==='/videographie/archives'?'/api/life-tree?archive=1':topic?'/api/ace-circles/topics/'+topic[1]:'/api/ace-circles';
+    const first=path.startsWith('/mecanisme')?'/api/mechanisms'+(slot?'/'+slot:''):path==='/videographie'?'/api/life-tree?videos=1&branch=self':path==='/videographie/archives'?'/api/life-tree?archive=1':topic?'/api/ace-circles/topics/'+topic[1]:'/api/ace-circles';
     // Each endpoint checks the current user and level. Fetch consent alongside
     // the first resource, without repeating the session/progression request.
     const [privacy,data]=await Promise.all([api('/api/private/consent'),api(first)]);
@@ -108,22 +110,23 @@ function dateLabel(event){
   return format(event.sort_date)+(event.end_date?' — '+format(event.end_date):'');
 }
 async function videoPage(){
-  session.videos={branch:'',events:[],next:null,request:0};
-  shell(`${heading('Vidéographie','','','/videographie')}<nav class="video-branches" aria-label="Rubriques de ma Vidéographie">${[['','Toutes'],...VIDEO_BRANCHES].map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key===''}">${label}</button>`).join('')}</nav><div class="private-actions video-add-action">${button('Ajouter une vidéo','video-add','')}</div><div class="video-section-heading"><h2 id="video-section-title">Toutes les vidéos</h2></div><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`);
+  session.videos={branch:'self',events:[],next:null,request:0};
+  shell(`${heading('Vidéographie','','','/videographie')}<nav class="video-branches" aria-label="Rubriques de ma Vidéographie">${VIDEO_BRANCHES.map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${label}</button>`).join('')}</nav><div class="private-actions video-add-action">${button('Ajouter une vidéo','video-add','')}</div><div class="video-section-heading"><h2 id="video-section-title">${esc(videoLabel('self'))}</h2></div><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`);
   bind('video-add',()=>videoForm(null,null,session.videos.branch||'self'));
   bind('video-more',()=>loadVideos());
-  const select=async branch=>{if(session.videos.branch===branch)return;session.videos.branch=branch;document.querySelectorAll('[data-video-branch]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.videoBranch===branch)));el('video-section-title').textContent=branch?videoLabel(branch):'Toutes les vidéos';await loadVideos(true);};
+  const select=async branch=>{if(session.videos.branch===branch)return;session.videos.branch=branch;document.querySelectorAll('[data-video-branch]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.videoBranch===branch)));el('video-section-title').textContent=videoLabel(branch);await loadVideos(true);};
   document.querySelectorAll('[data-video-branch]').forEach(b=>b.onclick=()=>run(b,()=>select(b.dataset.videoBranch)));
   await loadVideos(true);
 }
 async function loadVideos(reset=false){
   const state=session.videos,request=++state.request;
-  if(reset){clearInlineComments();state.events=[];state.next=null;el('video-list').replaceChildren();el('video-more').hidden=true;}
+  if(reset){clearInlineComments();destroyVideoPlayers(el('video-list'));state.events=[];state.next=null;el('video-list').replaceChildren();el('video-more').hidden=true;}
   const query=new URLSearchParams({videos:'1'});if(state.branch)query.set('branch',state.branch);if(state.next)query.set('after',state.next);
   const data=await api('/api/life-tree?'+query);if(session.videos!==state||state.request!==request)return;
   state.events.push(...data.events);state.next=data.next;
   // Append only the new page so loading more videos never restarts a player.
-  el('video-list').insertAdjacentHTML('beforeend',data.events.map((e,index)=>`<article class="video-card" data-video="${esc(e.id)}"><div class="video-card-top"><span>${esc(videoLabel(e.video_branch))}</span><time>${esc(dateLabel(e))}</time></div><h3>${esc(e.title)}</h3>${inlineVideoPlayer(e.creation?.url,e.title,reset&&index===0)}<div class="video-card-footer">${button(youtubeId(e.creation?.url)?'Modifier':'Ajouter le lien','','subtle',`data-video-edit="${esc(e.id)}"`)}${e.topic_id&&session.ctx.state.access?.aceSquare?button('AS','','quiet',`data-video-comments="${e.topic_id}" aria-expanded="false" aria-controls="as-comments-${e.topic_id}"`):''}</div></article>`).join(''));
+  el('video-list').insertAdjacentHTML('beforeend',data.events.map((e,index)=>`<article class="video-card" data-video="${esc(e.id)}"><div class="video-card-top"><span>${esc(videoLabel(e.video_branch))}</span><time>${esc(dateLabel(e))}</time></div><h3>${esc(e.title)}</h3>${eventVideoPlayer(e,true,reset&&index===0)}<div class="video-card-footer">${button('Modifier','','subtle',`data-video-edit="${esc(e.id)}"`)}${e.topic_id&&session.ctx.state.access?.aceSquare?button('AS','','quiet',`data-video-comments="${e.topic_id}" aria-expanded="false" aria-controls="as-comments-${e.topic_id}"`):''}</div></article>`).join(''));
+  wireVideoPlayers(el('video-list'),()=>Promise.resolve());
   if(!state.events.length)el('video-list').innerHTML='<div class="video-empty"><p>Aucune vidéo dans cette rubrique.</p></div>';
   el('video-more').hidden=!state.next;
   el('video-list').querySelectorAll('[data-video-edit]').forEach(b=>b.onclick=()=>run(b,async()=>{const data=await api('/api/life-tree/events/'+b.dataset.videoEdit);videoForm(data.event);}));
@@ -164,22 +167,122 @@ async function loadDrafts(){
   session.dialog.querySelectorAll('[data-erase-draft]').forEach(b=>b.onclick=()=>run(b,async()=>{await api('/api/life-tree/drafts/'+b.dataset.eraseDraft,{method:'DELETE',body:{}});b.closest('.ace-invitation').remove();}));
 }
 function videoForm(event=null,draft=null,branch='self'){
-  closeModal();const d=draft?.payload.event||event||{},id=event?.id||draft?.id||uid();
+  closeModal();const s=session,d=draft?.payload.event||event||{},id=event?.id||draft?.id||uid();
   let revision=event?.revision||d.revision||0;const draftRevision=draft?.revision||0;
-  branch=d.videoBranch||d.video_branch||branch;if(['society','monthly'].includes(branch))branch='ideas';
+  branch=d.videoBranch||d.video_branch||branch;if(branch==='monthly')branch='ideas';
   const now=new Date(),today=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-  const date=d.date||d.video_month||d.sort_date||today;
-  modal(event?'Modifier la vidéo':'Ajouter une vidéo',`<form id="video-form"><label>Titre<input name="title" required maxlength="140" value="${esc(d.title||'')}"></label><label>Lien YouTube<input type="url" name="url" required maxlength="2048" inputmode="url" autocomplete="off" aria-describedby="video-link-help" placeholder="https://youtu.be/…" value="${esc(d.url||d.creation?.url||'')}"></label><p id="video-link-help" class="private-note">Publie ta vidéo en « Non répertoriée » sur YouTube, puis colle son lien ici.</p><label>Catégorie<select name="videoBranch">${VIDEO_BRANCHES.map(([key,label])=>`<option value="${key}" ${branch===key?'selected':''}>${label}</option>`).join('')}</select></label>${dateFields('videoDate',date,'Date')}<div class="private-actions form-actions"><button class="private-button" type="submit">Enregistrer la vidéo</button>${event?button('Supprimer','video-delete','subtle'):''}</div><div id="video-conflict" hidden>${button('Comparer la version enregistrée','video-compare','quiet')}<div id="video-current"></div></div></form>`);
-  const form=el('video-form');form.oninput=()=>{session.dirty=true;};
+  const date=d.date||d.video_month||d.sort_date||today,existing=!!event&&(d.creation?.videoProvider==='stream'||!!youtubeId(d.creation?.url));
+  const dialog=modal(event?'Modifier la vidéo':'Ajouter une vidéo',`<form id="video-form"><label>Titre<input name="title" required maxlength="140" value="${esc(d.title||'')}"></label><label>${existing?'Remplacer la vidéo (facultatif)':'Vidéo'}<input type="file" name="video" accept="video/*" aria-describedby="video-file-help" ${existing?'':'required'}></label><p id="video-file-help" class="private-note">200 Mo et 30 minutes maximum.${existing?' Sans nouveau fichier, la vidéo actuelle est conservée.':''}</p><p id="video-upload-state" class="private-note" role="status"></p><progress id="video-upload-progress" max="100" value="0" hidden aria-label="Progression de l’envoi"></progress>${button('Annuler l’envoi','video-upload-cancel','subtle','hidden')}${button('Annuler l’envoi précédent et recommencer','video-upload-restart','subtle','hidden')}<label>Catégorie<select name="videoBranch">${VIDEO_BRANCHES.map(([key,label])=>`<option value="${key}" ${branch===key?'selected':''}>${label}</option>`).join('')}</select></label>${dateFields('videoDate',date,'Date')}<div class="private-actions form-actions"><button class="private-button" type="submit">Enregistrer la vidéo</button>${event?button('Supprimer','video-delete','subtle'):''}</div><div id="video-conflict" hidden>${button('Comparer la version enregistrée','video-compare','quiet')}<div id="video-current"></div></div></form>`);
+  const form=el('video-form'),picker=form.elements.video,upload={file:null,requestId:uid(),abandonedUploads:[]};let active=null,closed=false,committed=false,publishing=false;
+  const current=()=>live(s)&&!closed&&s.dialog===dialog;
+  const uploadRequest=async(path,options={})=>{
+    try{return await s.ctx.api(path,{...options,headers:{'X-WC-User':String(s.user)}});}
+    catch(error){
+      if(live(s)&&([401,403].includes(error.status)||(error.status===409&&/compte connecté a changé/i.test(error.message)))){
+        // A failed identity check must also remove content already on screen.
+        leave();s.ctx.app.innerHTML='<section class="private-page"><p>Cet espace n’est plus accessible avec la session actuelle.</p><a class="private-back" href="/connexion?retour=%2Fvideographie" data-link>Vérifier mon compte</a></section>';
+      }
+      throw error;
+    }
+  };
+  async function cancelAbandoned(){
+    for(const uploadId of [...upload.abandonedUploads]){
+      await uploadRequest('/api/life-tree/uploads/'+encodeURIComponent(uploadId),{method:'DELETE',body:{}});
+      upload.abandonedUploads=upload.abandonedUploads.filter(value=>value!==uploadId);
+    }
+  }
+  function resetUpload(file=null){
+    active?.abort();if(upload.uploadId)upload.abandonedUploads.push(upload.uploadId);
+    Object.assign(upload,{file,requestId:uid(),uploadId:null,uploadURL:null,uploadSent:false,durationChecked:false,uploadStatus:null,blockedUploadId:null});
+    if(current())el('video-upload-restart').hidden=true;
+    void cancelAbandoned().catch(()=>{});
+  }
+  const dispose=()=>{if(closed)return;closed=true;active?.abort();if(!committed&&!publishing)resetUpload();s.controller.signal.removeEventListener('abort',dispose);};
+  s.dialogCleanup=dispose;s.controller.signal.addEventListener('abort',dispose,{once:true});
+  const display=(message='',progress)=>{
+    if(!current())return;el('video-upload-state').textContent=message;el('video-upload-progress').hidden=progress===undefined;if(progress!==undefined)el('video-upload-progress').value=progress;
+    el('video-upload-cancel').hidden=!upload.file;
+  };
+  form.oninput=()=>{s.dirty=true;};
+  picker.onchange=()=>{
+    const file=picker.files?.[0];if(!file)return;
+    try{validateLogeFile(file);}catch(error){picker.value='';resetUpload();display();status(error.message,true,'dialog-status');return;}
+    resetUpload(file);display(file.name);status('');s.dirty=true;
+  };
+  bind('video-upload-cancel',()=>{resetUpload();picker.value='';display('Envoi annulé.');});
+  bind('video-upload-restart',async()=>{
+    const blocked=upload.blockedUploadId;if(!blocked||!confirm('Annuler ton envoi précédent, y compris s’il est ouvert dans un autre onglet, et recommencer ?'))return;
+    await uploadRequest('/api/life-tree/uploads/'+encodeURIComponent(blocked),{method:'DELETE',body:{}});
+    if(!current())return;
+    const file=upload.file;resetUpload(file);display(file?.name||'');form.onsubmit({preventDefault(){}});
+  });
   const precision=d.precision==='month'?'month':'day';configureDate(el('videoDate-fields'),precision);
-  const body=()=>{const url=youtubeLink(form.elements.url.value);if(!url){form.elements.url.focus();throw new Error('Ajoute un lien de vidéo YouTube valide (https://…).');}const date=readDate(form,'videoDate',precision);return {title:form.elements.title.value,videoBranch:form.elements.videoBranch.value,entryType:'creation',medium:'vidéo',url,work:d.work||d.creation?.work||'',understanding:d.understanding||'',story:d.story||'',feelings:d.feelings||'',resources:d.resources||'',kind:d.kind||'autre',impact:d.impact||'à explorer',themes:d.themes||[],precision,date,revision};};
-  const afterSave=()=>session.videos?loadVideos(true):session.ctx.navigate('/videographie');
-  form.onsubmit=e=>{e.preventDefault();run(form.querySelector('[type=submit]'),async()=>{try{await api('/api/life-tree/events/'+id,{method:'PUT',body:body()});if(draftRevision)await api('/api/life-tree/drafts/'+id,{method:'DELETE',body:{}});session.dirty=false;closeModal();await afterSave();}catch(error){if(error.status===409&&revision>0)el('video-conflict').hidden=false;throw error;}});};
-  bind('video-delete',async()=>{if(!confirm('Supprimer cette fiche et tous les commentaires qui lui sont liés ?'))return;await api('/api/life-tree/events/'+id,{method:'DELETE',body:{revision}});session.dirty=false;closeModal();await afterSave();});
-  bind('video-compare',async()=>{const current=await api('/api/life-tree/events/'+id);el('video-current').innerHTML=`<section class="private-panel"><h3>${esc(current.event.title)}</h3>${videoReading(current.event)}${button('Conserver ma saisie','video-keep','quiet')}</section>`;wireVideoPlayers(el('video-current'),()=>api('/api/life-tree/events/'+id));bind('video-keep',()=>{revision=current.event.revision;el('video-conflict').hidden=true;status('Ta saisie est conservée. Tu peux l’enregistrer après comparaison.',false,'dialog-status');});});
+  const body=()=>({title:form.elements.title.value,videoBranch:form.elements.videoBranch.value,entryType:'creation',medium:'vidéo',url:upload.file?'':(d.url||d.creation?.url||''),work:d.work||d.creation?.work||'',understanding:d.understanding||'',story:d.story||'',feelings:d.feelings||'',resources:d.resources||'',kind:d.kind||'autre',impact:d.impact||'à explorer',themes:d.themes||[],precision,date:readDate(form,'videoDate',precision),revision});
+  const afterSave=()=>s.videos?loadVideos(true):s.ctx.navigate('/videographie');
+  form.onsubmit=e=>{
+    e.preventDefault();if(active)return;
+    run(form.querySelector('[type=submit]'),async()=>{
+      const controller=new AbortController();active=controller;
+      const check=()=>{if(!current()||controller.signal.aborted)throw new DOMException('Envoi interrompu','AbortError');};
+      try{
+        let payload=body();if(!existing&&!upload.file)throw Error('Choisis une vidéo.');
+        await cancelAbandoned();check();
+        if(upload.file){
+          payload.uploadId=await ensureLogeUpload(upload,{request:uploadRequest,basePath:'/api/life-tree/uploads',signal:controller.signal,onState:(state,progress)=>{
+            if(!current())return;
+            const labels={checking:'Vérification de la vidéo…',preparing:'Préparation de l’envoi…',uploading:`Envoi de la vidéo : ${progress||0} %`,processing:'Vidéo reçue. Préparation en cours…',ready:'Vidéo prête. Enregistrement…'};
+            display(labels[state]||'',state==='uploading'?progress:undefined);
+          }});check();
+        }
+        payload={...body(),...(payload.uploadId?{uploadId:payload.uploadId}:{})};
+        // Freeze the selection during the final write: cancelling an upload does
+        // not undo a video which the server has already attached to the event.
+        picker.disabled=true;el('video-upload-cancel').disabled=true;
+        publishing=true;await uploadRequest('/api/life-tree/events/'+id,{method:'PUT',body:payload});committed=true;publishing=false;check();
+        if(draftRevision)await api('/api/life-tree/drafts/'+id,{method:'DELETE',body:{}});
+        s.dirty=false;closeModal();await afterSave();
+      }catch(error){
+        if(current()&&!controller.signal.aborted&&error.name!=='AbortError'){if(error.status===409&&error.data?.uploadId){upload.blockedUploadId=error.data.uploadId;el('video-upload-restart').hidden=false;}display(error.message);form.querySelector('[type=submit]').textContent='Réessayer';if(error.status===409&&revision>0)el('video-conflict').hidden=false;}
+        throw error;
+      }finally{publishing=false;if(closed&&!committed)resetUpload();if(active===controller)active=null;if(current()){picker.disabled=false;el('video-upload-cancel').disabled=false;}}
+    });
+  };
+  bind('video-delete',async()=>{if(!confirm('Supprimer cette fiche et tous les commentaires qui lui sont liés ?'))return;await api('/api/life-tree/events/'+id,{method:'DELETE',body:{revision}});s.dirty=false;closeModal();await afterSave();});
+  bind('video-compare',async()=>{const current=await api('/api/life-tree/events/'+id);destroyVideoPlayers(el('video-current'));el('video-current').innerHTML=`<section class="private-panel"><h3>${esc(current.event.title)}</h3>${videoReading(current.event)}${button('Conserver ma saisie','video-keep','quiet')}</section>`;wireVideoPlayers(el('video-current'),()=>api('/api/life-tree/events/'+id));bind('video-keep',()=>{revision=current.event.revision;el('video-conflict').hidden=true;status('Ta saisie est conservée. Tu peux l’enregistrer après comparaison.',false,'dialog-status');});});
+}
+function destroyVideoPlayers(root=document){
+  if(!root||!session?.videoPlayers)return;
+  for(const [container,entry] of session.videoPlayers){if(root===document||root===container||root.contains(container)){entry.destroy();session.videoPlayers.delete(container);}}
+}
+function pauseVideoPlayers(except=null){
+  for(const entry of session?.videoPlayers?.values()||[])if(entry!==except)entry.player.pauseVideo();
+  document.querySelectorAll?.('.video-player iframe').forEach(frame=>frame.contentWindow?.postMessage(JSON.stringify({event:'command',func:'pauseVideo',args:[]}),'https://www.youtube-nocookie.com'));
+}
+function eventVideoPlayer(event,inline=false,eager=false,owner=session.user){
+  if(event.creation?.videoProvider==='stream')return `<div class="videography-stream" data-stream-event="${esc(event.id)}" data-stream-owner="${esc(owner)}" data-stream-title="${esc(event.title)}"></div>`;
+  return inline?inlineVideoPlayer(event.creation?.url,event.title,eager):videoPlayer(event.creation?.url,event.title);
+}
+function wireStreamPlayers(root){
+  const s=session,players=s.videoPlayers||=new Map();
+  root.querySelectorAll('[data-stream-event]').forEach(container=>{
+    if(players.has(container))return;
+    const controls=document.createElement('div');controls.className='videography-stream-controls';
+    const seek=document.createElement('input');seek.type='range';seek.min='0';seek.max='100';seek.step='0.1';seek.value='0';seek.disabled=true;seek.setAttribute('aria-label','Position de lecture');
+    const time=document.createElement('span');time.textContent='0:00 / 0:00';controls.append(seek,time);
+    let player,entry;
+    const clock=seconds=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
+    const update=()=>{if(!player)return;const duration=player.getDuration(),position=player.getCurrentTime();seek.disabled=!duration;seek.max=String(duration||100);seek.value=String(position);time.textContent=clock(position)+' / '+clock(duration);};
+    player=createStreamPlayer({container,post:{id:container.dataset.streamEvent,title:container.dataset.streamTitle},getPlayback:id=>api('/api/life-tree/events/'+encodeURIComponent(id)+'/playback'+(String(s.user)===container.dataset.streamOwner?'':'?owner='+encodeURIComponent(container.dataset.streamOwner))),isEligible:()=>live(s)&&container.isConnected&&!document.hidden,onReady:update,onState:state=>{
+      if(state===1){pauseVideoPlayers(entry);document.querySelectorAll('audio').forEach(audio=>audio.pause());}update();
+    }});
+    player.element.append(controls);
+    seek.oninput=()=>{player.seekTo(Number(seek.value));update();};
+    const events=['timeupdate','durationchange','loadedmetadata'];for(const name of events)player.video.addEventListener(name,update);
+    entry={player,destroy(){for(const name of events)player.video.removeEventListener(name,update);player.destroy();}};players.set(container,entry);
+  });
 }
 function inlineVideoPlayer(url,title,eager=false){
-  const src=youtubeEmbed(url,false);if(!src)return '<p class="private-note">Le lien de cette vidéo n’a pas encore été ajouté.</p>';
+  const src=youtubeEmbed(url,false)+'&enablejsapi=1';if(!youtubeId(url))return '<p class="private-note">Le lien de cette vidéo n’a pas encore été ajouté.</p>';
   return `<div class="video-player"><iframe src="${esc(src)}" title="${esc('Lire la vidéo : '+title)}" loading="${eager?'eager':'lazy'}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`;
 }
 function videoPlayer(url,title){
@@ -187,21 +290,22 @@ function videoPlayer(url,title){
   return `<div class="video-player" data-video-player="${id}"><button type="button" class="video-play" aria-label="Lire la vidéo : ${esc(title)}"><span>Lire la vidéo</span><small>YouTube</small></button></div>`;
 }
 function wireVideoPlayers(root,authorize){
+  wireStreamPlayers(root);
   root.querySelectorAll('[data-video-player]').forEach(container=>{
-    const play=container.querySelector('button');play.onclick=()=>run(play,async()=>{
+    const play=container.querySelector('button');if(!play)return;play.onclick=()=>run(play,async()=>{
       await authorize();if(!container.isConnected)return;
-      document.querySelectorAll('audio').forEach(audio=>audio.pause());
+      pauseVideoPlayers();document.querySelectorAll('audio').forEach(audio=>audio.pause());
       const frame=document.createElement('iframe');frame.title=play.getAttribute('aria-label');
-      frame.src=youtubeEmbed('https://youtu.be/'+container.dataset.videoPlayer);
+      frame.src=youtubeEmbed('https://youtu.be/'+container.dataset.videoPlayer)+'&enablejsapi=1';
       frame.allow='autoplay; encrypted-media; picture-in-picture; fullscreen';frame.allowFullscreen=true;
       frame.referrerPolicy='strict-origin-when-cross-origin';container.replaceChildren(frame);
     });
   });
 }
-function videoReading(e){return `${videoPlayer(e.creation?.url,e.title)}<div class="life-reading"><p class="topic-kind">${esc(videoLabel(e.video_branch))}</p><p class="private-note">${esc(dateLabel(e))}</p>${e.creation?.work?`<p>${esc(e.creation.work)}</p>`:''}${e.understanding?`<h3>À approfondir</h3><p>${esc(e.understanding)}</p>`:''}</div>`;}
+function videoReading(e,owner=session.user){return `${eventVideoPlayer(e,false,false,owner)}<div class="life-reading"><p class="topic-kind">${esc(videoLabel(e.video_branch))}</p><p class="private-note">${esc(dateLabel(e))}</p>${e.creation?.work?`<p>${esc(e.creation.work)}</p>`:''}${e.understanding?`<h3>À approfondir</h3><p>${esc(e.understanding)}</p>`:''}</div>`;}
 async function videoDetail(data,owner){
   const event=data.event,own=owner===session.user;
-  modal(event.title,videoReading(event)+`<div class="private-actions">${own?button('Modifier','video-edit','quiet'):''}${event.topic_id&&session.ctx.state.access?.aceSquare?button('AS','video-comments',''):''}</div>`);
+  modal(event.title,videoReading(event,owner)+`<div class="private-actions">${own?button('Modifier','video-edit','quiet'):''}${event.topic_id&&session.ctx.state.access?.aceSquare?button('AS','video-comments',''):''}</div>`);
   wireVideoPlayers(session.dialog,()=>api('/api/life-tree/events/'+event.id+(own?'':'?owner='+owner)));
   bind('video-edit',()=>videoForm(event));
   bind('video-comments',async()=>{if(own)await api('/api/ace-circles',{method:'POST',body:{}});closeModal();session.ctx.navigate('/carre-d-as/fil/'+event.topic_id);});
@@ -325,7 +429,8 @@ async function topicPage(id){
   shell(`<a class="private-back" href="${data.topic.owner===session.user?'/videographie':'/carre-d-as#carre-'+data.topic.owner}" data-link>${data.topic.owner===session.user?'Revenir à mes vidéos':'Revenir au carré'}</a><article class="topic-thread ace-chat"><span class="topic-kind">${esc(data.topic.videoBranch?videoLabel(data.topic.videoBranch):topicKinds[data.topic.kind])}</span>${heading(esc(data.topic.title))}<div class="topic-source" id="topic-source"></div><div class="topic-replies" id="topic-replies" role="log" aria-live="polite" aria-relevant="additions"></div>${button('Voir les nouvelles réponses','topic-new','quiet','hidden')}<form id="topic-compose" class="ace-composer" ${data.topic.archived?'hidden':''}><p id="topic-reply-to" class="ace-reply" hidden></p><label class="sr-only" for="topic-text">Ta réponse</label><textarea id="topic-text" maxlength="4000" required rows="3" placeholder="Ton regard sur ce partage…"></textarea><div class="private-actions">${button('Annuler la réponse','topic-cancel','subtle','hidden')}<span></span><button class="private-button" type="submit">Répondre</button></div></form></article>`);
   const showSource=()=>{
     const t=thread.topic;
-    el('topic-source').innerHTML=t.video?`${videoPlayer(t.video.url,t.title)}<div class="life-reading">${t.video.notes?`<p>${esc(t.video.notes)}</p>`:''}${t.video.understanding?`<h3>À approfondir</h3><p>${esc(t.video.understanding)}</p>`:''}</div>`:t.kind==='mechanism'?mechanismReading(t.mechanism):`${t.kind==='link'?`<p class="life-reading">${esc(t.link)}</p>`:''}<div class="private-actions">${button(t.kind==='creation'?'Voir la création':t.kind==='link'?'Voir le premier élément':'Voir l’événement','topic-event','quiet')}${t.targetId?button('Voir le second élément','topic-target','quiet'):''}</div>`;
+    destroyVideoPlayers(el('topic-source'));
+    el('topic-source').innerHTML=t.video?`${eventVideoPlayer({id:t.eventId,title:t.title,creation:t.video},false,false,t.owner)}<div class="life-reading">${t.video.notes?`<p>${esc(t.video.notes)}</p>`:''}${t.video.understanding?`<h3>À approfondir</h3><p>${esc(t.video.understanding)}</p>`:''}</div>`:t.kind==='mechanism'?mechanismReading(t.mechanism):`${t.kind==='link'?`<p class="life-reading">${esc(t.link)}</p>`:''}<div class="private-actions">${button(t.kind==='creation'?'Voir la création':t.kind==='link'?'Voir le premier élément':'Voir l’événement','topic-event','quiet')}${t.targetId?button('Voir le second élément','topic-target','quiet'):''}</div>`;
     wireVideoPlayers(el('topic-source'),()=>api('/api/ace-circles/topics/'+id));
     bind('topic-event',()=>eventDetail(t.eventId,t.owner));bind('topic-target',()=>eventDetail(t.targetId,t.owner));
   };

@@ -2,7 +2,7 @@
 // Stratégie « réseau d'abord » : le site est collaboratif, on ne veut jamais
 // servir de contenu périmé. Le cache sert seulement de filet hors ligne.
 
-const CACHE = 'whitecadae-v80-loge-nav-videographie';
+const CACHE = 'whitecadae-v81-videographie-stream-publier';
 const SHELL = ['/', '/styles.css?v=wordmark-original-505ca2ef', '/app.js', '/music.css', '/music57.js', '/player.js', '/orange.js', '/attempt-timer.js', '/game-feedback.js', '/echelon.js', '/echelon.css', '/stellar.js', '/roadmap.js', '/roadmap.css', '/story.css', '/loge.js', '/loge.css', '/loge-features.js', '/loge-comment-viewport.js', '/loge-video.js', '/loge-stream-player.js', '/loge-upload.js', '/youtube-video.js', '/workshop-core.js', '/workshop-flow.js', '/manifest.webmanifest', '/icons/icon-192.png?v=white-20261030'];
 
 self.addEventListener('install', (event) => {

@@ -729,6 +729,9 @@ CREATE TABLE IF NOT EXISTS loge_stream_uploads (
     upload_url TEXT,
     state TEXT NOT NULL DEFAULT 'reserved' CHECK(state IN ('reserved','waiting','processing','ready','published','deleting','deleted')),
     post_id INTEGER UNIQUE,
+    purpose TEXT NOT NULL DEFAULT 'loge' CHECK(purpose IN ('loge','videography')),
+    event_id TEXT,
+    link_fingerprint TEXT,
     duration_seconds REAL NOT NULL DEFAULT 1800,
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     expires_at INTEGER NOT NULL,
@@ -737,5 +740,7 @@ CREATE TABLE IF NOT EXISTS loge_stream_uploads (
     cleanup_attempts INTEGER NOT NULL DEFAULT 0,
     UNIQUE(user_id,request_id)
   );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_loge_stream_outstanding ON loge_stream_uploads(user_id) WHERE state NOT IN ('published','deleted');
+CREATE UNIQUE INDEX IF NOT EXISTS idx_loge_stream_outstanding ON loge_stream_uploads(user_id,purpose) WHERE state IN ('reserved','waiting','processing','ready');
 CREATE INDEX IF NOT EXISTS idx_loge_stream_cleanup ON loge_stream_uploads(state,cleanup_after,expires_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stream_video_event ON loge_stream_uploads(user_id,event_id) WHERE purpose='videography' AND state='published';

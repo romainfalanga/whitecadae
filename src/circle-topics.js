@@ -31,7 +31,7 @@ async function topicContent(env,row){
     if(!link||!target)fail('Ce lien a été retiré.',404);
     return {title:event.title+' — '+(await unseal(env,`life:${row.owner_id}:${row.target_id}`,target.payload)).title,link:(await unseal(env,`link:${row.owner_id}:${row.event_id}:${row.target_id}`,link.payload)).label};
   }
-  return {title:event.title,...(row.video_branch?{video:{url:youtubeLink(event.creation?.url),notes:event.creation?.work||'',understanding:event.understanding||''}}:{})};
+  return {title:event.title,...(row.video_branch?{video:{url:youtubeLink(event.creation?.url),...(event.creation?.videoProvider==='stream'?{videoProvider:'stream'}:{}),notes:event.creation?.work||'',understanding:event.understanding||''}}:{})};
 }
 const topicView=(row,content)=>({id:row.id,owner:row.owner_id,kind:row.kind,eventId:row.event_id,targetId:row.target_id,slot:row.mechanism_slot,videoBranch:row.kind==='creation'?row.video_branch||null:null,archived:row.kind!=='creation'||!row.video_branch,revision:row.revision,updatedAt:row.updated_at,...content});
 async function freshTopic(env,access,user,topic){await freshAccess(env,access,user);if(!await env.DB.prepare('SELECT 1 FROM circle_topics WHERE id=?1 AND revision=?2').bind(topic.id,topic.revision).first())fail('Ce contenu a changé. Recharge la discussion.',409);}

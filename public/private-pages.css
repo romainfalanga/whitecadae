@@ -192,3 +192,21 @@
  .private-heading.has-help h1{font-size:clamp(1.7rem,8.3vw,3rem);line-height:1.2}
  .private-explanation>p{font-size:.94rem}
 }
+
+/* The shared Stream player is scoped here so a visit to Loge cannot change its layout. */
+.videography-stream{position:relative;min-width:0;margin:.3rem 0 1rem;border:1px solid #b9935652;border-radius:10px;overflow:hidden;background:#000}
+.videography-stream .loge-stream-frame{position:relative;display:block;width:100%;height:auto;max-width:none;max-height:none;aspect-ratio:16/9;overflow:hidden;background:#000}
+.videography-stream .loge-stream-video{display:block;width:100%;height:100%;object-fit:contain;background:#000}
+.videography-stream .loge-stream-play,.videography-stream .loge-stream-fullscreen{position:absolute;display:flex;align-items:center;justify-content:center;padding:0;border:1px solid #ffffff65;background:#0009;color:#fff;z-index:2;box-shadow:0 2px 12px #0003;cursor:pointer}
+.videography-stream .loge-stream-play{left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%}
+.videography-stream .loge-stream-play[hidden]{display:none}
+.videography-stream .loge-stream-play svg{display:block;width:28px;height:28px;fill:currentColor;stroke:none}
+.videography-stream .loge-stream-fullscreen{right:10px;bottom:44px;width:38px;height:38px;border-radius:50%}
+.videography-stream .loge-stream-fullscreen svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.videography-stream .loge-stream-message{position:absolute;left:10px;right:10px;bottom:86px;text-align:center;font-size:.78rem;color:#fff;background:#0009;border-radius:6px;padding:.4rem .6rem;pointer-events:none}
+.videography-stream .loge-stream-message:empty{display:none}
+.videography-stream-controls{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:.7rem;height:36px;padding:0 12px;background:#000b;color:#fff}
+.videography-stream-controls input[type=range]{width:100%;min-width:0;min-height:30px;padding:0;margin:0;border:0;accent-color:#d8b377;background:transparent;cursor:pointer}
+.videography-stream-controls span{flex:none;font-size:.7rem;font-variant-numeric:tabular-nums}
+.videography-stream .loge-stream-frame:fullscreen,.videography-stream .loge-stream-frame:-webkit-full-screen{width:100vw;height:100dvh;aspect-ratio:auto}
+#video-upload-progress{width:100%;accent-color:#d8b377}

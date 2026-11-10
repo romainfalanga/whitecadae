@@ -1,3 +1,4 @@
+import {ensureLogeStreamTables,createLogeUpload,getLogeUpload,deleteLogeUpload,readyLogeUpload,uploadIdOf,signedStreamPlayback} from './loge-stream.js';
 import {seal,unseal,tagHash,fail,text,identifier,integer} from './private-data.js';
 import {circleAccess,freshAccess,requireStorage,requireLevel} from './private-access.js';
 import {recordTopic} from './circle-topics.js';
@@ -21,15 +22,15 @@ function creationLink(value){
   if(url.protocol!=='https:'||url.username||url.password||url.hostname==='localhost'||!url.hostname.includes('.'))fail('Utilise un lien HTTPS public sans identifiants.');
   return url.href;
 }
-function validate(body){
+function validate(body,streamId=null){
   const entry_type=body.entryType||'event';if(!['event','creation'].includes(entry_type))fail('Type de contenu invalide.');
   const video_branch=body.videoBranch||null;
   if(video_branch&&!VIDEO_BRANCHES.some(([id])=>id===video_branch))fail('Rubrique invalide.');
   if(video_branch&&(entry_type!=='creation'||body.medium!=='vidéo'))fail('Ce contenu doit être une vidéo.');
   const videoUrl=video_branch?youtubeLink(body.url):null;
-  if(video_branch&&!videoUrl)fail('Ajoute un lien de vidéo YouTube valide (https://…).');
+  if(video_branch&&!streamId&&!videoUrl)fail('Ajoute un lien de vidéo YouTube valide (https://…).');
   const video_month=null;
-  const creation=entry_type==='creation'?{medium:body.medium,url:videoUrl??creationLink(body.url),work:text(body.work,12000)}:null;
+  const creation=entry_type==='creation'?{medium:body.medium,url:streamId?'':videoUrl??creationLink(body.url),work:text(body.work,12000),...(streamId?{videoProvider:'stream',uploadId:streamId}:{})}:null;
   if(creation&&(!CREATION_MEDIA.includes(creation.medium)||(!creation.url&&!creation.work&&!video_branch)))fail('Ajoute un texte ou un lien à ta création.');
   const precision=body.precision;if(!['day','month','year','period','unknown'].includes(precision))fail('Précise la forme de la date.');
   if(video_branch&&!['day','month'].includes(precision))fail('Choisis une date pour cette vidéo.');
@@ -46,7 +47,13 @@ function validateDraft(value){
   if(!Array.isArray(value.themes)||value.themes.length>12)fail('Utilise au maximum douze thèmes.');out.themes=value.themes.map(t=>text(t,60,true));out.revision=integer(value.revision||0);return {event:out};
 }
 async function unpack(env,row){
-  const {payload,owner_id,...rest}=row;return {...rest,...await unseal(env,context(owner_id,row.id),payload)};
+  const {payload,owner_id,...rest}=row,out={...rest,...await unseal(env,context(owner_id,row.id),payload)};
+  if(row.video_branch&&out.creation){
+    const upload=await eventUpload(env,owner_id,row.id);
+    if(upload)out.creation={...out.creation,videoProvider:'stream',uploadId:upload.id,url:''};
+    else if(out.creation.videoProvider!=='stream')out.creation.videoProvider='youtube';
+  }
+  return out;
 }
 function filteredQuery(url,owner){
   const values=[owner],filters=['e.owner_id=?1'];const add=(sql,value)=>{values.push(value);filters.push(sql.replace('$','?'+values.length));};
@@ -54,14 +61,26 @@ function filteredQuery(url,owner){
   for(const [key,op] of [['from','>='],['to','<=']])if(url.searchParams.get(key))add('e.sort_date'+op+'$',date(url.searchParams.get(key),'day'));
   return {values,filters,add};
 }
+async function eventUpload(env,owner,id){
+  return env.DB.prepare("SELECT * FROM loge_stream_uploads WHERE user_id=?1 AND event_id=?2 AND purpose='videography' AND state='published'").bind(owner,id).first();
+}
+async function linkFingerprint(id,revision,event){
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([id,revision,event])));
+  return Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+function queueEventMedia(env,owner,id,guard='',args=[]){
+  return env.DB.prepare(`UPDATE loge_stream_uploads SET state='deleting',upload_url=NULL,cleanup_after=0,updated_at=unixepoch()
+    WHERE user_id=?1 AND purpose='videography' AND state='published' AND event_id=?2 ${guard}`).bind(owner,id,...args);
+}
 export async function lifeRoute(request,env,url,user,body,json){
+  await ensureLogeStreamTables(env);
   const suffix=url.pathname.replace(/^\/api\/life-tree/,'').replace(/\/$/,''),method=request.method;
   // Data portability and erasure remain available even after exceptional loss
   // of progression. They never grant access to somebody else's data.
   if((suffix==='/export'&&method==='GET')||(suffix===''&&method==='DELETE')){
     if(method==='DELETE'){
       if(body.confirm!=='SUPPRIMER')fail('Confirme la suppression de ton arbre.');
-      await env.DB.batch(['DELETE FROM life_events WHERE owner_id=?1','DELETE FROM life_drafts WHERE owner_id=?1'].map(q=>env.DB.prepare(q).bind(user.id)));
+      await env.DB.batch([env.DB.prepare("UPDATE loge_stream_uploads SET state='deleting',upload_url=NULL,cleanup_after=CASE WHEN stream_id IS NULL THEN cleanup_after ELSE 0 END,updated_at=unixepoch() WHERE user_id=?1 AND purpose='videography' AND state<>'deleted'").bind(user.id),...['DELETE FROM life_events WHERE owner_id=?1','DELETE FROM life_drafts WHERE owner_id=?1'].map(q=>env.DB.prepare(q).bind(user.id))]);
       return json({ok:true});
     }
     const after=url.searchParams.get('after')||'';if(after)identifier(after);
@@ -74,7 +93,31 @@ export async function lifeRoute(request,env,url,user,body,json){
   await requireLevel(env,user,33);
   const owner=url.searchParams.has('owner')?integer(Number(url.searchParams.get('owner')),1):user.id;
   const access=await circleAccess(env,user,owner,true);
-  if(method!=='GET'){if(owner!==user.id)fail('Seul l’auteur peut modifier son arbre.',403);if(!/^\/events\/[a-zA-Z0-9_-]+$/.test(suffix))await requireStorage(env,user.id);}
+  if(method!=='GET'){if(owner!==user.id)fail('Seul l’auteur peut modifier son arbre.',403);if(!/^\/(?:events\/[a-zA-Z0-9_-]+|uploads(?:\/[0-9a-f-]+)?)$/i.test(suffix))await requireStorage(env,user.id);}
+  if(suffix==='/uploads'){
+    if(owner!==user.id)fail('Ces envois sont privés.',403);
+    if(method!=='POST')fail('Méthode indisponible.',405);
+    return createLogeUpload(body,env,user,url,json,'videography');
+  }
+  const uploading=/^\/uploads\/([0-9a-f-]+)$/i.exec(suffix);
+  if(uploading){
+    if(owner!==user.id)fail('Ces envois sont privés.',403);
+    if(method==='GET')return getLogeUpload(env,user,uploading[1],json,'videography');
+    if(method==='DELETE')return deleteLogeUpload(env,user,uploading[1],json,'videography');
+    fail('Méthode indisponible.',405);
+  }
+  const playback=/^\/events\/([a-zA-Z0-9_-]+)\/playback$/.exec(suffix);
+  if(playback){
+    if(method!=='GET')fail('Méthode indisponible.',405);
+    const id=identifier(playback[1]),row=await env.DB.prepare('SELECT id FROM life_events WHERE owner_id=?1 AND id=?2 AND video_branch IS NOT NULL').bind(owner,id).first();
+    const upload=row?await eventUpload(env,owner,id):null;if(!upload)fail('Vidéo introuvable.',404);
+    const output=await signedStreamPlayback(env,upload);
+    // Recheck membership revision and current attachment after token minting.
+    await freshAccess(env,access,user);
+    const current=await eventUpload(env,owner,id);
+    if(current?.id!==upload.id||!await env.DB.prepare('SELECT 1 FROM life_events WHERE owner_id=?1 AND id=?2 AND video_branch IS NOT NULL').bind(owner,id).first())fail('Vidéo introuvable.',404);
+    return json(output);
+  }
   if(!suffix&&method==='GET'){
     const q=filteredQuery(url,owner),tag=url.searchParams.get('theme'),entryType=url.searchParams.get('entryType');
     if(entryType){if(!['event','creation'].includes(entryType))fail('Filtre invalide.');q.add('e.entry_type=$',entryType);}
@@ -116,24 +159,52 @@ export async function lifeRoute(request,env,url,user,body,json){
     }
     if(method==='DELETE'){
       if(!row?.video_branch)await requireStorage(env,user.id);
-      const result=await env.DB.prepare('DELETE FROM life_events WHERE owner_id=?1 AND id=?2 AND revision=?3').bind(owner,id,integer(body.revision,1)).run();
+      const [result]=await env.DB.batch([env.DB.prepare('DELETE FROM life_events WHERE owner_id=?1 AND id=?2 AND revision=?3').bind(owner,id,integer(body.revision,1)),queueEventMedia(env,owner,id,'AND NOT EXISTS(SELECT 1 FROM life_events WHERE owner_id=?1 AND id=?2)')]);
       if(!result.meta.changes)fail('Cet événement a changé. Recharge-le avant de le supprimer.',409);return json({ok:true});
     }
     if(method==='PUT'){
+      if(Object.hasOwn(body,'uploadId')&&!body.videoBranch)fail('Un envoi vidéo doit appartenir à la vidéographie.');
       if(!body.videoBranch)await requireStorage(env,user.id);
-      const event=validate(body),revision=integer(body.revision);
+      const currentUpload=row?.video_branch?await eventUpload(env,owner,id):null;
+      const incoming=Object.hasOwn(body,'uploadId')?uploadIdOf(body.uploadId):null;
+      if(incoming&&!body.videoBranch)fail('Un envoi vidéo doit appartenir à la vidéographie.');
+      const event=validate(body,incoming||currentUpload?.id),revision=integer(body.revision);
+      const fingerprint=incoming?await linkFingerprint(id,revision,event):null;
+      const replay=async()=>{
+        if(!incoming)return null;
+        const linked=await env.DB.prepare("SELECT link_fingerprint FROM loge_stream_uploads WHERE id=?1 AND user_id=?2 AND event_id=?3 AND purpose='videography' AND state='published'").bind(incoming,owner,id).first();
+        if(!linked||linked.link_fingerprint!==fingerprint)return null;
+        const stored=await env.DB.prepare('SELECT * FROM life_events WHERE owner_id=?1 AND id=?2').bind(owner,id).first();
+        return stored?json({event:await unpack(env,stored)}):null;
+      };
+      const repeated=await replay();if(repeated)return repeated;
+      let upload=null;
+      if(incoming&&incoming!==currentUpload?.id){
+        try{upload=await readyLogeUpload(env,user,incoming,'videography');}catch(error){const retry=await replay();if(retry)return retry;throw error;}
+      }
+
       if(row&&(event.entry_type!==row.entry_type||!!event.video_branch!==!!row.video_branch))fail('Le type de ce contenu ne peut pas être changé.');
       const payload=await seal(env,context(owner,id),event.payload);
       if(row&&row.revision!==revision)fail('Cet événement a été modifié ailleurs. Ta saisie est conservée : recharge la version enregistrée avant de choisir.',409);
+      const eligible=upload?` AND EXISTS(SELECT 1 FROM loge_stream_uploads s WHERE s.id=?12 AND s.user_id=?2 AND s.purpose='videography' AND s.state='ready' AND s.post_id IS NULL AND s.event_id IS NULL AND s.expires_at>unixepoch())`:'';
       const statements=[revision===0?env.DB.prepare(`INSERT OR IGNORE INTO life_events(id,owner_id,sort_date,end_date,precision,kind,impact,payload,entry_type,video_branch,video_month)
-        SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11 WHERE (SELECT count(*) FROM life_events WHERE owner_id=?2)<2000`).bind(id,owner,event.sort_date,event.end_date,event.precision,event.kind,event.impact,payload,event.entry_type,event.video_branch,event.video_month):
-        env.DB.prepare("UPDATE life_events SET sort_date=?3,end_date=?4,precision=?5,kind=?6,impact=?7,payload=?8,video_branch=?10,video_month=?11,revision=revision+1,updated_at=datetime('now') WHERE id=?1 AND owner_id=?2 AND revision=?9").bind(id,owner,event.sort_date,event.end_date,event.precision,event.kind,event.impact,payload,revision,event.video_branch,event.video_month)];
+        SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11 WHERE (SELECT count(*) FROM life_events WHERE owner_id=?2)<2000${eligible}`).bind(id,owner,event.sort_date,event.end_date,event.precision,event.kind,event.impact,payload,event.entry_type,event.video_branch,event.video_month,...(upload?[upload.id]:[])):
+        env.DB.prepare(`UPDATE life_events SET sort_date=?3,end_date=?4,precision=?5,kind=?6,impact=?7,payload=?8,video_branch=?10,video_month=?11,revision=revision+1,updated_at=datetime('now') WHERE id=?1 AND owner_id=?2 AND revision=?9${eligible}`).bind(id,owner,event.sort_date,event.end_date,event.precision,event.kind,event.impact,payload,revision,event.video_branch,event.video_month,...(upload?[upload.id]:[]))];
+      if(upload){
+        statements.push(queueEventMedia(env,owner,id,'AND EXISTS(SELECT 1 FROM life_events WHERE owner_id=?1 AND id=?2 AND payload=?3)',[payload]));
+        statements.push(env.DB.prepare(`UPDATE loge_stream_uploads SET event_id=?3,link_fingerprint=?4,state='published',upload_url=NULL,duration_seconds=?5,updated_at=unixepoch()
+          WHERE id=?1 AND user_id=?2 AND purpose='videography' AND state='ready' AND post_id IS NULL AND event_id IS NULL AND expires_at>unixepoch()
+          AND EXISTS(SELECT 1 FROM life_events WHERE owner_id=?2 AND id=?3 AND payload=?6)`).bind(upload.id,owner,id,fingerprint,upload.details.duration,payload));
+        statements.push(env.DB.prepare(`UPDATE life_events SET payload=CASE WHEN EXISTS(SELECT 1 FROM loge_stream_uploads s
+          WHERE s.id=?4 AND s.user_id=?1 AND s.event_id=?2 AND s.purpose='videography' AND s.state='published') THEN payload ELSE NULL END
+          WHERE owner_id=?1 AND id=?2 AND payload=?3`).bind(owner,id,payload,upload.id));
+      }
       // Payload equality is a per-request CAS marker, including a random nonce.
       statements.push(env.DB.prepare('DELETE FROM life_tags WHERE owner_id=?1 AND event_id=?2 AND EXISTS(SELECT 1 FROM life_events WHERE id=?2 AND payload=?3)').bind(owner,id,payload));
       for(const tag of event.payload.themes)statements.push(env.DB.prepare('INSERT INTO life_tags(owner_id,event_id,tag_hash) SELECT ?1,?2,?3 WHERE EXISTS(SELECT 1 FROM life_events WHERE id=?2 AND owner_id=?1 AND payload=?4)').bind(owner,id,await tagHash(env,owner,tag),payload));
       statements.push(recordTopic(env,{owner,key:'event:'+id,kind:event.entry_type,event:id,guard:'EXISTS(SELECT 1 FROM life_events WHERE owner_id=?1 AND id=?4 AND payload=?7)',values:[payload]}));
-      const [result]=await env.DB.batch(statements);
-      if(!result.meta.changes)fail('Enregistrement non effectué : version modifiée ou limite de 2 000 événements atteinte. Ta saisie reste disponible.',409);
+      let result;try{[result]=await env.DB.batch(statements);}catch(error){if(/NOT NULL constraint failed: life_events.payload/.test(String(error?.message||error)))fail('La vidéo a expiré ou a été annulée. Ta version précédente est conservée.',409);throw error;}
+      if(!result.meta.changes){const retry=await replay();if(retry)return retry;fail('Enregistrement non effectué : version modifiée ou limite de 2 000 événements atteinte. Ta saisie reste disponible.',409);}
       return json({event:await unpack(env,await env.DB.prepare('SELECT * FROM life_events WHERE owner_id=?1 AND id=?2').bind(owner,id).first())});
     }
   }

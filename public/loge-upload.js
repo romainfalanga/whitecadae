@@ -43,19 +43,19 @@ function uploadWait(ms,signal){
     signal?.addEventListener('abort',abort,{once:true});
   });
 }
-export async function ensureLogeUpload(draft,{request,signal,onState=()=>{},upload=uploadLogeFile,duration=readLogeDuration,wait=uploadWait,maxPolls=300}={}){
+export async function ensureLogeUpload(draft,{request,signal,onState=()=>{},upload=uploadLogeFile,duration=readLogeDuration,wait=uploadWait,maxPolls=300,basePath='/api/loge/uploads'}={}){
   const file=draft.file,requestId=draft.requestId,sameDraft=()=>draft.file===file&&draft.requestId===requestId;
   const check=()=>{uploadActive(signal);if(!sameDraft())throw uploadAbort();};
   check();validateLogeFile(file);
   const state=(status,progress)=>{if(!sameDraft())return;draft.uploadStatus=status;if(progress!==undefined)draft.uploadProgress=progress;if(!signal?.aborted)onState(status,progress);};
   if(!draft.durationChecked){state('checking');const seconds=await duration(file,{signal});check();if(Number.isFinite(seconds)&&seconds>LOGE_UPLOAD_MAX_SECONDS)throw Error('La vidéo doit durer 30 minutes maximum.');draft.durationChecked=true;}
   let result;
-  if(draft.uploadId){result=await request('/api/loge/uploads/'+encodeURIComponent(draft.uploadId));check();}
+  if(draft.uploadId){result=await request(basePath+'/'+encodeURIComponent(draft.uploadId));check();}
   else{
-    state('preparing');result=await request('/api/loge/uploads',{method:'POST',body:{requestId,filename:file.name,size:file.size}});
+    state('preparing');result=await request(basePath,{method:'POST',body:{requestId,filename:file.name,size:file.size}});
     if(!sameDraft()){
       draft.abandonedUploads||=[];draft.abandonedUploads.push(result.uploadId);
-      try{await request('/api/loge/uploads/'+encodeURIComponent(result.uploadId),{method:'DELETE',body:{}});draft.abandonedUploads=draft.abandonedUploads.filter(id=>id!==result.uploadId);}catch{}
+      try{await request(basePath+'/'+encodeURIComponent(result.uploadId),{method:'DELETE',body:{}});draft.abandonedUploads=draft.abandonedUploads.filter(id=>id!==result.uploadId);}catch{}
       throw uploadAbort();
     }
     // Remember a reservation even if navigation happened while its response arrived.
@@ -71,7 +71,7 @@ export async function ensureLogeUpload(draft,{request,signal,onState=()=>{},uplo
   }
   state('processing');
   for(let count=0;count<maxPolls;count++){
-    check();result=await request('/api/loge/uploads/'+encodeURIComponent(draft.uploadId));check();
+    check();result=await request(basePath+'/'+encodeURIComponent(draft.uploadId));check();
     if(result.status==='ready'){state('ready');return draft.uploadId;}
     if(result.status==='error')throw Error('Cette vidéo n’a pas pu être préparée. Sélectionne une vidéo pour recommencer.');
     await wait(2000,signal);
