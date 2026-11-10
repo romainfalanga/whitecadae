@@ -36,8 +36,14 @@ test('Loge joins Game Master Blanc only at 33 real levels and existing accounts 
     const text=await(await call('/api/game-master-blanc')).json();
     assert.deepEqual(text.page.sections.at(-1),{title:'Loge virtuelle',paragraphs:[
       'Partage dans la Loge virtuelle tes réflexions et tes avancées aux autres Game Masters Blancs.',
-      'Ces échanges vous permettent de grandir ensemble. Enrichissez mutuellement vos arborescences de réflexion et aidez-vous à les faire grandir de manière harmonieuse.'
+      'Ces échanges vous permettent de grandir ensemble. Enrichissez mutuellement vos arborescences de réflexion et aidez-vous à les faire grandir de manière harmonieuse.',
+      'Trois loges t’y attendent, avec un même esprit d’entraide.',
+      'Réflexions : extériorise tes réflexions et aide les autres à prendre du recul pour voir une trajectoire qui les améliore.',
+      'Idées et projets : partage ce que tu veux construire et aide les autres à faire grandir leurs idées.',
+      'Ta société harmonieuse : si tu n’es pas d’accord, montre les inconvénients que tu vois pour aider l’autre à affiner sa vision.'
     ]});
+    for(const room of ['ideas','projects','society'])assert.equal((await(await call('/api/loge?loge='+room)).json()).loge,room);
+    assert.equal((await(await call('/api/loge')).json()).loge,'ideas');assert.equal((await call('/api/loge?loge=self')).status,404);assert.equal((await call('/api/loge?loge=version')).status,404);
     f.sql.prepare('DELETE FROM riddle_progress WHERE user_id=1 AND riddle_id=?').run(ids.at(-1));
     assert.equal((await call('/api/loge')).status,403);
     assert.equal((await(await call('/api/me')).json()).access.loge,false);

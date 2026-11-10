@@ -101,3 +101,24 @@ Dans le formulaire de la vidéographie, le choix du fichier est une zone unique
 changer. La page d’explication et son bouton « i » sont retirés ;
 `/videographie/comprendre` ramène à la vidéographie.
 
+## Trois loges
+
+La Loge virtuelle se divise en trois loges, une par catégorie partageable :
+Réflexions (`/loge-virtuelle`), Idées et projets (`?loge=idees-et-projets`) et
+Ta société Harmonieuse (`?loge=societe-harmonieuse`). Un second menu, sous les
+onglets, passe de l’une à l’autre ; l’onglet Loge Virtuelle revient à la dernière
+loge visitée et une loge déjà ouverte est restaurée sans nouvelle requête.
+
+- `GET /api/loge?loge=ideas|projects|society` filtre le fil ; sans paramètre,
+  Réflexions. Une autre valeur répond 404. Chaque publication expose `loge`.
+- La loge d’une publication suit la catégorie de sa fiche. Les publications
+  antérieures, sans catégorie, restent dans Réflexions.
+- Métacognition et Ta version Harmonieuse n’ont pas de loge : leurs vidéos ne
+  sont ni proposées ni acceptées à la publication, et une vidéo publiée ne peut
+  pas être reclassée dans l’une d’elles tant que sa publication existe.
+- La page Game Master Blanc décrit l’état d’esprit attendu dans chaque loge.
+
+L’en-tête « Loge virtuelle » reste présent pour les lecteurs d’écran mais n’est
+plus affiché sur ses propres pages : la vidéo commence plus haut. La catégorie
+n’est affichée sur une vidéo qu’en dehors des loges (Mes réflexions, détail).
+

@@ -1,6 +1,6 @@
-import {ensureLogeStreamTables,createLogeUpload,getLogeUpload,deleteLogeUpload,readyLogeUpload,logePlayback,LOGE_STREAM_MARKER,SHARED_UPLOAD_LIVE} from './loge-stream.js';
+import {ensureLogeStreamTables,createLogeUpload,getLogeUpload,deleteLogeUpload,readyLogeUpload,logePlayback,LOGE_STREAM_MARKER,SHARED_UPLOAD_LIVE,LOGE_ROOM_SQL} from './loge-stream.js';
 import {LOGE_LEGACY_SOURCES} from './features.js';
-import {videoBranchKey} from '../public/video-model.js';
+import {videoBranchKey,LOGE_ROOMS,logeRoom} from '../public/video-model.js';
 import {gameRows} from './echelon-api.js';
 import {gameLevel} from './echelon.js';
 import {fail,objectBody,text,integer,identifier,unseal,lifeEventContext} from './private-data.js';
@@ -82,7 +82,7 @@ const streamFields=`COALESCE((SELECT s.stream_id FROM loge_stream_uploads s WHER
 const postFields=`p.*,${streamFields},${authorFields},${themeFields},(SELECT count(*) FROM loge_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count`;
 const postSelect=`SELECT ${postFields} FROM loge_posts p JOIN users u ON u.id=p.author_id`;
 const commentSelect=`SELECT c.*,${authorFields} FROM loge_comments c JOIN users u ON u.id=c.author_id JOIN loge_posts p ON p.id=c.post_id`;
-const postView=row=>({id:row.id,author:person(row),title:row.title,description:row.description,videoProvider:row.stream_id?'stream':'youtube',category:row.video_branch?videoBranchKey(row.video_branch):null,youtubeUrl:row.stream_id?null:'https://www.youtube.com/watch?v='+row.youtube_id,createdAt:iso(row.created_at),updatedAt:iso(row.updated_at),revision:row.revision,commentCount:row.comment_count,isFavorite:!!row.is_favorite,theme:row.theme_id?{id:row.theme_id,title:row.theme_title,week:row.theme_week}:null});
+const postView=row=>({id:row.id,author:person(row),title:row.title,description:row.description,videoProvider:row.stream_id?'stream':'youtube',category:row.video_branch?videoBranchKey(row.video_branch):null,loge:logeRoom(row.video_branch),youtubeUrl:row.stream_id?null:'https://www.youtube.com/watch?v='+row.youtube_id,createdAt:iso(row.created_at),updatedAt:iso(row.updated_at),revision:row.revision,commentCount:row.comment_count,isFavorite:!!row.is_favorite,theme:row.theme_id?{id:row.theme_id,title:row.theme_title,week:row.theme_week}:null});
 const commentView=row=>({id:row.id,postId:row.post_id,author:person(row),body:row.body,createdAt:iso(row.created_at),updatedAt:iso(row.updated_at),revision:row.revision});
 const cursor=url=>integer(Number(url.searchParams.get('after')||0));
 const safeId=value=>{const id=Number(value);if(!Number.isSafeInteger(id)||id<1)fail('Page introuvable.',404);return id;};
@@ -199,16 +199,17 @@ async function createPost(request,env,user,json,legacySources){
   // own published upload for as long as both exist.
   let shared=null;
   if(fromVideography){
-    shared=await env.DB.prepare(`SELECT s.id FROM loge_stream_uploads s JOIN life_events e ON e.owner_id=s.user_id AND e.id=s.event_id
+    shared=await env.DB.prepare(`SELECT s.id,e.video_branch FROM loge_stream_uploads s JOIN life_events e ON e.owner_id=s.user_id AND e.id=s.event_id
       WHERE s.user_id=?1 AND s.event_id=?2 AND s.purpose='videography' AND s.state='published' AND e.video_branch IS NOT NULL`).bind(user.id,eventId).first();
     if(!shared)fail('Cette vidéo n’est plus dans ta vidéographie.',404);
+    if(!LOGE_ROOMS.includes(shared.video_branch))fail('Cette catégorie n’a pas de loge : la vidéo reste dans ta vidéographie.',409);
     if(await env.DB.prepare('SELECT 1 FROM loge_shared_videos v JOIN loge_posts p ON p.id=v.post_id WHERE v.upload_id=?1 AND p.deleted_at IS NULL').bind(shared.id).first())fail('Cette vidéo est déjà publiée dans la Loge.',409);
   }
   const claim=crypto.randomUUID();
   const activeWeek=assignment?`EXISTS(SELECT 1 FROM loge_theme_weeks w WHERE w.week_start=?9 AND w.theme_id=?10 AND w.starts_at<=unixepoch() AND unixepoch()<w.ends_at)`:'1';
   const reserveActiveWeek=assignment?`EXISTS(SELECT 1 FROM loge_theme_weeks w WHERE w.week_start=?5 AND w.theme_id=?6 AND w.starts_at<=unixepoch() AND unixepoch()<w.ends_at)`:'1';
   const uploadEligible=placeholder=>shared?`(EXISTS(SELECT 1 FROM loge_stream_uploads s JOIN life_events e ON e.owner_id=s.user_id AND e.id=s.event_id
-      WHERE s.id=${placeholder} AND s.user_id=?1 AND s.purpose='videography' AND s.state='published' AND e.video_branch IS NOT NULL)
+      WHERE s.id=${placeholder} AND s.user_id=?1 AND s.purpose='videography' AND s.state='published' AND e.video_branch IN (${LOGE_ROOM_SQL}))
     AND NOT EXISTS(SELECT 1 FROM loge_shared_videos v JOIN loge_posts lp ON lp.id=v.post_id WHERE v.upload_id=${placeholder} AND lp.deleted_at IS NULL))`
     :`(${placeholder}='' OR EXISTS(SELECT 1 FROM loge_stream_uploads s WHERE s.id=${placeholder} AND s.user_id=?1 AND s.state='ready' AND s.post_id IS NULL AND s.expires_at>unixepoch()))`;
   // Every write rechecks the server-selected edition inside the transaction.
@@ -405,7 +406,7 @@ async function videographyChoices(env,user,json){
   const rows=(await env.DB.prepare(`SELECT e.id,e.payload,e.video_branch,e.sort_date,e.precision,
       (SELECT v.post_id FROM loge_shared_videos v JOIN loge_posts p ON p.id=v.post_id WHERE v.upload_id=s.id AND p.deleted_at IS NULL) AS post_id
     FROM life_events e JOIN loge_stream_uploads s ON s.user_id=e.owner_id AND s.event_id=e.id AND s.purpose='videography' AND s.state='published'
-    WHERE e.owner_id=?1 AND e.video_branch IS NOT NULL ORDER BY e.sort_date DESC,e.id DESC LIMIT 101`).bind(user.id).all()).results||[];
+    WHERE e.owner_id=?1 AND e.video_branch IN (${LOGE_ROOM_SQL}) ORDER BY e.sort_date DESC,e.id DESC LIMIT 101`).bind(user.id).all()).results||[];
   const videos=await Promise.all(rows.slice(0,100).map(async row=>({id:row.id,title:(await unseal(env,lifeEventContext(user.id,row.id),row.payload)).title||'',category:videoBranchKey(row.video_branch),date:row.sort_date,precision:row.precision,postId:row.post_id||null})));
   const time=await timing(env,user.id);
   return json({self:await selfOf(env,user.id),currentTheme:await getCurrentTheme(env),videos,more:rows.length>100,nextPublicationAt:time.nextPublicationAt,serverNow:time.serverNow});
@@ -453,9 +454,13 @@ export async function handleLoge(request,env,url,{getUser,json,legacySources=LOG
   if(path==='/api/loge/themes'||path.startsWith('/api/loge/themes/'))return handleThemes(request,env,url,user,json);
   if(path==='/api/loge'){
     if(method!=='GET')fail('Méthode indisponible.',405);
-    const after=cursor(url),rows=(await env.DB.prepare(postSelect+' WHERE p.deleted_at IS NULL AND (?1=0 OR p.id<?1) ORDER BY p.id DESC LIMIT 21').bind(after).all()).results||[];
+    // One room per shareable category; a post follows its videography entry.
+    const room=url.searchParams.get('loge')||LOGE_ROOMS[0];if(!LOGE_ROOMS.includes(room))fail('Loge introuvable.',404);
+    const after=cursor(url),rows=(await env.DB.prepare(postSelect+` WHERE p.deleted_at IS NULL AND (?1=0 OR p.id<?1)
+      AND COALESCE((SELECT CASE WHEN e.video_branch IN (${LOGE_ROOM_SQL}) THEN e.video_branch END FROM loge_shared_videos v JOIN life_events e ON e.owner_id=v.user_id AND e.id=v.event_id WHERE v.post_id=p.id),'${LOGE_ROOMS[0]}')=?2
+      ORDER BY p.id DESC LIMIT 21`).bind(after,room).all()).results||[];
     const result=page(await withFavorites(env,user.id,rows),postView),time=await timing(env,user.id);
-    return json({self:await selfOf(env,user.id),currentTheme:await getCurrentTheme(env),posts:result.items,next:result.next,nextPublicationAt:time.nextPublicationAt,serverNow:time.serverNow});
+    return json({self:await selfOf(env,user.id),currentTheme:await getCurrentTheme(env),loge:room,posts:result.items,next:result.next,nextPublicationAt:time.nextPublicationAt,serverNow:time.serverNow});
   }
   if(path==='/api/loge/posts'){
     if(method!=='POST')fail('Méthode indisponible.',405);return createPost(request,env,user,json,legacySources);
