@@ -158,7 +158,7 @@ test('publication reads the title and uploaded video, retains an idempotent draf
   assert.equal(first.body.title,'Ma réflexion');assert.equal(Object.hasOwn(first.body,'description'),false);assert.equal(form.elements.namedItem('description'),null);assert.equal(first.body.uploadId,'upload-test-1');assert.equal(Object.hasOwn(first.body,'url'),false);assert.match(first.body.requestId,/^[\da-f-]{36}$/i);
   assert.equal(form.elements.namedItem('title').value,'  Ma réflexion  ');assert.equal(f.node('loge-new-status').textContent,'Réessaie');
   f.submit(form);await flush();assert.equal(f.requests.filter(r=>r.url==='/api/loge/posts').at(-1).body.requestId,first.body.requestId);assert(f.node('loge-post-20'));assert.equal(f.document.getElementById('loge-compose'),null);assert.equal(f.location.pathname,'/loge-virtuelle/membres/11');
-  assert.equal(f.node('loge-open-compose').getAttribute('href'),'/loge-virtuelle/publier');await f.click('loge-open-compose');assert.equal(f.node('loge-new-submit').disabled,true);assert.match(f.node('loge-quota').textContent,/Tu pourras publier/);assert.equal(f.timers.size,1);
+  assert.equal(f.node('loge-open-compose').getAttribute('href'),'/loge-virtuelle/publier');await f.click('loge-open-compose');assert.equal(f.node('loge-new-submit').disabled,true);assert.match(f.node('loge-quota').textContent,/Prochaine publication/);assert.equal(f.timers.size,1);
   f.client.clear();assert.equal(f.timers.size,0);
 });
 
@@ -287,7 +287,7 @@ test('a late creation synchronizes the quota immediately and refetches the affec
   const f=fixture();await f.page();await f.click('loge-open-compose');const form=f.node('loge-new-form');f.fill(form,'title','Nouvelle vidéo');f.selectVideo(form);
   const release=f.defer();f.submit(form);await flush();await f.navigate('/loge-virtuelle/membres/11?onglet=reflexions');const profile=f.node('loge-profile-list'),created={...post(20),title:'Nouvelle vidéo',description:'Ma réflexion'},nextPublicationAt=new Date(Date.now()+604800000).toISOString();
   release({post:created,nextPublicationAt});await flush();assert.equal(f.node('loge-profile-list'),profile);
-  f.queue({self,posts:[created,post()],next:null,nextPublicationAt});await f.navigate('/loge-virtuelle');assert(f.node('loge-post-20'));assert.equal(f.node('loge-open-compose').getAttribute('href'),'/loge-virtuelle/publier');await f.click('loge-open-compose');assert.equal(f.node('loge-new-submit').disabled,true);assert.match(f.node('loge-quota').textContent,/Tu pourras publier/);assert.equal(f.requests.filter(request=>request.method==='POST').length,1);f.client.clear();
+  f.queue({self,posts:[created,post()],next:null,nextPublicationAt});await f.navigate('/loge-virtuelle');assert(f.node('loge-post-20'));assert.equal(f.node('loge-open-compose').getAttribute('href'),'/loge-virtuelle/publier');await f.click('loge-open-compose');assert.equal(f.node('loge-new-submit').disabled,true);assert.match(f.node('loge-quota').textContent,/Prochaine publication/);assert.equal(f.requests.filter(request=>request.method==='POST').length,1);f.client.clear();
 });
 
 test('comments update the reel count and late panel acknowledgements refresh when the discussion reopens',async()=>{
@@ -665,7 +665,9 @@ test('successful publication from a direct page opens own reflections and expose
 });
 
 test('the publish page applies the weekly quota and is an authenticated return destination',async()=>{
-  const f=fixture();f.queue({self,posts:[],next:null,nextPublicationAt:new Date(Date.now()+3600000).toISOString()});await f.page('/loge-virtuelle/publier');assert.equal(f.node('loge-new-submit').disabled,true);assert.match(f.node('loge-quota').textContent,/Tu pourras publier/);assert.equal(f.find('.loge-tabs').querySelectorAll('a').length,3);f.client.clear();
+  const f=fixture();f.queue({self,posts:[],next:null,nextPublicationAt:new Date(Date.now()+3600000).toISOString()});await f.page('/loge-virtuelle/publier');assert.equal(f.node('loge-new-submit').disabled,true);assert.match(f.node('loge-quota').textContent,/Prochaine publication/);
+  const quota=f.node('loge-quota');assert.equal(quota.hidden,false);assert.equal(quota.querySelector('.loge-quota-label').textContent,'Prochaine publication');assert.match(quota.querySelector('time').textContent,/^\S+ \d{1,2} \S+ à \d{2}:\d{2}$/);assert.match(quota.querySelector('.loge-quota-countdown').textContent,/^dans (1 h|60 min|59 min)$/);assert.doesNotMatch(quota.textContent,/Tu pourras|\./);
+  const tick=[...f.timers.values()].find(job=>job.fn.name==='updateQuota');assert(tick.delay<=60050);assert.equal(f.find('.loge-tabs').querySelectorAll('a').length,3);f.client.clear();
   const anonymous=fixture({user:null});await anonymous.page('/loge-virtuelle/publier');assert.deepEqual(anonymous.navigations,[['/connexion?retour=%2Floge-virtuelle%2Fpublier',true]]);assert.equal(anonymous.requests.length,0);anonymous.client.clear();
 });
 

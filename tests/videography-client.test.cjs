@@ -16,12 +16,12 @@ class Element extends EventTarget{
   remove(){this.isConnected=false;}
 }
 function fixture({upload,request}={}){
-  const nodes=new Map(),calls=[],players=[],branches=['self','ideas','projects','society'].map(key=>Object.assign(new Element(),{dataset:{videoBranch:key}}));
+  const nodes=new Map(),calls=[],players=[],branches=['self','ideas','projects','version','society'].map(key=>Object.assign(new Element(),{dataset:{videoBranch:key}}));
   const get=id=>{if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);};
   const form=get('video-form');form.elements={title:{value:'Titre modifié'},video:{files:[],value:''},videoBranch:{value:'self'}};form.submit=new Element();
   const document={hidden:false,querySelector:()=>({}),querySelectorAll:selector=>selector==='[data-video-branch]'?branches:[],createElement:()=>new Element(),getElementById:get,addEventListener(){},removeEventListener(){}};
   const ctx={state:{user:{id:19},access:{}},app:new Element(),isCurrent:()=>true,esc:value=>String(value??''),navigate:()=>{},api:async(path,options={})=>{calls.push({path,...options});return request?request(path,options):{events:[],next:null};}};
-  const sandbox=vm.createContext({document,window:{addEventListener(){},removeEventListener(){}},DOMException,AbortController,URLSearchParams,URL,crypto:require('node:crypto').webcrypto,setTimeout,clearTimeout,confirm:()=>true,VIDEO_BRANCHES:[['self','Métacognition'],['ideas','Idées'],['projects','Projets'],['society','Ta société Harmonieuse']],videoLabel:key=>key==='self'?'Métacognition':key,PRIVATE_HELP:{},youtubeId:url=>url?.includes('youtube')?'M7lc1UVf-VE':null,youtubeEmbed:()=>'',dateFields:()=>'',configureDate(){},readDate:()=> '2026-11-10',validateLogeFile:file=>{if(!file?.size)throw Error('Choisis une vidéo.');},ensureLogeUpload:upload||(async()=>{throw Error('Unexpected upload');}),createStreamPlayer:options=>{
+  const sandbox=vm.createContext({document,window:{addEventListener(){},removeEventListener(){}},DOMException,AbortController,URLSearchParams,URL,crypto:require('node:crypto').webcrypto,setTimeout,clearTimeout,confirm:()=>true,VIDEO_BRANCHES:[['self','Métacognition'],['ideas','Réflexions'],['projects','Idées et projets'],['version','Ta version Harmonieuse'],['society','Ta société Harmonieuse']],videoLabel:key=>key==='self'?'Métacognition':key,PRIVATE_HELP:{},youtubeId:url=>url?.includes('youtube')?'M7lc1UVf-VE':null,youtubeEmbed:()=>'',dateFields:()=>'',configureDate(){},readDate:()=> '2026-11-10',validateLogeFile:file=>{if(!file?.size)throw Error('Choisis une vidéo.');},ensureLogeUpload:upload||(async()=>{throw Error('Unexpected upload');}),createStreamPlayer:options=>{
     const video=new Element(),element=new Element();let position=0,pauses=0,destroys=0;const player={video,element,getDuration:()=>120,getCurrentTime:()=>position,seekTo:value=>position=value,pauseVideo:()=>pauses++,destroy:()=>destroys++};players.push({options,player,get pauses(){return pauses;},get destroys(){return destroys;}});options.container.append(element);return player;
   }});
   vm.runInContext(source+`;globalThis.client={page,leave,videoPage,loadVideos,videoForm,eventVideoPlayer,wireStreamPlayers,pauseVideoPlayers,destroyVideoPlayers,getSession:()=>session,setSession:value=>session=value};`,sandbox);
@@ -38,6 +38,15 @@ test('the initial Videography fetch is filtered to Métacognition and there is n
   assert.deepEqual(h.calls.map(c=>c.path),['/api/private/consent','/api/life-tree?videos=1&branch=self']);
   assert.match(h.ctx.app.innerHTML,/data-video-branch="self" aria-pressed="true"/);assert.doesNotMatch(h.ctx.app.innerHTML,/Toutes|data-video-branch=""/);
   assert.equal(h.client.getSession().videos.branch,'self');h.client.leave();
+});
+
+test('Videography lists five categories and places Add under the current category title',async()=>{
+  const h=fixture();await h.client.page('/videographie',h.ctx);const html=h.ctx.app.innerHTML;
+  assert.deepEqual([...html.matchAll(/data-video-branch="(\w+)"/g)].map(m=>m[1]),['self','ideas','projects','version','society']);
+  assert.match(html,/data-video-branch="version"[^>]*>Ta version Harmonieuse</);
+  const nav=html.indexOf('</nav>'),title=html.indexOf('id="video-section-title"'),add=html.indexOf('id="video-add"'),list=html.indexOf('id="video-list"');
+  assert.ok(nav>0&&nav<title&&title<add&&add<list,'categories, title, add button, then videos');
+  h.client.videoForm(null,null,'version');assert.match(h.sandbox.markup,/<option value="version" selected>Ta version Harmonieuse</);h.client.leave();
 });
 
 test('existing Stream and legacy videos save metadata without requesting another upload',async()=>{

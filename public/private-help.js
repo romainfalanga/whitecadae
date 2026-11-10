@@ -4,10 +4,9 @@ export const PRIVATE_HELP={
   'Les relire, les préciser et les mettre en pratique régulièrement les ramène dans ton présent. Cette répétition peut t’aider à installer progressivement de nouvelles habitudes et à rapprocher tes actions de la direction que tu choisis.'
  ]},
  '/videographie':{title:'Vidéographie',paragraphs:[
-  'Extérioriser tes réflexions te permet de les revoir avec du recul. En te regardant parler, tu peux remarquer des façons de penser, de réagir ou de présenter tes idées qui t’échappent sur le moment.',
-  'Ta vidéographie garde une trace de tes observations sur toi-même, de tes réflexions, de tes projets et de la société harmonieuse que tu imagines. Revenir sur ces vidéos permet de comparer tes points de vue, de reconnaître ce qui évolue et de trouver ce que tu souhaites améliorer.',
-  'La métacognition consiste à observer et à comprendre ta propre manière de penser, d’apprendre et de prendre des décisions. Elle te permet de prendre du recul sur tes raisonnements plutôt que de te concentrer uniquement sur leurs conclusions.',
-  'Dans la catégorie Métacognition, filme tes réflexions sur la façon dont tu arrives à tes idées, ce qui influence tes interprétations et ce qui te fait changer d’avis. En revoyant ces vidéos, tu peux repérer tes habitudes de pensée, vérifier ce que tu comprends et ajuster ta manière de réfléchir.'
+  'Tu es le Game Master de ton propre jeu. Son objectif : devenir une meilleure version de toi-même.',
+  'Extériorise tes réflexions en vidéo, puis revois-les avec du recul. En te regardant parler, tu remarques des façons de penser et de réagir qui t’échappent sur le moment.',
+  'C’est la métacognition : observer ta manière de penser pour choisir ce que tu veux faire évoluer. Ta vidéographie garde la trace de ce chemin, de tes premières réflexions jusqu’à ta version harmonieuse.'
  ]},
  '/carre-d-as':{title:'Carré d’AS',paragraphs:[
   'Dans Mon carré, tes quatre AS t’accompagnent. Dans J’accompagne, tu retrouves les personnes dont tu es un AS. Les AS acceptés peuvent consulter la vidéographie et les mécanismes de la personne qu’ils accompagnent, et échanger avec elle sous ses vidéos.',

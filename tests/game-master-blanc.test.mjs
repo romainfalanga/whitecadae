@@ -38,7 +38,7 @@ test('the final page requires 33 real earned levels, including for admins; forge
     assert.deepEqual(content.page.opening,['Façonne ton paradis pour le rejoindre.','Deviens ton propre Game Master.']);
     assert.match(content.page.sections.at(-1).paragraphs[0],/aux autres Game Masters Blancs\./);
     assert.deepEqual(content.page.sections.map(s=>s.title),['Vidéographie','Ta version harmonieuse','Ta société harmonieuse','Loge virtuelle']);
-    assert.match(content.page.sections[0].paragraphs.join(' '),/vidéographie de cette plateforme/);
+    assert.match(content.page.sections[0].paragraphs.join(' '),/Utilise ta vidéographie pour organiser/);assert.doesNotMatch(JSON.stringify(content.page),/plateforme/i);
     assert.match(content.page.sections[2].paragraphs.join(' '),/version harmonieuse soit cohérente avec cette société/);
     assert.doesNotMatch(JSON.stringify(content.page),/Crée ta propre plateforme|Ta version harmonieuse IA/);
     assert.ok(content.page.sections.every(s=>s.paragraphs.length&&s.paragraphs.every(p=>typeof p==='string'&&p.length>20)));

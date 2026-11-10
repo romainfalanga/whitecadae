@@ -111,15 +111,26 @@ function acceptSelf(result){
   const server=dateValue(result.serverNow);if(server)s.clockOffset=server.getTime()-Date.now();
   armThemeBoundary(s);
 }
+function quotaDate(date){return date.toLocaleString('fr-FR',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Paris'});}
+function countdown(remaining){
+  const total=Math.ceil(remaining/60000),days=Math.floor(total/1440),hours=Math.floor(total%1440/60),minutes=total%60;
+  if(days)return `dans ${days} j${hours?` ${hours} h`:''}`;
+  if(hours)return `dans ${hours} h${minutes?` ${String(minutes).padStart(2,'0')} min`:''}`;
+  return `dans ${minutes} min`;
+}
 function updateQuota(){
   const s=session;if(!live(s))return;clearTimeout(s.quotaTimer);
   const until=dateValue(s.nextPublicationAt),remaining=until?until.getTime()-Date.now()-s.clockOffset:0;
   const blocked=remaining>0;
-  const text=blocked?`Tu pourras publier une nouvelle réflexion le ${dateLabel(s.nextPublicationAt)}.`:'Tu peux publier une réflexion. Une publication est possible tous les sept jours.';
-  const quota=node('loge-quota');if(quota){quota.textContent=text;quota.hidden=false;}
+  const quota=node('loge-quota');
+  if(quota){
+    quota.innerHTML=blocked?`<span class="loge-quota-label">Prochaine publication</span><time class="loge-quota-value" datetime="${esc(until.toISOString())}">${esc(quotaDate(until))}</time><span class="loge-quota-countdown">${esc(countdown(remaining))}</span>`:'<span class="loge-quota-label">Publication</span><span class="loge-quota-value">Disponible</span><span class="loge-quota-countdown">Une réflexion tous les sept jours</span>';
+    quota.classList.toggle('is-open',!blocked);quota.hidden=false;
+  }
   const submit=node('loge-new-submit');if(submit&&!submit.closest('form')?.dataset.busy)submit.disabled=blocked;
-  const open=node('loge-open-compose');if(open){open.setAttribute('title',blocked?text:'Publier');}
-  if(blocked)s.quotaTimer=setTimeout(updateQuota,Math.min(remaining+50,2147483647));
+  const open=node('loge-open-compose');if(open){open.setAttribute('title',blocked?'Prochaine publication le '+dateLabel(until):'Publier');}
+  // The visible countdown follows the minute; without it only the unlock matters.
+  if(blocked)s.quotaTimer=setTimeout(updateQuota,Math.min((quota?remaining%60000:remaining)+50,2147483647));
 }
 function getDraft(key,initial){
   const full=session.user+':'+key;
@@ -216,7 +227,7 @@ function bindPublishForm(){
   const draft=getDraft('create-post',{title:'',file:null,themeWeek:null});
   if(root.logeDraft!==draft){root.innerHTML='';root.logeDraft=draft;}
   if(root.innerHTML){const form=node('loge-new-form');if(form&&!form.dataset.busy)form.elements.namedItem('title').value=draft.title;syncComposerTheme();uploadDisplay(draft);updateQuota();return;}
-  root.innerHTML=`<h2 id="loge-compose-title">Publier une réflexion</h2><p id="loge-quota" class="loge-note"></p><form id="loge-new-form">${postFields(draft,true)}<div class="loge-form-actions"><button class="loge-button" type="submit" id="loge-new-submit">Publier</button></div>${statusMarkup('loge-new-status')}${button('Annuler l’envoi précédent et recommencer','data-upload-restart hidden',true)}</form>`;
+  root.innerHTML=`<h2 id="loge-compose-title">Publier une réflexion</h2><div id="loge-quota" class="loge-quota" hidden></div><form id="loge-new-form">${postFields(draft,true)}<div class="loge-form-actions"><button class="loge-button" type="submit" id="loge-new-submit">Publier</button></div>${statusMarkup('loge-new-status')}${button('Annuler l’envoi précédent et recommencer','data-upload-restart hidden',true)}</form>`;
   const form=node('loge-new-form');rememberFields(form,draft,['title']);syncComposerTheme();uploadDisplay(draft);
   if(session.currentTheme?.endsAt*1000<=Date.now()+session.clockOffset)void refreshThemeBoundary(session);
   const uploadRequest=async(path,options={})=>{

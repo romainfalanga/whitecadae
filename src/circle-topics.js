@@ -1,6 +1,7 @@
 import {seal,unseal,fail,text,integer,identifier} from './private-data.js';
 import {circleAccess,freshAccess,writeGuard,requireContentAccess} from './private-access.js';
 import {youtubeLink} from '../public/youtube-video.js';
+import {videoBranchKey} from '../public/video-model.js';
 
 export function recordTopic(env,{owner,key,kind,event=null,target=null,slot=null,guard='1',values=[]}){
   return env.DB.prepare(`INSERT INTO circle_topics(owner_id,resource_key,kind,event_id,target_id,mechanism_slot)
@@ -33,7 +34,7 @@ async function topicContent(env,row){
   }
   return {title:event.title,...(row.video_branch?{video:{url:youtubeLink(event.creation?.url),...(event.creation?.videoProvider==='stream'?{videoProvider:'stream'}:{}),notes:event.creation?.work||'',understanding:event.understanding||''}}:{})};
 }
-const topicView=(row,content)=>({id:row.id,owner:row.owner_id,kind:row.kind,eventId:row.event_id,targetId:row.target_id,slot:row.mechanism_slot,videoBranch:row.kind==='creation'?row.video_branch||null:null,archived:row.kind!=='creation'||!row.video_branch,revision:row.revision,updatedAt:row.updated_at,...content});
+const topicView=(row,content)=>({id:row.id,owner:row.owner_id,kind:row.kind,eventId:row.event_id,targetId:row.target_id,slot:row.mechanism_slot,videoBranch:row.kind==='creation'&&row.video_branch?videoBranchKey(row.video_branch):null,archived:row.kind!=='creation'||!row.video_branch,revision:row.revision,updatedAt:row.updated_at,...content});
 async function freshTopic(env,access,user,topic){await freshAccess(env,access,user);if(!await env.DB.prepare('SELECT 1 FROM circle_topics WHERE id=?1 AND revision=?2').bind(topic.id,topic.revision).first())fail('Ce contenu a changé. Recharge la discussion.',409);}
 
 export async function topicsRoute(request,env,url,user,body,json){
