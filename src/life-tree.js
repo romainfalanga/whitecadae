@@ -2,7 +2,7 @@ import {ensureLogeStreamTables,createLogeUpload,getLogeUpload,deleteLogeUpload,r
 import {seal,unseal,tagHash,fail,text,identifier,integer} from './private-data.js';
 import {circleAccess,freshAccess,requireStorage,requireLevel} from './private-access.js';
 import {recordTopic} from './circle-topics.js';
-import {VIDEO_BRANCHES} from '../public/video-model.js';
+import {VIDEO_BRANCHES,storedVideoBranch,videoBranchKey} from '../public/video-model.js';
 import {youtubeLink} from '../public/youtube-video.js';
 export const EVENT_KINDS=['rencontre','famille','relation','études','travail','santé','changement','réussite','perte','autre'];
 export const EVENT_IMPACTS=['ressource','difficulté','mixte','à explorer'];
@@ -39,7 +39,7 @@ function validate(body,streamId=null){
   if(!EVENT_KINDS.includes(body.kind)||!EVENT_IMPACTS.includes(body.impact))fail('Repère invalide.');
   if(!Array.isArray(body.themes)||body.themes.length>12)fail('Utilise au maximum douze thèmes.');
   const themes=[...new Set(body.themes.map(v=>text(v,60,true)))];
-  return {entry_type,video_branch,video_month,sort_date,end_date,precision,kind:body.kind,impact:body.impact,payload:{title:text(body.title,140,true),story:text(body.story,8000),feelings:text(body.feelings),understanding:text(body.understanding),resources:text(body.resources),themes,...(creation?{creation}:{})}};
+  return {entry_type,video_branch:video_branch&&storedVideoBranch(video_branch),video_month,sort_date,end_date,precision,kind:body.kind,impact:body.impact,payload:{title:text(body.title,140,true),story:text(body.story,8000),feelings:text(body.feelings),understanding:text(body.understanding),resources:text(body.resources),themes,...(creation?{creation}:{})}};
 }
 function validateDraft(value){
   if(!value||typeof value!=='object'||Array.isArray(value))fail('Brouillon invalide.');
@@ -48,6 +48,7 @@ function validateDraft(value){
 }
 async function unpack(env,row){
   const {payload,owner_id,...rest}=row,out={...rest,...await unseal(env,context(owner_id,row.id),payload)};
+  if(out.video_branch)out.video_branch=videoBranchKey(out.video_branch);
   if(row.video_branch&&out.creation){
     const upload=await eventUpload(env,owner_id,row.id);
     if(upload)out.creation={...out.creation,videoProvider:'stream',uploadId:upload.id,url:''};
@@ -124,7 +125,7 @@ export async function lifeRoute(request,env,url,user,body,json){
     const videos=url.searchParams.get('videos')==='1'||owner!==user.id;
     if(videos)q.filters.push('e.video_branch IS NOT NULL');
     if(url.searchParams.get('archive')==='1'){if(owner!==user.id)fail('Archives privées.',403);q.filters.push('e.video_branch IS NULL');}
-    const branch=url.searchParams.get('branch');if(branch){if(!VIDEO_BRANCHES.some(([id])=>id===branch))fail('Rubrique invalide.');q.add('e.video_branch=$',branch);}
+    const branch=url.searchParams.get('branch');if(branch){if(!VIDEO_BRANCHES.some(([id])=>id===branch))fail('Rubrique invalide.');q.add('e.video_branch=$',storedVideoBranch(branch));}
     if(tag)q.add('EXISTS(SELECT 1 FROM life_tags t WHERE t.owner_id=e.owner_id AND t.event_id=e.id AND t.tag_hash=$)',await tagHash(env,owner,text(tag,60,true)));
     const after=url.searchParams.get('after');if(after){if(!/^\d{4}-\d{2}-\d{2}\|[a-zA-Z0-9_-]{8,64}$/.test(after))fail('Page invalide.');q.add("(e.sort_date||'|'||e.id)"+(videos?'<':'>')+'$',after);}
     const rows=(await env.DB.prepare(`SELECT e.*,(SELECT id FROM circle_topics WHERE owner_id=e.owner_id AND resource_key='event:'||e.id) AS topic_id FROM life_events e WHERE ${q.filters.join(' AND ')} ORDER BY e.sort_date ${videos?'DESC':'ASC'},e.id ${videos?'DESC':'ASC'} LIMIT 31`).bind(...q.values).all()).results;

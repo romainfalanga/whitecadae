@@ -22,11 +22,19 @@ test('restored video access requires canonical level 33 while AS invitation thre
   const access=(await f.ok('/api/me',15)).access;assert.equal(access.lifeTree,false);assert.equal(access.aceSquare,false);assert.equal(access.videographie,true);
  }finally{f.sql.close();}
 });
-test('four categories, concurrent edits, real dates and validated YouTube hosting',async()=>{
+test('five categories, concurrent edits, real dates and validated YouTube hosting',async()=>{
  const f=setup();try{
   await f.agree(15);
-  for(const branch of ['self','ideas','projects','society'])await f.ok('/api/life-tree/events/video-'+branch,15,'PUT',video({videoBranch:branch}));
-  const all=await f.ok('/api/life-tree?videos=1',15);assert.equal(all.events.length,4);assert.ok(all.events.every(e=>e.topic_id));assert.equal((await f.ok('/api/life-tree?branch=ideas&videos=1',15)).events.length,1);
+  for(const branch of ['self','ideas','projects','version','society'])await f.ok('/api/life-tree/events/video-'+branch,15,'PUT',video({videoBranch:branch}));
+  const all=await f.ok('/api/life-tree?videos=1',15);assert.equal(all.events.length,5);assert.ok(all.events.every(e=>e.topic_id));assert.equal((await f.ok('/api/life-tree?branch=ideas&videos=1',15)).events.length,1);
+  // « Ta version harmonieuse » reuses the retired storage value; clients only see its public key.
+  assert.equal(f.sql.prepare("SELECT video_branch FROM life_events WHERE id='video-version'").get().video_branch,'monthly');
+  assert.deepEqual(all.events.map(e=>e.video_branch).sort(),['ideas','projects','self','society','version']);
+  const version=await f.ok('/api/life-tree?branch=version&videos=1',15);assert.deepEqual(version.events.map(e=>[e.id,e.video_branch]),[['video-version','version']]);
+  const saved=(await f.ok('/api/life-tree/events/video-version',15)).event;assert.equal(saved.video_branch,'version');
+  assert.equal((await f.ok('/api/life-tree/events/video-version',15,'PUT',video({videoBranch:'version',title:'Ma version',revision:saved.revision}))).event.video_branch,'version');
+  await f.ok('/api/life-tree/events/video-version-2',15,'PUT',video({videoBranch:'version'}));assert.equal((await f.ok('/api/life-tree?branch=version&videos=1',15)).events.length,2);
+  await f.ok('/api/ace-circles',15,'POST',{});const topics=await f.ok('/api/ace-circles/16/topics',15);assert.equal(topics.topics.filter(t=>t.videoBranch==='version').length,2);assert.equal(topics.topics.some(t=>t.videoBranch==='monthly'),false);
   for(const extra of [{videoBranch:'other'},{videoBranch:'monthly'},{url:''},{url:'https://youtube.com/watch?v=secret'},{precision:'unknown'},{date:'2026-02-30'},{date:'2099-01-01'}])assert.equal((await f.call('/api/life-tree/events/video-invalid',15,'PUT',video(extra))).status,400);
   assert.equal((await f.call('/api/life-tree?branch=monthly&videos=1',15)).status,400);
   assert.equal((await f.call('/api/life-tree/events/video-self',15,'PUT',video({videoBranch:null,revision:1}))).status,400);

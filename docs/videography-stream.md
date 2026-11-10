@@ -6,8 +6,21 @@ vidéos YouTube et leurs métadonnées sont conservées. Un changement de titre,
 de catégorie ou de date sans fichier conserve la vidéo existante.
 
 Les catégories sont Métacognition (sélection initiale), Réflexions, Idées et
-projets et Ta société Harmonieuse. Le filtre Toutes disparaît. Aucune migration
-ne redistribue les fiches existantes entre catégories.
+projets, Ta version Harmonieuse et Ta société Harmonieuse. Le filtre Toutes
+disparaît. Aucune migration ne redistribue les fiches existantes entre catégories.
+
+Sur mobile, Métacognition occupe toute la largeur, puis Réflexions et Idées et
+projets, puis Ta version Harmonieuse à gauche et Ta société Harmonieuse à
+droite. Le bouton Ajouter une vidéo se trouve sous le titre de la catégorie
+ouverte.
+
+Ta version Harmonieuse porte la clé publique `version`. La contrainte `CHECK`
+de `life_events.video_branch` n’accepte que ses cinq valeurs d’origine et la
+table ne peut pas être reconstruite sans déclencher ses suppressions en cascade :
+cette catégorie est donc enregistrée sous l’ancienne valeur `monthly`, vidée par
+la migration 0040. `public/video-model.js` fait la correspondance ; l’API et le
+client ne voient que `version`, et `monthly` reste refusé en entrée. Aucune
+migration n’est nécessaire.
 
 ## Contrats et protection des médias
 
@@ -50,8 +63,10 @@ inspecter le schéma et n’appliquer que les éléments manquants.
 `/loge-virtuelle/publier` est une destination normale avec le menu Loge Virtuelle,
 Mes réflexions et Publier. Seul le formulaire défile ; aucun popup de publication
 ni bouton Fermer n’est monté. Les onglets permettent de quitter la page et
-conservent le brouillon dans la session. Un succès ouvre Mes réflexions sur la
-publication. L’ancienne URL `?publier` est redirigée vers cette destination.
+conservent le brouillon dans la session. Un encadré « Prochaine publication »
+indique la date et le temps restant, actualisé chaque minute ; il affiche
+« Disponible » lorsque la publication est ouverte. Un succès ouvre Mes réflexions
+sur la publication. L’ancienne URL `?publier` est redirigée vers cette destination.
 
 Les tests couvrent droits, isolation des espaces, limites globales, conservation
 des anciennes vidéos, remplacement atomique, concurrence, nettoyage, navigation,

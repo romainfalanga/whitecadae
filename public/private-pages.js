@@ -111,7 +111,7 @@ function dateLabel(event){
 }
 async function videoPage(){
   session.videos={branch:'self',events:[],next:null,request:0};
-  shell(`${heading('Vidéographie','','','/videographie')}<nav class="video-branches" aria-label="Rubriques de ma Vidéographie">${VIDEO_BRANCHES.map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${label}</button>`).join('')}</nav><div class="private-actions video-add-action">${button('Ajouter une vidéo','video-add','')}</div><div class="video-section-heading"><h2 id="video-section-title">${esc(videoLabel('self'))}</h2></div><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`);
+  shell(`${heading('Vidéographie','','','/videographie')}<nav class="video-branches" aria-label="Rubriques de ma Vidéographie">${VIDEO_BRANCHES.map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${label}</button>`).join('')}</nav><div class="video-section-heading"><h2 id="video-section-title">${esc(videoLabel('self'))}</h2></div><div class="private-actions video-add-action">${button('Ajouter une vidéo','video-add','')}</div><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`);
   bind('video-add',()=>videoForm(null,null,session.videos.branch||'self'));
   bind('video-more',()=>loadVideos());
   const select=async branch=>{if(session.videos.branch===branch)return;session.videos.branch=branch;document.querySelectorAll('[data-video-branch]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.videoBranch===branch)));el('video-section-title').textContent=videoLabel(branch);await loadVideos(true);};

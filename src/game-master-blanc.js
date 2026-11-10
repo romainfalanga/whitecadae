@@ -5,7 +5,7 @@ export const GAME_MASTER_BLANC = {
   sections:[
     {title:'Vidéographie',paragraphs:[
       'Extériorise tes réflexions et tes idées en vidéo.',
-      'Utilise la vidéographie de cette plateforme pour organiser tes réflexions, visualiser tes trajectoires et choisir celles que tu veux voir grandir.'
+      'Utilise ta vidéographie pour organiser tes réflexions, visualiser tes trajectoires et choisir celles que tu veux voir grandir.'
     ]},
     {title:'Ta version harmonieuse',paragraphs:[
       'Imagine ta version harmonieuse et façonne-la dans ta vidéographie.',
