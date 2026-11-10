@@ -1,12 +1,13 @@
 import {ensureLogeStreamTables,createLogeUpload,getLogeUpload,deleteLogeUpload,readyLogeUpload,uploadIdOf,signedStreamPlayback} from './loge-stream.js';
-import {seal,unseal,tagHash,fail,text,identifier,integer} from './private-data.js';
+import {seal,unseal,tagHash,fail,text,identifier,integer,lifeEventContext} from './private-data.js';
+import {ensureLogeTables,sharedPostWithdrawal} from './loge.js';
 import {circleAccess,freshAccess,requireStorage,requireLevel} from './private-access.js';
 import {recordTopic} from './circle-topics.js';
 import {VIDEO_BRANCHES,storedVideoBranch,videoBranchKey} from '../public/video-model.js';
 import {youtubeLink} from '../public/youtube-video.js';
 export const EVENT_KINDS=['rencontre','famille','relation','études','travail','santé','changement','réussite','perte','autre'];
 export const EVENT_IMPACTS=['ressource','difficulté','mixte','à explorer'];
-const context=(owner,id)=>`life:${owner}:${id}`;
+const context=lifeEventContext;
 function date(value,precision){
   if(precision==='unknown')return '9999-12-31';
   const re=precision==='year'?/^\d{4}$/:precision==='month'?/^\d{4}-\d{2}$/:/^\d{4}-\d{2}-\d{2}$/;
@@ -51,7 +52,7 @@ async function unpack(env,row){
   if(out.video_branch)out.video_branch=videoBranchKey(out.video_branch);
   if(row.video_branch&&out.creation){
     const upload=await eventUpload(env,owner_id,row.id);
-    if(upload)out.creation={...out.creation,videoProvider:'stream',uploadId:upload.id,url:''};
+    if(upload){out.creation={...out.creation,videoProvider:'stream',uploadId:upload.id,url:''};if(upload.loge_post_id)out.loge_post_id=upload.loge_post_id;}
     else if(out.creation.videoProvider!=='stream')out.creation.videoProvider='youtube';
   }
   return out;
@@ -63,7 +64,9 @@ function filteredQuery(url,owner){
   return {values,filters,add};
 }
 async function eventUpload(env,owner,id){
-  return env.DB.prepare("SELECT * FROM loge_stream_uploads WHERE user_id=?1 AND event_id=?2 AND purpose='videography' AND state='published'").bind(owner,id).first();
+  // loge_post_id is set while this entry is shared in the Loge.
+  return env.DB.prepare(`SELECT s.*,(SELECT v.post_id FROM loge_shared_videos v JOIN loge_posts p ON p.id=v.post_id WHERE v.upload_id=s.id AND p.deleted_at IS NULL) AS loge_post_id
+    FROM loge_stream_uploads s WHERE s.user_id=?1 AND s.event_id=?2 AND s.purpose='videography' AND s.state='published'`).bind(owner,id).first();
 }
 async function linkFingerprint(id,revision,event){
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([id,revision,event])));
@@ -74,14 +77,14 @@ function queueEventMedia(env,owner,id,guard='',args=[]){
     WHERE user_id=?1 AND purpose='videography' AND state='published' AND event_id=?2 ${guard}`).bind(owner,id,...args);
 }
 export async function lifeRoute(request,env,url,user,body,json){
-  await ensureLogeStreamTables(env);
+  await ensureLogeStreamTables(env);await ensureLogeTables(env);
   const suffix=url.pathname.replace(/^\/api\/life-tree/,'').replace(/\/$/,''),method=request.method;
   // Data portability and erasure remain available even after exceptional loss
   // of progression. They never grant access to somebody else's data.
   if((suffix==='/export'&&method==='GET')||(suffix===''&&method==='DELETE')){
     if(method==='DELETE'){
       if(body.confirm!=='SUPPRIMER')fail('Confirme la suppression de ton arbre.');
-      await env.DB.batch([env.DB.prepare("UPDATE loge_stream_uploads SET state='deleting',upload_url=NULL,cleanup_after=CASE WHEN stream_id IS NULL THEN cleanup_after ELSE 0 END,updated_at=unixepoch() WHERE user_id=?1 AND purpose='videography' AND state<>'deleted'").bind(user.id),...['DELETE FROM life_events WHERE owner_id=?1','DELETE FROM life_drafts WHERE owner_id=?1'].map(q=>env.DB.prepare(q).bind(user.id))]);
+      await env.DB.batch([env.DB.prepare("UPDATE loge_stream_uploads SET state='deleting',upload_url=NULL,cleanup_after=CASE WHEN stream_id IS NULL THEN cleanup_after ELSE 0 END,updated_at=unixepoch() WHERE user_id=?1 AND purpose='videography' AND state<>'deleted'").bind(user.id),...['DELETE FROM life_events WHERE owner_id=?1','DELETE FROM life_drafts WHERE owner_id=?1'].map(q=>env.DB.prepare(q).bind(user.id)),...await sharedPostWithdrawal(env,user.id)]);
       return json({ok:true});
     }
     const after=url.searchParams.get('after')||'';if(after)identifier(after);
@@ -160,7 +163,8 @@ export async function lifeRoute(request,env,url,user,body,json){
     }
     if(method==='DELETE'){
       if(!row?.video_branch)await requireStorage(env,user.id);
-      const [result]=await env.DB.batch([env.DB.prepare('DELETE FROM life_events WHERE owner_id=?1 AND id=?2 AND revision=?3').bind(owner,id,integer(body.revision,1)),queueEventMedia(env,owner,id,'AND NOT EXISTS(SELECT 1 FROM life_events WHERE owner_id=?1 AND id=?2)')]);
+      // A video shared in the Loge leaves it with its entry.
+      const [result]=await env.DB.batch([env.DB.prepare('DELETE FROM life_events WHERE owner_id=?1 AND id=?2 AND revision=?3').bind(owner,id,integer(body.revision,1)),queueEventMedia(env,owner,id,'AND NOT EXISTS(SELECT 1 FROM life_events WHERE owner_id=?1 AND id=?2)'),...await sharedPostWithdrawal(env,owner)]);
       if(!result.meta.changes)fail('Cet événement a changé. Recharge-le avant de le supprimer.',409);return json({ok:true});
     }
     if(method==='PUT'){
@@ -180,6 +184,8 @@ export async function lifeRoute(request,env,url,user,body,json){
       };
       const repeated=await replay();if(repeated)return repeated;
       let upload=null;
+      // Commenters must keep seeing the video they answered.
+      if(incoming&&incoming!==currentUpload?.id&&currentUpload?.loge_post_id)fail('Cette vidéo est publiée dans la Loge virtuelle. Supprime sa publication avant de remplacer le fichier.',409);
       if(incoming&&incoming!==currentUpload?.id){
         try{upload=await readyLogeUpload(env,user,incoming,'videography');}catch(error){const retry=await replay();if(retry)return retry;throw error;}
       }
@@ -200,6 +206,8 @@ export async function lifeRoute(request,env,url,user,body,json){
           WHERE s.id=?4 AND s.user_id=?1 AND s.event_id=?2 AND s.purpose='videography' AND s.state='published') THEN payload ELSE NULL END
           WHERE owner_id=?1 AND id=?2 AND payload=?3`).bind(owner,id,payload,upload.id));
       }
+      // Safety net for a publication racing the replacement checked above.
+      if(upload&&currentUpload)statements.push(...await sharedPostWithdrawal(env,owner));
       // Payload equality is a per-request CAS marker, including a random nonce.
       statements.push(env.DB.prepare('DELETE FROM life_tags WHERE owner_id=?1 AND event_id=?2 AND EXISTS(SELECT 1 FROM life_events WHERE id=?2 AND payload=?3)').bind(owner,id,payload));
       for(const tag of event.payload.themes)statements.push(env.DB.prepare('INSERT INTO life_tags(owner_id,event_id,tag_hash) SELECT ?1,?2,?3 WHERE EXISTS(SELECT 1 FROM life_events WHERE id=?2 AND owner_id=?1 AND payload=?4)').bind(owner,id,await tagHash(env,owner,tag),payload));

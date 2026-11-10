@@ -744,3 +744,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_loge_stream_outstanding ON loge_stream_upl
 CREATE INDEX IF NOT EXISTS idx_loge_stream_cleanup ON loge_stream_uploads(state,cleanup_after,expires_at);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_stream_video_event ON loge_stream_uploads(user_id,event_id) WHERE purpose='videography' AND state='published';
+-- Loge posts shared from the videography (migration 0052).
+CREATE TABLE IF NOT EXISTS loge_shared_videos (
+    post_id INTEGER PRIMARY KEY REFERENCES loge_posts(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL,
+    event_id TEXT NOT NULL,
+    upload_id TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_loge_shared_upload ON loge_shared_videos(upload_id);
+CREATE INDEX IF NOT EXISTS idx_loge_shared_user ON loge_shared_videos(user_id,event_id);

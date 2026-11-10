@@ -14,7 +14,7 @@ import {handlePrivate} from './private-api.js';
 import {validAvatar} from './avatar-validation.js';
 import {handlePlaylists} from './playlists.js';
 import {handlePlaylistAudio} from './playlist-audio.js';
-import {handleLoge,ensureLogeTables} from './loge.js';
+import {handleLoge,ensureLogeTables,withdrawOrphanedSharedPosts} from './loge.js';
 import {cleanupLogeStream} from './loge-stream.js';
 import {settleThemeWeeks} from './loge-themes.js';
 export {BrainstormLive} from './brainstorm-live.js';
@@ -28,6 +28,7 @@ export default {
     await ensureLogeTables(env);
     if(controller.cron !== '*/15 * * * *') await settleThemeWeeks(env, controller.scheduledTime);
     await cleanupLogeStream(env);
+    await withdrawOrphanedSharedPosts(env);
   },
   async fetch(request, env) {
     const url = new URL(request.url);

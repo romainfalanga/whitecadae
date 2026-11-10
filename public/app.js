@@ -201,7 +201,8 @@ async function route() {
   }
   if (path === '/echelon/horloge') return navigate('/signes/horloge'+location.hash,true);
   if(/^\/(mecanisme|carre-d-as|arbre-de-vie|matiere)(?:\/|$)/.test(path))return navigate('/',true);
-  if(['/game-master-orange','/game-master-blanc','/signalements','/videographie','/videographie/archives','/videographie/comprendre'].includes(path)){
+  if(path==='/videographie/comprendre')return navigate('/videographie',true);
+  if(['/game-master-orange','/game-master-blanc','/signalements','/videographie','/videographie/archives'].includes(path)){
     const epoch=renderEpoch;
     app.innerHTML='<div class="loading">Chargement…</div>';
     try{
@@ -327,9 +328,10 @@ function accountDestination() {
   if(value==='57')return '/signes';
   if(value==='echelon'||value==='/parcours')return '/echelon';
   if(value==='/loge-virtuelle/publier')return value;
+  if(value==='/videographie/comprendre')return '/videographie';
   if(/^\/loge-virtuelle\/theme(?:\?theme=[1-9]\d*)?$/.test(value||''))return value;
   if(/^\/loge-virtuelle(?:\/(?:publications|membres)\/[1-9]\d*)?(?:\?(?:comment=[1-9]\d*|onglet=(?:reflexions|interventions|favoris)))?(?:#comment-[1-9]\d*)?$/.test(value||''))return value;
-  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|game-master-blanc|videographie(?:\/(?:archives|comprendre))?|sans-vin-divin)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
+  return /^\/(?:signes(?:\/horloge)?|echelon(?:\/horloge)?|game-master-orange|game-master-blanc|videographie(?:\/archives)?|sans-vin-divin)(?:#[a-z0-9-]+)?$/.test(value || '') ? value : '/';
 }
 
 function pageLogin() {

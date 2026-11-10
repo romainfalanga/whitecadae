@@ -114,3 +114,25 @@ test('upload access loss clears private content and prevents saving under anothe
     assert.equal(h.client.getSession(),null);assert.doesNotMatch(h.ctx.app.innerHTML,/Données privées/);assert.match(h.ctx.app.innerHTML,/Vérifier mon compte/);assert.equal(h.calls.some(c=>c.method==='PUT'),false);
   }
 });
+
+test('the file picker is one tappable zone that shows the chosen file and how to change it',async()=>{
+  const h=fixture();h.client.videoForm(null,null,'self');
+  assert.match(h.sandbox.markup,/<label class="video-file" id="video-file-zone"><input type="file" name="video" accept="video\/\*"[^>]*required/);
+  assert.match(h.sandbox.markup,/<strong id="video-file-name">Choisir une vidéo<\/strong><small id="video-file-help">200 Mo et 30 minutes maximum<\/small>/);
+  assert.match(h.sandbox.markup,/id="video-file-action" hidden>Changer</);assert.doesNotMatch(h.sandbox.markup,/Loge/);
+  let toggled;h.get('video-file-zone').classList={toggle:(name,on)=>{toggled=[name,on];}};
+  h.form.elements.video.files=[{name:'ma-réflexion.mp4',type:'video/mp4',size:42500000}];h.form.elements.video.onchange();
+  assert.equal(h.get('video-file-name').textContent,'ma-réflexion.mp4');assert.equal(h.get('video-file-help').textContent,'42,5 Mo');assert.equal(h.get('video-file-action').hidden,false);assert.deepEqual(toggled,['has-file',true]);
+  h.get('video-upload-cancel').onclick();await tick();
+  assert.equal(h.get('video-file-name').textContent,'Choisir une vidéo');assert.equal(h.get('video-file-help').textContent,'200 Mo et 30 minutes maximum');assert.equal(h.get('video-file-action').hidden,true);assert.deepEqual(toggled,['has-file',false]);
+});
+
+test('a video published in the Loge locks its file and warns before deletion',async()=>{
+  const h=fixture(),prompts=[];h.sandbox.confirm=message=>{prompts.push(message);return false;};
+  h.client.videoForm(event({loge_post_id:5}));
+  assert.match(h.sandbox.markup,/<label class="video-file is-locked"[^>]*><input type="file"[^>]*disabled>/);assert.match(h.sandbox.markup,/Vidéo publiée dans la Loge<\/strong><small id="video-file-help">Supprime sa publication dans la Loge pour remplacer le fichier\./);
+  h.get('video-delete').onclick();await tick();assert.match(prompts[0],/retirée de la Loge/);assert.equal(h.calls.some(call=>call.method==='DELETE'),false);
+  const plain=fixture(),asked=[];plain.sandbox.confirm=message=>{asked.push(message);return false;};plain.client.videoForm(event());
+  assert.match(plain.sandbox.markup,/Choisir une autre vidéo<\/strong><small id="video-file-help">200 Mo et 30 minutes maximum · sans nouveau fichier, la vidéo actuelle est conservée/);
+  plain.get('video-delete').onclick();await tick();assert.doesNotMatch(asked[0],/Loge/);
+});
