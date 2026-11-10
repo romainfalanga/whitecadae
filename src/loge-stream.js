@@ -1,4 +1,7 @@
 import {fail} from './private-data.js';
+import {LOGE_ROOMS} from '../public/video-model.js';
+// Room keys are fixed source constants, never request data.
+export const LOGE_ROOM_SQL=LOGE_ROOMS.map(room=>`'${room}'`).join(',');
 
 export const LOGE_UPLOAD_MAX_BYTES=200_000_000;
 export const LOGE_UPLOAD_MAX_SECONDS=1800;
@@ -47,7 +50,7 @@ export const LOGE_SHARED_SCHEMA=[
 ];
 // The shared upload must still be the published media of a videography entry.
 export const SHARED_UPLOAD_LIVE=`s.id=v.upload_id AND s.user_id=v.user_id AND s.event_id=v.event_id AND s.purpose='videography' AND s.state='published'
-  AND EXISTS(SELECT 1 FROM life_events e WHERE e.owner_id=s.user_id AND e.id=s.event_id AND e.video_branch IS NOT NULL)`;
+  AND EXISTS(SELECT 1 FROM life_events e WHERE e.owner_id=s.user_id AND e.id=s.event_id AND e.video_branch IN (${LOGE_ROOM_SQL}))`;
 const ready=new WeakMap();
 export const VIDEOGRAPHY_STREAM_INDEX=`CREATE UNIQUE INDEX IF NOT EXISTS idx_stream_video_event ON loge_stream_uploads(user_id,event_id) WHERE purpose='videography' AND state='published'`;
 async function initialize(env){

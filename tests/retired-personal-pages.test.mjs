@@ -31,10 +31,14 @@ test('the removed videography explanation returns to the videography without an 
 });
 
 test('login return URLs reject retired pages and preserve the active game destinations',()=>{
-  for(const path of [...destinations,'/signes','/signes/horloge','/echelon','/game-master-orange','/game-master-blanc','/loge-virtuelle/publier','/videographie','/videographie/archives','/videographie/comprendre','/playlist']){
+  for(const path of [...destinations,'/signes','/signes/horloge','/echelon','/game-master-orange','/game-master-blanc','/loge-virtuelle/publier','/loge-virtuelle','/loge-virtuelle?loge=idees-et-projets','/loge-virtuelle?loge=societe-harmonieuse','/videographie','/videographie/archives','/videographie/comprendre','/playlist']){
     const result=runInNewContext(destinationSource+'\naccountDestination()',{URLSearchParams,location:{search:'?retour='+encodeURIComponent(path)}});
     assert.equal(result,destinations.includes(path)||path==='/playlist'?'/':path==='/videographie/comprendre'?'/videographie':path,path);
   }
+});
+
+test('an unknown loge is not a login return destination',()=>{
+  for(const path of ['/loge-virtuelle?loge=metacognition','/loge-virtuelle?loge=version','/loge-virtuelle?loge='])assert.equal(runInNewContext(destinationSource+'\naccountDestination()',{URLSearchParams,location:{search:'?retour='+encodeURIComponent(path)}}),'/',path);
 });
 
 test('Playlist stays absent despite stale access flags and private queues stay disabled across accounts',async()=>{

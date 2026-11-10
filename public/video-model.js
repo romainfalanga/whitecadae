@@ -13,3 +13,9 @@ export const videoLabel=key=>VIDEO_BRANCHES.find(([id])=>id===key)?.[1]||'Vidéo
 const STORED_BRANCHES={version:'monthly'};
 export const storedVideoBranch=key=>STORED_BRANCHES[key]||key;
 export const videoBranchKey=stored=>Object.keys(STORED_BRANCHES).find(key=>STORED_BRANCHES[key]===stored)||stored;
+// The Loge has one room per shareable category. Métacognition and « Ta version
+// harmonieuse » stay private to the videography. Older posts carry no
+// category and live in the first room.
+export const LOGE_ROOMS=['ideas','projects','society'];
+export const logeRoom=category=>LOGE_ROOMS.includes(category)?category:LOGE_ROOMS[0];
+

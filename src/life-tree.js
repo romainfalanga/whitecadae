@@ -3,7 +3,7 @@ import {seal,unseal,tagHash,fail,text,identifier,integer,lifeEventContext} from 
 import {ensureLogeTables,sharedPostWithdrawal} from './loge.js';
 import {circleAccess,freshAccess,requireStorage,requireLevel} from './private-access.js';
 import {recordTopic} from './circle-topics.js';
-import {VIDEO_BRANCHES,storedVideoBranch,videoBranchKey} from '../public/video-model.js';
+import {VIDEO_BRANCHES,LOGE_ROOMS,storedVideoBranch,videoBranchKey} from '../public/video-model.js';
 import {youtubeLink} from '../public/youtube-video.js';
 export const EVENT_KINDS=['rencontre','famille','relation','études','travail','santé','changement','réussite','perte','autre'];
 export const EVENT_IMPACTS=['ressource','difficulté','mixte','à explorer'];
@@ -184,6 +184,8 @@ export async function lifeRoute(request,env,url,user,body,json){
       };
       const repeated=await replay();if(repeated)return repeated;
       let upload=null;
+      // A published video stays in a category that has a loge.
+      if(currentUpload?.loge_post_id&&!LOGE_ROOMS.includes(event.video_branch))fail('Cette vidéo est publiée dans la Loge virtuelle. Supprime sa publication avant de la passer dans une catégorie sans loge.',409);
       // Commenters must keep seeing the video they answered.
       if(incoming&&incoming!==currentUpload?.id&&currentUpload?.loge_post_id)fail('Cette vidéo est publiée dans la Loge virtuelle. Supprime sa publication avant de remplacer le fichier.',409);
       if(incoming&&incoming!==currentUpload?.id){
@@ -206,8 +208,8 @@ export async function lifeRoute(request,env,url,user,body,json){
           WHERE s.id=?4 AND s.user_id=?1 AND s.event_id=?2 AND s.purpose='videography' AND s.state='published') THEN payload ELSE NULL END
           WHERE owner_id=?1 AND id=?2 AND payload=?3`).bind(owner,id,payload,upload.id));
       }
-      // Safety net for a publication racing the replacement checked above.
-      if(upload&&currentUpload)statements.push(...await sharedPostWithdrawal(env,owner));
+      // Safety net for a publication racing the two refusals above.
+      if(row?.video_branch)statements.push(...await sharedPostWithdrawal(env,owner));
       // Payload equality is a per-request CAS marker, including a random nonce.
       statements.push(env.DB.prepare('DELETE FROM life_tags WHERE owner_id=?1 AND event_id=?2 AND EXISTS(SELECT 1 FROM life_events WHERE id=?2 AND payload=?3)').bind(owner,id,payload));
       for(const tag of event.payload.themes)statements.push(env.DB.prepare('INSERT INTO life_tags(owner_id,event_id,tag_hash) SELECT ?1,?2,?3 WHERE EXISTS(SELECT 1 FROM life_events WHERE id=?2 AND owner_id=?1 AND payload=?4)').bind(owner,id,await tagHash(env,owner,tag),payload));
