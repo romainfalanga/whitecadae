@@ -187,12 +187,15 @@ export async function logePlayback(env,postId,json){
     const token=await video.generateToken();
     if(typeof token!=='string'||! /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token))unavailable();
     let payload;try{payload=JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));}catch{unavailable();}
-    if(!Number.isSafeInteger(payload.exp)||payload.exp<=Math.floor(Date.now()/1000)||payload.sub!==row.stream_id)unavailable();
+    // The native Stream binding returns exp as a decimal string. Accept its
+    // documented numeric meaning, but never coerce arbitrary JSON values.
+    const expiry=typeof payload.exp==='number'?payload.exp:typeof payload.exp==='string'&&/^\d+$/.test(payload.exp)?Number(payload.exp):NaN;
+    if(!Number.isSafeInteger(expiry)||expiry<=Math.floor(Date.now()/1000)||payload.sub!==row.stream_id)unavailable();
     const hls=signedURL(details.playback?.hls||details.hlsPlaybackUrl,row.stream_id,token,'hls');
     const poster=signedURL(details.thumbnail,row.stream_id,token,'poster');
     // Recheck after external calls: a deleted post is never handed a new token.
     if(!await env.DB.prepare("SELECT 1 FROM loge_posts p JOIN loge_stream_uploads s ON s.post_id=p.id WHERE p.id=?1 AND p.deleted_at IS NULL AND s.state='published'").bind(postId).first())fail('Vidéo introuvable.',404);
-    return json({hls,poster,expiresAt:iso(payload.exp)});
+    return json({hls,poster,expiresAt:iso(expiry)});
   }catch(error){if(error instanceof Response)throw error;unavailable();}
 }
 export async function cleanupLogeStream(env){

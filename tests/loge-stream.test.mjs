@@ -26,7 +26,7 @@ function setup(){
       async details(){if(!videos.has(id))throw Object.assign(new Error('missing'),{status:404});return structuredClone(videos.get(id));},
       async update(params){updates.push({id,params});Object.assign(videos.get(id),params);},
       async delete(){deleted.push(id);videos.delete(id);},
-      async generateToken(){return 'header.'+Buffer.from(JSON.stringify({sub:id,exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.signature';}
+      async generateToken(){return 'header.'+Buffer.from(JSON.stringify({sub:id,exp:String(Math.floor(Date.now()/1000)+3600)})).toString('base64url')+'.signature';}
     };}
   };
   const deps={getUser:async request=>f.sql.prepare('SELECT * FROM users WHERE id=?').get(Number(request.headers.get('Test-User')))||null,json:(body,status=200,headers={})=>Response.json(body,{status,headers:{'Cache-Control':'no-store',...headers}})};
@@ -251,4 +251,16 @@ test('direct uploads accept the real Stream host and legacy host, but reject loo
       if(accepted){assert.equal(result.data.uploadURL,url);assert.equal((await f.call('/api/loge')).data.nextPublicationAt,null);}
     }finally{f.sql.close();}
   }
+});
+
+test('playback accepts native string and numeric expiries, rejecting malformed, expired and unsafe claims',async()=>{
+  const f=setup();try{
+    const id=(await f.upload()).data.uploadId;f.ready(id);const published=await f.publish(post(id));
+    const path='/api/loge/posts/'+published.data.post.id+'/playback',video=f.env.STREAM.video.bind(f.env.STREAM),future=Math.floor(Date.now()/1000)+3600;
+    for(const [exp,ok] of [[String(future),true],[future,true],[null,false],[true,false],[[future],false],['',false],['tomorrow',false],['1e20',false],['123.5',false],[future+.5,false],[String(Number.MAX_SAFE_INTEGER+1),false],[String(Math.floor(Date.now()/1000)-1),false]]){
+      f.env.STREAM.video=uid=>({...video(uid),async generateToken(){return 'header.'+Buffer.from(JSON.stringify({sub:uid,exp})).toString('base64url')+'.signature';}});
+      const response=await f.call(path);assert.equal(response.status,ok?200:503,JSON.stringify(exp));
+      if(ok)assert.equal(response.data.expiresAt,new Date(future*1000).toISOString());
+    }
+  }finally{f.sql.close();}
 });
