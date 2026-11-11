@@ -1,6 +1,7 @@
 import {seal,unseal,fail,text,identifier,integer,limitWrites} from './private-data.js';
 import {NOTICE_VERSION,requireLevel,requireStorage,levelOf,circleAccess,freshAccess,writeGuard,blocked,person} from './private-access.js';
 import {topicsRoute} from './circle-topics.js';
+import {ACE_SQUARE_LEVEL as LEVEL} from './content-access.js';
 
 const profileSQL='SELECT id,username,avatar_data IS NOT NULL AS has_avatar FROM users WHERE id=?1';
 async function profile(env,id){const row=await env.DB.prepare(profileSQL).bind(id).first();return row?person(row):null;}
@@ -9,6 +10,11 @@ async function messageView(env,row){return {id:row.id,author:row.author_id?{id:r
 const invisibleBlocked=`NOT EXISTS(SELECT 1 FROM ace_blocks b WHERE (b.user_id=?3 AND b.blocked_id=m.author_id) OR (b.blocked_id=?3 AND b.user_id=m.author_id))`;
 function messageVisibility(access,user){return {sql:`m.owner_id=?1 AND m.id>=?2 AND (?1=?3 OR EXISTS(SELECT 1 FROM circle_topics t JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=m.topic_id AND t.kind='creation' AND e.video_branch IS NOT NULL)) AND ${invisibleBlocked} AND (m.event_id IS NULL OR ?4=1) AND (m.topic_id IS NULL OR ${access.owner===user.id||access.member?.content_access?1:0}=1)`,values:[access.owner,access.member?.joined_seq||0,user.id,access.owner===user.id||access.member?.content_access?1:0]};}
 async function ensureCircle(env,owner){await env.DB.prepare('INSERT OR IGNORE INTO ace_circles(owner_id) VALUES(?1)').bind(owner).run();}
+// A link between two members is stored as two mirrored memberships: each one
+// is the other's AS and both videographies open. Each member holds four links.
+const linked=(a,b)=>`EXISTS(SELECT 1 FROM ace_memberships WHERE (owner_id=${a} AND angel_id=${b}) OR (owner_id=${b} AND angel_id=${a}))`;
+const hasRoom=who=>`(SELECT count(*) FROM ace_memberships WHERE owner_id=${who})<4 AND (SELECT count(*) FROM ace_memberships WHERE angel_id=${who})<4`;
+const freeSlot=who=>`(SELECT MIN(n) FROM slots WHERE n NOT IN(SELECT owner_slot FROM ace_memberships WHERE owner_id=${who}) AND n NOT IN(SELECT angel_slot FROM ace_memberships WHERE angel_id=${who}))`;
 async function invitation(env,user,id){
   const row=await env.DB.prepare('SELECT * FROM ace_invitations WHERE id=?1 AND (owner_id=?2 OR angel_id=?2)').bind(id,user.id).first();
   if(!row)fail('Invitation indisponible.',404);return row;
@@ -19,7 +25,7 @@ export async function aceRoute(request,env,url,user,body,json){
   // Leaving/blocking and deleting one's own messages remain possible after a
   // level change; they never disclose a circle's contents.
   const exitAction=method==='DELETE'&&/^\/(members|messages)\/[\w-]+$/.test(suffix)||method==='POST'&&suffix==='/blocks';
-  if(!exitAction)await requireLevel(env,user,18);
+  if(!exitAction)await requireLevel(env,user,LEVEL);
   if(!suffix&&method==='POST'){await ensureCircle(env,user.id);return json({ok:true});}
   if(!suffix&&method==='GET'){
     const own=await env.DB.prepare('SELECT * FROM ace_circles WHERE owner_id=?1').bind(user.id).first();
@@ -28,11 +34,12 @@ export async function aceRoute(request,env,url,user,body,json){
       WHERE c.owner_id=?1 OR m.angel_id=?1 ORDER BY c.owner_id=?1 DESC,c.owner_id LIMIT 5`).bind(user.id).all()).results;
     const circles=[];
     for(const row of candidates){
-      if(row.owner_id!==user.id&&(await levelOf(env,row.owner_id)<18||await blocked(env,user.id,row.owner_id)))continue;
+      if(row.owner_id!==user.id&&(await levelOf(env,row.owner_id)<LEVEL||await blocked(env,user.id,row.owner_id)))continue;
       const members=(await env.DB.prepare(`SELECT m.id AS membership_id,m.owner_slot,u.id,u.username,u.avatar_data IS NOT NULL AS has_avatar FROM ace_memberships m JOIN users u ON u.id=m.angel_id WHERE m.owner_id=?1 ORDER BY m.owner_slot`).bind(row.owner_id).all()).results;
       const unread=await env.DB.prepare(`SELECT count(*) AS n FROM ace_messages m WHERE m.owner_id=?1 AND m.id>=?2 AND m.author_id<>?3 AND (m.event_id IS NULL OR ?4=1)
         AND m.kind='message' AND EXISTS(SELECT 1 FROM circle_topics t JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=m.topic_id AND t.kind='creation' AND e.video_branch IS NOT NULL) AND (m.topic_id IS NULL OR ?5=1) AND m.id>COALESCE(CASE WHEN m.topic_id IS NULL THEN (SELECT last_id FROM ace_read_markers WHERE owner_id=?1 AND reader_id=?3) ELSE (SELECT last_id FROM circle_topic_reads WHERE topic_id=m.topic_id AND reader_id=?3) END,0) AND ${invisibleBlocked}`).bind(row.owner_id,row.joined_seq||0,user.id,row.owner_id===user.id||row.content_access?1:0,row.owner_id===user.id||row.content_access?1:0).first();
-      circles.push({owner:person({...row,id:row.owner_id}),sharing:row.owner_id===user.id||!!row.content_access,combinedSharing:row.owner_id===user.id||!!row.content_access,membershipId:row.membership_id,members:members.map(m=>({...person(m),membershipId:m.membership_id,slot:m.owner_slot})),unread:unread.n});
+      // Each member's square is their own: the AS of an AS stay private.
+      circles.push({owner:person({...row,id:row.owner_id}),sharing:row.owner_id===user.id||!!row.content_access,combinedSharing:row.owner_id===user.id||!!row.content_access,membershipId:row.membership_id,members:row.owner_id===user.id?members.map(m=>({...person(m),membershipId:m.membership_id,slot:m.owner_slot})):[],unread:unread.n});
     }
     const invitations=(await env.DB.prepare(`SELECT i.*,o.username AS owner_name,a.username AS angel_name FROM ace_invitations i JOIN users o ON o.id=i.owner_id JOIN users a ON a.id=i.angel_id
       WHERE (i.owner_id=?1 OR i.angel_id=?1) AND i.state='pending' AND i.expires_at>datetime('now') ORDER BY i.created_at DESC LIMIT 48`).bind(user.id).all()).results;
@@ -52,17 +59,16 @@ export async function aceRoute(request,env,url,user,body,json){
     await limitWrites(env,user.id);
     const rows=(await env.DB.prepare(`SELECT u.id,u.username FROM users u
       WHERE u.id<>?1 AND u.username=?2 COLLATE NOCASE
-      AND (SELECT count(*) FROM ace_memberships WHERE angel_id=u.id)<4
-      AND NOT EXISTS(SELECT 1 FROM ace_memberships WHERE owner_id=?1 AND angel_id=u.id)
-      AND NOT EXISTS(SELECT 1 FROM ace_invitations WHERE owner_id=?1 AND angel_id=u.id AND state='pending' AND expires_at>datetime('now'))
+      AND ${hasRoom('u.id')} AND NOT ${linked('?1','u.id')}
+      AND NOT EXISTS(SELECT 1 FROM ace_invitations WHERE ((owner_id=?1 AND angel_id=u.id) OR (owner_id=u.id AND angel_id=?1)) AND state='pending' AND expires_at>datetime('now'))
       AND NOT EXISTS(SELECT 1 FROM ace_blocks WHERE (user_id=?1 AND blocked_id=u.id) OR (blocked_id=?1 AND user_id=u.id)) LIMIT 1`).bind(user.id,search).all()).results;
-    const people=[];for(const row of rows)if(await levelOf(env,row.id)>=18)people.push({id:row.id,username:row.username});
+    const people=[];for(const row of rows)if(await levelOf(env,row.id)>=LEVEL)people.push({id:row.id,username:row.username});
     return json({people,next:null});
   }
   const avatar=/^\/avatar\/(\d+)$/.exec(suffix);
   if(avatar&&method==='GET'){
     const target=integer(Number(avatar[1]),1);let allowed=target===user.id;
-    if(!allowed&&!await blocked(env,user.id,target)&&await levelOf(env,target)>=18){
+    if(!allowed&&!await blocked(env,user.id,target)&&await levelOf(env,target)>=LEVEL){
       allowed=!!await env.DB.prepare(`SELECT 1 WHERE EXISTS(SELECT 1 FROM ace_preferences WHERE user_id=?1 AND listed=1)
         OR EXISTS(SELECT 1 FROM ace_memberships m WHERE (m.owner_id=?1 AND m.angel_id=?2) OR (m.owner_id=?2 AND m.angel_id=?1))
         OR EXISTS(SELECT 1 FROM ace_memberships a JOIN ace_memberships b ON a.owner_id=b.owner_id WHERE a.angel_id=?1 AND b.angel_id=?2)`).bind(target,user.id).first();
@@ -75,20 +81,20 @@ export async function aceRoute(request,env,url,user,body,json){
     const id=identifier(body.id),direction=body.direction==='request'?'request':'invite';let target;
     if(body.code){const code=text(body.code,64,true);target=await env.DB.prepare('SELECT user_id AS id FROM ace_preferences WHERE private_code=?1').bind(code).first();}
     else{const targetId=integer(body.target,1);target=await env.DB.prepare('SELECT id FROM users WHERE id=?1').bind(targetId).first();}
-    if(!target||target.id===user.id||await blocked(env,user.id,target.id)||await levelOf(env,target.id)<18)fail('Cette mise en relation n’est pas disponible.',404);
+    if(!target||target.id===user.id||await blocked(env,user.id,target.id)||await levelOf(env,target.id)<LEVEL)fail('Cette mise en relation n’est pas disponible.',404);
     const owner=direction==='invite'?user.id:target.id,angel=direction==='invite'?target.id:user.id;
     if(direction==='invite'&&body.recipientNotice!==true)fail('Confirme les accès que cette personne recevra.');
     // A request requires a private code. Directory entries are prospective angels.
     if(direction==='request'&&!body.code)fail('Utilise le code privé de la personne que tu souhaites accompagner.');
-    if(direction==='invite')await ensureCircle(env,owner);
+    await ensureCircle(env,user.id);if(direction==='invite')await ensureCircle(env,owner);
     else if(!await env.DB.prepare('SELECT 1 FROM ace_circles WHERE owner_id=?1').bind(owner).first())fail('Cette personne n’a pas encore créé son carré.',409);
     const result=await env.DB.prepare(`INSERT OR IGNORE INTO ace_invitations(id,owner_id,angel_id,direction,expires_at,recipient_notice)
       SELECT ?1,?2,?3,?4,datetime('now','+7 days'),?5
-      WHERE NOT EXISTS(SELECT 1 FROM ace_memberships WHERE owner_id=?2 AND angel_id=?3)
-      AND NOT EXISTS(SELECT 1 FROM ace_invitations WHERE owner_id=?2 AND angel_id=?3 AND state='pending' AND expires_at>datetime('now'))
-      AND (SELECT count(*) FROM ace_memberships WHERE owner_id=?2)<4 AND (SELECT count(*) FROM ace_memberships WHERE angel_id=?3)<4
+      WHERE NOT ${linked('?2','?3')}
+      AND NOT EXISTS(SELECT 1 FROM ace_invitations WHERE ((owner_id=?2 AND angel_id=?3) OR (owner_id=?3 AND angel_id=?2)) AND state='pending' AND expires_at>datetime('now'))
+      AND ${hasRoom('?2')} AND ${hasRoom('?3')}
       AND (SELECT count(*) FROM ace_invitations WHERE (owner_id=?6 OR angel_id=?6) AND created_at>datetime('now','-1 day'))<16`).bind(id,owner,angel,direction,direction==='invite'?1:0,user.id).run();
-    if(!result.meta.changes){const existing=await env.DB.prepare('SELECT id FROM ace_invitations WHERE id=?1 AND owner_id=?2 AND angel_id=?3').bind(id,owner,angel).first();if(!existing)fail('Une invitation existe déjà, une limite de places est atteinte ou trop de demandes ont été envoyées aujourd’hui.',409);}
+    if(!result.meta.changes){const existing=await env.DB.prepare('SELECT id FROM ace_invitations WHERE id=?1 AND owner_id=?2 AND angel_id=?3').bind(id,owner,angel).first();if(!existing)fail('Une invitation existe déjà, l’un de vous a déjà ses quatre AS ou trop de demandes ont été envoyées aujourd’hui.',409);}
     return json({ok:true,id});
   }
   const action=/^\/invitations\/([\w-]+)$/.exec(suffix);
@@ -98,22 +104,26 @@ export async function aceRoute(request,env,url,user,body,json){
       if(user.id!==recipient)fail('Seul le destinataire peut accepter.',403);
       if(row.state==='accepted')return json({ok:true});
       if(row.state!=='pending'||row.expires_at<=new Date().toISOString().replace('T',' ').slice(0,19))fail('Cette invitation a expiré.',409);
-      if(await levelOf(env,row.owner_id)<18||await levelOf(env,row.angel_id)<18||await blocked(env,row.owner_id,row.angel_id))fail('Cette mise en relation n’est plus disponible.',403);
+      if(await levelOf(env,row.owner_id)<LEVEL||await levelOf(env,row.angel_id)<LEVEL||await blocked(env,row.owner_id,row.angel_id))fail('Cette mise en relation n’est plus disponible.',403);
       if(row.direction==='request'&&body.recipientNotice!==true)fail('Confirme les accès que cette personne recevra.');
-      // Slots are selected and inserted in one statement. Unique constraints
-      // enforce both capacities even with simultaneous acceptance requests.
+      // Both memberships are written in one transaction. Each takes the lowest
+      // slot free on both sides of its member; unique slots keep the four-link
+      // limit even when several invitations are accepted at the same time.
+      await ensureCircle(env,row.angel_id);
       const [inserted]=await env.DB.batch([
-        env.DB.prepare(`WITH slots(n) AS (VALUES(1),(2),(3),(4)) INSERT OR IGNORE INTO ace_memberships(id,owner_id,angel_id,owner_slot,angel_slot,joined_seq)
-          SELECT ?1,?2,?3,a.n,b.n,COALESCE((SELECT MAX(id) FROM ace_messages),0)+1 FROM slots a CROSS JOIN slots b
-          WHERE NOT EXISTS(SELECT 1 FROM ace_memberships WHERE owner_id=?2 AND owner_slot=a.n)
-          AND NOT EXISTS(SELECT 1 FROM ace_memberships WHERE angel_id=?3 AND angel_slot=b.n)
+        env.DB.prepare(`WITH slots(n) AS (VALUES(1),(2),(3),(4)) INSERT OR IGNORE INTO ace_memberships(id,owner_id,angel_id,owner_slot,angel_slot,joined_seq,content_access)
+          SELECT ?1,?2,?3,a,b,COALESCE((SELECT MAX(id) FROM ace_messages),0)+1,1 FROM (SELECT ${freeSlot('?2')} AS a,${freeSlot('?3')} AS b)
+          WHERE a IS NOT NULL AND b IS NOT NULL AND NOT ${linked('?2','?3')}
           AND EXISTS(SELECT 1 FROM ace_invitations WHERE id=?1 AND state='pending' AND expires_at>datetime('now'))
-          AND NOT EXISTS(SELECT 1 FROM ace_blocks WHERE (user_id=?2 AND blocked_id=?3) OR (user_id=?3 AND blocked_id=?2))
-          ORDER BY a.n,b.n LIMIT 1`).bind(row.id,row.owner_id,row.angel_id),
+          AND NOT EXISTS(SELECT 1 FROM ace_blocks WHERE (user_id=?2 AND blocked_id=?3) OR (user_id=?3 AND blocked_id=?2))`).bind(row.id,row.owner_id,row.angel_id),
+        env.DB.prepare(`INSERT INTO ace_memberships(id,owner_id,angel_id,owner_slot,angel_slot,joined_seq,content_access)
+          SELECT ?4,angel_id,owner_id,angel_slot,owner_slot,joined_seq,1 FROM ace_memberships WHERE id=?1 AND owner_id=?2 AND angel_id=?3
+          AND NOT EXISTS(SELECT 1 FROM ace_memberships WHERE owner_id=?3 AND angel_id=?2)`).bind(row.id,row.owner_id,row.angel_id,crypto.randomUUID()),
         env.DB.prepare("UPDATE ace_invitations SET state='accepted',recipient_notice=1 WHERE id=?1 AND EXISTS(SELECT 1 FROM ace_memberships WHERE id=?1)").bind(row.id),
         env.DB.prepare("INSERT INTO privacy_consents(user_id,purpose,version,granted,recipient_id) SELECT ?1,'recipient',?2,1,?3 WHERE EXISTS(SELECT 1 FROM ace_memberships WHERE id=?4)").bind(row.owner_id,NOTICE_VERSION,row.angel_id,row.id),
+        env.DB.prepare("INSERT INTO privacy_consents(user_id,purpose,version,granted,recipient_id) SELECT ?1,'recipient',?2,1,?3 WHERE EXISTS(SELECT 1 FROM ace_memberships WHERE id=?4)").bind(row.angel_id,NOTICE_VERSION,row.owner_id,row.id),
       ]);
-      if(!inserted.meta.changes&&!await env.DB.prepare('SELECT 1 FROM ace_memberships WHERE id=?1').bind(row.id).first())fail('Les quatre places du carré ou les quatre accompagnements sont déjà occupés.',409);
+      if(!inserted.meta.changes&&!await env.DB.prepare('SELECT 1 FROM ace_memberships WHERE id=?1').bind(row.id).first())fail('L’un de vous a déjà ses quatre AS.',409);
       return json({ok:true});
     }
     if(!['decline','cancel'].includes(body.action))fail('Action invalide.');
@@ -122,7 +132,10 @@ export async function aceRoute(request,env,url,user,body,json){
   }
   const member=/^\/members\/([\w-]+)$/.exec(suffix);
   if(member&&method==='DELETE'){
-    await env.DB.prepare('DELETE FROM ace_memberships WHERE id=?1 AND (owner_id=?2 OR angel_id=?2)').bind(identifier(member[1]),user.id).run();return json({ok:true});
+    const link=await env.DB.prepare('SELECT owner_id,angel_id FROM ace_memberships WHERE id=?1 AND (owner_id=?2 OR angel_id=?2)').bind(identifier(member[1]),user.id).first();
+    // Removing an AS closes both videographies at once.
+    if(link)await env.DB.prepare('DELETE FROM ace_memberships WHERE (owner_id=?1 AND angel_id=?2) OR (owner_id=?2 AND angel_id=?1)').bind(link.owner_id,link.angel_id).run();
+    return json({ok:true});
   }
   if(suffix==='/sharing'&&method==='PUT'){
     if(typeof body.enabled!=='boolean'||body.enabled&&(body.consent!==true||!['videography','matter-and-mechanisms'].includes(body.scope)))fail('Confirme le partage de ta Vidéographie avec tes AS.');

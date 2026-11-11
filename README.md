@@ -15,7 +15,7 @@ Application JavaScript sans framework : Cloudflare Worker, assets statiques, D1 
 - `/loge-virtuelle` : fil des Game Masters Blancs à l’échelon 15, avec vidéos YouTube, commentaires et profils Réflexions / Interventions.
 - `/game-master-blanc` : prolongement du parcours à l’échelon 15, avec les six rubriques sur la vidéographie, les versions harmonieuses et la loge sociale. Le contenu est transmis uniquement après vérification du score côté serveur.
 
-Mécanismes, Vidéographie et Carré d’AS sont retirés du site, du menu, de l’accueil et du calendrier des déblocages. Leurs anciennes adresses, y compris les sous-pages, `/matiere` et `/arbre-de-vie`, ramènent à l’accueil. Les indicateurs d’accès correspondants restent désactivés à tous les échelons, y compris pour les administrateurs. Game Master Orange rejoint le parcours à l’échelon 7, puis Game Master Blanc, les Loges virtuelles et la Vidéographie à l’échelon 15. Les données et API personnelles historiques sont conservées avec leurs contrôles d’accès pour compatibilité ; aucune migration ni suppression de données n’est exécutée.
+Mécanismes est retiré du site, du menu, de l’accueil et du calendrier des déblocages. Ses anciennes adresses, y compris les sous-pages, `/matiere` et `/arbre-de-vie`, ramènent à l’accueil. Les indicateurs d’accès correspondants restent désactivés à tous les échelons, y compris pour les administrateurs. Game Master Orange rejoint le parcours à l’échelon 7, puis Game Master Blanc, les Loges virtuelles et la Vidéographie à l’échelon 15, et le Carré d’AS à l’échelon 20 (voir [docs/carre-d-as.md](docs/carre-d-as.md)). Les données et API personnelles historiques sont conservées avec leurs contrôles d’accès pour compatibilité ; aucune migration ni suppression de données n’est exécutée.
 
 La liste des contenus découverts sur l’accueil est entièrement informative : aucun titre de musique ou de page n’est cliquable et aucun bouton Paroles n’y figure. Les pages de paroles affichent le titre du morceau, son texte et le retour à l’album, sans surtitre album / Paroles ni bouton d’écoute local ; le lecteur global reste disponible. Les repères de section sont présentés sans crochets, avec des titres dorés dans la marge sur ordinateur et au-dessus des strophes sur mobile. Les repères numérotés sont harmonisés à l’affichage et toutes les lignes chantées restent conservées, sans modification des paroles enregistrées.
 
@@ -39,6 +39,7 @@ Le signe `n-0-3` (Katikas) est retiré du score, sans suppression de son histori
 | 12 | La matière danse |
 | 15 | Game Master Blanc, Loges virtuelles et Vidéographie |
 | 18 | Les probabilités |
+| 20 | Carré d’AS |
 | 25 | Fais Mieux |
 | 33 | Un fil entre deux infinis |
 

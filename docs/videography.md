@@ -23,7 +23,7 @@ ni dépôt de fichier vidéo, ni lecteur, ni fournisseur d’hébergement.
 Un bilan par auteur et par mois est imposé par un index unique, y compris lors
 de deux enregistrements simultanés. Un brouillon incomplet reste privé.
 
-Carré d’AS s’ouvre à l’échelon 18, y compris pour accepter une invitation.
+Carré d’AS s’ouvre désormais à l’échelon 20, y compris pour accepter une invitation (voir [carre-d-as.md](carre-d-as.md)).
 Il présente uniquement les discussions liées aux fiches vidéo. Le propriétaire
 autorise explicitement le partage, puis chaque AS doit avoir accepté son
 invitation. Retrait, blocage et révocation empêchent les lectures et écritures

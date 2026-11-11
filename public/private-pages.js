@@ -56,7 +56,8 @@ async function verifyIdentity(){const current=await api('/api/me');if(current.us
 export async function page(path,ctx){
   // The explanation page was removed; its address returns to the videography.
   if(path==='/videographie/comprendre'){leave();return ctx.navigate('/videographie',true);}
-  if(!['/game-master-orange','/game-master-blanc','/signalements','/videographie','/videographie/archives'].includes(path)){leave();return ctx.navigate('/',true);}
+  if(path==='/carre-d-as/comprendre'){leave();return ctx.navigate('/carre-d-as',true);}
+  if(!['/game-master-orange','/game-master-blanc','/signalements','/videographie','/videographie/archives','/carre-d-as'].includes(path)&&!/^\/carre-d-as\/fil\/\d+$/.test(path)){leave();return ctx.navigate('/',true);}
   leave();const s=session={ctx,user:ctx.state.user?.id,controller:new AbortController(),timer:null,dialog:null,dirty:false};
   if(!document.querySelector('link[href="/private-pages.css"]')){const css=document.createElement('link');css.rel='stylesheet';css.href='/private-pages.css';document.head.append(css);}
   const title=path.startsWith('/mecanisme')?'Mécanismes':path==='/game-master-orange'?'Game Master Orange':path==='/game-master-blanc'?'Game Master Blanc':path.startsWith('/videographie')?'Vidéographie':path==='/signalements'?'Signalements':'Carré d’AS';document.title=title+' · White Cadae';
@@ -71,7 +72,7 @@ export async function page(path,ctx){
     if(path==='/game-master-orange'){await api('/api/game-master-orange');gameMaster();return;}
     if(path==='/game-master-blanc'){const content=await api('/api/game-master-blanc');gameMasterBlanc(content.page);return;} if(path==='/signalements'){await reportsPage();return;}
     const helpBase=path.endsWith('/comprendre')?path.slice(0,-11):null;
-    if(PRIVATE_HELP[helpBase]){await api(helpBase==='/mecanisme'?'/api/mechanisms':'/api/ace-circles');helpPage(helpBase);return;}
+    if(PRIVATE_HELP[helpBase]){await api('/api/mechanisms');helpPage(helpBase);return;}
     const slot=Number(path.split('/')[2])||null,topic=/^\/carre-d-as\/fil\/(\d+)$/.exec(path);
     const first=path.startsWith('/mecanisme')?'/api/mechanisms'+(slot?'/'+slot:''):path==='/videographie'?'/api/life-tree?videos=1&branch=self':path==='/videographie/archives'?'/api/life-tree?archive=1':topic?'/api/ace-circles/topics/'+topic[1]:'/api/ace-circles';
     // Each endpoint checks the current user and level. Fetch consent alongside
@@ -130,34 +131,34 @@ async function videoPage(){
 async function loadVideos(reset=false){
   const state=session.videos,request=++state.request;
   if(reset){clearInlineComments();destroyVideoPlayers(el('video-list'));state.events=[];state.next=null;el('video-list').replaceChildren();el('video-more').hidden=true;}
-  const query=new URLSearchParams({videos:'1'});if(state.branch)query.set('branch',state.branch);if(state.next)query.set('after',state.next);
+  const query=new URLSearchParams({videos:'1'});if(state.owner)query.set('owner',String(state.owner));if(state.branch)query.set('branch',state.branch);if(state.next)query.set('after',state.next);
   state.loading=true;let data;try{data=await api('/api/life-tree?'+query);}finally{state.loading=false;}
   if(session.videos!==state||state.request!==request)return;
   const start=state.events.length;state.events.push(...data.events);state.next=data.next;
   // A grid of covers, as on a profile: each opens the video in a viewer.
   el('video-list').insertAdjacentHTML('beforeend',data.events.map((e,index)=>videoTile(e,start+index)).join(''));
   el('video-list').querySelector('.video-empty')?.remove();
-  if(!state.events.length)el('video-list').insertAdjacentHTML('beforeend',`<div class="video-empty"><span class="video-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="3"/><path d="m16 10 5-3v10l-5-3"/></svg></span><p>Aucune vidéo dans cette rubrique pour le moment.</p>${button('Ajouter ta première vidéo','','',`data-video-add-empty`)}</div>`);
+  if(!state.events.length)el('video-list').insertAdjacentHTML('beforeend',`<div class="video-empty"><span class="video-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="3"/><path d="m16 10 5-3v10l-5-3"/></svg></span><p>Aucune vidéo dans cette rubrique pour le moment.</p>${state.owner?'':button('Ajouter ta première vidéo','','',`data-video-add-empty`)}</div>`);
   el('video-list').querySelector('[data-video-add-empty]')?.addEventListener('click',()=>el('video-add').click());
   el('video-more').hidden=!state.next;
   const count=el('video-section-count');if(count)count.textContent=state.events.length?`${state.events.length}${state.next?'+':''} vidéo${state.events.length>1?'s':''}`:'';
   el('video-list').querySelectorAll('[data-video-open]:not([data-bound])').forEach(tile=>{tile.dataset.bound='1';tile.onclick=()=>openVideoViewer(Number(tile.dataset.videoOpen));});
-  renderJobTile();loadPosters(el('video-list'));
+  if(!state.owner)renderJobTile();loadPosters(el('video-list'),state.owner);
 }
 function videoTile(e,index){
   const shared=!!e.loge_post_id;
   return `<article class="video-tile" data-video="${esc(e.id)}"><button type="button" class="video-tile-open" data-video-open="${index}" aria-label="Regarder ${esc(e.title)}"><span class="video-tile-poster"${e.creation?.videoProvider==='stream'?` data-poster="${esc(e.id)}"`:''}></span><span class="video-tile-shade" aria-hidden="true"></span><span class="video-tile-play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5 20 12 8 19Z"/></svg></span>${shared?'<span class="video-tile-badge">Dans les loges</span>':''}<span class="video-tile-text"><strong>${esc(e.title)}</strong><time>${esc(dateLabel(e))}</time></span></button></article>`;
 }
 // Covers are signed by the server one by one, only when a tile nears the screen.
-function loadPosters(root){
-  const s=session,cache=s.posters||=new Map(),queue=s.posterQueue||=[];
+function loadPosters(root,owner=null){
+  const s=session,cache=s.posters||=new Map(),queue=s.posterQueue||=[],ownerQuery=owner?'?owner='+encodeURIComponent(owner):'';
   const fill=(slot,url)=>{if(slot.querySelector('img'))return;const img=document.createElement('img');img.alt='';img.decoding='async';img.loading='lazy';img.onload=()=>slot.classList.add('is-loaded');img.src=url;slot.append(img);};
   const pump=()=>{
     while((s.posterActive||0)<3&&queue.length){
       const slot=queue.shift();if(!slot.isConnected||!live(s))continue;const id=slot.dataset.poster,hit=cache.get(id);
       if(hit&&hit.expires>Date.now()+60000){fill(slot,hit.url);continue;}
       s.posterActive=(s.posterActive||0)+1;
-      api('/api/life-tree/events/'+encodeURIComponent(id)+'/playback').then(data=>{if(data?.poster){cache.set(id,{url:data.poster,expires:Date.parse(data.expiresAt)||Date.now()+1800000});if(slot.isConnected)fill(slot,data.poster);}}).catch(()=>{}).finally(()=>{s.posterActive--;pump();});
+      api('/api/life-tree/events/'+encodeURIComponent(id)+'/playback'+ownerQuery).then(data=>{if(data?.poster){cache.set(id,{url:data.poster,expires:Date.parse(data.expiresAt)||Date.now()+1800000});if(slot.isConnected)fill(slot,data.poster);}}).catch(()=>{}).finally(()=>{s.posterActive--;pump();});
     }
   };
   const want=slot=>{if(slot.dataset.posterQueued)return;slot.dataset.posterQueued='1';queue.push(slot);pump();};
@@ -169,7 +170,7 @@ function loadPosters(root){
 // A video on its way shows in its category, ahead of the others.
 function renderJobTile(){
   const list=el('video-list');if(!list||!session?.videos)return;
-  const job=currentVideoJob(),show=!!job&&job.phase!=='done'&&job.branch===session.videos.branch;
+  const job=currentVideoJob(),show=!!job&&!session.videos.owner&&job.phase!=='done'&&job.branch===session.videos.branch;
   let tile=el('video-job-tile');
   if(!show){tile?.remove();list.querySelector('.video-empty')?.removeAttribute('hidden');return;}
   if(!tile){list.insertAdjacentHTML('afterbegin',`<article class="video-tile is-pending" id="video-job-tile"><button type="button" class="video-tile-open" data-video-job><span class="video-tile-ring" aria-hidden="true"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" pathLength="100"/><circle class="ring-value" cx="18" cy="18" r="15" pathLength="100"/></svg></span><span class="video-tile-text"><strong></strong><time></time></span></button></article>`);tile=el('video-job-tile');tile.querySelector('[data-video-job]').onclick=()=>videoJobView();}
@@ -182,9 +183,10 @@ function renderJobTile(){
 // The viewer plays one video at a time, with its details and the way to the next.
 function openVideoViewer(index){
   const s=session,events=s.videos?.events||[],e=events[index];if(!e)return;
-  const dialog=modal(e.title,`<article class="video-card video-viewer" data-video="${esc(e.id)}"><p class="video-viewer-meta"><span>${esc(videoLabel(e.video_branch))}</span><time>${esc(dateLabel(e))}</time>${e.loge_post_id?'<span class="video-tile-badge">Dans les loges</span>':''}</p>${eventVideoPlayer(e,true,true)}<div class="video-card-footer">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Zm9-13 4 4"/></svg>Modifier','video-viewer-edit','quiet')}${e.topic_id&&s.ctx.state.access?.aceSquare?button('AS','','quiet',`data-video-comments="${e.topic_id}" aria-expanded="false" aria-controls="as-comments-${e.topic_id}"`):''}</div><nav class="video-viewer-nav" aria-label="Autres vidéos">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg><span>Précédente</span>','video-viewer-prev','quiet',index===0?'disabled':'')}<span class="video-viewer-position">${index+1} / ${events.length}${s.videos.next?'+':''}</span>${button('<span>Suivante</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>','video-viewer-next','quiet',index>=events.length-1&&!s.videos.next?'disabled':'')}</nav></article>`);
+  const owner=s.videos.owner||s.user,own=owner===s.user;
+  const dialog=modal(e.title,`<article class="video-card video-viewer" data-video="${esc(e.id)}"><p class="video-viewer-meta"><span>${esc(videoLabel(e.video_branch))}</span><time>${esc(dateLabel(e))}</time>${e.loge_post_id?'<span class="video-tile-badge">Dans les loges</span>':''}</p>${eventVideoPlayer(e,true,true,owner)}${!own&&e.creation?.work?`<p class="video-viewer-notes">${esc(e.creation.work)}</p>`:''}<div class="video-card-footer">${own?button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Zm9-13 4 4"/></svg>Modifier','video-viewer-edit','quiet'):'<span></span>'}${e.topic_id&&s.ctx.state.access?.aceSquare?button('AS','','quiet',`data-video-comments="${e.topic_id}" aria-expanded="false" aria-controls="as-comments-${e.topic_id}"`):''}</div><nav class="video-viewer-nav" aria-label="Autres vidéos">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg><span>Précédente</span>','video-viewer-prev','quiet',index===0?'disabled':'')}<span class="video-viewer-position">${index+1} / ${events.length}${s.videos.next?'+':''}</span>${button('<span>Suivante</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>','video-viewer-next','quiet',index>=events.length-1&&!s.videos.next?'disabled':'')}</nav></article>`);
   dialog.classList.add('is-viewer');wireVideoPlayers(dialog,()=>Promise.resolve());
-  bind('video-viewer-edit',async()=>{const data=await api('/api/life-tree/events/'+encodeURIComponent(e.id));videoForm(data.event);});
+  if(own)bind('video-viewer-edit',async()=>{const data=await api('/api/life-tree/events/'+encodeURIComponent(e.id));videoForm(data.event);});
   dialog.querySelectorAll('[data-video-comments]').forEach(b=>b.onclick=()=>run(b,()=>toggleInlineComments(b)));
   const go=async step=>{
     const next=index+step;
@@ -461,78 +463,61 @@ async function eventDetail(id,owner=session.user){
   bind('life-link',()=>{el('life-link-form').innerHTML=`<label>Élément déjà chargé dans ta chronologie<select id="life-link-target">${session.tree.events.filter(e=>e.id!==id).map(e=>`<option value="${esc(e.id)}">${esc(e.title)}</option>`).join('')}</select></label><label>Le lien que tu perçois<input id="life-link-label" maxlength="200"></label>${button('Enregistrer le lien','life-link-save')}`;bind('life-link-save',async()=>{await api('/api/life-tree/links',{method:'POST',body:{source:id,target:el('life-link-target').value,label:el('life-link-label').value}});await eventDetail(id);});});
 }
 
+// The Carré d'AS: four chosen links. Each link opens both videographies, so
+// every member's square is their own and holds the people they help.
 async function circlePage(){
-  session.circle=await api('/api/ace-circles');session.selectedOwner=Number(/^#carre-(\d+)$/.exec(location.hash)?.[1])||session.selectedOwner||session.user;
-  shell(`${heading('Carré d’AS','','','/carre-d-as')}<div class="ace-tabs" role="tablist" aria-label="Carré d’AS">${[['circle','Mon carré'],['companions','J’accompagne']].map(([key,label])=>`<button type="button" role="tab" id="ace-tab-${key}" aria-controls="ace-view" tabindex="${key==='circle'?0:-1}" aria-selected="${key==='circle'}" data-tab="${key}">${label}</button>`).join('')}</div><div id="ace-view" role="tabpanel" tabindex="0" aria-labelledby="ace-tab-circle"></div>`);
-  const tabs=[...document.querySelectorAll('[data-tab]')];
-  tabs.forEach((b,index)=>{b.onclick=()=>run(null,()=>circleTab(b.dataset.tab));b.onkeydown=e=>{let next;if(e.key==='ArrowRight')next=(index+1)%tabs.length;else if(e.key==='ArrowLeft')next=(index+tabs.length-1)%tabs.length;else if(e.key==='Home')next=0;else if(e.key==='End')next=tabs.length-1;else return;e.preventDefault();tabs[next].focus();tabs[next].click();};});
-  await circleTab(session.selectedOwner===session.user?'circle':'companions',false);
+  shell(`${heading('Carré d’AS')}<p class="square-lead">Choisis jusqu’à quatre AS. Chaque lien est réciproque : vous découvrez la vidéographie l’un de l’autre pour vous aider à avancer.</p><div id="square-view"></div>`);
+  session.selectedOwner=Number(/^#as-(\d+)$/.exec(location.hash)?.[1])||null;session.circle=session.initial?.data;
+  await squareView(false);
 }
-async function circleTab(name,refresh=true){
-  session.poll=null;session.feed=null;clearTimeout(session.timer);document.querySelectorAll('[data-tab]').forEach(b=>{const active=b.dataset.tab===name;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;});el('ace-view').setAttribute('aria-labelledby','ace-tab-'+name);session.tab=name;
-  if(name==='circle')session.selectedOwner=session.user;else if(session.selectedOwner===session.user)session.selectedOwner=null;return circlesView(refresh);
+const squareMembers=()=>{const own=session.circle.circles.find(c=>c.owner.id===session.user);const unread=new Map(session.circle.circles.filter(c=>c.owner.id!==session.user).map(c=>[c.owner.id,c]));return (own?.members||[]).map(m=>({...m,unread:unread.get(m.id)?.unread||0,reachable:unread.has(m.id)}));};
+async function squareView(refresh=true){
+  const s=session;if(refresh||!s.circle)s.circle=await api('/api/ace-circles');if(!live(s))return;
+  const members=squareMembers();
+  if(!members.some(m=>m.id===s.selectedOwner&&m.reachable))s.selectedOwner=members.find(m=>m.reachable)?.id||null;
+  const slots=Array.from({length:4},(_,i)=>{
+    const m=members.find(m=>m.slot===i+1);
+    if(!m)return `<button type="button" class="square-slot is-empty" data-square-add><span class="square-plus" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><strong>Choisir un AS</strong></button>`;
+    return `<button type="button" class="square-slot" data-square-member="${m.id}" aria-pressed="${m.id===s.selectedOwner}" ${m.reachable?'':'disabled'}>${avatar(m)}<strong>${esc(m.username)}</strong>${m.unread?`<span class="square-unread" aria-label="${m.unread} nouvelle${m.unread>1?'s':''} réponse${m.unread>1?'s':''}">${m.unread}</span>`:''}${m.reachable?'':'<small>Pas encore à l’échelon 20</small>'}</button>`;
+  }).join('');
+  el('square-view').innerHTML=`<div class="square-grid" aria-label="Mes AS">${slots}</div><p class="square-count">${members.length} / 4 AS</p>${squareInvitations()}<section id="square-member" class="square-member" ${s.selectedOwner?'':'hidden'}></section>`;
+  el('square-view').querySelectorAll('[data-square-add]').forEach(b=>b.onclick=()=>directoryView());
+  el('square-view').querySelectorAll('[data-square-member]').forEach(b=>b.onclick=()=>run(b,async()=>{s.selectedOwner=Number(b.dataset.squareMember);history.replaceState(history.state,'','#as-'+s.selectedOwner);el('square-view').querySelectorAll('[data-square-member]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));await memberVideography();}));
+  wireInvitations();
+  if(s.selectedOwner)await memberVideography();
 }
-async function circlesView(refresh=true){
-  const view=session.tab;if(refresh)session.circle=await api('/api/ace-circles');if(session.tab!==view)return;
-  const ownView=session.tab==='circle',circles=session.circle.circles.filter(c=>ownView?c.owner.id===session.user:c.owner.id!==session.user);
-  if(!circles.length){
-    el('ace-view').innerHTML=`<div class="ace-intro"><div class="ace-four" aria-hidden="true"><span>AS</span><span>AS</span><span>AS</span><span>AS</span></div><h2>${ownView?'Quatre places, des liens choisis.':'Être là, à ton tour.'}</h2><p>${ownView?'Invite une personne de ton entourage par son pseudo. Tes AS pourront découvrir ta Vidéographie et tes mécanismes.':'Les carrés des personnes dont tu es un AS apparaissent ici après acceptation de leur invitation.'}</p><div class="private-actions">${ownView?button('Ajouter un AS','ace-add','')+button('Ouvrir mon carré','ace-create','quiet'):''}</div></div>${invitationsMarkup(ownView)}`;
-    wireInvitations(ownView);bind('ace-add',directoryView);bind('ace-create',async()=>{await api('/api/ace-circles',{method:'POST',body:{}});session.circle=await api('/api/ace-circles');await circlesView();});return;
-  }
-  const selected=circles.find(c=>c.owner.id===session.selectedOwner)||circles[0];session.selectedOwner=selected.owner.id;
-  el('ace-view').innerHTML=`<nav class="ace-nav ${circles.length===1?'is-single':''}" aria-label="Les personnes que j’accompagne">${circles.map(c=>`<button type="button" data-circle="${c.owner.id}" aria-current="${c===selected}">${esc(c.owner.username)}</button>`).join('')}</nav><div class="ace-layout ${ownView?'ace-own-square':''}"><aside id="ace-members"><section class="ace-members-panel"><header><h2>${ownView?'Mes AS':'Les AS de '+esc(selected.owner.username)}</h2><span>${selected.members.length} / 4</span></header><div class="ace-star-map">${memberSlots(selected,ownView)}</div></section><div class="private-actions">${ownView&&selected.members.length<4?button('Ajouter un AS','ace-add','quiet'):''}${!ownView?button('Quitter ce carré','ace-leave','subtle'):''}</div></aside>${ownView?'':`<section class="topic-feed"><header><h2>Vidéographie de ${esc(selected.owner.username)}</h2>${button('Mécanismes','ace-mechanisms','quiet')}</header><div id="topic-list"></div>${button('Voir la suite','topic-more','quiet','hidden')}</section>`}</div>${invitationsMarkup(ownView)}`;
-  wireInvitations(ownView);bind('ace-add',directoryView);bind('ace-mechanisms',()=>sharedMechanisms(selected));
-  document.querySelectorAll('[data-square-remove]').forEach(b=>b.onclick=()=>{
-    const member=selected.members.find(m=>m.membershipId===b.dataset.squareRemove);if(!member)return;
-    modal('Retirer un AS',`<p>Retirer ${esc(member.username)} de ton carré ? Cette personne n’aura plus accès à tes vidéos, à tes mécanismes ni aux échanges sur le site.</p><div class="private-actions">${button('Annuler','square-remove-cancel','quiet')}${button('Retirer cet AS','square-remove-confirm','')}</div>`);
-    bind('square-remove-cancel',closeModal);bind('square-remove-confirm',async()=>{await api('/api/ace-circles/members/'+member.membershipId,{method:'DELETE',body:{}});closeModal();session.circle=await api('/api/ace-circles');if(session.tab==='circle')await circlesView();});
+async function memberVideography(){
+  const s=session,member=squareMembers().find(m=>m.id===s.selectedOwner),root=el('square-member');if(!member||!root)return;
+  clearInlineComments();destroyVideoPlayers(root);root.hidden=false;
+  root.innerHTML=`<header class="square-member-head">${avatar(member)}<div><h2>Vidéographie de ${esc(member.username)}</h2><p class="video-section-count" id="video-section-count" aria-live="polite"></p></div>${button('<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M16 11h6"/></svg>','square-remove','subtle',`aria-label="Retirer ${esc(member.username)} de mes AS" title="Retirer cet AS"`)}</header><nav class="video-branches" aria-label="Rubriques de la vidéographie de ${esc(member.username)}">${VIDEO_BRANCHES.map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${label}</button>`).join('')}</nav><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`;
+  s.videos={branch:'self',owner:member.id,events:[],next:null,request:0};
+  s.moreObserver?.disconnect();
+  if(typeof IntersectionObserver==='function'){s.moreObserver=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting)&&live(s)&&!el('video-more')?.hidden&&!s.videos.loading)el('video-more').click();},{rootMargin:'600px 0px'});s.moreObserver.observe(el('video-more'));}
+  bind('video-more',()=>loadVideos());
+  root.querySelectorAll('[data-video-branch]').forEach(b=>b.onclick=()=>run(b,async()=>{if(s.videos.branch===b.dataset.videoBranch)return;s.videos.branch=b.dataset.videoBranch;root.querySelectorAll('[data-video-branch]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));await loadVideos(true);}));
+  bind('square-remove',()=>{
+    modal('Retirer un AS',`<p>Retirer ${esc(member.username)} de tes AS ? Vous n’aurez plus accès à la vidéographie l’un de l’autre ni à vos échanges sur le site.</p><div class="private-actions">${button('Annuler','square-remove-cancel','quiet')}${button('Retirer cet AS','square-remove-confirm','')}</div>`);
+    bind('square-remove-cancel',closeModal);bind('square-remove-confirm',async()=>{await api('/api/ace-circles/members/'+member.membershipId,{method:'DELETE',body:{}});closeModal();if(s.selectedOwner===member.id)s.selectedOwner=null;history.replaceState(history.state,'',location.pathname);await squareView();});
   });
-  bind('ace-leave',async()=>{if(!confirm('Quitter ce carré et perdre l’accès à ses échanges ?'))return;await api('/api/ace-circles/members/'+selected.membershipId,{method:'DELETE',body:{}});session.circle=await api('/api/ace-circles');await circlesView();});
-  document.querySelectorAll('[data-circle]').forEach(b=>b.onclick=()=>run(b,async()=>{session.selectedOwner=Number(b.dataset.circle);session.poll=null;clearTimeout(session.timer);await circlesView();}));
-  if(ownView)return;
-  const feed=session.feed={owner:selected.owner.id,next:null,revision:null};
-  const load=async(more=false,poll=false)=>{
-    let data;try{data=await api(`/api/ace-circles/${feed.owner}/topics`+(more&&feed.next?'?after='+encodeURIComponent(feed.next):poll&&feed.revision?'?revision='+encodeURIComponent(feed.revision):''));}
-    catch(e){if(e.status===403&&session.feed===feed){closeModal();el('topic-list').innerHTML='<p class="private-note">Cet accompagnement ne donne plus accès aux contenus.</p>';el('topic-more').hidden=true;const current=await api('/api/ace-circles');if(session.feed===feed)session.circle=current;return;}throw e;}
-    if(session.feed!==feed||!['circle','companions'].includes(session.tab)||data.unchanged)return;
-    if(poll&&feed.revision&&data.revision!==feed.revision&&!session.dirty&&session.dialog){try{if(session.dialogCheck)await session.dialogCheck();else closeModal();}catch(e){if([403,404].includes(e.status))closeModal();else throw e;}}
-    feed.revision=data.revision;feed.next=data.next;
-    const markup=data.topics.map(t=>`<a class="topic-card" href="/carre-d-as/fil/${t.id}" data-link><div class="topic-meta"><span class="topic-kind">${esc(t.videoBranch?videoLabel(t.videoBranch):topicKinds[t.kind])}</span><time>${esc(shortDate(t.updatedAt))}</time></div><h3>${esc(t.title)}</h3><span class="topic-count">${t.replies} réponse${t.replies>1?'s':''}${t.unread?` <strong>· ${t.unread} nouvelle${t.unread>1?'s':''}</strong>`:''}</span></a>`).join('');
-    if(more)el('topic-list').insertAdjacentHTML('beforeend',markup);else el('topic-list').innerHTML=markup||'<p class="private-note topic-empty">Les vidéos et leurs commentaires apparaissent ici.</p>';
-    el('topic-more').hidden=!data.next;
-  };
-  bind('topic-more',()=>load(true));await load();if(session.feed===feed){session.poll=()=>load(false,true);schedule();}
+  try{await loadVideos(true);}catch(e){if(e.status===403&&live(s)){root.innerHTML='<p class="private-note">Cette vidéographie n’est plus accessible.</p>';return;}throw e;}
+  // New replies and access changes are picked up while the page stays open.
+  s.poll=async()=>{const current=await api('/api/ace-circles');if(!live(s))return;const before=JSON.stringify(squareMembers().map(m=>[m.id,m.reachable]));s.circle=current;if(JSON.stringify(squareMembers().map(m=>[m.id,m.reachable]))!==before&&!s.dialog?.open)await squareView(false);};schedule();
 }
-function invitationsMarkup(ownView){
-  const invitations=session.circle.invitations.filter(i=>(i.owner.id===session.user)===ownView);
-  const requests=invitations.map(i=>{const other=i.owner.id===session.user?i.angel:i.owner;return `<article class="ace-invitation"><div><strong>${esc(other.username)}</strong><p class="private-note">${i.incoming?(ownView?'Souhaite devenir ton AS.':'T’invite à devenir son AS.'):'Invitation en attente.'}</p></div><div class="private-actions">${i.incoming?button('Accepter','','quiet',`data-invitation="${esc(i.id)}" data-action="accept"`)+button('Refuser','','subtle',`data-invitation="${esc(i.id)}" data-action="decline"`):button('Annuler','','subtle',`data-invitation="${esc(i.id)}" data-action="cancel"`)}</div></article>`;}).join('');
-  const blocks=ownView?session.circle.blocks||[]:[];
-  return (requests?`<section class="ace-pending"><h2>En attente</h2>${requests}</section>`:'')+(blocks.length?`<details class="ace-blocked"><summary>Personnes bloquées</summary>${blocks.map(p=>`<div class="ace-invitation"><strong>${esc(p.username)}</strong>${button('Débloquer','','subtle',`data-unblock="${p.id}"`)}</div>`).join('')}</details>`:'');
+function squareInvitations(){
+  const items=session.circle.invitations.map(i=>{const other=i.owner.id===session.user?i.angel:i.owner;return `<article class="square-invitation"><div><strong>${esc(other.username)}</strong><p class="private-note">${i.incoming?'Te propose de devenir AS l’un de l’autre.':'Invitation envoyée, en attente de réponse.'}</p></div><div class="private-actions">${i.incoming?button('Accepter','','',`data-invitation="${esc(i.id)}" data-action="accept"`)+button('Refuser','','subtle',`data-invitation="${esc(i.id)}" data-action="decline"`):button('Annuler','','subtle',`data-invitation="${esc(i.id)}" data-action="cancel"`)}</div></article>`;}).join('');
+  const blocks=session.circle.blocks||[];
+  return (items?`<section class="square-pending"><h2>Invitations</h2>${items}</section>`:'')+(blocks.length?`<details class="ace-blocked"><summary>Personnes bloquées</summary>${blocks.map(p=>`<div class="square-invitation"><strong>${esc(p.username)}</strong>${button('Débloquer','','subtle',`data-unblock="${p.id}"`)}</div>`).join('')}</details>`:'');
 }
-function wireInvitations(ownView){
-  const view=session.tab;
-  el('ace-view').querySelectorAll('[data-invitation]').forEach(b=>b.onclick=()=>run(b,async()=>{await api('/api/ace-circles/invitations/'+b.dataset.invitation,{method:'PUT',body:{action:b.dataset.action,recipientNotice:true}});if(session.tab===view)await circlesView();}));
-  if(ownView)el('ace-view').querySelectorAll('[data-unblock]').forEach(b=>b.onclick=()=>run(b,async()=>{await api('/api/ace-circles/blocks',{method:'DELETE',body:{target:Number(b.dataset.unblock)}});if(session.tab===view)await circlesView();}));
-}
-async function sharedMechanisms(circle){
-  const s=session,owner=circle.owner.id;
-  const {mechanisms}=await api('/api/mechanisms?owner='+owner);
-  if(s.selectedOwner!==owner||s.tab!=='companions')return;
-  const group=(title,items)=>`<section class="shared-mechanism-group"><h3>${title}</h3>${items.filter(m=>m.title).map(m=>`<details data-slot="${m.slot}"><summary>${esc(m.title)}</summary>${mechanismReading(m)}</details>`).join('')||'<p class="private-note">Aucun mécanisme renseigné.</p>'}</section>`;
-  const markup=items=>group('Mécanismes choisis',items.slice(0,5))+group('Mécanismes innés',items.slice(5));
-  const dialog=modal('Mécanismes de '+circle.owner.username,`<div class="shared-mechanisms">${markup(mechanisms)}</div>`);
-  s.dialogCheck=async()=>{
-    const data=await api('/api/mechanisms?owner='+owner);if(s.dialog!==dialog)return;
-    const root=dialog.querySelector('.shared-mechanisms'),opened=[...root.querySelectorAll('details[open]')].map(d=>d.dataset.slot);
-    root.innerHTML=markup(data.mechanisms);root.querySelectorAll('details').forEach(d=>d.open=opened.includes(d.dataset.slot));
-  };
+function wireInvitations(){
+  el('square-view').querySelectorAll('[data-invitation]').forEach(b=>b.onclick=()=>run(b,async()=>{await api('/api/ace-circles/invitations/'+b.dataset.invitation,{method:'PUT',body:{action:b.dataset.action,recipientNotice:true}});await squareView();}));
+  el('square-view').querySelectorAll('[data-unblock]').forEach(b=>b.onclick=()=>run(b,async()=>{await api('/api/ace-circles/blocks',{method:'DELETE',body:{target:Number(b.dataset.unblock)}});await squareView();}));
 }
 const topicKinds={event:'Vécu',creation:'Création',link:'Lien',mechanism:'Mécanisme'};
 const shortDate=value=>new Date(value.replace(' ','T')+'Z').toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'});
 function mechanismReading(value){const m=normalizeMechanism(value.slot,value);return `<div class="mechanism-reading">${mechanismFields(value.slot).filter(([key])=>m[key]).map(([key,label])=>`<section><h2>${label}</h2><p>${esc(m[key])}</p></section>`).join('')}</div>`;}
 async function topicPage(id){
   const data=await api('/api/ace-circles/topics/'+id),thread=session.thread={id,topic:data.topic,replies:[],last:0,first:0,more:false,parent:null,requestId:uid(),busy:false,revision:data.revision,membership:data.membership};session.tab='thread';
-  shell(`<a class="private-back" href="${data.topic.owner===session.user?'/videographie':'/carre-d-as#carre-'+data.topic.owner}" data-link>${data.topic.owner===session.user?'Revenir à mes vidéos':'Revenir au carré'}</a><article class="topic-thread ace-chat"><span class="topic-kind">${esc(data.topic.videoBranch?videoLabel(data.topic.videoBranch):topicKinds[data.topic.kind])}</span>${heading(esc(data.topic.title))}<div class="topic-source" id="topic-source"></div><div class="topic-replies" id="topic-replies" role="log" aria-live="polite" aria-relevant="additions"></div>${button('Voir les nouvelles réponses','topic-new','quiet','hidden')}<form id="topic-compose" class="ace-composer" ${data.topic.archived?'hidden':''}><p id="topic-reply-to" class="ace-reply" hidden></p><label class="sr-only" for="topic-text">Ta réponse</label><textarea id="topic-text" maxlength="4000" required rows="3" placeholder="Ton regard sur ce partage…"></textarea><div class="private-actions">${button('Annuler la réponse','topic-cancel','subtle','hidden')}<span></span><button class="private-button" type="submit">Répondre</button></div></form></article>`);
+  shell(`<a class="private-back" href="${data.topic.owner===session.user?'/videographie':'/carre-d-as#as-'+data.topic.owner}" data-link>${data.topic.owner===session.user?'Revenir à mes vidéos':'Revenir au carré'}</a><article class="topic-thread ace-chat"><span class="topic-kind">${esc(data.topic.videoBranch?videoLabel(data.topic.videoBranch):topicKinds[data.topic.kind])}</span>${heading(esc(data.topic.title))}<div class="topic-source" id="topic-source"></div><div class="topic-replies" id="topic-replies" role="log" aria-live="polite" aria-relevant="additions"></div>${button('Voir les nouvelles réponses','topic-new','quiet','hidden')}<form id="topic-compose" class="ace-composer" ${data.topic.archived?'hidden':''}><p id="topic-reply-to" class="ace-reply" hidden></p><label class="sr-only" for="topic-text">Ta réponse</label><textarea id="topic-text" maxlength="4000" required rows="3" placeholder="Ton regard sur ce partage…"></textarea><div class="private-actions">${button('Annuler la réponse','topic-cancel','subtle','hidden')}<span></span><button class="private-button" type="submit">Répondre</button></div></form></article>`);
   const showSource=()=>{
     const t=thread.topic;
     destroyVideoPlayers(el('topic-source'));
@@ -572,11 +557,10 @@ async function topicPage(id){
   session.poll=()=>refresh();schedule();
 }
 
-function memberSlots(circle,editable=false){return Array.from({length:4},(_,i)=>{const m=circle.members.find(m=>m.slot===i+1);return `<div class="ace-slot ${m?'is-filled':''}"><span class="ace-card-mark" aria-hidden="true">AS</span>${avatar(m)}<div><strong>${m?esc(m.username):'Une place à choisir'}</strong><small>${m?'À tes côtés':'Sur invitation'}</small></div>${m&&editable?button('Retirer','','subtle',`data-square-remove="${esc(m.membershipId)}" aria-label="Retirer ${esc(m.username)} de mon carré"`):''}</div>`;}).join('');}
 async function directoryView(){
-  modal('Ajouter un AS',`<p class="private-note">Saisis le pseudo exact d’une personne qui a accès au Carré d’AS. Elle choisira d’accepter ou non ton invitation. Ses vidéos ne s’affichent jamais dans la recherche.</p><form id="ace-search" class="ace-search"><label>Pseudo<input name="q" required minlength="3" maxlength="30" autocomplete="off" placeholder="Son pseudo exact"></label><button class="private-button" type="submit">Rechercher</button></form><div id="ace-directory" class="ace-search-results" aria-live="polite"></div>`);
+  modal('Choisir un AS',`<p class="private-note">Saisis le pseudo exact d’une personne qui a atteint l’échelon 20. Si elle accepte, vous devenez AS l’un de l’autre et chacun peut découvrir la vidéographie de l’autre.</p><form id="ace-search" class="ace-search"><label>Pseudo<input name="q" required minlength="3" maxlength="30" autocomplete="off" placeholder="Son pseudo exact"></label><button class="private-button" type="submit">Rechercher</button></form><div id="ace-directory" class="ace-search-results" aria-live="polite"></div>`);
   const dialog=session.dialog;
-  el('ace-search').onsubmit=e=>{e.preventDefault();const search=e.target.elements.q.value.trim();run(e.target.querySelector('button'),async()=>{const data=await api('/api/ace-circles/directory?q='+encodeURIComponent(search));if(session.dialog!==dialog)return;el('ace-directory').innerHTML=data.people.map(p=>`<article class="ace-person"><header>${avatar(p)}<h3>${esc(p.username)}</h3></header><p>Une invitation pour t’accompagner à travers tes vidéos et tes mécanismes.</p>${button('Inviter comme AS','','quiet',`data-invite="${p.id}"`)}</article>`).join('')||'<p class="private-note">Aucune personne disponible avec ce pseudo. Vérifie son orthographe ou tes invitations en attente.</p>';el('ace-directory').querySelectorAll('[data-invite]').forEach(b=>b.onclick=()=>run(b,async()=>{await api('/api/ace-circles/invitations',{method:'POST',body:{target:Number(b.dataset.invite),direction:'invite',id:uid(),recipientNotice:true}});closeModal();await circleTab('circle');}));});};
+  el('ace-search').onsubmit=e=>{e.preventDefault();const search=e.target.elements.q.value.trim();run(e.target.querySelector('button'),async()=>{const data=await api('/api/ace-circles/directory?q='+encodeURIComponent(search));if(session.dialog!==dialog)return;el('ace-directory').innerHTML=data.people.map(p=>`<article class="ace-person"><header>${avatar(p)}<h3>${esc(p.username)}</h3></header>${button('Inviter','','',`data-invite="${p.id}"`)}</article>`).join('')||'<p class="private-note">Aucune personne disponible avec ce pseudo. Vérifie son orthographe, vos invitations en attente ou ses places libres.</p>';el('ace-directory').querySelectorAll('[data-invite]').forEach(b=>b.onclick=()=>run(b,async()=>{await api('/api/ace-circles/invitations',{method:'POST',body:{target:Number(b.dataset.invite),direction:'invite',id:uid(),recipientNotice:true}});closeModal();await squareView();}));});};
 }
 
 async function reportsPage(){

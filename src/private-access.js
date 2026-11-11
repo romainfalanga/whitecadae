@@ -1,6 +1,7 @@
 import {gameRows} from './echelon-api.js';
 import {gameLevel} from './echelon.js';
 import {fail,integer} from './private-data.js';
+import {ACE_SQUARE_LEVEL} from './content-access.js';
 export const NOTICE_VERSION='2026-10-01';
 export const PRIVATE_NOTICE={version:NOTICE_VERSION,
  purpose:'Cet espace conserve tes récits et réflexions pour te permettre de relire ton parcours. Aucun diagnostic ni analyse automatique n’est effectué.',
@@ -20,11 +21,11 @@ export async function circleAccess(env,user,owner,tree=false){
   const circle=await env.DB.prepare('SELECT * FROM ace_circles WHERE owner_id=?1').bind(owner).first();
   if(user.id===owner){
     if(tree){await requireLevel(env,user,15);return {owner,member:null,circle};}
-    await requireLevel(env,user,18);if(!circle)fail('Crée ton carré pour ouvrir cette conversation.',404);
+    await requireLevel(env,user,ACE_SQUARE_LEVEL);if(!circle)fail('Crée ton carré pour ouvrir cette conversation.',404);
     return {owner,member:null,circle};
   }
-  await requireLevel(env,user,18);
-  if(!circle||await levelOf(env,owner)<18||await blocked(env,user.id,owner))fail('Cet espace n’est pas accessible.',403);
+  await requireLevel(env,user,ACE_SQUARE_LEVEL);
+  if(!circle||await levelOf(env,owner)<ACE_SQUARE_LEVEL||await blocked(env,user.id,owner))fail('Cet espace n’est pas accessible.',403);
   const member=await env.DB.prepare('SELECT * FROM ace_memberships WHERE owner_id=?1 AND angel_id=?2').bind(owner,user.id).first();
   if(!member||tree&&!member.content_access)fail('Cet espace n’est pas accessible.',403);
   return {owner,member,circle};

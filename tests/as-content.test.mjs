@@ -19,7 +19,7 @@ function setup(){
 }
 const video={title:'Une vidéo',entryType:'creation',medium:'vidéo',videoBranch:'self',url:'https://youtu.be/M7lc1UVf-VE',precision:'day',date:'2026-10-01',kind:'autre',impact:'à explorer',themes:[],revision:0};
 
-test('accepted AS read current chosen and innate mechanisms; pending, strangers, reverse relations, edits and exports stay blocked',async()=>{
+test('accepted AS read current chosen and innate mechanisms; both linked members read each other; pending, strangers, edits and exports stay blocked',async()=>{
  const f=setup();try{
   await f.ok('/api/private/consent',22,'POST',{consent:true,version:'2026-10-01'});
   await f.ok('/api/mechanisms/6',22,'PUT',{format:2,title:'Ma réaction',description:'Un fonctionnement',improvement:'Un ajustement',anchor:'Une pause',revision:0});
@@ -28,7 +28,7 @@ test('accepted AS read current chosen and innate mechanisms; pending, strangers,
   const read=await f.call('/api/mechanisms?owner=23',25);assert.equal(read.status,200);assert.match(read.cache,/no-store/);assert.equal(read.data.editable,false);assert.equal(read.data.mechanisms.length,10);
   assert.equal(read.data.mechanisms[0].title,'Toujours faire mieux');assert.equal(read.data.mechanisms[5].improvement,'Un ajustement');
   for(const level of [17,18,23])assert.equal((await f.call('/api/mechanisms?owner=23',level)).status,403);
-  assert.equal((await f.call('/api/mechanisms?owner=26',22)).status,403);
+  assert.equal((await f.call('/api/mechanisms?owner=26',22)).status,200,'an AS link opens both ways');assert.equal((await f.call('/api/mechanisms?owner=26',23)).status,403);
   for(const path of ['/api/mechanisms/export?owner=23','/api/life-tree/drafts?owner=23'])assert.equal((await f.call(path,25)).status,403);
   assert.equal((await f.call('/api/mechanisms/6?owner=23',25,'PUT',{title:'Intrusion',revision:1})).status,403);
   await f.ok('/api/mechanisms/6',22,'PUT',{format:2,title:'Ma réaction',description:'Évolution',improvement:'Un nouvel essai',anchor:'Une pause',revision:1});
