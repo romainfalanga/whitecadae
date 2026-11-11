@@ -10,7 +10,7 @@ import {createStreamPlayer} from './loge-stream-player.js';
 import {startVideoJob,currentVideoJob,onVideoJob,setVideoJobOpener,takePendingJobOpen,retryVideoJob,cancelVideoJob,dismissVideoJob,jobActive,jobSummary,jobCategory} from './video-uploads.js';
 let session=null;
 export function leave(){
-  if(!session)return;session.offJob?.();session.offJobOpener?.();clearInlineComments();destroyVideoPlayers();session.dialogCleanup?.();session.controller.abort();clearTimeout(session.timer);
+  if(!session)return;session.offJob?.();session.offJobOpener?.();session.moreObserver?.disconnect();session.posterObserver?.disconnect();clearInlineComments();destroyVideoPlayers();session.dialogCleanup?.();session.controller.abort();clearTimeout(session.timer);
   document.removeEventListener('visibilitychange',session.visibility);
   window.removeEventListener('beforeunload',session.beforeUnload);
   session.dialog?.remove();session.ctx.app.style.visibility='';session.ctx.app.inert=false;session=null;
@@ -114,11 +114,13 @@ function dateLabel(event){
 }
 async function videoPage(){
   session.videos={branch:'self',events:[],next:null,request:0};
-  shell(`${heading('Vidéographie')}<nav class="video-branches" aria-label="Rubriques de ma Vidéographie">${VIDEO_BRANCHES.map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${label}</button>`).join('')}</nav><div class="video-section-heading"><h2 id="video-section-title">${esc(videoLabel('self'))}</h2></div><div class="private-actions video-add-action">${button('Ajouter une vidéo','video-add','')}</div><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`);
+  shell(`${heading('Vidéographie')}<nav class="video-branches" aria-label="Rubriques de ma Vidéographie">${VIDEO_BRANCHES.map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${label}</button>`).join('')}</nav><div class="video-section-heading"><div class="video-section-title"><h2 id="video-section-title">${esc(videoLabel('self'))}</h2><p class="video-section-count" id="video-section-count" aria-live="polite"></p></div><div class="private-actions video-add-action">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter une vidéo','video-add','')}</div></div><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`);
   // While a video is on its way, « Ajouter » shows where it stands instead.
   bind('video-add',()=>currentVideoJob()?.phase&&currentVideoJob().phase!=='done'?videoJobView():videoForm(null,null,session.videos.branch||'self'));
   const s=session;s.offJobOpener=setVideoJobOpener(()=>{if(live(s))videoJobView();});
-  s.offJob=onVideoJob(job=>{if(live(s)&&job?.phase==='done'&&s.videos&&s.reloadedJob!==job){s.reloadedJob=job;void loadVideos(true).catch(()=>{});}});
+  s.offJob=onVideoJob(job=>{if(!live(s)||!s.videos)return;if(job?.phase==='done'&&s.reloadedJob!==job){s.reloadedJob=job;void loadVideos(true).catch(()=>{});}else renderJobTile();});
+  // The next page loads by itself as the grid's end comes into view.
+  if(typeof IntersectionObserver==='function'){s.moreObserver=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting)&&live(s)&&!el('video-more').hidden&&!s.videos.loading)el('video-more').click();},{rootMargin:'600px 0px'});s.moreObserver.observe(el('video-more'));}
   bind('video-more',()=>loadVideos());
   const select=async branch=>{if(session.videos.branch===branch)return;session.videos.branch=branch;document.querySelectorAll('[data-video-branch]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.videoBranch===branch)));el('video-section-title').textContent=videoLabel(branch);await loadVideos(true);};
   document.querySelectorAll('[data-video-branch]').forEach(b=>b.onclick=()=>run(b,()=>select(b.dataset.videoBranch)));
@@ -129,15 +131,68 @@ async function loadVideos(reset=false){
   const state=session.videos,request=++state.request;
   if(reset){clearInlineComments();destroyVideoPlayers(el('video-list'));state.events=[];state.next=null;el('video-list').replaceChildren();el('video-more').hidden=true;}
   const query=new URLSearchParams({videos:'1'});if(state.branch)query.set('branch',state.branch);if(state.next)query.set('after',state.next);
-  const data=await api('/api/life-tree?'+query);if(session.videos!==state||state.request!==request)return;
-  state.events.push(...data.events);state.next=data.next;
-  // Append only the new page so loading more videos never restarts a player.
-  el('video-list').insertAdjacentHTML('beforeend',data.events.map((e,index)=>`<article class="video-card" data-video="${esc(e.id)}"><div class="video-card-top"><span>${esc(videoLabel(e.video_branch))}</span><time>${esc(dateLabel(e))}</time></div><h3>${esc(e.title)}</h3>${eventVideoPlayer(e,true,reset&&index===0)}<div class="video-card-footer">${button('Modifier','','subtle',`data-video-edit="${esc(e.id)}"`)}${e.topic_id&&session.ctx.state.access?.aceSquare?button('AS','','quiet',`data-video-comments="${e.topic_id}" aria-expanded="false" aria-controls="as-comments-${e.topic_id}"`):''}</div></article>`).join(''));
-  wireVideoPlayers(el('video-list'),()=>Promise.resolve());
-  if(!state.events.length)el('video-list').innerHTML='<div class="video-empty"><p>Aucune vidéo dans cette rubrique.</p></div>';
+  state.loading=true;let data;try{data=await api('/api/life-tree?'+query);}finally{state.loading=false;}
+  if(session.videos!==state||state.request!==request)return;
+  const start=state.events.length;state.events.push(...data.events);state.next=data.next;
+  // A grid of covers, as on a profile: each opens the video in a viewer.
+  el('video-list').insertAdjacentHTML('beforeend',data.events.map((e,index)=>videoTile(e,start+index)).join(''));
+  el('video-list').querySelector('.video-empty')?.remove();
+  if(!state.events.length)el('video-list').insertAdjacentHTML('beforeend',`<div class="video-empty"><span class="video-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="3"/><path d="m16 10 5-3v10l-5-3"/></svg></span><p>Aucune vidéo dans cette rubrique pour le moment.</p>${button('Ajouter ta première vidéo','','',`data-video-add-empty`)}</div>`);
+  el('video-list').querySelector('[data-video-add-empty]')?.addEventListener('click',()=>el('video-add').click());
   el('video-more').hidden=!state.next;
-  el('video-list').querySelectorAll('[data-video-edit]').forEach(b=>b.onclick=()=>run(b,async()=>{const data=await api('/api/life-tree/events/'+b.dataset.videoEdit);videoForm(data.event);}));
-  el('video-list').querySelectorAll('[data-video-comments]').forEach(b=>b.onclick=()=>run(b,()=>toggleInlineComments(b)));
+  const count=el('video-section-count');if(count)count.textContent=state.events.length?`${state.events.length}${state.next?'+':''} vidéo${state.events.length>1?'s':''}`:'';
+  el('video-list').querySelectorAll('[data-video-open]:not([data-bound])').forEach(tile=>{tile.dataset.bound='1';tile.onclick=()=>openVideoViewer(Number(tile.dataset.videoOpen));});
+  renderJobTile();loadPosters(el('video-list'));
+}
+function videoTile(e,index){
+  const shared=!!e.loge_post_id;
+  return `<article class="video-tile" data-video="${esc(e.id)}"><button type="button" class="video-tile-open" data-video-open="${index}" aria-label="Regarder ${esc(e.title)}"><span class="video-tile-poster"${e.creation?.videoProvider==='stream'?` data-poster="${esc(e.id)}"`:''}></span><span class="video-tile-shade" aria-hidden="true"></span><span class="video-tile-play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5 20 12 8 19Z"/></svg></span>${shared?'<span class="video-tile-badge">Dans les loges</span>':''}<span class="video-tile-text"><strong>${esc(e.title)}</strong><time>${esc(dateLabel(e))}</time></span></button></article>`;
+}
+// Covers are signed by the server one by one, only when a tile nears the screen.
+function loadPosters(root){
+  const s=session,cache=s.posters||=new Map(),queue=s.posterQueue||=[];
+  const fill=(slot,url)=>{if(slot.querySelector('img'))return;const img=document.createElement('img');img.alt='';img.decoding='async';img.loading='lazy';img.onload=()=>slot.classList.add('is-loaded');img.src=url;slot.append(img);};
+  const pump=()=>{
+    while((s.posterActive||0)<3&&queue.length){
+      const slot=queue.shift();if(!slot.isConnected||!live(s))continue;const id=slot.dataset.poster,hit=cache.get(id);
+      if(hit&&hit.expires>Date.now()+60000){fill(slot,hit.url);continue;}
+      s.posterActive=(s.posterActive||0)+1;
+      api('/api/life-tree/events/'+encodeURIComponent(id)+'/playback').then(data=>{if(data?.poster){cache.set(id,{url:data.poster,expires:Date.parse(data.expiresAt)||Date.now()+1800000});if(slot.isConnected)fill(slot,data.poster);}}).catch(()=>{}).finally(()=>{s.posterActive--;pump();});
+    }
+  };
+  const want=slot=>{if(slot.dataset.posterQueued)return;slot.dataset.posterQueued='1';queue.push(slot);pump();};
+  const slots=[...root.querySelectorAll('[data-poster]')];
+  if(typeof IntersectionObserver!=='function'){slots.forEach(want);return;}
+  s.posterObserver||=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting){s.posterObserver.unobserve(entry.target);want(entry.target);}},{rootMargin:'300px 0px'});
+  for(const slot of slots)if(!slot.dataset.posterQueued)s.posterObserver.observe(slot);
+}
+// A video on its way shows in its category, ahead of the others.
+function renderJobTile(){
+  const list=el('video-list');if(!list||!session?.videos)return;
+  const job=currentVideoJob(),show=!!job&&job.phase!=='done'&&job.branch===session.videos.branch;
+  let tile=el('video-job-tile');
+  if(!show){tile?.remove();list.querySelector('.video-empty')?.removeAttribute('hidden');return;}
+  if(!tile){list.insertAdjacentHTML('afterbegin',`<article class="video-tile is-pending" id="video-job-tile"><button type="button" class="video-tile-open" data-video-job><span class="video-tile-ring" aria-hidden="true"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" pathLength="100"/><circle class="ring-value" cx="18" cy="18" r="15" pathLength="100"/></svg></span><span class="video-tile-text"><strong></strong><time></time></span></button></article>`);tile=el('video-job-tile');tile.querySelector('[data-video-job]').onclick=()=>videoJobView();}
+  list.querySelector('.video-empty')?.setAttribute('hidden','');
+  tile.classList.toggle('is-error',job.phase==='error');tile.style.setProperty('--ring',String(job.phase==='uploading'?job.progress||0:job.phase==='error'?100:30));
+  tile.classList.toggle('is-indeterminate',!['uploading','error'].includes(job.phase));
+  tile.querySelector('strong').textContent=job.title;tile.querySelector('time').textContent=job.phase==='error'?'Envoi interrompu · toucher pour voir':jobSummary(job);
+  tile.querySelector('[data-video-job]').setAttribute('aria-label',`${job.title} : ${jobSummary(job)||job.error}. Afficher le suivi.`);
+}
+// The viewer plays one video at a time, with its details and the way to the next.
+function openVideoViewer(index){
+  const s=session,events=s.videos?.events||[],e=events[index];if(!e)return;
+  const dialog=modal(e.title,`<article class="video-card video-viewer" data-video="${esc(e.id)}"><p class="video-viewer-meta"><span>${esc(videoLabel(e.video_branch))}</span><time>${esc(dateLabel(e))}</time>${e.loge_post_id?'<span class="video-tile-badge">Dans les loges</span>':''}</p>${eventVideoPlayer(e,true,true)}<div class="video-card-footer">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Zm9-13 4 4"/></svg>Modifier','video-viewer-edit','quiet')}${e.topic_id&&s.ctx.state.access?.aceSquare?button('AS','','quiet',`data-video-comments="${e.topic_id}" aria-expanded="false" aria-controls="as-comments-${e.topic_id}"`):''}</div><nav class="video-viewer-nav" aria-label="Autres vidéos">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg><span>Précédente</span>','video-viewer-prev','quiet',index===0?'disabled':'')}<span class="video-viewer-position">${index+1} / ${events.length}${s.videos.next?'+':''}</span>${button('<span>Suivante</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>','video-viewer-next','quiet',index>=events.length-1&&!s.videos.next?'disabled':'')}</nav></article>`);
+  dialog.classList.add('is-viewer');wireVideoPlayers(dialog,()=>Promise.resolve());
+  bind('video-viewer-edit',async()=>{const data=await api('/api/life-tree/events/'+encodeURIComponent(e.id));videoForm(data.event);});
+  dialog.querySelectorAll('[data-video-comments]').forEach(b=>b.onclick=()=>run(b,()=>toggleInlineComments(b)));
+  const go=async step=>{
+    const next=index+step;
+    if(next>=events.length&&s.videos.next){await loadVideos();}
+    if(live(s)&&s.videos.events[next])openVideoViewer(next);
+  };
+  bind('video-viewer-prev',()=>go(-1));bind('video-viewer-next',()=>go(1));
+  dialog.addEventListener('keydown',event=>{if(event.target.closest?.('input,textarea,select'))return;if(event.key==='ArrowRight'){event.preventDefault();void go(1);}else if(event.key==='ArrowLeft'&&index>0){event.preventDefault();void go(-1);}});
 }
 function clearInlineComments(){
   if(!session?.commentPanels)return;

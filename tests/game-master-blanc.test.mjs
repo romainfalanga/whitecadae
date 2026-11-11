@@ -37,10 +37,10 @@ test('the final page requires 33 real earned levels, including for admins; forge
     const content=await res.json();assert.equal(content.page.title,'Game Master Blanc');
     assert.deepEqual(content.page.opening,['Façonne ton paradis pour le rejoindre.','Deviens ton propre Game Master.']);
     assert.match(content.page.sections.at(-1).paragraphs[0],/aux autres Game Masters Blancs\./);
-    assert.deepEqual(content.page.sections.map(s=>s.title),['Vidéographie','Ta version harmonieuse','Ta société harmonieuse','Loges virtuelles']);
-    assert.match(content.page.sections[0].paragraphs.join(' '),/Utilise ta vidéographie pour organiser/);assert.doesNotMatch(JSON.stringify(content.page),/plateforme/i);
-    assert.match(content.page.sections[2].paragraphs.join(' '),/version harmonieuse soit cohérente avec cette société\./);assert.doesNotMatch(JSON.stringify(content.page),/trouver sa place|expansions harmonieuses/);
-    assert.deepEqual(content.page.sections.map(s=>s.paragraphs.length),[2,1,2,3]);
+    assert.deepEqual(content.page.sections.map(s=>s.title),['Vidéographie','Métacognition','Ta version harmonieuse','Ta société harmonieuse','Loges virtuelles']);
+    assert.deepEqual(content.page.sections[0].paragraphs,['Extériorise tes pensées en vidéo.','Utilise ta vidéographie pour visualiser tes trajectoires de réflexion et choisir celles que tu veux voir grandir.']);assert.match(content.page.sections[1].paragraphs[0],/Observe tes propres pensées.*la manière dont elles émergent\./);assert.doesNotMatch(JSON.stringify(content.page),/plateforme/i);
+    assert.match(content.page.sections[3].paragraphs.join(' '),/version harmonieuse soit cohérente avec cette société\./);assert.doesNotMatch(JSON.stringify(content.page),/trouver sa place|expansions harmonieuses/);
+    assert.deepEqual(content.page.sections.map(s=>s.paragraphs.length),[2,1,1,2,3]);
     assert.doesNotMatch(JSON.stringify(content.page),/Crée ta propre plateforme|Ta version harmonieuse IA/);
     assert.ok(content.page.sections.every(s=>s.paragraphs.length&&s.paragraphs.every(p=>typeof p==='string'&&p.length>20)));
     assert.equal(content.page.communityUrl,undefined);assert.doesNotMatch(JSON.stringify(content),/discord|y83ewhS49/);
@@ -76,13 +76,13 @@ test('the private page uses the final API and renders no final text on refusal o
     add(f,1,ids);await page('/game-master-blanc',ctx);
     assert.equal(document.title,'Game Master Blanc · White Cadae');
     assert.match(app.innerHTML,/gm-layout gm-white/);assert.match(app.innerHTML,/gm-letter/);
-    assert.equal((app.innerHTML.match(/class="gm-section"/g)||[]).length,4);
+    assert.equal((app.innerHTML.match(/class="gm-section"/g)||[]).length,5);
     assert.match(app.innerHTML,/<p class="gm-opening"><span>Façonne ton paradis pour le rejoindre\.<\/span> <span>Deviens ton propre Game Master\.<\/span><\/p>/);
     assert.ok(app.innerHTML.indexOf('gm-opening')<app.innerHTML.indexOf('gm-white-section-0'));
     assert.match(app.innerHTML,/<span class="gm-community-name">Game\u00a0Masters\u00a0Blancs\.<\/span>/);
     assert.doesNotMatch(app.innerHTML,/Ta société harmonieuse IA|Commente leurs vidéos/);
     const paragraphs=[...app.innerHTML.matchAll(/<section class="gm-section"[^>]*>[\s\S]*?<\/section>/g)].flatMap(section=>[...section[0].matchAll(/<p>([\s\S]*?)<\/p>/g)].map(match=>match[1].replace(/<[^>]+>/g,'')));
-    assert.equal(paragraphs.length,8);
+    assert.equal(paragraphs.length,9);
     assert.ok(paragraphs.every(text=>/\S+\u00a0\S+$/.test(text)),'last words stay together without fixed line breaks');
     assert.match(paragraphs[0],/en\u00a0vidéo\.$/);
     assert.doesNotMatch(app.innerHTML,/gm-orbit/);
@@ -110,7 +110,7 @@ test('the home omits the final block at 33 and keeps the discovered-page list in
   assert.ok(openings.innerHTML.indexOf('Game Master Blanc')<openings.innerHTML.indexOf('Loge virtuelle'));
   assert.doesNotMatch(openings.innerHTML,/<a /);
   const client=readFileSync(new URL('../public/private-pages.js',import.meta.url),'utf8');
-  assert.doesNotMatch(client,/Extériorise tes réflexions|Partage dans les Loges virtuelles|point de vue de l’autre|y83ewhS49/);
+  assert.doesNotMatch(client,/Extériorise tes pensées|Observe tes propres pensées|Partage dans les Loges virtuelles|point de vue de l’autre|y83ewhS49/);
 });
 
 test('Signes, Horloge and the lyric workshop omit the final block even when the server reports level 33',async()=>{

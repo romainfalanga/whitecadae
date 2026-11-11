@@ -4,8 +4,11 @@ export const GAME_MASTER_BLANC = {
   opening:['Façonne ton paradis pour le rejoindre.','Deviens ton propre Game Master.'],
   sections:[
     {title:'Vidéographie',paragraphs:[
-      'Extériorise tes réflexions et tes idées en vidéo.',
-      'Utilise ta vidéographie pour organiser tes réflexions, visualiser tes trajectoires et choisir celles que tu veux voir grandir.'
+      'Extériorise tes pensées en vidéo.',
+      'Utilise ta vidéographie pour visualiser tes trajectoires de réflexion et choisir celles que tu veux voir grandir.'
+    ]},
+    {title:'Métacognition',paragraphs:[
+      'Observe tes propres pensées et extériorise dans ta vidéographie ce que tu comprends de la manière dont elles émergent.'
     ]},
     {title:'Ta version harmonieuse',paragraphs:[
       'Imagine ta version harmonieuse et façonne-la dans ta vidéographie.'

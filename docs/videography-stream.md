@@ -166,3 +166,21 @@ se trouver cachée derrière lui.
   champ titre disparaît. Ce titre dérivé reste hors de l’empreinte d’idempotence,
   si bien qu’un renommage n’empêche pas de rejouer une publication.
 
+## Affichage inspiré des réseaux vidéo
+
+- **Vidéographie** : une grille de vignettes verticales (2 colonnes sur
+  téléphone, 3 sur tablette, 4 sur ordinateur) remplace les grandes cartes. Une
+  vignette montre l’image de la vidéo, son titre, sa date et « Dans les loges »
+  si elle y est publiée. Les images sont signées une à une par l’API de lecture,
+  seulement quand la vignette approche de l’écran (trois à la fois). Un toucher
+  ouvre une visionneuse : la vidéo, sa catégorie et sa date, Modifier, puis
+  Précédente et Suivante (flèches du clavier aussi). La suite de la liste se
+  charge au défilement ; un envoi en cours apparaît en tête de sa catégorie.
+- **Loges** : chaque vidéo est une carte 9:16. L’auteur, le titre et la date se
+  posent sur un dégradé en bas de la vidéo, le bouton des commentaires (icône et
+  nombre) sur son bord droit, à côté de la carte sur ordinateur, et la barre de
+  lecture le long du bord inférieur. Sur ordinateur, deux boutons haut et bas
+  passent d’une vidéo à l’autre ; les flèches du clavier aussi, partout, sauf
+  pendant une saisie ou avec les commentaires ouverts. Un toucher sur la vidéo
+  lance ou met en pause.
+

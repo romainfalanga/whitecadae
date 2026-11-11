@@ -247,3 +247,84 @@
 @keyframes video-job-flow{to{background-position:-200% 0}}
 @media(prefers-reduced-motion:reduce){.video-job-bar span{transition:none;animation:none!important}}
 @media(max-width:400px){.video-job-steps li{gap:.3rem;font-size:.7rem}.video-job-steps li span{width:15px;height:15px}}
+
+/* ——— Vidéographie: a profile grid and a viewer ———
+   Categories as a calm segmented bar, the open category's title beside its add
+   button, then covers in a grid (2 to 4 columns) that open one video at a time. */
+.video-branches{gap:.5rem;margin:1.2rem 0 1.6rem}
+.video-branches button{min-height:48px;padding:.6rem .9rem;border-color:#ffffff1a;border-radius:12px;background:#16151a;color:#b9b0a5;font-size:.82rem;transition:border-color .2s ease,background-color .2s ease,color .2s ease}
+.video-branches button:hover{border-color:#d8aa6580;color:#f2e6d6}
+.video-branches button[aria-pressed=true]{border-color:#d8aa65;background:linear-gradient(135deg,#d8aa6533,#d8aa6512);color:#f6deb4;box-shadow:inset 0 0 0 1px #d8aa6533}
+.video-section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin:0 0 1.1rem}
+.video-section-title{min-width:0}.video-section-heading h2{font:400 1.7rem/1.2 var(--serif);margin:0}
+.video-section-count{margin:.3rem 0 0;font-size:.74rem;letter-spacing:.04em;color:#9d9387}.video-section-count:empty{display:none}
+.private-actions.video-add-action{margin:0;flex:none}
+.video-add-action .private-button{display:inline-flex;align-items:center;gap:.45rem;border-radius:999px;padding-inline:1.1rem}
+.video-add-action svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
+.video-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;align-items:start}
+.video-tile{position:relative;min-width:0}
+.video-tile-open{position:relative;display:block;width:100%;aspect-ratio:9/16;padding:0;border:0;border-radius:14px;overflow:hidden;background:radial-gradient(ellipse at 50% 30%,#3a2f29,#141216 75%);color:#fff;text-align:left;cursor:pointer;box-shadow:0 0 0 1px #ffffff12,0 10px 30px #0006;transition:transform .2s ease,box-shadow .2s ease}
+.video-tile-open:hover{transform:translateY(-2px);box-shadow:0 0 0 1px #d8aa6566,0 14px 34px #0008}
+.video-tile-open:focus-visible{outline:2px solid #dcb67b;outline-offset:3px}
+.video-tile-poster{position:absolute;inset:0}
+.video-tile-poster img{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s ease,transform .4s ease}
+.video-tile-poster.is-loaded img{opacity:1}.video-tile-open:hover .video-tile-poster img{transform:scale(1.03)}
+.video-tile-shade{position:absolute;inset:0;background:linear-gradient(180deg,#0000 45%,#000a 78%,#000e)}
+.video-tile-play{position:absolute;top:10px;right:10px;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#0007;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.video-tile-play svg{width:13px;height:13px;fill:#fff;margin-left:2px}
+.video-tile-badge{position:absolute;top:10px;left:10px;max-width:calc(100% - 52px);padding:.2rem .5rem;border-radius:999px;background:#0009;border:1px solid #d8aa6599;color:#f3dcae;font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.video-viewer-meta .video-tile-badge{position:static}
+.video-tile-text{position:absolute;left:0;right:0;bottom:0;display:grid;gap:.2rem;padding:.75rem .8rem .8rem}
+.video-tile-text strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font:400 1rem/1.3 var(--serif);color:#fff;text-shadow:0 1px 8px #000c}
+.video-tile-text time{font-size:.68rem;color:#ddd5ca;text-shadow:0 1px 6px #000c}
+/* A video on its way. */
+.video-tile.is-pending .video-tile-open{background:linear-gradient(160deg,#2a2219,#121115);box-shadow:0 0 0 1px #d8aa6566}
+.video-tile-ring{position:absolute;left:50%;top:42%;width:56px;height:56px;transform:translate(-50%,-50%)}
+.video-tile-ring svg{width:56px;height:56px;fill:none;stroke-width:2.6;stroke-linecap:round}
+.video-tile-ring circle{stroke:#ffffff1f}.video-tile-ring .ring-value{stroke:#ebc283;stroke-dasharray:100;stroke-dashoffset:calc(100 - var(--ring));transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .35s ease}
+.video-tile.is-indeterminate .ring-value{animation:video-ring-spin 1.1s linear infinite}
+.video-tile.is-error .video-tile-open{box-shadow:0 0 0 1px #f0a493aa}.video-tile.is-error .ring-value{stroke:#f0a493}
+.video-tile.is-pending .video-tile-text time{color:#ebc283}
+@keyframes video-ring-spin{to{transform:rotate(270deg)}}
+.video-empty{gap:.9rem;padding:3.2rem 1rem;border-color:#ffffff1f;border-radius:16px;background:radial-gradient(ellipse at 50% 0,#d8aa650f,transparent 70%);text-align:center}
+.video-empty-icon{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;border:1px solid #d8aa6566;color:#ebc283}
+.video-empty-icon svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round}
+.video-empty[hidden]{display:none}
+/* The viewer. */
+.private-dialog.is-viewer{max-width:480px;padding:1.1rem 1.1rem 1.2rem;background:#0f0e12}
+.private-dialog.is-viewer>h2{font:400 1.35rem/1.3 var(--serif);margin:0 2.4rem .3rem 0;color:#f2d8af}
+.video-viewer{padding:0;border:0;background:none}
+.video-viewer-meta{display:flex;align-items:center;flex-wrap:wrap;gap:.35rem .8rem;margin:0 0 .8rem;font-size:.74rem;color:#b5966c}.video-viewer-meta time{color:#a2978a}
+.is-viewer .videography-stream{margin:0 auto;border-radius:16px;border-color:#ffffff1a;width:min(100%,calc((100dvh - 260px)*9/16))}
+.is-viewer .videography-stream .loge-stream-frame{aspect-ratio:9/16}
+.is-viewer .video-card-footer{border-top:0;padding-top:.9rem;justify-content:center}
+.video-viewer-nav{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-top:.6rem;padding-top:.8rem;border-top:1px solid #ffffff14}
+.video-viewer-nav .private-button{display:inline-flex;align-items:center;gap:.3rem;min-height:40px}
+.video-viewer-nav svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.video-viewer-nav .private-button:disabled{opacity:.35}
+.video-viewer-position{font-size:.74rem;color:#9d9387;font-variant-numeric:tabular-nums}
+/* The position bar of the videography player, like the Loge one. */
+.videography-stream-controls{height:34px;background:linear-gradient(180deg,#0000,#000c)}
+.videography-stream-controls input[type=range]{-webkit-appearance:none;appearance:none;height:22px;min-height:22px;accent-color:auto}
+.videography-stream-controls input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:999px;background:#ffffff33}
+.videography-stream-controls input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:12px;height:12px;margin-top:-4.5px;border-radius:50%;background:#fbf0cf;box-shadow:0 1px 4px #0009}
+.videography-stream-controls input[type=range]::-moz-range-track{height:3px;border-radius:999px;background:#ffffff33}
+.videography-stream-controls input[type=range]::-moz-range-progress{height:3px;border-radius:999px;background:#e6c98a}
+.videography-stream-controls input[type=range]::-moz-range-thumb{width:12px;height:12px;border:0;border-radius:50%;background:#fbf0cf}
+@media(max-width:1000px){.video-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){
+  .video-branches button{min-height:46px;font-size:.78rem}
+  .video-section-heading{flex-direction:column;align-items:center;text-align:center;gap:.8rem}
+  .video-section-heading h2{font-size:1.5rem}
+  .video-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.55rem}
+  .video-tile-text strong{font-size:.92rem}
+  /* The viewer takes the whole screen on a phone. */
+  .private-dialog.is-viewer{width:100%;max-width:none;height:100dvh;max-height:100dvh;margin:0;border:0;border-radius:0;padding:max(.8rem,env(safe-area-inset-top,0px)) .9rem max(.8rem,env(safe-area-inset-bottom,0px))}
+  .is-viewer .videography-stream{width:min(100%,calc((100dvh - 250px)*9/16))}
+}
+@media(prefers-reduced-motion:reduce){.video-tile-open,.video-tile-poster img,.video-branches button{transition:none}.video-tile.is-indeterminate .ring-value{animation:none}}
+.private-page:has(.video-branches) .private-heading{padding-bottom:1.2rem;margin-bottom:.4rem}
+.private-page:has(.video-branches) .private-heading h1{font-size:clamp(2.2rem,4vw,3.2rem)}
+.is-viewer .video-card-footer .private-button{display:inline-flex;align-items:center;gap:.45rem;border-radius:999px;padding-inline:1.1rem}
+.is-viewer .video-card-footer svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+

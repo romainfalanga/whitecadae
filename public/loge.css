@@ -206,3 +206,55 @@ body.loge-immersive.loge-comment-keyboard main#app{z-index:70}
 .loge-timeline [data-video-time]{min-width:4.6em;text-align:right;font:500 .66rem/1 var(--sans);letter-spacing:.02em;color:#9d9da8}
 @media(prefers-reduced-motion:reduce){.loge-timeline input[type=range]::-webkit-slider-thumb,.loge-timeline input[type=range]::-webkit-slider-runnable-track,.loge-timeline input[type=range]::-moz-range-thumb{transition:none}}
 
+/* ——— Reels like the apps people know ———
+   Each video is a 9:16 card. The author, title and date sit on a soft scrim at
+   the bottom of the video, the comment button sits on its right edge (beside the
+   card on a wide screen), and the position bar runs along its lower edge. */
+.loge-reels>.loge-reel>.loge-reel-stage{container-type:size;display:grid;place-items:center;padding:.15rem 0 .55rem}
+.loge-reel-card{position:relative;width:min(100cqw,56.25cqh);height:min(100cqh,177.7778cqw);min-width:0;min-height:0}
+.loge-reel-card>.loge-reel-media{position:absolute;inset:0;width:auto;height:auto;min-width:0;min-height:0;border-radius:18px;overflow:hidden;background:#0b0b0d;box-shadow:0 18px 50px #000a,0 0 0 1px #ffffff0d}
+.loge-reel-card>.loge-reel-media::after{content:"";position:absolute;left:0;right:0;bottom:0;height:46%;z-index:1;pointer-events:none;background:linear-gradient(180deg,#0000,#0006 45%,#000d)}
+.loge-reel-card .loge-stream-frame,.loge-reel-card .loge-reel-frame{border-radius:0}
+.loge-reel-card .loge-stream-message{bottom:auto;top:16px;left:50%;right:auto;transform:translateX(-50%);max-width:calc(100% - 32px);z-index:2}
+/* Information over the video; only its links and buttons catch taps, so a tap
+   anywhere else still plays or pauses. */
+.loge-reel-card>.loge-reel-info{position:absolute;left:0;right:0;bottom:24px;z-index:3;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:end;gap:.2rem .7rem;width:auto;max-width:none;min-height:0;margin:0;padding:.5rem .75rem .45rem .9rem;background:none;pointer-events:none}
+.loge-reel-card>.loge-reel-info a,.loge-reel-card>.loge-reel-info button,.loge-reel-card>.loge-reel-info details,.loge-reel-card>.loge-reel-info .loge-intervention-context{pointer-events:auto}
+.loge-reel-card .loge-reel-avatar{align-self:end;margin:0 0 .15rem;width:38px;height:38px;border:1.5px solid #f1dfa6aa;box-shadow:0 2px 10px #0008}
+.loge-reel-card .loge-reel-username{font-size:.92rem;text-shadow:0 1px 6px #000c}
+.loge-reel-card .loge-post-title{font-size:.9rem;line-height:1.4;color:#fff;text-shadow:0 1px 8px #000d}
+.loge-reel-card .loge-post-date{color:#d8d8de;font-size:.68rem;text-shadow:0 1px 6px #000c}
+.loge-reel-card .loge-post-category{background:#0008;border-color:#d8c07a88;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.loge-reel-card .loge-reel-actions{align-self:end;flex-direction:column;gap:.9rem;margin-bottom:.1rem}
+.loge-page .loge-reel-card .loge-reel-icon{flex-direction:column;gap:.25rem;min-width:52px;min-height:0;padding:0;border:0;border-radius:0;background:none;color:#fff;box-shadow:none}
+.loge-reel-card .loge-reel-icon svg{box-sizing:content-box;width:24px;height:24px;padding:11px;border-radius:50%;background:#0a0a0d8c;border:1px solid #ffffff2b;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);transition:background-color .2s ease,border-color .2s ease,transform .15s ease}
+.loge-reel-card .loge-reel-icon:hover svg{background:#16161bcc;border-color:#d8c07a99}
+.loge-reel-card .loge-reel-icon:active svg{transform:scale(.92)}
+.loge-reel-card .loge-reel-icon[aria-expanded=true]{color:#f3e2ad}.loge-reel-card .loge-reel-icon[aria-expanded=true] svg{border-color:#d8c07a;background:#d8c07a33}
+.loge-reel-card .loge-reel-icon small{font:600 .74rem/1 var(--sans);text-shadow:0 1px 6px #000c}
+.loge-reel-card .loge-intervention-context{grid-column:1/-1;max-height:72px;border-top-color:#ffffff26}
+/* The position bar hugs the bottom edge of the video. */
+.loge-reel-card>.loge-timeline{position:absolute;left:12px;right:12px;bottom:4px;z-index:4;width:auto;max-width:none;margin:0;padding:0;background:none;grid-template-columns:minmax(0,1fr) auto;gap:.55rem}
+.loge-reel-card>.loge-timeline input[type=range]{height:22px;min-height:22px}
+.loge-reel-card>.loge-timeline [data-video-time]{color:#e5e5ea;text-shadow:0 1px 4px #000c}
+.loge-reel-card .loge-stream-play{width:68px;height:68px;background:#0a0a0d66}
+/* Up and down, as on a phone: buttons on a wide screen, arrow keys everywhere. */
+.loge-reel-nav{display:none}
+@media(min-width:900px){
+  .loge-reel-nav{position:absolute;right:max(1.5rem,calc((100% - 1080px)/2));top:50%;z-index:6;display:grid;gap:.6rem;transform:translateY(-50%)}
+  .is-loge-layout{position:relative}
+  .loge-reel-nav button{display:grid;place-items:center;width:44px;height:44px;min-height:44px;padding:0;border:1px solid #ffffff24;border-radius:50%;background:#15151a;color:#e4e4ea;transition:background-color .2s ease,border-color .2s ease,transform .15s ease}
+  .loge-reel-nav button:hover{border-color:#d8c07a88;color:#fff}.loge-reel-nav button:active{transform:scale(.94)}
+  .loge-reel-nav svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .has-open-comments .loge-reel-nav{display:none}
+  /* Beside the card on a wide screen, as on the web versions of the apps. */
+  .loge-reel-card>.loge-reel-info{padding-right:1rem}
+  .loge-reel-card>.loge-reel-info .loge-reel-actions{position:absolute;right:-72px;bottom:6px;margin:0}
+  .loge-reel-card .loge-reel-icon svg{background:#1b1b21;border-color:#ffffff1f}
+}
+@media(max-width:700px){
+  .loge-reel.is-comments-open .loge-reel-card>.loge-reel-info{display:none}
+  .loge-reels>.loge-reel>.loge-reel-stage{padding:.1rem .45rem .45rem}
+}
+.loge-reel-card .loge-reel-avatar{align-self:start;margin:.05rem 0 0}
+
