@@ -1,6 +1,6 @@
 import {createLogeCommentViewport} from './loge-comment-viewport.js';
 import {LOGE_THEMES_ENABLED} from './loge-features.js';
-import {videoLabel,LOGE_ROOMS} from './video-model.js';
+import {videoLabel,LOGE_ROOMS,logeRoom,logeRoomLabel} from './video-model.js';
 import {createLogeVideoFeed} from './loge-video.js';
 import {themeOverviewMarkup,proposalMarkup,historyMarkup} from './loge-themes-ui.js';
 
@@ -61,8 +61,20 @@ function shell(html){
   const view=session.current,root=document.createElement('section');root.className='loge-page'+(logeView(view)?' is-loge-layout':'')+(videoView(view)?' is-video-view':'')+(view.kind==='feed'?' is-feed':'')+(view.kind==='publish'?' is-publish-view':'');
   root.innerHTML=html+statusMarkup('loge-status');view.root=root;session.ctx.app.replaceChildren(root);
 }
-function topbar(view){const other=view.kind==='profile'&&String(view.memberId)!==String(session.user);return `<header class="loge-topbar${other?'':' is-own'}"><h1>${esc(other?view.member.username:'Loge virtuelle')}</h1></header>`;}
-function roomsMarkup(view){return `<nav class="loge-rooms" aria-label="Les trois loges">${LOGE_ROOMS.map(room=>`<a href="${roomPath(room)}" data-link data-room="${room}" ${view.room===room?'aria-current="page"':''}>${esc(videoLabel(room))}</a>`).join('')}</nav>`;}
+const minePath=()=>memberPath(session.user)+'?onglet=reflexions';
+function ownPublications(view){return view.kind==='profile'&&view.tab==='reflexions'&&String(view.memberId)===String(session.user);}
+// The three loges are the Loge's main menu. « Mes publications » and
+// « Publier » are places reached from it, each with a way back to the loge.
+function topbar(view){
+  const mine=`<a class="loge-action" id="loge-open-mine" href="${minePath()}" data-link>${icon('profile')}<span>Mes publications</span></a>`;
+  const publish=`<a class="loge-action is-primary" id="loge-open-compose" href="${publishPath}" data-link>${icon('plus')}<span>Publier</span></a>`;
+  const theme=LOGE_THEMES_ENABLED?`<a class="loge-action" href="${themePath()}" data-link>Thème</a>`:'';
+  if(view.kind==='feed')return `<header class="loge-bar"><h1 class="loge-bar-title">Loge virtuelle</h1><nav class="loge-bar-actions" aria-label="Mes actions dans la Loge">${theme}${mine}${publish}</nav></header>${roomsMarkup(view)}`;
+  const title=view.kind==='publish'?'Publier':ownPublications(view)?'Mes publications':view.kind==='profile'?view.member.username:view.kind==='theme'?'Thème de la semaine':'Loge virtuelle';
+  const back=roomPath(session.room);
+  return `<header class="loge-bar is-sub"><a class="loge-back" href="${back}" data-link aria-label="Revenir à la loge ${esc(logeRoomLabel(session.room))}">${icon('back')}<span>${esc(logeRoomLabel(session.room))}</span></a><h1 class="loge-bar-title">${esc(title)}</h1><nav class="loge-bar-actions" aria-label="Mes actions dans la Loge">${ownPublications(view)||view.kind==='theme'?publish:view.kind==='publish'?mine:''}</nav></header>`;
+}
+function roomsMarkup(view){return `<nav class="loge-rooms" aria-label="Les trois loges">${LOGE_ROOMS.map(room=>`<a href="${roomPath(room)}" data-link data-room="${room}" ${view.room===room?'aria-current="page"':''}>${esc(logeRoomLabel(room))}</a>`).join('')}</nav>`;}
 function clearPending(root){for(const link of root?.querySelectorAll('.is-pending')||[])link.classList.remove('is-pending');}
 function bindRooms(view){
   for(const link of view.root.querySelectorAll('[data-room]')){
@@ -74,10 +86,6 @@ function bindRooms(view){
   }
 }
 function composerMarkup(){return '<div class="loge-publish-scroll"><section id="loge-compose" class="loge-compose" aria-labelledby="loge-compose-title"></section></div>';}
-function logeNavigation(view){
-  const ownProfile=view.kind==='profile'&&String(view.memberId)===String(session.user),active=view.kind==='publish'?'publish':view.kind==='theme'?'theme':ownProfile&&view.tab==='reflexions'?'reflexions':'loge';
-  return `<nav class="loge-tabs" aria-label="Navigation de la Loge">${[['loge','Loge Virtuelle',roomPath(session.room)],['reflexions','Mes réflexions',memberPath(session.user)+'?onglet=reflexions'],['publish','Publier',publishPath],...(LOGE_THEMES_ENABLED?[['theme','Thème',themePath()]]:[])].map(([tab,label,href])=>`<a href="${href}" data-link ${tab==='publish'?'id="loge-open-compose"':''} ${active===tab?'aria-current="page"':''}>${label}</a>`).join('')}</nav>`;
-}
 function login(s){
   if(!live(s))return;
   closeVideo(s);immersion(false);s.blocked=true;
@@ -143,7 +151,7 @@ function updateQuota(){
   const blocked=remaining>0;
   const quota=node('loge-quota');
   if(quota){
-    quota.innerHTML=blocked?`<span class="loge-quota-label">Prochaine publication</span><time class="loge-quota-value" datetime="${esc(until.toISOString())}">${esc(quotaDate(until))}</time><span class="loge-quota-countdown">${esc(countdown(remaining))}</span>`:'<span class="loge-quota-label">Publication</span><span class="loge-quota-value">Disponible</span><span class="loge-quota-countdown">Une réflexion tous les sept jours</span>';
+    quota.innerHTML=blocked?`<span class="loge-quota-label">Prochaine publication</span><time class="loge-quota-value" datetime="${esc(until.toISOString())}">${esc(quotaDate(until))}</time><span class="loge-quota-countdown">${esc(countdown(remaining))}</span>`:'<span class="loge-quota-label">Publication</span><span class="loge-quota-value">Disponible</span><span class="loge-quota-countdown">Une vidéo tous les sept jours</span>';
     quota.classList.toggle('is-open',!blocked);quota.hidden=false;
   }
   const submit=node('loge-new-submit');if(submit&&!submit.closest('form')?.dataset.busy)submit.disabled=blocked;
@@ -199,7 +207,7 @@ function refreshLayout(view){
 function ownerMenu(kind,id){return `<details class="loge-menu${kind==='comment'?' loge-comment-menu':''}"><summary aria-label="Options de ${kind==='post'?'la publication':'ton commentaire'}">${kind==='comment'?'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>':'…'}</summary><div>${button('Modifier',`data-${kind}-edit="${esc(id)}"`,true)}${button('Supprimer',`data-${kind}-delete="${esc(id)}"`,true)}</div></details>`;}
 function postMarkup(post){
   const manage=own(post)&&canManagePosts(),count=Number.isInteger(post.commentCount)?post.commentCount:0;
-  return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage">${videoMarkup(post)}<footer class="loge-reel-info">${avatarLink(post.author)}<div class="loge-reel-copy"><div class="loge-reel-byline"><a class="loge-reel-username" href="${memberPath(post.author.id)}" data-link>${esc(post.author.username)}</a>${manage?ownerMenu('post',post.id):''}</div>${post.category?`<p class="loge-post-category">${esc(videoLabel(post.category))}</p>`:''}<h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2>${dateValue(post.createdAt)?`<p class="loge-post-date">${stamp(post.createdAt)}</p>`:''}${LOGE_THEMES_ENABLED&&post.theme?`<a class="loge-post-theme" href="${themePath(post.theme.id)}" data-link>${esc(post.theme.title)}</a>`:''}${statusMarkup('loge-post-status-'+post.id)}</div><div class="loge-reel-actions" role="group" aria-label="Actions de la vidéo"><button type="button" class="loge-reel-icon" data-comments-open="${esc(post.id)}" aria-label="Commentaires (${count})" aria-expanded="false">${icon('comment')}<small data-comment-count>${count}</small></button></div><div class="loge-intervention-context" id="loge-interventions-post-${esc(post.id)}" hidden></div></footer></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div>${manage?`<div id="loge-post-editor-${esc(post.id)}" class="loge-edit-sheet" role="dialog" aria-modal="true" aria-label="Modifier le titre" hidden></div>`:''}</article>`;
+  return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage">${videoMarkup(post)}<footer class="loge-reel-info">${avatarLink(post.author)}<div class="loge-reel-copy"><div class="loge-reel-byline"><a class="loge-reel-username" href="${memberPath(post.author.id)}" data-link>${esc(post.author.username)}</a>${manage?ownerMenu('post',post.id):''}</div>${session.current?.kind!=='feed'?`<p class="loge-post-category">${esc(logeRoomLabel(post.loge))}</p>`:''}<h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2>${dateValue(post.createdAt)?`<p class="loge-post-date">${stamp(post.createdAt)}</p>`:''}${LOGE_THEMES_ENABLED&&post.theme?`<a class="loge-post-theme" href="${themePath(post.theme.id)}" data-link>${esc(post.theme.title)}</a>`:''}${statusMarkup('loge-post-status-'+post.id)}</div><div class="loge-reel-actions" role="group" aria-label="Actions de la vidéo"><button type="button" class="loge-reel-icon" data-comments-open="${esc(post.id)}" aria-label="Commentaires (${count})" aria-expanded="false">${icon('comment')}<small data-comment-count>${count}</small></button></div><div class="loge-intervention-context" id="loge-interventions-post-${esc(post.id)}" hidden></div></footer></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div>${manage?`<div id="loge-post-editor-${esc(post.id)}" class="loge-edit-sheet" role="dialog" aria-modal="true" aria-label="Modifier le titre" hidden></div>`:''}</article>`;
 }
 function removeProfileClip(postId){
   const view=session.current,list=node('loge-profile-list');if(!list)return;
@@ -238,7 +246,7 @@ function choiceDate(video){
 // is already in the Loge stays listed, so its absence is never a mystery.
 function videoChoiceMarkup(video,draft){
   const taken=!!video.postId;
-  return `<label class="loge-video-choice${taken?' is-published':''}"><input type="radio" name="eventId" value="${esc(video.id)}" ${!taken&&String(draft.eventId)===String(video.id)?'checked':''} ${taken?'disabled':''}><span class="loge-video-choice-mark" aria-hidden="true"></span><span class="loge-video-choice-body"><strong>${esc(video.title||'Sans titre')}</strong><small>${esc([videoLabel(video.category),choiceDate(video),taken?'Déjà publiée':''].filter(Boolean).join(' · '))}</small></span></label>`;
+  return `<label class="loge-video-choice${taken?' is-published':''}" data-loge="${esc(logeRoom(video.category))}"><input type="radio" name="eventId" value="${esc(video.id)}" ${!taken&&String(draft.eventId)===String(video.id)?'checked':''} ${taken?'disabled':''}><span class="loge-video-choice-mark" aria-hidden="true"></span><span class="loge-video-choice-body"><strong>${esc(video.title||'Sans titre')}</strong><small>${esc([choiceDate(video),taken?'Déjà publiée':''].filter(Boolean).join(' · '))}</small></span></label>`;
 }
 function closePostEditor(id){const view=session.current,root=node('loge-post-editor-'+id);if(root)root.hidden=true;view.editingId=null;view.root.classList.remove('has-editor');if(!document.body.classList.contains('nav-open'))view.player?.resume();node('loge-post-'+id)?.querySelector('summary')?.focus({preventScroll:true});}
 function bindPublishForm(){
@@ -248,7 +256,9 @@ function bindPublishForm(){
   if(draft.eventId&&!videos.some(video=>String(video.id)===String(draft.eventId)&&!video.postId)){draft.eventId=null;draft.requestId=crypto.randomUUID();}
   if(root.logeDraft!==draft){root.innerHTML='';root.logeDraft=draft;}
   if(root.innerHTML){const form=node('loge-new-form');if(form&&!form.dataset.busy)form.elements.namedItem('title').value=draft.title;syncComposerTheme();updateQuota();return;}
-  root.innerHTML=`<h2 id="loge-compose-title">Publier une réflexion</h2><div id="loge-quota" class="loge-quota" hidden></div>${videos.length?`<form id="loge-new-form"><fieldset class="loge-video-choices"><legend>Vidéo de ta vidéographie</legend><div class="loge-video-list">${videos.map(video=>videoChoiceMarkup(video,draft)).join('')}</div>${view.moreVideoChoices?'<p class="loge-note">Tes 100 vidéos les plus récentes sont proposées.</p>':''}</fieldset>${postFields(draft,true)}<div class="loge-form-actions"><button class="loge-button" type="submit" id="loge-new-submit">Publier</button></div>${statusMarkup('loge-new-status')}</form>`:`<div class="loge-video-empty"><p>Ici, tu publies une vidéo de ta vidéographie classée dans ${LOGE_ROOMS.map(room=>videoLabel(room)).join(', ').replace(/, ([^,]*)$/,' ou $1')}.</p><a class="loge-button" href="/videographie" data-link>Ouvrir ma vidéographie</a></div>`}`;
+  // Each video is listed under the loge it will join.
+  const groups=LOGE_ROOMS.map(room=>[room,videos.filter(video=>logeRoom(video.category)===room)]).filter(([,items])=>items.length);
+  root.innerHTML=`<h2 id="loge-compose-title" class="loge-visually-hidden">Publier dans la Loge</h2><div id="loge-quota" class="loge-quota" hidden></div>${videos.length?`<form id="loge-new-form"><fieldset class="loge-video-choices"><legend>Choisis une vidéo de ta vidéographie</legend><div class="loge-video-list">${groups.map(([room,items])=>`<p class="loge-video-group">${esc(logeRoomLabel(room))}</p>${items.map(video=>videoChoiceMarkup(video,draft)).join('')}`).join('')}</div>${view.moreVideoChoices?'<p class="loge-note">Tes 100 vidéos les plus récentes sont proposées.</p>':''}</fieldset>${postFields(draft,true)}<div class="loge-form-actions"><button class="loge-button" type="submit" id="loge-new-submit">Publier</button></div>${statusMarkup('loge-new-status')}</form>`:`<div class="loge-video-empty"><p>Ici, tu publies une vidéo de ta vidéographie classée dans ${LOGE_ROOMS.map(room=>videoLabel(room)).join(', ').replace(/, ([^,]*)$/,' ou $1')}.</p><a class="loge-button" href="/videographie" data-link>Ouvrir ma vidéographie</a></div>`}`;
   const form=root.querySelector('form');if(!form){updateQuota();return;}
   rememberFields(form,draft,['title']);syncComposerTheme();
   if(session.currentTheme?.endsAt*1000<=Date.now()+session.clockOffset)void refreshThemeBoundary(session);
@@ -271,11 +281,12 @@ function bindPublishForm(){
       // A reply that arrives after navigation is reconciled by request().
       const result=await request('/api/loge/posts',{method:'POST',body:{title:draft.title.trim(),eventId:draft.eventId,requestId:draft.requestId,...(draft.themeWeek?{themeWeek:draft.themeWeek}:{})}});
       acceptSelf(result);invalidateOtherViews();forgetDraft('create-post');root.innerHTML='';view.dirty=true;
-      const destination=memberPath(s.user)+'?onglet=reflexions';
+      // Land in the loge the video joined, on the new post.
+      const room=logeRoom(result.post.loge),destination=roomPath(room);
       await s.ctx.navigate(destination);
       if(live(s)&&s.current?.key===destination){
-        const list=node('loge-profile-list');if(list){node('loge-profile-empty')?.remove();insertPost(result.post,list);node('loge-post-'+result.post.id)?.scrollIntoView({block:'start'});}
-        notice('loge-status','Ta réflexion est publiée.');updateQuota();
+        const list=node('loge-feed');if(list){node('loge-feed-empty')?.remove();insertPost(result.post,list);node('loge-post-'+result.post.id)?.scrollIntoView({block:'start'});}
+        notice('loge-status','Ta vidéo est publiée dans '+logeRoomLabel(room)+'.');updateQuota();
       }
     },error=>{if(s.navigationVersion!==version)return;notice('loge-new-status',error.message,true);const submit=node('loge-new-submit');if(submit)submit.textContent='Réessayer';if(error.status===409&&/thème|semaine/i.test(error.message))void refreshThemeBoundary(session);else if([404,409].includes(error.status))view.dirty=true;});
   };
@@ -312,7 +323,7 @@ function openPostEdit(id){
   const form=root.querySelector('form');rememberFields(form,draft,['title']);form.querySelector('[data-edit-close]').onclick=()=>closePostEditor(id);form.elements.namedItem('title').focus({preventScroll:true});
   form.onsubmit=event=>{event.preventDefault();if(!form.reportValidity())return;readFields(form,draft,['title']);perform('post-'+id,form,async()=>{
     const result=await request('/api/loge/posts/'+encodeURIComponent(id),{method:'PUT',body:{title:draft.title.trim(),revision:draft.revision}});
-    acceptSelf(result);invalidateOtherViews();updatePost(result.post);forgetDraft('post-'+id);root.innerHTML='';closePostEditor(id);notice('loge-post-status-'+id,'Ta réflexion est mise à jour.');
+    acceptSelf(result);invalidateOtherViews();updatePost(result.post);forgetDraft('post-'+id);root.innerHTML='';closePostEditor(id);notice('loge-post-status-'+id,'Ta publication est mise à jour.');
   },error=>{notice('loge-post-edit-status-'+id,error.message,true);if(error.status===409&&error.data?.conflict)conflict(form,'post',id,draft);});};
 }
 function refreshAfterConflict(kind,id,error){
@@ -325,11 +336,11 @@ function refreshAfterConflict(kind,id,error){
   },next=>notice(target,next.message,true));
 }
 function deletePost(id){
-  const s=session,post=s.posts.get(String(id));if(!canManagePosts()||!post||!own(post)||!confirm('Supprimer cette réflexion et ses commentaires ?'))return;
+  const s=session,post=s.posts.get(String(id));if(!canManagePosts()||!post||!own(post)||!confirm('Retirer cette vidéo de la Loge ? Ses commentaires seront supprimés ; la vidéo reste dans ta vidéographie.'))return;
   perform('post-'+id,node('loge-post-'+id),async()=>{
     const result=await request('/api/loge/posts/'+encodeURIComponent(id),{method:'DELETE',body:{revision:post.revision}});
     acceptSelf(result);invalidateOtherViews();s.current.player?.remove(id);s.posts.delete(String(id));forgetDraft('post-'+id);
-    node('loge-post-'+id)?.remove();notice('loge-status','Ta réflexion est supprimée.');updateQuota();
+    node('loge-post-'+id)?.remove();notice('loge-status','Ta publication est retirée de la Loge.');updateQuota();
   },error=>refreshAfterConflict('post',id,error));
 }
 
@@ -473,7 +484,7 @@ function addProfileRows(view,result){
   const list=node('loge-profile-list');node('loge-profile-empty')?.remove();node('loge-favorites-empty')?.remove();
   if(view.tab!=='interventions')for(const post of result.posts||[])insertPost(post,list);
   else for(const comment of result.interventions||[])insertIntervention(comment,list);
-  if(!view.posts.size&&!view.interventions.size)list.insertAdjacentHTML('afterbegin',`<p class="loge-empty" id="loge-profile-empty">${view.tab==='favoris'?'Aucune vidéo en favori.':view.tab==='reflexions'?'Aucune réflexion publiée pour le moment.':'Aucune intervention pour le moment.'}</p>`);
+  if(!view.posts.size&&!view.interventions.size)list.insertAdjacentHTML('afterbegin',`<p class="loge-empty" id="loge-profile-empty">${view.tab==='favoris'?'Aucune vidéo en favori.':view.tab==='reflexions'?(String(view.memberId)===String(session.user)?'Tu n’as encore rien publié dans la Loge.':'Aucune publication pour le moment.'):'Aucune intervention pour le moment.'}</p>`);
   view.next=result.next;paginationState(view,'loge-profile-more');
 }
 async function moreProfile(){
@@ -577,7 +588,7 @@ async function moreThemePosts(){
 function renderThemeView(view,result){
   view.posts.clear();view.comments.clear();view.panels.clear();view.activePanel=null;view.editingId=null;
   view.themeData=result;view.selectedTheme=result.selectedTheme;view.proposals=new Map((result.proposals||[]).map(p=>[String(p.id),p]));view.history=new Map((result.history||[]).map(t=>[String(t.id),t]));view.historyNext=result.historyNext;view.historyQuery='';view.historyVersion=0;
-  shell(`${topbar(view)}${logeNavigation(view)}<div class="loge-themes-scroll">${themeOverviewMarkup(result,view.themeId?result.selectedTheme:null,esc)}<section class="loge-theme-videos"><header><h2>${result.selectedTheme?esc(result.selectedTheme.title):'Réflexions du thème'}</h2></header><div id="loge-theme-posts"><div class="loge-feed-pagination">${button('Voir la suite','id="loge-theme-posts-more"',true)}</div></div></section></div>`);
+  shell(`${topbar(view)}<div class="loge-themes-scroll">${themeOverviewMarkup(result,view.themeId?result.selectedTheme:null,esc)}<section class="loge-theme-videos"><header><h2>${result.selectedTheme?esc(result.selectedTheme.title):'Réflexions du thème'}</h2></header><div id="loge-theme-posts"><div class="loge-feed-pagination">${button('Voir la suite','id="loge-theme-posts-more"',true)}</div></div></section></div>`);
   node('loge-theme-posts-more').onclick=moreThemePosts;
   themePostsState(view,{posts:result.posts,next:result.postNext});
   for(const proposal of view.proposals.values())bindThemeProposal(view,proposal);bindThemeHistory(view);
@@ -601,19 +612,21 @@ function renderView(view,result){
   if(view.kind==='profile'){view.member=result.member;document.title=result.member.username+' · Loge virtuelle · White Cadae';}
   else document.title=(view.kind==='post'?result.post.title+' · ':'')+'Loge virtuelle · White Cadae';
   if(view.kind==='feed')s.room=view.room;
-  const tabs=logeNavigation(view);
+  if(ownPublications(view))document.title='Mes publications · Loge virtuelle · White Cadae';
+  if(view.kind==='post')s.room=logeRoom(result.post?.loge);
   if(view.kind==='publish'){
-    document.title='Publier une réflexion · Loge virtuelle · White Cadae';
+    document.title='Publier dans la Loge · Loge virtuelle · White Cadae';
     view.videoChoices=Array.isArray(result.videos)?result.videos:[];view.moreVideoChoices=!!result.more;
-    shell(`${topbar(view)}${tabs}${composerMarkup()}`);bindPublishForm();
+    shell(`${topbar(view)}${composerMarkup()}`);bindPublishForm();
   }else{
     const listId=view.kind==='feed'?'loge-feed':view.kind==='profile'?'loge-profile-list':'loge-detail-post',moreId=view.kind==='profile'?'loge-profile-more':'loge-feed-more';
-    shell(`${topbar(view)}${tabs}${view.kind==='feed'?roomsMarkup(view):''}<div id="${listId}" class="loge-reels" aria-label="${view.kind==='feed'?esc(videoLabel(view.room)):'Réflexions'} en vidéo"><div class="loge-feed-pagination">${button('Voir la suite',`id="${moreId}"`,true)}</div></div>`);
+    const listLabel=view.kind==='feed'?'Loge '+logeRoomLabel(view.room):ownPublications(view)?'Mes publications':'Publications';
+    shell(`${topbar(view)}<div id="${listId}" class="loge-reels" aria-label="${esc(listLabel)}"><div class="loge-feed-pagination">${button('Voir la suite',`id="${moreId}"`,true)}</div></div>`);
     if(view.kind==='feed')bindRooms(view);
     if(view.kind==='profile'){node(moreId).onclick=moreProfile;addProfileRows(view,result);}
     else{
       node(moreId).onclick=moreFeed;for(const post of view.kind==='post'?[result.post]:result.posts)insertPost(post,node(listId));
-      if(!view.posts.size)node(listId).insertAdjacentHTML('afterbegin',`<div class="loge-empty loge-room-empty" id="loge-feed-empty"><p>Aucune vidéo dans cette loge pour le moment.</p>${view.kind==='feed'?`<a class="loge-button is-quiet" href="${publishPath}" data-link>Publier une vidéo</a>`:''}</div>`);
+      if(!view.posts.size)node(listId).insertAdjacentHTML('afterbegin',`<div class="loge-empty loge-room-empty" id="loge-feed-empty"><p>Aucune vidéo dans la loge ${esc(logeRoomLabel(view.room))} pour le moment.</p>${view.kind==='feed'?`<a class="loge-button is-quiet" href="${publishPath}" data-link>Publier une vidéo</a>`:''}</div>`);
       view.next=view.kind==='post'?null:result.next;paginationState(view,moreId);
     }
   }

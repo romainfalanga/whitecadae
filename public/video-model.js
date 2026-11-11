@@ -2,8 +2,8 @@ export const VIDEO_BRANCHES=[
   ['self','Métacognition'],
   ['ideas','Réflexions'],
   ['projects','Idées et projets'],
-  ['version','Ta version Harmonieuse'],
-  ['society','Ta société Harmonieuse'],
+  ['version','Ma version harmonieuse'],
+  ['society','Ma société harmonieuse'],
 ];
 export const videoLabel=key=>VIDEO_BRANCHES.find(([id])=>id===key)?.[1]||'Vidéo';
 // life_events.video_branch only accepts its five original values, and the
@@ -18,4 +18,8 @@ export const videoBranchKey=stored=>Object.keys(STORED_BRANCHES).find(key=>STORE
 // category and live in the first room.
 export const LOGE_ROOMS=['ideas','projects','society'];
 export const logeRoom=category=>LOGE_ROOMS.includes(category)?category:LOGE_ROOMS[0];
+// A loge gathers every Game Master Blanc's videos: its name is shared, unlike
+// the personal names of the videography categories.
+const LOGE_ROOM_LABELS={ideas:'Réflexions',projects:'Idées et projets',society:'Sociétés harmonieuses'};
+export const logeRoomLabel=room=>LOGE_ROOM_LABELS[logeRoom(room)];
 

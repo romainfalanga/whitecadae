@@ -40,7 +40,7 @@ test('Loge joins Game Master Blanc only at 33 real levels and existing accounts 
       'Trois loges t’y attendent, avec un même esprit d’entraide.',
       'Réflexions : extériorise tes réflexions et aide les autres à prendre du recul pour voir une trajectoire qui les améliore.',
       'Idées et projets : partage ce que tu veux construire et aide les autres à faire grandir leurs idées.',
-      'Ta société harmonieuse : si tu n’es pas d’accord, montre les inconvénients que tu vois pour aider l’autre à affiner sa vision.'
+      'Sociétés harmonieuses : si tu n’es pas d’accord, montre les inconvénients que tu vois pour aider l’autre à affiner sa vision.'
     ]});
     for(const room of ['ideas','projects','society'])assert.equal((await(await call('/api/loge?loge='+room)).json()).loge,room);
     assert.equal((await(await call('/api/loge')).json()).loge,'ideas');assert.equal((await call('/api/loge?loge=self')).status,404);assert.equal((await call('/api/loge?loge=version')).status,404);
