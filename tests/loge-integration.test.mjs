@@ -37,7 +37,7 @@ test('Loge joins Game Master Blanc only at 33 real levels and existing accounts 
     assert.deepEqual(text.page.sections.at(-1),{title:'Loges virtuelles',paragraphs:[
       'Partage dans les Loges virtuelles tes réflexions et tes avancées aux autres Game Masters Blancs.',
       'Ces échanges vous permettent de grandir ensemble. Enrichissez mutuellement vos arborescences de réflexion et aidez-vous à les faire grandir de manière harmonieuse.',
-      'Dans chacune des trois loges, deviens aussi le Game Master des autres : aide-les à prendre du recul et à faire grandir leurs idées. Quand tu n’es pas d’accord, fais émerger les inconvénients que tu perçois dans le point de vue de l’autre pour affiner ensemble votre vision.'
+      'Quand tu n’es pas d’accord, fais émerger les inconvénients que tu perçois dans le point de vue de l’autre pour affiner ensemble votre vision.'
     ]});
     for(const room of ['ideas','projects','society'])assert.equal((await(await call('/api/loge?loge='+room)).json()).loge,room);
     assert.equal((await(await call('/api/loge')).json()).loge,'ideas');assert.equal((await call('/api/loge?loge=self')).status,404);assert.equal((await call('/api/loge?loge=version')).status,404);

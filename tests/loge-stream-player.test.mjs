@@ -1,9 +1,10 @@
 import {test} from 'node:test';
+import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {createStreamPlayer,validStreamURL} from '../public/loge-stream-player.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const signed={hls:'https://customer-example.cloudflarestream.com/signed-token/manifest/video.m3u8',poster:'https://customer-example.cloudflarestream.com/signed-token/thumbnails/thumbnail.jpg',expiresAt:new Date(Date.now()+3600000).toISOString()};
-function fixture({native=false,getPlayback=async()=>signed,playImplementation}={}){
+function fixture({native=false,getPlayback=async()=>signed,playImplementation,fullscreen=true}={}){
   const previous=globalThis.document,instances=[],states=[],players=[];let ready=0,eligible=true,libraryCalls=0;
   class Element extends EventTarget{
     constructor(tag){super();this.tag=tag;this.children=[];this.attributes=new Map();this.hidden=false;this.disabled=false;this.paused=true;this.playCalls=0;this.pauseCalls=0;this.loads=0;this.currentTime=0;this.duration=120;this.ended=false;this.fullscreenCalls=0;const values=new Set();this.classList={toggle:(key,on)=>on?values.add(key):values.delete(key),contains:key=>values.has(key)};}
@@ -33,7 +34,7 @@ function fixture({native=false,getPlayback=async()=>signed,playImplementation}={
     fatal(){this.handlers.error('error',{fatal:true});}
   }
   const container=document.createElement('div');container.stage=document.createElement('section');
-  const player=createStreamPlayer({container,post:{id:7,title:'Ma réflexion'},getPlayback,isEligible:()=>eligible,onReady:()=>ready++,onState:value=>states.push(value),loadLibrary:async()=>{libraryCalls++;return {default:Hls};}});players.push(player);
+  const player=createStreamPlayer({container,post:{id:7,title:'Ma réflexion'},getPlayback,isEligible:()=>eligible,onReady:()=>ready++,onState:value=>states.push(value),loadLibrary:async()=>{libraryCalls++;return {default:Hls};},fullscreen});players.push(player);
   const button=player.element.children[1],full=player.element.children[2],message=player.element.children[3];
   return {player,button,full,message,container,document,instances,states,get ready(){return ready;},get libraryCalls(){return libraryCalls;},eligible:value=>eligible=value,async click(target=button){target.dispatchEvent(new Event('click'));await tick();},close(){for(const item of players)item.destroy();if(previous===undefined)delete globalThis.document;else globalThis.document=previous;}};
 }
@@ -84,4 +85,15 @@ test('Safari native HLS stays paused until a tap and requires no hls.js module',
 
 test('fatal HLS failure stops requests and an explicit retry creates a fresh source',async()=>{
   const h=fixture();try{await tick();await h.click();const first=h.instances[0];first.fatal();assert.equal(h.player.video.paused,true);assert(first.stops>0);assert.match(h.message.textContent,/interrompue/);await h.click();assert.equal(first.destroys,1);assert.equal(h.instances.length,2);assert.equal(h.player.video.playCalls,2);assert.equal(h.player.getPlayerState(),1);}finally{h.close();}
+});
+
+test('a player without fullscreen has no fullscreen button and still plays',async()=>{
+  const h=fixture({fullscreen:false});try{
+    await tick();assert.equal(h.player.element.children.length,3);assert.equal(h.player.element.children.some(child=>child.className==='loge-stream-fullscreen'),false);
+    assert.equal(h.player.element.children[2].className,'loge-stream-message');
+  }finally{h.close();}
+});
+
+test('the Loge reels create their players without a fullscreen button',()=>{
+  assert.match(readFileSync(new URL('../public/loge-video.js',import.meta.url),'utf8'),/createStreamPlayer\(\{[^}]*fullscreen:false/);
 });

@@ -110,7 +110,7 @@ test('the home omits the final block at 33 and keeps the discovered-page list in
   assert.ok(openings.innerHTML.indexOf('Game Master Blanc')<openings.innerHTML.indexOf('Loge virtuelle'));
   assert.doesNotMatch(openings.innerHTML,/<a /);
   const client=readFileSync(new URL('../public/private-pages.js',import.meta.url),'utf8');
-  assert.doesNotMatch(client,/Extériorise tes réflexions|Partage dans les Loges virtuelles|deviens aussi le Game Master des autres|y83ewhS49/);
+  assert.doesNotMatch(client,/Extériorise tes réflexions|Partage dans les Loges virtuelles|point de vue de l’autre|y83ewhS49/);
 });
 
 test('Signes, Horloge and the lyric workshop omit the final block even when the server reports level 33',async()=>{

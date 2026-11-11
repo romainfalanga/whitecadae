@@ -50,6 +50,8 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
   function paintTimeline(record,time,length){
     const value=Math.min(length,Math.max(0,Number.isFinite(time)?time:0)),description=clock(value)+' / '+clock(length);
     record.range.max=String(length);record.range.value=String(value);record.range.setAttribute('aria-valuetext',description);
+    // The played part of the bar is painted from this value.
+    record.range.style?.setProperty?.('--progress',(length?value/length*100:0).toFixed(2)+'%');
     if(record.timeLabel)record.timeLabel.textContent=description;
   }
   function syncTimeline(record){
@@ -128,7 +130,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
   function warmStream(record){
     const token=++record.token;
     const live=()=>!destroyed&&records.get(record.key)===record&&record.token===token;
-    const player=createStreamPlayer({container:record.container,post:record.post,getPlayback,
+    const player=createStreamPlayer({container:record.container,post:record.post,getPlayback,fullscreen:false,
       isEligible:()=>live()&&eligible(record),
       onReady:()=>{if(!live())return;record.ready=true;refresh();},
       onState:state=>{
