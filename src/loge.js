@@ -169,7 +169,15 @@ function reserveComment(env,userId,claim,nonce=null){
 async function createPost(request,env,user,json,legacySources){
   const body=await bodyOf(request),fromVideography=Object.hasOwn(body,'eventId'),streamUpload=Object.hasOwn(body,'uploadId');
   if(!fromVideography&&!legacySources)fail('Choisis une vidéo de ta vidéographie pour la publier dans les Loges virtuelles.');
-  const title=titleOf(body.title),description=Object.hasOwn(body,'description')?clean(body.description,5000):title,eventId=fromVideography?identifier(body.eventId):null,video=fromVideography||streamUpload?LOGE_STREAM_MARKER:youtubeId(body.url),nonce=requestId(body.requestId);
+  const eventId=fromVideography?identifier(body.eventId):null,ownTitle=Object.hasOwn(body,'title');
+  // A shared video keeps the title it has in the videography unless one is given.
+  let entryTitle=null;
+  if(fromVideography&&!ownTitle){
+    const entry=await env.DB.prepare('SELECT payload FROM life_events WHERE owner_id=?1 AND id=?2 AND video_branch IS NOT NULL').bind(user.id,eventId).first();
+    if(!entry)fail('Cette vidéo n’est plus dans ta vidéographie.',404);
+    entryTitle=String((await unseal(env,lifeEventContext(user.id,eventId),entry.payload)).title||'').replace(/[\r\n\t]+/g,' ').trim().slice(0,140)||'Sans titre';
+  }
+  const title=ownTitle?titleOf(body.title):fromVideography?entryTitle:titleOf(body.title),description=Object.hasOwn(body,'description')?clean(body.description,5000):title,video=fromVideography||streamUpload?LOGE_STREAM_MARKER:youtubeId(body.url),nonce=requestId(body.requestId);
   // Existing D1 tables require a nonempty description. A title-only client
   // fills that legacy column without rebuilding tables or changing old text.
   if([fromVideography,streamUpload,Object.hasOwn(body,'url')].filter(Boolean).length>1)fail('Choisis une seule source vidéo.');
@@ -179,7 +187,9 @@ async function createPost(request,env,user,json,legacySources){
   // Keep the original fingerprint format for older clients. An explicit choice
   // participates in idempotency, including an explicit unchecked (null) choice.
   const identity=fromVideography?['videography',eventId]:streamUpload?['stream',body.uploadId]:video;
-  const hash=await fingerprint(hasThemeWeek?[title,description,identity,requestedWeek]:[title,description,identity]);
+  // A derived title stays out of the fingerprint, so renaming the video never breaks a retry.
+  const signed=fromVideography&&!ownTitle?[null,null,identity]:[title,description,identity];
+  const hash=await fingerprint(hasThemeWeek?[...signed,requestedWeek]:signed);
   const repeated=await env.DB.prepare('SELECT id,request_fingerprint,deleted_at FROM loge_posts WHERE author_id=?1 AND request_id=?2').bind(user.id,nonce).first();
   if(repeated){sameRequest(repeated,hash);const time=await timing(env,user.id);return json({post:postView(await visiblePost(env,repeated.id,user.id)),nextPublicationAt:time.nextPublicationAt});}
   // Resolve only after nonce replay: a successful old-week retry must retain

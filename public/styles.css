@@ -2050,3 +2050,18 @@ body.avec-dock main { padding-bottom: 7rem; }
    and stays above the player so no entry can sit behind it. */
 body.nav-open .site-header{z-index:50}
 body.nav-open .site-nav{flex-wrap:nowrap}body.nav-open .site-nav>*{flex:none}
+/* Background video upload: a ring beside the echelon, on every page. */
+.video-upload-indicator{--ring:0;position:relative;display:inline-grid;place-items:center;flex:none;width:34px;height:34px;padding:0;border:0;border-radius:50%;background:transparent;color:#f3c57f;cursor:pointer}
+.video-upload-indicator::after{content:"";position:absolute;inset:-5px}
+.video-upload-indicator svg{width:34px;height:34px;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.video-upload-indicator .ring-track{stroke:#ffffff1f;stroke-width:2.6}
+.video-upload-indicator .ring-value{stroke:currentColor;stroke-width:2.6;stroke-dasharray:100;stroke-dashoffset:calc(100 - var(--ring));transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .35s ease}
+.video-upload-indicator .ring-icon{stroke:currentColor;stroke-width:2;display:none}
+.video-upload-indicator .ring-up{display:block}
+.video-upload-indicator[data-phase=done]{color:#9fd8a6}.video-upload-indicator[data-phase=done] .ring-up{display:none}.video-upload-indicator[data-phase=done] .ring-done{display:block}
+.video-upload-indicator[data-phase=error]{color:#f0a493}.video-upload-indicator[data-phase=error] .ring-up{display:none}.video-upload-indicator[data-phase=error] .ring-error{display:block}
+.video-upload-indicator.is-indeterminate .ring-value{animation:video-ring-spin 1.1s linear infinite}
+.video-upload-indicator:hover .ring-track{stroke:#ffffff38}.video-upload-indicator:focus-visible{outline:2px solid #f3c57f;outline-offset:3px}
+@keyframes video-ring-spin{to{transform:rotate(270deg)}}
+@media(prefers-reduced-motion:reduce){.video-upload-indicator .ring-value{animation:none!important;transition:none}}
+

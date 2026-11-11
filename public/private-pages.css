@@ -225,4 +225,25 @@
 @media(prefers-reduced-motion:reduce){.private-dialog label.video-file{transition:none}}
 /* On a phone, the open category's title and its add button sit centred under the categories. */
 @media(max-width:700px){.video-section-heading{justify-content:center;text-align:center}.private-actions.video-add-action{justify-content:center}}
-
+/* Follow-up of a background video upload. */
+.video-job{display:grid;gap:.2rem}
+.video-job-title{margin:0;font:400 1.35rem/1.3 var(--serif);color:#f2d8af;overflow-wrap:anywhere}
+.video-job-meta{margin:0 0 1rem;font-size:.78rem;color:#b8aea4;overflow-wrap:anywhere}
+.video-job-steps{display:grid;grid-template-columns:repeat(3,auto);justify-content:space-between;gap:.4rem;margin:0 0 .8rem;padding:0;list-style:none;counter-reset:step}
+.video-job-steps li{display:flex;align-items:center;gap:.45rem;min-width:0;font-size:.76rem;color:#8f877e}
+.video-job-steps li span{flex:none;width:18px;height:18px;border:1.5px solid #6f6152;border-radius:50%;display:grid;place-items:center}
+.video-job-steps li[data-state=current]{color:#f2d8af}.video-job-steps li[data-state=current] span{border-color:#ebc283;box-shadow:0 0 0 3px #ebc28322}
+.video-job-steps li[data-state=done]{color:#cbbfae}.video-job-steps li[data-state=done] span{border-color:#9fd8a6;background:#9fd8a6}
+.video-job-steps li[data-state=done] span::after{content:"";width:6px;height:3px;border:solid #1d1611;border-width:0 0 1.6px 1.6px;transform:rotate(-45deg) translate(1px,-1px)}
+.video-job-steps li[data-state=failed]{color:#f0a493}.video-job-steps li[data-state=failed] span{border-color:#f0a493}
+.video-job-bar{height:6px;border-radius:999px;background:#ffffff14;overflow:hidden}
+.video-job-bar span{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#c9a15e,#f1d9a4);transition:width .4s ease}
+.video-job-bar span.is-moving{background:linear-gradient(90deg,#c9a15e,#f1d9a4,#c9a15e);background-size:200% 100%;animation:video-job-flow 1.6s linear infinite}
+.private-dialog.is-error .video-job-bar span{background:#f0a493}
+.video-job-status{margin:.7rem 0 0;font-size:.9rem;color:#f2e6d6}
+.private-dialog.is-error .video-job-status{color:#f0a493}
+.video-job-note{margin:.2rem 0 0!important;line-height:1.6}
+.video-job-actions{margin-top:1.2rem}
+@keyframes video-job-flow{to{background-position:-200% 0}}
+@media(prefers-reduced-motion:reduce){.video-job-bar span{transition:none;animation:none!important}}
+@media(max-width:400px){.video-job-steps li{gap:.3rem;font-size:.7rem}.video-job-steps li span{width:15px;height:15px}}

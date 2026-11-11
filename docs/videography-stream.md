@@ -146,3 +146,23 @@ Le site les nomme « Loges virtuelles » (menu, titre, Game Master Blanc).
 Le menu ouvert s’arrête au-dessus du lecteur (`--player-height`), défile quand
 la fenêtre est basse et reste au-dessus du lecteur ; aucune entrée ne peut plus
 se trouver cachée derrière lui.
+
+## Envoi en arrière-plan et date du jour
+
+- Le formulaire d’ajout n’a plus de date : le serveur date une nouvelle vidéo du
+  jour où elle est ajoutée, à l’heure de Paris (`parisToday`). Une modification
+  garde la date enregistrée ; une date explicite reste acceptée pour les anciens
+  clients et les brouillons.
+- « Enregistrer la vidéo » lance l’envoi dans `public/video-uploads.js`, hors de
+  la page : la fenêtre devient un suivi (Envoi, Traitement, Enregistrement) et
+  peut être fermée aussitôt. Un cercle de progression apparaît près de l’échelon,
+  dans l’en-tête de toutes les pages ; un toucher rouvre le suivi sur la
+  vidéographie. En cas d’erreur, le suivi propose Réessayer (en libérant un envoi
+  précédent qui occuperait la place) ou Annuler. Un seul envoi à la fois ;
+  pendant un envoi, « Ajouter une vidéo » rouvre son suivi.
+- L’envoi s’arrête si le compte connecté change et ne publie jamais sous une
+  autre identité. Fermer l’onglet interrompt l’envoi : le navigateur le signale.
+- Publier dans les loges reprend le titre de la vidéo dans la vidéographie ; le
+  champ titre disparaît. Ce titre dérivé reste hors de l’empreinte d’idempotence,
+  si bien qu’un renommage n’empêche pas de rejouer une publication.
+
