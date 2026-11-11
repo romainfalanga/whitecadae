@@ -2036,7 +2036,7 @@ body.avec-dock main { padding-bottom: 7rem; }
 :where(a,button,summary):focus-visible{outline:2px solid #e5c184;outline-offset:4px}
 /* The unlocked menu remains usable at intermediate widths and short heights. */
 @media(min-width:701px){.site-nav{gap:.45rem .9rem;justify-content:flex-end;max-width:calc(100% - 210px);font-size:.84rem}}
-@media(max-width:700px){body.nav-open .site-nav{max-height:calc(100dvh - 85px);overflow-y:auto;overscroll-behavior:contain}}
+@media(max-width:700px){body.nav-open .site-nav{max-height:calc(100dvh - 85px - var(--player-height,0px));overflow-y:auto;overscroll-behavior:contain}}
 
 .header-identity{display:flex;align-items:center;gap:1rem;flex:none}
 .header-controls{display:flex;align-items:center;gap:1rem;order:3;flex:none}
@@ -2045,4 +2045,8 @@ body.avec-dock main { padding-bottom: 7rem; }
 .header-level[hidden]{display:none}
 @media(max-width:700px){.header-controls{margin-left:auto;gap:.85rem}.header-level{font-size:1.9rem}.site-header{flex-wrap:nowrap}.site-header>.site-nav{max-width:none}}
 @media(max-width:360px){.site-header{padding-inline:1rem;gap:.5rem}.header-controls{gap:.6rem}.nav-toggle{flex:none}}
-@media(min-width:701px){body.nav-open .site-nav{left:auto;right:1.5rem;width:320px;max-width:calc(100vw - 3rem);max-height:calc(100dvh - 100px);overflow-y:auto;border:1px solid var(--border);border-radius:0 0 12px 12px}}
+@media(min-width:701px){body.nav-open .site-nav{left:auto;right:1.5rem;width:320px;max-width:calc(100vw - 3rem);max-height:calc(100dvh - 100px - var(--player-height,0px));overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--border);border-radius:0 0 12px 12px}body.nav-open .site-nav>*{padding:.68rem .2rem}}
+/* The open menu ends above the music player, scrolls when the window is short,
+   and stays above the player so no entry can sit behind it. */
+body.nav-open .site-header{z-index:50}
+body.nav-open .site-nav{flex-wrap:nowrap}body.nav-open .site-nav>*{flex:none}

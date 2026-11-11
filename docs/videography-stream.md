@@ -60,13 +60,13 @@ inspecter le schéma et n’appliquer que les éléments manquants.
 
 ## Navigation Loge
 
-`/loge-virtuelle/publier` est une destination normale avec le menu Loge Virtuelle,
-Mes réflexions et Publier. Seul le formulaire défile ; aucun popup de publication
-ni bouton Fermer n’est monté. Les onglets permettent de quitter la page et
-conservent le brouillon dans la session. Un encadré « Prochaine publication »
+`/loge-virtuelle/publier` est une destination normale, avec un retour vers la
+loge et un lien vers Mes publications. Seul le formulaire défile ; aucun popup de
+publication ni bouton Fermer n’est monté. Quitter la page conserve le brouillon
+dans la session. Un encadré « Prochaine publication »
 indique la date et le temps restant, actualisé chaque minute ; il affiche
-« Disponible » lorsque la publication est ouverte. Un succès ouvre Mes réflexions
-sur la publication. L’ancienne URL `?publier` est redirigée vers cette destination.
+« Disponible » lorsque la publication est ouverte. Un succès ouvre la loge de la
+vidéo sur la publication. L’ancienne URL `?publier` est redirigée vers cette destination.
 
 Les tests couvrent droits, isolation des espaces, limites globales, conservation
 des anciennes vidéos, remplacement atomique, concurrence, nettoyage, navigation,
@@ -103,22 +103,42 @@ changer. La page d’explication et son bouton « i » sont retirés ;
 
 ## Trois loges
 
+Les catégories de la vidéographie sont Métacognition, Réflexions, Idées et
+projets, Ma version harmonieuse et Ma société harmonieuse.
+
 La Loge virtuelle se divise en trois loges, une par catégorie partageable :
 Réflexions (`/loge-virtuelle`), Idées et projets (`?loge=idees-et-projets`) et
-Ta société Harmonieuse (`?loge=societe-harmonieuse`). Un second menu, sous les
-onglets, passe de l’une à l’autre ; l’onglet Loge Virtuelle revient à la dernière
-loge visitée et une loge déjà ouverte est restaurée sans nouvelle requête.
+Sociétés harmonieuses (`?loge=societe-harmonieuse`). Le nom d’une loge est
+collectif : il réunit les vidéos de tous les Game Masters Blancs, alors que les
+catégories de la vidéographie restent personnelles (`logeRoomLabel` dans
+`public/video-model.js`).
+
+### Navigation
+
+- Le menu principal de la Loge est celui des trois loges, sous une barre légère
+  qui porte le titre, « Mes publications » et « Publier ».
+- « Mes publications » (les vidéos que le membre a mises dans la Loge, avec le
+  nom de leur loge) et « Publier » sont des pages secondaires avec un retour vers
+  la dernière loge visitée. Le profil d’un autre membre et le détail d’une
+  publication utilisent le même retour.
+- Publier ouvre la loge où la vidéo est arrivée, sur la nouvelle publication.
+  Les vidéos à publier sont regroupées par loge de destination.
+- Une loge déjà ouverte est restaurée sans nouvelle requête, et une loge se
+  prépare dès le survol, le toucher ou le focus de son onglet.
+
+### API et règles
 
 - `GET /api/loge?loge=ideas|projects|society` filtre le fil ; sans paramètre,
   Réflexions. Une autre valeur répond 404. Chaque publication expose `loge`.
 - La loge d’une publication suit la catégorie de sa fiche. Les publications
   antérieures, sans catégorie, restent dans Réflexions.
-- Métacognition et Ta version Harmonieuse n’ont pas de loge : leurs vidéos ne
+- Métacognition et Ma version harmonieuse n’ont pas de loge : leurs vidéos ne
   sont ni proposées ni acceptées à la publication, et une vidéo publiée ne peut
   pas être reclassée dans l’une d’elles tant que sa publication existe.
 - La page Game Master Blanc décrit l’état d’esprit attendu dans chaque loge.
 
-L’en-tête « Loge virtuelle » reste présent pour les lecteurs d’écran mais n’est
-plus affiché sur ses propres pages : la vidéo commence plus haut. La catégorie
-n’est affichée sur une vidéo qu’en dehors des loges (Mes réflexions, détail).
+## Menu du site et lecteur de musique
 
+Le menu ouvert s’arrête au-dessus du lecteur (`--player-height`), défile quand
+la fenêtre est basse et reste au-dessus du lecteur ; aucune entrée ne peut plus
+se trouver cachée derrière lui.

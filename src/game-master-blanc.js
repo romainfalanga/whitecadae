@@ -20,7 +20,7 @@ export const GAME_MASTER_BLANC = {
       'Trois loges t’y attendent, avec un même esprit d’entraide.',
       'Réflexions : extériorise tes réflexions et aide les autres à prendre du recul pour voir une trajectoire qui les améliore.',
       'Idées et projets : partage ce que tu veux construire et aide les autres à faire grandir leurs idées.',
-      'Ta société harmonieuse : si tu n’es pas d’accord, montre les inconvénients que tu vois pour aider l’autre à affiner sa vision.'
+      'Sociétés harmonieuses : si tu n’es pas d’accord, montre les inconvénients que tu vois pour aider l’autre à affiner sa vision.'
     ]}
   ]
 };
