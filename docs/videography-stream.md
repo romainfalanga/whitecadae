@@ -204,3 +204,11 @@ Le bouton « Échanges AS » du lecteur ouvre la conversation juste sous la vid�
 Le lecteur de la vidéographie n’a plus de bouton plein écran. Modifier une vidéo ne propose que son titre et sa catégorie : le fichier n’est jamais remplacé depuis la fiche.
 
 Les échanges entre AS et les commentaires des Loges s’appellent « expansions harmonieuses », avec une même icône (une bulle et une étoile, `EXPANSION_ICON_PATHS` dans `public/video-model.js`).
+
+## Fichier refusé par le navigateur
+
+Sur certains téléphones, l’envoi direct d’un fichier choisi dans la galerie échoue avant le premier octet (le navigateur juge que le fichier a changé, ou ne peut plus le lire). Quand un envoi est coupé sans que rien ne soit parti, le site lit la vidéo une fois en mémoire et envoie cette copie, sous le même nom. Si la lecture elle-même échoue, l’envoi s’arrête avec un message qui explique de télécharger d’abord la vidéo sur le téléphone.
+
+La vérification d’état qui suit une coupure porte un diagnostic sans donnée personnelle (`?try=&sent=&ms=&copy=`), visible dans les journaux du Worker.
+
+Une réservation laissée par une page rechargée est libérée automatiquement, une fois, au lieu de refuser le nouvel envoi.

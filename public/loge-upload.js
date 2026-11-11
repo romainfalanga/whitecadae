@@ -22,7 +22,7 @@ export function readLogeDuration(file,{signal}={}){
     timer=setTimeout(()=>finish(null,null),10000);video.src=url;
   });
 }
-export function uploadLogeFile(uploadURL,file,{signal,onProgress=()=>{},xhrFactory=()=>new XMLHttpRequest(),formFactory=()=>new FormData()}={}){
+export function uploadLogeFile(uploadURL,file,{signal,name=null,onProgress=()=>{},xhrFactory=()=>new XMLHttpRequest(),formFactory=()=>new FormData()}={}){
   uploadActive(signal);
   return new Promise((resolve,reject)=>{
     const xhr=xhrFactory();let settled=false;
@@ -34,7 +34,8 @@ export function uploadLogeFile(uploadURL,file,{signal,onProgress=()=>{},xhrFacto
     // A dropped connection or a lost response can be retried on the same address.
     xhr.onerror=()=>finish(Object.assign(Error('La connexion a été interrompue pendant l’envoi.'),{network:true}));xhr.ontimeout=()=>finish(Object.assign(Error('L’envoi a expiré.'),{network:true}));xhr.onabort=()=>finish(uploadAbort());
     signal?.addEventListener('abort',abort,{once:true});
-    const form=formFactory();form.append('file',file);
+    // A copy held in memory has no name of its own: it keeps the picked file's.
+    const form=formFactory();if(name)form.append('file',file,name);else form.append('file',file);
     try{xhr.send(form);}catch(error){finish(error);}
   });
 }
@@ -54,13 +55,21 @@ export function uploadReconnect(ms,signal){
   });
 }
 export const UPLOAD_RETRY_DELAYS=[1500,4000,8000,15000,30000];
+export const UPLOAD_UNREADABLE='Cette vidéo ne peut pas être lue sur ton appareil. Si elle vient de Google Photos ou d’un espace en ligne, télécharge-la d’abord sur ton téléphone, puis choisis-la de nouveau.';
+// A private copy of the picked file. Some phones refuse to send a gallery or
+// cloud file directly (its date shifts under the browser, and the transfer is
+// cut before the first byte); the same bytes read into memory go through.
+export async function snapshotLogeFile(file){
+  const bytes=typeof file.arrayBuffer==='function'?await file.arrayBuffer():await new Response(file).arrayBuffer();
+  return new Blob([bytes],{type:file.type||'video/mp4'});
+}
 function uploadWait(ms,signal){
   uploadActive(signal);return new Promise((resolve,reject)=>{
     const abort=()=>{clearTimeout(timer);reject(uploadAbort());},timer=setTimeout(()=>{signal?.removeEventListener('abort',abort);resolve();},ms);
     signal?.addEventListener('abort',abort,{once:true});
   });
 }
-export async function ensureLogeUpload(draft,{request,signal,onState=()=>{},upload=uploadLogeFile,duration=readLogeDuration,wait=uploadWait,reconnect=uploadReconnect,retryDelays=UPLOAD_RETRY_DELAYS,maxPolls=300,basePath='/api/loge/uploads'}={}){
+export async function ensureLogeUpload(draft,{request,signal,onState=()=>{},upload=uploadLogeFile,duration=readLogeDuration,wait=uploadWait,reconnect=uploadReconnect,snapshot=snapshotLogeFile,retryDelays=UPLOAD_RETRY_DELAYS,maxPolls=300,basePath='/api/loge/uploads'}={}){
   const file=draft.file,requestId=draft.requestId,sameDraft=()=>draft.file===file&&draft.requestId===requestId;
   const check=()=>{uploadActive(signal);if(!sameDraft())throw uploadAbort();};
   check();validateLogeFile(file);
@@ -85,13 +94,25 @@ export async function ensureLogeUpload(draft,{request,signal,onState=()=>{},uplo
     const expiry=typeof draft.expiresAt==='number'?(draft.expiresAt<1e12?draft.expiresAt*1000:draft.expiresAt):Date.parse(draft.expiresAt);
     if(Number.isFinite(expiry)&&expiry<=Date.now())throw Error('L’envoi a expiré. Sélectionne de nouveau ta vidéo.');
     state('uploading',0);
+    let source=draft.snapshot||file;
     for(let attempt=0;;attempt++){
-      try{await upload(draft.uploadURL,file,{signal,onProgress:value=>state('uploading',value)});check();draft.uploadSent=true;break;}
+      let sent=0;const started=Date.now();
+      try{await upload(draft.uploadURL,source,{signal,...(source===file?{}:{name:file.name}),onProgress:value=>{sent=value;state('uploading',value);}});check();draft.uploadSent=true;break;}
       catch(error){
         if(!error?.network||attempt>=retryDelays.length)throw error;
+        const elapsed=Date.now()-started;
+        // Cut before anything left the device: the browser could not send the
+        // picked file as it is. Read it once into memory and send that copy.
+        if(source===file&&sent===0){
+          state('reading');
+          try{source=draft.snapshot=await snapshot(file);}
+          catch(cause){if(cause?.name==='AbortError')throw cause;check();throw Object.assign(Error(UPLOAD_UNREADABLE),{unreadable:true});}
+          check();
+        }
         state('reconnecting');await reconnect(retryDelays[attempt],signal);check();
-        // The file may have arrived before the response was lost.
-        result=await request(basePath+'/'+encodeURIComponent(draft.uploadId));check();
+        // The file may have arrived before the response was lost. The query
+        // carries no personal data: it lets the server logs tell how it failed.
+        result=await request(basePath+'/'+encodeURIComponent(draft.uploadId)+`?try=${attempt+1}&sent=${sent}&ms=${elapsed}&copy=${source===file?0:1}`);check();
         if(result.status==='ready'){state('ready');return draft.uploadId;}
         if(result.status==='error')throw Error('Cette vidéo n’a pas pu être préparée. Sélectionne une vidéo pour recommencer.');
         if(result.status==='processing'){draft.uploadSent=true;break;}

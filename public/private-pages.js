@@ -410,7 +410,7 @@ function videoJobView(){
     const step=current.phase==='done'?3:current.phase==='saving'?2:current.phase==='processing'?1:0;
     steps.forEach((item,index)=>{item.dataset.state=index<step?'done':index===step&&current.phase!=='error'?'current':index===step?'failed':'pending';});
     const fill=el('video-job-fill');fill.style.width=(current.phase==='uploading'?current.progress||0:current.phase==='done'?100:current.phase==='error'?Math.max(4,current.progress||0):step===0?6:step===1?72:90)+'%';
-    fill.classList.toggle('is-moving',['checking','preparing','reconnecting','processing','saving'].includes(current.phase));
+    fill.classList.toggle('is-moving',['checking','preparing','reading','reconnecting','processing','saving'].includes(current.phase));
     dialog.classList.toggle('is-error',current.phase==='error');
     el('video-job-status').textContent=current.phase==='error'?current.error:jobSummary(current);
     el('video-job-note').textContent=current.phase==='done'?'Ta vidéo est dans ta vidéographie.':current.phase==='error'?'Ta vidéo n’a pas été ajoutée. Tu peux réessayer ou annuler.':current.phase==='processing'?'Le service vidéo prépare la lecture : cela peut prendre quelques minutes. Tu peux fermer cette fenêtre et continuer ; le cercle près de ton échelon indique où en est l’envoi.':'Tu peux fermer cette fenêtre et continuer à utiliser le site ; le cercle près de ton échelon indique où en est l’envoi. Garde l’onglet ouvert jusqu’à la fin.';
