@@ -184,3 +184,17 @@ se trouver cachée derrière lui.
   pendant une saisie ou avec les commentaires ouverts. Un toucher sur la vidéo
   lance ou met en pause.
 
+
+## Envoi interrompu
+
+L’envoi direct vers Stream est un seul formulaire. Une coupure réseau, ou un téléphone qui verrouille son écran ou passe une autre application au premier plan, l’interrompt. Depuis le 11 novembre 2026 :
+
+- l’envoi reprend seul jusqu’à cinq fois (après 1,5 s, 4 s, 8 s, 15 s et 30 s), sur la même adresse et la même réservation ;
+- chaque reprise attend que le réseau soit revenu et que la page soit de nouveau visible ;
+- avant de renvoyer le fichier, le serveur est interrogé : un fichier déjà reçu, dont seule la réponse s’est perdue, n’est pas renvoyé ;
+- l’écran reste allumé pendant un envoi en cours (Screen Wake Lock, quand le navigateur le permet) ;
+- après cinq coupures, le suivi propose « Réessayer » avec un message explicite ; un refus HTTP ou une annulation n’est jamais répété automatiquement.
+
+## Échanges avec les AS
+
+Le bouton « Échanges AS » du lecteur ouvre la conversation juste sous la vidéo, avant la navigation. Sur un écran d’au moins 900 px, elle s’ouvre d’elle-même dans une colonne à droite de la vidéo, avec la zone de réponse en bas. Chaque message affiche une initiale, une bulle, une date relative, Répondre et Signaler ou Supprimer.

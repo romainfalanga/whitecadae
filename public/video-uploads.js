@@ -22,13 +22,22 @@ function emit(){
   renderIndicator();
 }
 function guard(event){if(jobActive(currentVideoJob())){event.preventDefault();event.returnValue='';}}
+// Keep the screen on while a file is sent: a locked phone suspends the transfer.
+let wakeLock=null;
+async function holdScreen(){
+  const lock=globalThis.navigator?.wakeLock;
+  if(wakeLock||globalThis.document?.hidden||!lock?.request||!jobActive(currentVideoJob()))return;
+  try{wakeLock=await lock.request('screen');wakeLock.addEventListener?.('release',()=>{wakeLock=null;});if(!jobActive(currentVideoJob()))releaseScreen();}catch{wakeLock=null;}
+}
+function releaseScreen(){const lock=wakeLock;wakeLock=null;lock?.release?.().catch?.(()=>{});}
+globalThis.document?.addEventListener?.('visibilitychange',()=>{if(!globalThis.document.hidden)void holdScreen();});
 
 export function startVideoJob({api,state,navigate,eventId,body,file}){
   if(jobActive(currentVideoJob()))throw Error('Une vidéo est déjà en cours d’envoi. Attends la fin ou annule-la.');
   clearTimeout(doneTimer);
   job={id:eventId,user:state.user?.id,api,state,navigate,body,title:body.title,branch:body.videoBranch,fileName:file.name,fileSize:file.size,
     upload:{file,requestId:crypto.randomUUID(),abandonedUploads:[]},phase:'checking',progress:0,error:'',blockedUploadId:null,controller:null,startedAt:Date.now()};
-  window.addEventListener('beforeunload',guard);
+  window.addEventListener('beforeunload',guard);void holdScreen();
   void run(job);return job;
 }
 function request(current,path,options={}){
@@ -47,22 +56,22 @@ async function run(current){
     await request(current,'/api/life-tree/events/'+encodeURIComponent(current.id),{method:'PUT',body:{...current.body,uploadId}});
     if(!live())return;
     current.phase='done';current.progress=100;current.finishedAt=Date.now();emit();
-    window.removeEventListener('beforeunload',guard);
+    window.removeEventListener('beforeunload',guard);releaseScreen();
     // A finished job lingers briefly so the ring can show its check mark.
     doneTimer=setTimeout(()=>{if(job===current&&!current.viewing){job=null;emit();}},6000);
   }catch(error){
     if(!live()||error?.name==='AbortError')return;
     current.phase='error';
-    current.error=[401,403].includes(error.status)?'Reconnecte-toi pour terminer l’envoi.':error.message||'L’envoi a échoué.';
+    current.error=[401,403].includes(error.status)?'Reconnecte-toi pour terminer l’envoi.':error.network?'La connexion a été coupée plusieurs fois pendant l’envoi. Vérifie ta connexion, garde cette page ouverte et touche Réessayer.':error.message||'L’envoi a échoué.';
     if(error.status===409&&error.data?.uploadId)current.blockedUploadId=error.data.uploadId;
     // A reservation the video service refused or let expire cannot resume: start it again.
     current.restart=/préparée|expiré|Sélectionne/i.test(current.error);
-    window.removeEventListener('beforeunload',guard);emit();
+    window.removeEventListener('beforeunload',guard);releaseScreen();emit();
   }
 }
 export async function retryVideoJob(){
   const current=currentVideoJob();if(!current||current.phase!=='error')return;
-  window.addEventListener('beforeunload',guard);
+  window.addEventListener('beforeunload',guard);void holdScreen();
   if(current.restart&&!current.blockedUploadId){
     const stale=current.upload.uploadId;
     Object.assign(current.upload,{requestId:crypto.randomUUID(),uploadId:null,uploadURL:null,uploadSent:false,uploadStatus:null});
@@ -78,13 +87,13 @@ export async function retryVideoJob(){
 export async function cancelVideoJob(){
   const current=currentVideoJob();if(!current)return;
   const saving=current.phase==='saving'||current.phase==='done';
-  current.controller?.abort();job=null;clearTimeout(doneTimer);window.removeEventListener('beforeunload',guard);emit();
+  current.controller?.abort();job=null;clearTimeout(doneTimer);window.removeEventListener('beforeunload',guard);releaseScreen();emit();
   // Free the reservation unless the video may already be attached to its entry.
   if(!saving&&current.upload.uploadId){try{await current.api(basePath+'/'+encodeURIComponent(current.upload.uploadId),{method:'DELETE',body:{},headers:{'X-WC-User':String(current.user)}});}catch{/* cleanup also runs on the server */}}
 }
 export function dismissVideoJob(){const current=currentVideoJob();if(current&&!jobActive(current)&&current.phase!=='error'){job=null;clearTimeout(doneTimer);emit();}}
 
-export const jobLabels={checking:'Vérification de la vidéo',preparing:'Préparation de l’envoi',uploading:'Envoi de la vidéo',processing:'Traitement de la vidéo',saving:'Enregistrement',done:'Vidéo ajoutée',error:'Envoi interrompu'};
+export const jobLabels={checking:'Vérification de la vidéo',preparing:'Préparation de l’envoi',uploading:'Envoi de la vidéo',reconnecting:'Connexion perdue · reprise automatique',processing:'Traitement de la vidéo',saving:'Enregistrement',done:'Vidéo ajoutée',error:'Envoi interrompu'};
 export function jobSummary(value){
   if(!value)return '';
   if(value.phase==='uploading')return `${jobLabels.uploading} · ${value.progress||0} %`;
@@ -107,7 +116,7 @@ function renderIndicator(){
     });
     controls.insertBefore(button,controls.firstChild);
   }
-  const indeterminate=['checking','preparing','processing','saving'].includes(current.phase);
+  const indeterminate=['checking','preparing','reconnecting','processing','saving'].includes(current.phase);
   button.dataset.phase=current.phase;button.classList.toggle('is-indeterminate',indeterminate);
   const value=current.phase==='uploading'?current.progress||0:current.phase==='done'?100:indeterminate?28:100;
   button.style.setProperty('--ring',String(value));

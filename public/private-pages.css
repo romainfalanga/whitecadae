@@ -364,3 +364,47 @@
 .gm-as .gm-section p{text-wrap:pretty;overflow-wrap:anywhere}
 .gm-as-action{justify-content:center;margin-top:2.4rem}
 .gm-as-action .private-button{text-decoration:none!important}
+
+/* AS exchanges: a conversation under the video, beside it on wide screens. */
+.as-comments{margin-top:1rem;padding-top:1rem;border-top:1px solid #ffffff14}
+.as-comments-head{margin-bottom:.4rem}
+.as-comments-head h4{font:400 1.15rem var(--serif);color:#f0d5a6}
+.as-comments-head button{flex-basis:40px;width:40px;height:40px;border-color:#ffffff1f}
+.as-comments-head button::before{content:none}
+.as-comments-head svg,.as-send svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.as-thread{display:grid;gap:.9rem;padding:.4rem 0 .8rem}
+.as-comments .as-message{display:flex;align-items:flex-start;gap:.6rem;margin:0;padding:0;border:0}
+.as-comments .as-message.is-reply{margin-left:2.4rem}
+.as-avatar{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:#2c2219;border:1px solid #d8aa6550;color:#ecc58a;font:400 .95rem var(--serif)}
+.is-reply .as-avatar{width:28px;height:28px;font-size:.8rem}
+.as-body{min-width:0;flex:1}
+.as-bubble{display:inline-block;max-width:100%;padding:.55rem .8rem .6rem;border-radius:4px 16px 16px 16px;background:#1d1a20;border:1px solid #ffffff10}
+.as-message.is-self .as-bubble{background:#2a2118;border-color:#d8aa6530}
+.as-bubble strong{display:block;font-size:.78rem;color:#e6c08a;font-weight:600}
+.as-bubble small{display:block;font-size:.7rem;color:#9f9483;margin-top:.1rem}
+.as-comments .as-bubble p{margin:.25rem 0 0;white-space:pre-wrap;overflow-wrap:anywhere;color:#ece3d4;line-height:1.45;font-size:.92rem}
+.as-meta{display:flex;align-items:center;flex-wrap:wrap;gap:.2rem .9rem;margin:.3rem 0 0 .4rem;font-size:.72rem;color:#93897b}
+.as-meta button{padding:.25rem 0;border:0;background:none;color:#b9a689;font:inherit;font-weight:600;cursor:pointer;min-height:28px}
+.as-meta button:hover{color:#ecc58a}
+.as-empty{margin:.6rem 0;color:#9b9182;font-size:.85rem}
+.as-new{justify-self:center;margin:.2rem auto .6rem;display:block}
+.as-compose{position:sticky;bottom:0;padding:.6rem 0 .2rem;background:linear-gradient(transparent,#0f0e12 18%)}
+.as-replying{margin:0 0 .4rem .3rem;font-size:.75rem;color:#c9ad83}
+.as-compose-row{display:flex;align-items:flex-end;gap:.5rem;padding:.35rem .35rem .35rem .9rem;border:1px solid #d8aa6545;border-radius:22px;background:#17151a}
+.as-compose-row:focus-within{border-color:#d8aa65}
+.as-compose textarea{flex:1;min-height:0!important;height:auto;max-height:160px;padding:.45rem 0!important;border:0!important;background:transparent!important;resize:none;color:#ede4d7;font:inherit;font-size:.92rem;line-height:1.4;outline:none;box-shadow:none!important}
+.as-send{flex:none;display:grid;place-items:center;width:36px;height:36px;border:0;border-radius:50%;background:#d8aa65;color:#1a140f;cursor:pointer}
+.as-send:disabled{opacity:.5}
+.as-cancel{margin:.35rem 0 0 .6rem;padding:.2rem 0;border:0;background:none;color:#a99c88;font-size:.75rem;cursor:pointer}
+.as-comments .private-status:empty{display:none}
+.as-report{margin-top:.5rem}
+@media(min-width:900px){
+  .private-dialog.is-viewer.has-comments{max-width:min(980px,calc(100vw - 48px))}
+  .has-comments .video-viewer{display:grid;grid-template-columns:minmax(0,1fr) 360px;column-gap:1.4rem;align-items:start}
+  .has-comments .video-viewer>*{grid-column:1}
+  .has-comments .video-viewer>.as-comments{grid-column:2;grid-row:1 / span 6;display:flex;flex-direction:column;margin:0;padding:0 0 0 1.4rem;border-top:0;border-left:1px solid #ffffff14;height:min(calc(100dvh - 150px),760px);position:sticky;top:0}
+  .has-comments .as-thread{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;align-content:start;padding-right:.3rem;scrollbar-width:thin;scrollbar-color:#6f5838 transparent}
+  .has-comments .as-compose{position:static;background:none}
+  .has-comments .as-comments-head button{display:none}
+  .has-comments .as-comments-head{min-height:40px}
+}
