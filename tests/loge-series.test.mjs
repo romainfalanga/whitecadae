@@ -14,7 +14,7 @@ function setup(){
       async generateToken(){return 'header.'+Buffer.from(JSON.stringify({sub:id,exp:String(Math.floor(Date.now()/1000)+3600)})).toString('base64url')+'.signature';}};}
   };
   // D1 refuses a statement whose bound values differ from its highest placeholder: check every query.
-  const prepare=f.env.DB.prepare;f.env.DB.prepare=query=>{const statement=prepare(query),bind=statement.bind;statement.bind=(...args)=>{const highest=Math.max(0,...[...query.matchAll(/\?(\d+)/g)].map(m=>Number(m[1])));if(highest&&args.length!==highest)throw Error(`binding mismatch ${args.length}/${highest}: ${query.slice(0,80)}`);return bind(...args);};return statement;};
+  const prepare=f.env.DB.prepare;f.env.DB.prepare=query=>{const statement=prepare(query),bind=statement.bind;statement.bind=(...args)=>{const highest=Math.max(0,...[...query.matchAll(/\?(\d+)/g)].map(m=>Number(m[1])));if(highest&&args.length!==highest)throw Error(`binding mismatch ${args.length}/${highest}: ${query.slice(0,80)}`);if(args.length>100)throw Error(`too many parameters (${args.length}): ${query.slice(0,80)}`);return bind(...args);};return statement;};
   f.call=async(path,method='GET',body,user=11)=>{const r=await worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session=qa'+(user-1),'X-WC-User':String(user),...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})}),f.env);return {status:r.status,data:await r.json()};};
   f.video=async(id,extra={},user=11,duration=40)=>{
     const u=await f.call('/api/life-tree/uploads','POST',{filename:'v.mp4',size:1000,requestId:crypto.randomUUID()},user);assert.equal(u.status,201,JSON.stringify(u.data));

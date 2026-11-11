@@ -25,7 +25,7 @@ const state = {
 const accountChannel=typeof BroadcastChannel==='function'?new BroadcastChannel('wc-account-context'):null;
 let observedAccount;
 accountChannel?.addEventListener('message',event=>{
-  if(event.data?.type!=='account-changed'||event.data.userId===state.user?.id)return;
+  if(event.data?.type!=='account-changed'||(event.data.userId??null)===(state.user?.id??null))return;
   window.WCPrivate?.leave();
   window.WCPlaylists?.clear();
   window.WCLoge?.clear();
@@ -79,7 +79,15 @@ async function api(path, options = {}) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(opts.body);
   }
-  const res = await fetch(path, opts);
+  let res;
+  try { res = await fetch(path, opts); }
+  catch (cause) {
+    // An aborted request keeps its name; a lost connection gets words a person can read.
+    if (cause?.name === 'AbortError') throw cause;
+    const err = new Error('Connexion interrompue. Vérifie ta connexion puis réessaie.');
+    err.status = 0; err.network = true;
+    throw err;
+  }
   let data = null;
   try { data = await res.json(); } catch { /* réponse vide */ }
   if (!res.ok) {
@@ -105,7 +113,8 @@ function stale(epoch) { return epoch !== renderEpoch; }
 function navigate(path, remplace) {
   if (remplace) history.replaceState(null, '', path);
   else history.pushState(null, '', path);
-  route();
+  // Callers that continue on the new page wait for it to be rendered.
+  return route();
 }
 
 document.addEventListener('click', (e) => {
@@ -193,7 +202,10 @@ async function route() {
   if (/^\/playlist(?:\/|$)/.test(path)) return navigate('/',true);
   if (path === '/paroles') return pageParoles();
   if (path === '/interpretations' || path === '/fil') return navigate('/paroles', true);
-  if ((m = path.match(/^\/chanson\/([^/]+)$/))) return pageSong(decodeURIComponent(m[1]));
+  if ((m = path.match(/^\/chanson\/([^/]+)$/))) {
+    let slug; try { slug = decodeURIComponent(m[1]); } catch { return navigate('/paroles', true); }
+    return pageSong(slug);
+  }
   if (path === '/signes' || path === '/signes/horloge' || path === '/sans-vin-divin') return WCGame.page();
   if (path === '/echelon') {
     if(/^#(?:eg-|n-)[a-z0-9-]+$/.test(location.hash))return navigate('/signes'+location.hash,true);
@@ -304,8 +316,11 @@ async function refreshSession({isCurrent=()=>true}={}) {
     state.echelon = data.echelon || 1;
     state.gameEchelon = data.gameEchelon || 1;
     state.attenteMs = data.attenteMs || 0;
-  } catch {
+  } catch (error) {
     if(!isCurrent())return;
+    // A lost connection or a server hiccup says nothing about the session:
+    // keep what is known rather than signing every tab out.
+    if(error?.network||error?.status>=500)return;
     // même injoignable, le serveur n'aurait pas refusé le sol
     state.user = null;
     state.access = { interpretations: true };
@@ -351,8 +366,12 @@ function pageLogin() {
       <button type="submit" class="primary">Connexion</button>
       <p class="form-footer">Pas encore de compte ? <a href="/inscription${destination !== '/' ? '?retour=' + encodeURIComponent(destination) : ''}" data-link>Inscrivez-vous</a></p>
     </form>`;
+  let sending = false;
   document.getElementById('login-form').onsubmit = async (e) => {
     e.preventDefault();
+    // One request at a time: a second tap must not sign in or register twice.
+    if (sending) return;
+    sending = true;
     try {
       const data = await api('/api/login', {
         method: 'POST',
@@ -364,8 +383,9 @@ function pageLogin() {
       await refreshSession();
       navigate(destination);
     } catch (err) {
-      document.getElementById('lf-error').textContent = err.message;
-    }
+      const box = document.getElementById('lf-error');
+      if (box) box.textContent = err.message;
+    } finally { sending = false; }
   };
 }
 
@@ -385,8 +405,12 @@ function pageRegister() {
       <button type="submit" class="primary">S’inscrire</button>
       <p class="form-footer">Déjà inscrit ? <a href="/connexion${destination !== '/' ? '?retour=' + encodeURIComponent(destination) : ''}" data-link>Connectez-vous</a></p>
     </form>`;
+  let sending = false;
   document.getElementById('reg-form').onsubmit = async (e) => {
     e.preventDefault();
+    // One request at a time: a second tap must not sign in or register twice.
+    if (sending) return;
+    sending = true;
     try {
       const data = await api('/api/register', {
         method: 'POST',
@@ -399,8 +423,9 @@ function pageRegister() {
       await refreshSession();
       navigate(destination);
     } catch (err) {
-      document.getElementById('rf-error').textContent = err.message;
-    }
+      const box = document.getElementById('rf-error');
+      if (box) box.textContent = err.message;
+    } finally { sending = false; }
   };
 }
 
@@ -647,17 +672,19 @@ function isIOS() {
   return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
 }
 
+// Storage can be blocked (private mode, strict settings): never let it throw.
+const installStore={get(){try{return localStorage.getItem('wc_install_dismissed');}catch{return null;}},set(){try{localStorage.setItem('wc_install_dismissed','1');}catch{/* the banner simply returns next time */}}};
 function showInstallBanner(mode) {
   const banner = document.getElementById('install-banner');
   if (!banner) return;
-  if (localStorage.getItem('wc_install_dismissed') === '1') return;
+  if (installStore.get() === '1') return;
   const hint = document.getElementById('install-hint');
   const go = document.getElementById('install-go');
   if (mode === 'ios') {
     hint.innerHTML = 'Appuyez sur <strong>Partager</strong> puis <strong>« Sur l’écran d’accueil »</strong>.';
     go.hidden = true;
   } else {
-    hint.textContent = 'Les textes sur votre écran d’accueil, même hors connexion.';
+    hint.textContent = 'White Cadae sur votre écran d’accueil.';
     go.hidden = false;
   }
   banner.hidden = false;
@@ -670,7 +697,7 @@ function bindInstall() {
   const close = document.getElementById('install-close');
   close.onclick = () => {
     banner.hidden = true;
-    localStorage.setItem('wc_install_dismissed', '1');
+    installStore.set();
   };
 
   document.getElementById('install-go').onclick = async () => {
@@ -678,7 +705,7 @@ function bindInstall() {
     banner.hidden = true;
     deferredInstall.prompt();
     const { outcome } = await deferredInstall.userChoice;
-    if (outcome === 'accepted') localStorage.setItem('wc_install_dismissed', '1');
+    if (outcome === 'accepted') installStore.set();
     deferredInstall = null;
   };
 
@@ -690,7 +717,7 @@ function bindInstall() {
 
   window.addEventListener('appinstalled', () => {
     banner.hidden = true;
-    localStorage.setItem('wc_install_dismissed', '1');
+    installStore.set();
   });
 
   // iOS : pas d'événement, on propose le geste après quelques secondes

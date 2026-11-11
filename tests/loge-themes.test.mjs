@@ -133,9 +133,19 @@ test('malformed requests, stale target weeks, prototype fields and unsafe IDs ne
   }finally{f.sql.close();}
 });
 
+test('a member proposes at most three themes per week; replaying one of them stays accepted',async()=>{
+  const f=setup();try{
+    for(const title of ['Un','Deux','Trois'])assert.equal((await f.propose(title)).status,201);
+    const refused=await f.propose('Quatre');assert.equal(refused.status,429);assert.match(refused.data.error,/3 thèmes/);
+    assert.equal((await f.propose('Deux')).status,200,'an existing proposal is a replay, not a fourth');
+    assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_theme_candidates').get().n,3);assert.equal(f.sql.prepare("SELECT count(*) n FROM loge_themes WHERE title='Quatre'").get().n,0);
+  }finally{f.sql.close();}
+});
 test('proposal and history cursors use stable IDs, search is accent insensitive and archive metadata counts live tagged videos',async()=>{
   const f=setup();try{
-    const order=[];for(let i=0;i<43;i++)order.push((await f.propose('Réflexion '+i)).data.proposal);
+    // A member proposes three themes a week: this long list is credited to another account as it grows.
+    const spread=()=>f.sql.prepare('UPDATE loge_theme_candidates SET proposed_by=26').run();
+    const order=[];for(let i=0;i<43;i++){order.push((await f.propose('Réflexion '+i)).data.proposal);spread();}
     const first=(await f.call('/api/loge/themes/proposals')).data;assert.equal(first.proposals.length,20);
     await f.propose('Nouveau');const second=(await f.call('/api/loge/themes/proposals?after='+first.next)).data,third=(await f.call('/api/loge/themes/proposals?after='+second.next)).data;
     assert.deepEqual([...first.proposals,...second.proposals,...third.proposals].map(p=>p.id),order.map(p=>p.id).reverse());assert.equal(third.next,null);

@@ -138,3 +138,18 @@ test('service worker leaves audio, Range requests and API responses out of its c
   handlers.fetch({request:{url:'https://test.local/styles.css',method:'GET',headers:new Headers()},respondWith(p){response=p;},waitUntil(){}});
   await response; assert.equal(writes,0);
 });
+
+test('service worker keeps one shell for every page and never stores HTML under a file address', async () => {
+  const handlers={},stored=[],matched=[];let reply,offline=false;
+  const self={location:{origin:'https://test.local'},addEventListener:(k,v)=>handlers[k]=v};
+  const context=vm.createContext({self,URL,Response,fetch:async()=>{if(offline)throw new Error('offline');return reply();},
+    caches:{open:async()=>({put:async key=>{stored.push(typeof key==='string'?key:key.url);}}),match:async key=>{matched.push(typeof key==='string'?key:key.url);return new Response('cached shell');}}});
+  vm.runInContext(readFileSync(new URL('../public/sw.js',import.meta.url),'utf8'),context);
+  const visit=async(path,mode)=>{let response;const pending=[];handlers.fetch({request:{url:'https://test.local'+path,method:'GET',mode,headers:new Headers()},respondWith(p){response=p;},waitUntil(p){pending.push(p);}});const result=await response;await Promise.all(pending);return result;};
+  reply=()=>new Response('<html>',{status:200,headers:{'Content-Type':'text/html'}});
+  await visit('/loge-virtuelle','navigate');await visit('/videographie','navigate');assert.deepEqual(stored,['/','/'],'each page refreshes the single shell');
+  await visit('/missing-file.js','no-cors');assert.deepEqual(stored,['/','/'],'the shell served for a missing file is not stored as that file');
+  reply=()=>new Response('code',{status:200,headers:{'Content-Type':'text/javascript'}});
+  await visit('/app.js','no-cors');assert.deepEqual(stored,['/','/','https://test.local/app.js']);
+  offline=true;assert.equal(await(await visit('/carre-d-as','navigate')).text(),'cached shell');assert.deepEqual(matched,['/']);
+});

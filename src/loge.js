@@ -302,12 +302,14 @@ async function createPost(request,env,user,json,legacySources){
 }
 // The videos of a sériographie that can join a loge, in its order, with the
 // reason it cannot when that is the case. Shared by the choices and the publication.
-async function seriesPlan(env,userId,items){
+// Every video of the member with its published upload, read once: the plans
+// of all their sériographies are then worked out in memory.
+async function memberVideos(env,userId){
+  return new Map(((await env.DB.prepare(`SELECT e.id,e.video_branch,(SELECT s.id FROM loge_stream_uploads s WHERE s.user_id=e.owner_id AND s.event_id=e.id AND s.purpose='videography' AND s.state='published') AS upload_id
+    FROM life_events e WHERE e.owner_id=?1 AND e.video_branch IS NOT NULL`).bind(userId).all()).results||[]).map(row=>[row.id,row]));
+}
+function seriesPlan(videos,items){
   const ids=[...new Set(items.filter(id=>typeof id==='string'))].slice(0,100);
-  if(!ids.length)return {parts:[],reason:'empty'};
-  const marks=ids.map((_,i)=>'?'+(i+2)).join(',');
-  const videos=new Map(((await env.DB.prepare(`SELECT e.id,e.video_branch,(SELECT s.id FROM loge_stream_uploads s WHERE s.user_id=e.owner_id AND s.event_id=e.id AND s.purpose='videography' AND s.state='published') AS upload_id
-    FROM life_events e WHERE e.owner_id=?1 AND e.video_branch IS NOT NULL AND e.id IN (${marks})`).bind(userId,...ids).all()).results||[]).map(row=>[row.id,row]));
   const parts=ids.filter(id=>videos.has(id)).map(id=>videos.get(id));
   if(!parts.length)return {parts,reason:'empty'};
   if(parts.some(part=>!part.upload_id))return {parts,reason:'source'};
@@ -318,13 +320,12 @@ async function seriesPlan(env,userId,items){
   return {parts,branch,reason:null};
 }
 const SERIES_REASONS={empty:'Cette sériographie n’a plus de vidéo.',source:'Une de ses vidéos ne peut pas être publiée dans les Loges virtuelles.',mixed:'Ses vidéos doivent toutes être dans la même catégorie.',room:'Sa catégorie n’a pas de loge.'};
-// Named values (:name, or :name* for a list) become numbered placeholders in
+// Named values (:name) become numbered placeholders in
 // order of appearance, so each statement binds exactly what it uses.
 function statement(env,sql,values){
   const bound=[];
-  const query=sql.replace(/:([a-z]+)(\*)?/g,(token,name,list)=>{
+  const query=sql.replace(/:([a-z]+)/g,(token,name)=>{
     if(!Object.hasOwn(values,name))return token;
-    if(list)return values[name].map(value=>{bound.push(value);return '?'+bound.length;}).join(',');
     bound.push(values[name]);return '?'+bound.length;
   });
   return env.DB.prepare(query).bind(...bound);
@@ -341,14 +342,14 @@ async function createSeriesPost(env,user,json,body){
   const stored=await env.DB.prepare('SELECT payload FROM life_series WHERE owner_id=?1 AND id=?2').bind(user.id,seriesId).first();
   if(!stored)fail('Cette sériographie n’est plus dans ta vidéographie.',404);
   const series=await unseal(env,seriesContext(user.id,seriesId),stored.payload);
-  const plan=await seriesPlan(env,user.id,Array.isArray(series.items)?series.items:[]);
+  const plan=seriesPlan(await memberVideos(env,user.id),Array.isArray(series.items)?series.items:[]);
   if(plan.reason)fail(SERIES_REASONS[plan.reason],409);
   const title=ownTitle?titleOf(body.title):String(series.title||'').replace(/[\r\n\t]+/g,' ').trim().slice(0,140)||'Sans titre';
   const assignment=await postThemeAssignment(env,requestedWeek),claim=crypto.randomUUID(),count=plan.parts.length;
-  const values={user:user.id,claim,nonce,hash,marker:LOGE_STREAM_MARKER,title,branch:plan.branch,uploads:plan.parts.map(part=>part.upload_id),week:assignment?.week??null,theme:assignment?.themeId??null};
+  const values={user:user.id,claim,nonce,hash,marker:LOGE_STREAM_MARKER,title,branch:plan.branch,uploads:JSON.stringify(plan.parts.map(part=>part.upload_id)),week:assignment?.week??null,theme:assignment?.themeId??null};
   // Every video must still be published in the same loge category when the batch runs.
   const eligible=`(SELECT count(*) FROM loge_stream_uploads s JOIN life_events e ON e.owner_id=s.user_id AND e.id=s.event_id
-    WHERE s.user_id=:user AND s.purpose='videography' AND s.state='published' AND e.video_branch=:branch AND s.id IN (:uploads*))=${count}`;
+    WHERE s.user_id=:user AND s.purpose='videography' AND s.state='published' AND e.video_branch=:branch AND s.id IN (SELECT value FROM json_each(:uploads)))=${count}`;
   const activeWeek=assignment?`EXISTS(SELECT 1 FROM loge_theme_weeks w WHERE w.week_start=:week AND w.theme_id=:theme AND w.starts_at<=unixepoch() AND unixepoch()<w.ends_at)`:'1';
   const fresh=`NOT EXISTS(SELECT 1 FROM loge_posts WHERE author_id=:user AND request_id=:nonce)`;
   const statements=[
@@ -520,8 +521,9 @@ async function videographyChoices(env,user,json){
   await ensureSeries(env);
   const seriesRows=(await env.DB.prepare('SELECT id,payload FROM life_series WHERE owner_id=?1 ORDER BY updated_at DESC,id LIMIT 60').bind(user.id).all()).results||[];
   const series=[];
+  const owned=seriesRows.length?await memberVideos(env,user.id):new Map();
   for(const row of seriesRows){
-    const value=await unseal(env,seriesContext(user.id,row.id),row.payload),plan=await seriesPlan(env,user.id,Array.isArray(value.items)?value.items:[]);
+    const value=await unseal(env,seriesContext(user.id,row.id),row.payload),plan=seriesPlan(owned,Array.isArray(value.items)?value.items:[]);
     if(plan.reason==='empty')continue;
     series.push({id:row.id,title:value.title||'',count:plan.parts.length,category:plan.branch?videoBranchKey(plan.branch):null,reason:plan.reason?SERIES_REASONS[plan.reason]:null});
   }

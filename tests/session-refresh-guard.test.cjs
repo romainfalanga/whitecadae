@@ -48,3 +48,19 @@ test('existing callers without a guard retain failure handling and refresh the c
   assert.deepEqual(f.albums,[['public']]);
   assert.equal(f.accountEvents.length,1);
 });
+
+for(const [label,failure] of [['a lost connection',Object.assign(new Error('Connexion interrompue'),{status:0,network:true})],['a server error',Object.assign(new Error('Erreur 503'),{status:503})]])test(`${label} keeps the member signed in and tells no other tab`,async()=>{
+  const f=fixture(),pending=vm.runInContext('refreshSession()',f.context);
+  f.me.reject(failure);await pending;
+  assert.deepEqual(f.state.user,{id:7});assert.equal(f.state.access.loge,false);
+  assert.deepEqual(f.accountEvents,[]);assert.deepEqual(f.calls,['/api/me']);assert.deepEqual(f.albums,[]);
+});
+
+test('a refused session still signs out; navigate hands back the routing promise',async()=>{
+  const f=fixture(),pending=vm.runInContext('refreshSession()',f.context);
+  f.me.reject(Object.assign(new Error('Connexion requise.'),{status:401}));await settle();
+  assert.equal(f.state.user,null);f.music.resolve({albums:[]});await pending;assert.equal(f.accountEvents.length,1);
+  const navigate=source.slice(source.indexOf('function navigate(path, remplace)'),source.indexOf("document.addEventListener('click'"));
+  assert.match(navigate,/return route\(\);/);
+  assert.match(source,/if \(cause\?\.name === 'AbortError'\) throw cause;/);assert.match(source,/err\.status = 0; err\.network = true;/);
+});

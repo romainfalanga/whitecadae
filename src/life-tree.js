@@ -31,7 +31,8 @@ async function seriesRoute(env,user,suffix,method,body,json){
   if(!Array.isArray(body.items)||!body.items.length)fail('Choisis au moins une vidéo.');
   if(body.items.length>SERIES_ITEMS)fail(`Une sériographie compte ${SERIES_ITEMS} vidéos au plus.`);
   const items=[...new Set(body.items.map(identifier))];
-  const owned=(await env.DB.prepare(`SELECT id FROM life_events WHERE owner_id=?1 AND video_branch IS NOT NULL AND id IN (${items.map((_,i)=>'?'+(i+2)).join(',')})`).bind(user.id,...items).all()).results;
+  // The list travels as one JSON value: D1 accepts at most 100 bound parameters.
+  const owned=(await env.DB.prepare('SELECT id FROM life_events WHERE owner_id=?1 AND video_branch IS NOT NULL AND id IN (SELECT value FROM json_each(?2))').bind(user.id,JSON.stringify(items)).all()).results;
   if(owned.length!==items.length)fail('Une des vidéos choisies n’est plus dans ta vidéographie.',409);
   const payload=await seal(env,seriesContext(user.id,id),{title,items});
   const revision=integer(body.revision);

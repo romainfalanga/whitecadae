@@ -11,7 +11,7 @@ function when(value){
   return date.toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
 }
 export async function mountComments({root,id,api,user,esc,onDraft,onClose,title='Expansions harmonieuses',placeholder='Ton expansion harmonieuse…'}){
-  let alive=true,busy=false,parent=null,requestId=crypto.randomUUID(),replies=[],more=false,membership=null;
+  let alive=true,busy=false,parent=null,requestId=crypto.randomUUID(),replies=[],more=false,membership=null,acknowledged=null;
   const find=selector=>root.querySelector(selector);
   root.innerHTML=`<header class="as-comments-head"><h4>${esc(title)}</h4><button type="button" data-close aria-label="Fermer les expansions harmonieuses"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header><div data-replies class="as-thread topic-replies" role="log" aria-live="polite" aria-relevant="additions"></div><button type="button" data-new class="private-button subtle as-new" hidden>Voir les nouvelles expansions harmonieuses</button><form class="as-compose"><p data-parent class="as-replying" hidden></p><div class="as-compose-row"><label class="sr-only" for="as-message-${id}">Ta réponse</label><textarea id="as-message-${id}" name="message" maxlength="4000" rows="1" required placeholder="${esc(placeholder)}"></textarea><button type="submit" class="as-send" aria-label="Envoyer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></div><button type="button" data-cancel class="as-cancel" hidden>Annuler la réponse</button></form><p data-status class="private-status" role="status"></p>`;
   const form=find('form'),messages=find('[data-replies]');
@@ -50,7 +50,8 @@ export async function mountComments({root,id,api,user,esc,onDraft,onClose,title=
       if(reset||!last){replies=data.replies;more=data.more;render();}
       else if(data.replies.length||data.removed?.length){replies=replies.filter(r=>!data.removed?.includes(r.id));const ids=new Set(replies.map(r=>r.id));replies.push(...data.replies.filter(r=>!ids.has(r.id)));if(data.removed?.includes(parent))cancel();render();}
       find('[data-new]').hidden=reset||!data.more;
-      const read=replies.at(-1)?.id;if(read)await api('/api/ace-circles/topics/'+id+'/read',{method:'PUT',body:{lastId:read}});
+      // Acknowledge only what is new: an idle panel writes nothing.
+      const read=replies.at(-1)?.id;if(read&&read!==acknowledged){await api('/api/ace-circles/topics/'+id+'/read',{method:'PUT',body:{lastId:read}});acknowledged=read;}
       status();
     }catch(e){
       if(current()&&[401,403,404,409].includes(e.status)){root.replaceChildren();const note=document.createElement('p');note.textContent='Ces expansions harmonieuses ne sont plus accessibles.';root.append(note);alive=false;onDraft(false);}throw e;

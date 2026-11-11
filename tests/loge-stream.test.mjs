@@ -211,6 +211,11 @@ test('ambiguous provisioning failures retain budget, reconcile exact ownership a
     const row=f.sql.prepare('SELECT * FROM loge_stream_uploads').get();assert.equal(row.state,'deleting');assert.equal(row.stream_id,null);
     assert.equal((await f.upload()).status,409);assert.equal(f.created.length,1);
     f.env.STREAM.videos={async list(){return [...f.videos.values(),{id:'f'.repeat(32),creator:'someone',meta:{source:'other'}}];}};
+    // Once its upload address has expired, the unidentified reservation no longer locks the member out.
+    f.env.STREAM.createDirectUpload=create;
+    f.sql.prepare('UPDATE loge_stream_uploads SET expires_at=unixepoch()-1,created_at=unixepoch()-4000 WHERE id=?').run(row.id);
+    const retry=await f.upload();assert.equal(retry.status,201,JSON.stringify(retry.data));
+    await f.call('/api/loge/uploads/'+retry.data.uploadId,{method:'DELETE',body:{}});f.deleted.length=0;
     f.sql.prepare('UPDATE loge_stream_uploads SET created_at=unixepoch()-600,updated_at=unixepoch()-600 WHERE id=?').run(row.id);
     assert.deepEqual(await cleanupLogeStream(f.env),{deleted:1,failed:0});assert.equal(f.deleted.length,1);assert.equal(f.row(row.id).state,'deleted');
   }finally{f.sql.close();}

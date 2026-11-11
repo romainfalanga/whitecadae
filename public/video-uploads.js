@@ -23,11 +23,14 @@ function emit(){
 }
 function guard(event){if(jobActive(currentVideoJob())){event.preventDefault();event.returnValue='';}}
 // Keep the screen on while a file is sent: a locked phone suspends the transfer.
-let wakeLock=null;
+let wakeLock=null,wakeLockPending=false;
 async function holdScreen(){
   const lock=globalThis.navigator?.wakeLock;
-  if(wakeLock||globalThis.document?.hidden||!lock?.request||!jobActive(currentVideoJob()))return;
-  try{wakeLock=await lock.request('screen');wakeLock.addEventListener?.('release',()=>{wakeLock=null;});if(!jobActive(currentVideoJob()))releaseScreen();}catch{wakeLock=null;}
+  // One request at a time: two would leave a lock nobody releases.
+  if(wakeLock||wakeLockPending||globalThis.document?.hidden||!lock?.request||!jobActive(currentVideoJob()))return;
+  wakeLockPending=true;
+  try{const held=await lock.request('screen');wakeLock=held;held.addEventListener?.('release',()=>{if(wakeLock===held)wakeLock=null;});if(!jobActive(currentVideoJob()))releaseScreen();}catch{wakeLock=null;}
+  finally{wakeLockPending=false;}
 }
 function releaseScreen(){const lock=wakeLock;wakeLock=null;lock?.release?.().catch?.(()=>{});}
 globalThis.document?.addEventListener?.('visibilitychange',()=>{if(!globalThis.document.hidden)void holdScreen();});
@@ -60,6 +63,8 @@ async function run(current){
     // A finished job lingers briefly so the ring can show its check mark.
     doneTimer=setTimeout(()=>{if(job===current&&!current.viewing){job=null;emit();}},6000);
   }catch(error){
+    // The account changed under the job: stop sending for the previous member.
+    if(job===current&&current.state.user?.id!==current.user){abandonVideoJob();return;}
     if(!live()||error?.name==='AbortError')return;
     current.phase='error';
     current.error=[401,403].includes(error.status)?'Reconnecte-toi pour terminer l’envoi.':error.network?'La connexion a été coupée plusieurs fois pendant l’envoi. Vérifie ta connexion, garde cette page ouverte et touche Réessayer.':error.message||'L’envoi a échoué.';
@@ -90,6 +95,20 @@ export async function cancelVideoJob(){
   current.controller?.abort();job=null;clearTimeout(doneTimer);window.removeEventListener('beforeunload',guard);releaseScreen();emit();
   // Free the reservation unless the video may already be attached to its entry.
   if(!saving&&current.upload.uploadId){try{await current.api(basePath+'/'+encodeURIComponent(current.upload.uploadId),{method:'DELETE',body:{},headers:{'X-WC-User':String(current.user)}});}catch{/* cleanup also runs on the server */}}
+}
+// Signing out or switching account ends the job at once: the transfer is
+// aborted, the screen is released and nothing stays frozen for the next visit.
+export function abandonVideoJob(){
+  const current=job;if(!current)return;
+  current.controller?.abort();job=null;clearTimeout(doneTimer);
+  globalThis.removeEventListener?.('beforeunload',guard);releaseScreen();emit();
+}
+// The site announces account changes on this channel, in this tab and the others.
+if(typeof BroadcastChannel==='function'){
+  const accounts=new BroadcastChannel('wc-account-context');
+  // Outside a browser (tests), an open channel must not keep the process alive.
+  accounts.unref?.();
+  accounts.addEventListener('message',event=>{if(event.data?.type==='account-changed'&&job&&(event.data.userId??null)!==job.user)abandonVideoJob();});
 }
 export function dismissVideoJob(){const current=currentVideoJob();if(current&&!jobActive(current)&&current.phase!=='error'){job=null;clearTimeout(doneTimer);emit();}}
 

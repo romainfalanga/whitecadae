@@ -126,18 +126,22 @@ export async function createLogeUpload(body,env,user,url,json,purpose='loge'){
   // still reserve their allowance until deletion is confirmed.
   const result=await env.DB.prepare(`INSERT INTO loge_stream_uploads(id,user_id,request_id,filename,declared_size,expires_at,cleanup_after,purpose)
     SELECT ?1,?2,?3,?4,?5,unixepoch()+${LOGE_UPLOAD_TTL},unixepoch()+${LOGE_UPLOAD_TTL+PROVIDER_SAFETY_SECONDS},?6
-    WHERE NOT EXISTS(SELECT 1 FROM loge_stream_uploads WHERE user_id=?2 AND purpose=?6 AND (state IN ('reserved','waiting','processing','ready') OR (state='deleting' AND stream_id IS NULL)))
+    WHERE NOT EXISTS(SELECT 1 FROM loge_stream_uploads WHERE user_id=?2 AND purpose=?6 AND (state IN ('reserved','waiting','processing','ready') OR (state='deleting' AND stream_id IS NULL AND expires_at>unixepoch())))
     AND NOT EXISTS(SELECT 1 FROM loge_stream_uploads WHERE user_id=?2 AND request_id=?3)
     AND (?6<>'loge' OR NOT EXISTS(SELECT 1 FROM loge_publication_limits WHERE user_id=?2 AND next_publish_at>unixepoch()))
     AND (SELECT count(*) FROM loge_stream_uploads WHERE user_id=?2 AND created_at>unixepoch()-3600)<3
-    AND COALESCE((SELECT sum(duration_seconds) FROM loge_stream_uploads WHERE state<>'deleted'),0)+${LOGE_UPLOAD_MAX_SECONDS}<=${LOGE_STREAM_BUDGET_SECONDS}`)
+    AND COALESCE((SELECT sum(duration_seconds) FROM loge_stream_uploads WHERE state<>'deleted' AND NOT (state='deleting' AND stream_id IS NULL AND expires_at<=unixepoch())),0)+${LOGE_UPLOAD_MAX_SECONDS}<=${LOGE_STREAM_BUDGET_SECONDS}`)
     .bind(id,user.id,nonce,body.filename,body.size,purpose).run();
   if(!result.meta.changes){
     const replay=await env.DB.prepare('SELECT *,unixepoch() AS now FROM loge_stream_uploads WHERE user_id=?1 AND request_id=?2').bind(user.id,nonce).first();
     if(replay){if(replay.purpose!==purpose)fail('Cet identifiant d’envoi appartient à un autre espace.',409);return replayUpload(env,replay,body,json);}
     if(purpose==='loge')await quota(env,user.id,json);
-    const outstanding=await env.DB.prepare("SELECT id FROM loge_stream_uploads WHERE user_id=?1 AND purpose=?2 AND (state IN ('reserved','waiting','processing','ready') OR (state='deleting' AND stream_id IS NULL))").bind(user.id,purpose).first();
+    const outstanding=await env.DB.prepare("SELECT id FROM loge_stream_uploads WHERE user_id=?1 AND purpose=?2 AND (state IN ('reserved','waiting','processing','ready') OR (state='deleting' AND stream_id IS NULL AND expires_at>unixepoch()))").bind(user.id,purpose).first();
     if(outstanding)return json({error:'Termine ou annule ton envoi précédent avant d’en commencer un autre.',uploadId:outstanding.id},409);
+    // Tell the member's own hourly limit apart from the site-wide ceiling.
+    const recent=await env.DB.prepare('SELECT count(*) AS n FROM loge_stream_uploads WHERE user_id=?1 AND created_at>unixepoch()-3600').bind(user.id).first();
+    if(recent.n>=3)return json({error:'Tu as déjà lancé trois envois cette heure-ci. Réessaie un peu plus tard.'},429,{'Retry-After':'3600'});
+    console.error('stream_budget_reached');
     return json({error:'La capacité d’envoi est temporairement atteinte. Réessaie plus tard.'},429,{'Retry-After':'3600'});
   }
   const row=await rowOf(env,id,user.id,purpose);
@@ -158,8 +162,9 @@ export async function createLogeUpload(body,env,user,url,json,purpose='loge'){
       await env.DB.prepare("UPDATE loge_stream_uploads SET state='deleted',upload_url=NULL,updated_at=unixepoch() WHERE id=?1 AND stream_id IS NULL").bind(id).run();
       unavailable();
     }
-    // Ambiguous provisioning failures retain the reservation through provider
-    // scheduled deletion, so retries cannot allocate unbounded hidden media.
+    // Ambiguous provisioning failures keep the row until the provider's scheduled
+    // deletion, for reconciliation. It blocks a new upload and counts in the
+    // budget only until its upload address expires: no file can reach it after.
     await env.DB.prepare(`UPDATE loge_stream_uploads SET state='deleting',cleanup_after=CASE WHEN stream_id IS NULL THEN expires_at+${PROVIDER_SAFETY_SECONDS} ELSE 0 END,upload_url=NULL,updated_at=unixepoch() WHERE id=?1`).bind(id).run();
     unavailable();
   }

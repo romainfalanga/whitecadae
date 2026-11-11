@@ -54,13 +54,33 @@ test('parallel registration requests atomically stop at six per address',async()
     assert.equal((await worker.fetch(request('/api/register',{}, {'CF-Connecting-IP':'192.0.2.2'}),f.env)).status,400);
   }finally{f.sql.close();}
 });
-test('parallel login attempts stop at twenty before further password checks',async()=>{
+test('parallel login attempts from one address stop at twenty before further password checks',async()=>{
   const f=fixture();
   try{
-    const responses=await Promise.all(Array.from({length:25},()=>worker.fetch(request('/api/login',{email:'nobody@example.test',password:'nope'},{'CF-Connecting-IP':'192.0.2.3'}),f.env)));
+    const responses=await Promise.all(Array.from({length:25},(_,i)=>worker.fetch(request('/api/login',{email:`nobody${i}@example.test`,password:'nope'},{'CF-Connecting-IP':'192.0.2.3'}),f.env)));
     assert.equal(responses.filter(r=>r.status===401).length,20);assert.equal(responses.filter(r=>r.status===429).length,5);
     assert.equal(f.sql.prepare("SELECT compte FROM auth_attempts WHERE cle='connexion:192.0.2.3'").get().compte,20);
   }finally{f.sql.close();}
+});
+test('one network cannot lock a member out: ten tries per network, sixty per account, IPv6 counted by /64',async()=>{
+  const f=fixture();
+  try{
+    const created=await worker.fetch(request('/api/register',{email:'victim@test.local',username:'VictimTest',password:'correct-fixture-password'}),f.env);assert.equal(created.status,200);
+    const login=(password,ip)=>worker.fetch(request('/api/login',{email:'victim@test.local',password},{'CF-Connecting-IP':ip}),f.env);
+    // The attacker rotates through one /64: still a single network.
+    const attack=[];for(let i=0;i<14;i++)attack.push((await login('wrong','2001:db8:aa:bb::'+(i+1).toString(16))).status);
+    assert.deepEqual(attack,[...Array(10).fill(401),...Array(4).fill(429)]);
+    assert.equal((await login('correct-fixture-password','203.0.113.50')).status,200,'the member still signs in from elsewhere');
+    assert.equal((await login('correct-fixture-password','2001:db8:aa:cc::1')).status,200,'another /64 is another network');
+    // Spread over many networks, the account itself stops at sixty.
+    const statuses=[];for(let i=0;i<60;i++)statuses.push((await login('wrong','198.51.100.'+i)).status);
+    assert.equal(statuses.filter(status=>status===401).length,48);assert.equal(statuses.filter(status=>status===429).length,12);
+  }finally{f.sql.close();}
+});
+test('IPv6 addresses are reduced to their /64 network and IPv4 is kept whole',async()=>{
+  const {networkOf}=await import('../src/network.js');
+  assert.equal(networkOf('2a01:cb00:1234:5678:aaaa:bbbb:cccc:dddd'),'2a01:cb00:1234:5678::/64');assert.equal(networkOf('2a01:cb00:1234:5678::1'),'2a01:cb00:1234:5678::/64');
+  assert.equal(networkOf('2a01:db8::1'),'2a01:db8:0:0::/64');assert.equal(networkOf('203.0.113.7'),'203.0.113.7');assert.equal(networkOf(null),null);
 });
 test('forged types, oversized chunks, source values, user ids and scores cannot alter progression',async()=>{
   const f=fixture(),headers={Cookie:'wc_session=qa0'};
@@ -84,4 +104,24 @@ test('static documents and API responses use the same restrictive security polic
   assert.equal(res.headers.get('Cache-Control'),'no-store');
   assert.match(res.headers.get('Content-Security-Policy'),/script-src 'self'/);
   assert.match(res.headers.get('Content-Security-Policy'),/frame-src https:\/\/www\.youtube-nocookie\.com;/);
+});
+test('a database failure is a 500 with a diagnostic line, never an empty success; cron steps fail alone',async()=>{
+  const f=fixture(),logged=[],original=console.error;console.error=(...args)=>logged.push(args.join(' '));
+  try{
+    const prepare=f.env.DB.prepare;
+    f.env.DB.prepare=(sql,...rest)=>{if(sql.includes('FROM sessions s'))throw new Error('D1_ERROR: simulated outage for user 42');return prepare(sql,...rest);};
+    for(const [path,method] of [['/api/account/username','PUT'],['/api/account/password','PUT'],['/api/admin/albums','POST']]){
+      const response=await worker.fetch(new Request('https://test.local'+path,{method,headers:{Cookie:'wc_session=qa0','Content-Type':'application/json'},...(method==='GET'?{}:{body:'{}'})}),f.env);
+      assert.equal(response.status,500,path);assert.deepEqual(await response.json(),{error:'Erreur interne du serveur.'});
+    }
+    assert.ok(logged.some(line=>/^api_failure PUT \/api\/account\/username Error D1_ERROR: simulated outage/.test(line)),logged.join('|'));
+    f.env.DB.prepare=prepare;
+    const bad=await worker.fetch(new Request('https://test.local/api/songs/%E0%A4%A'),f.env);assert.equal(bad.status,404);
+    // A failing cleanup step is logged and the following steps still run.
+    logged.length=0;const steps=[];
+    f.env.STREAM={videos:{list(){steps.push('stream');throw new Error('provider down');}},video(){throw new Error('provider down');}};
+    f.env.DB.prepare=(sql,...rest)=>{if(/FROM loge_stream_uploads\s+WHERE stream_id IS NULL/.test(sql))throw new Error('stream step failed');if(sql.includes('loge_shared_series v WHERE'))steps.push('shared-posts');return prepare(sql,...rest);};
+    await worker.scheduled({cron:'*/15 * * * *',scheduledTime:Date.now()},f.env);
+    assert.ok(logged.some(line=>/^scheduled_failure stream Error stream step failed/.test(line)),logged.join('|'));assert.ok(steps.includes('shared-posts'),'the step after the failure still ran');
+  }finally{console.error=original;f.sql.close();}
 });

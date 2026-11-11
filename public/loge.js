@@ -482,7 +482,7 @@ async function loadComments(id,after=null){
   panel.loading=true;const more=node('loge-comments-more');if(more)more.disabled=true;notice('loge-comments-status','Chargement des expansions harmonieuses…');
   try{
     const query=new URLSearchParams();if(after!==null)query.set('after',after);else if(panel.focusComment)query.set('focus',panel.focusComment);
-    const result=await request(`/api/loge/posts/${encodeURIComponent(id)}/comments${query.size?'?'+query:''}`);
+    const result=await request(`/api/loge/posts/${encodeURIComponent(id)}/comments${query.toString()?'?'+query:''}`);
     if(s.current!==view||view.activePanel!==panel)return;
     const list=node('loge-comments-list');for(const comment of result.comments)insertComment(comment,list);
     if(!list.querySelector('[data-comment-id]'))list.innerHTML='<p class="loge-empty" id="loge-comments-empty">Aucune expansion harmonieuse pour le moment.</p>';
@@ -601,7 +601,7 @@ async function loadThemeHistory(view,after=null){
   const s=session,version=++view.historyVersion,query=new URLSearchParams();if(after)query.set('after',after);if(view.historyQuery)query.set('q',view.historyQuery);
   const more=node('loge-theme-history-more');more.disabled=true;
   try{
-    const result=await request('/api/loge/themes/history'+(query.size?'?'+query:''));if(!live(s)||s.current!==view||view.historyVersion!==version)return;
+    const result=await request('/api/loge/themes/history'+(query.toString()?'?'+query:''));if(!live(s)||s.current!==view||view.historyVersion!==version)return;
     const list=node('loge-theme-history');if(!after){view.history.clear();list.innerHTML='';}
     for(const theme of result.themes){if(view.history.has(String(theme.id)))continue;view.history.set(String(theme.id),theme);list.insertAdjacentHTML('beforeend',historyMarkup(theme,esc));}
     if(!view.history.size)list.innerHTML='<p class="loge-empty">Aucun thème trouvé.</p>';
