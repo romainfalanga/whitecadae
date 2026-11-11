@@ -66,8 +66,9 @@ function ownPublications(view){return view.kind==='profile'&&view.tab==='reflexi
 // The three loges are the Loge's main menu. « Mes publications » and
 // « Publier » are places reached from it, each with a way back to the loge.
 function topbar(view){
-  const mine=`<a class="loge-action" id="loge-open-mine" href="${minePath()}" data-link>${icon('profile')}<span>Mes publications</span></a>`;
-  const publish=`<a class="loge-action is-primary" id="loge-open-compose" href="${publishPath}" data-link>${icon('plus')}<span>Publier</span></a>`;
+  // Icons alone keep the bar light; their names stay available to assistive tech and on hover.
+  const mine=`<a class="loge-action is-icon" id="loge-open-mine" href="${minePath()}" data-link aria-label="Mes publications" title="Mes publications">${icon('profile')}</a>`;
+  const publish=`<a class="loge-action is-icon is-primary" id="loge-open-compose" href="${publishPath}" data-link aria-label="Publier" title="Publier">${icon('plus')}</a>`;
   const theme=LOGE_THEMES_ENABLED?`<a class="loge-action" href="${themePath()}" data-link>Thème</a>`:'';
   if(view.kind==='feed')return `<header class="loge-bar"><h1 class="loge-bar-title">Loge virtuelle</h1><nav class="loge-bar-actions" aria-label="Mes actions dans la Loge">${theme}${mine}${publish}</nav></header>${roomsMarkup(view)}`;
   const title=view.kind==='publish'?'Publier':ownPublications(view)?'Mes publications':view.kind==='profile'?view.member.username:view.kind==='theme'?'Thème de la semaine':'Loge virtuelle';

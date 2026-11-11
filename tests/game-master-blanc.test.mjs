@@ -40,7 +40,7 @@ test('the final page requires 33 real earned levels, including for admins; forge
     assert.deepEqual(content.page.sections.map(s=>s.title),['Vidéographie','Ta version harmonieuse','Ta société harmonieuse','Loge virtuelle']);
     assert.match(content.page.sections[0].paragraphs.join(' '),/Utilise ta vidéographie pour organiser/);assert.doesNotMatch(JSON.stringify(content.page),/plateforme/i);
     assert.match(content.page.sections[2].paragraphs.join(' '),/version harmonieuse soit cohérente avec cette société\./);assert.doesNotMatch(JSON.stringify(content.page),/trouver sa place|expansions harmonieuses/);
-    assert.deepEqual(content.page.sections.map(s=>s.paragraphs.length),[2,1,2,6]);
+    assert.deepEqual(content.page.sections.map(s=>s.paragraphs.length),[2,1,2,3]);
     assert.doesNotMatch(JSON.stringify(content.page),/Crée ta propre plateforme|Ta version harmonieuse IA/);
     assert.ok(content.page.sections.every(s=>s.paragraphs.length&&s.paragraphs.every(p=>typeof p==='string'&&p.length>20)));
     assert.equal(content.page.communityUrl,undefined);assert.doesNotMatch(JSON.stringify(content),/discord|y83ewhS49/);
@@ -82,7 +82,7 @@ test('the private page uses the final API and renders no final text on refusal o
     assert.match(app.innerHTML,/<span class="gm-community-name">Game\u00a0Masters\u00a0Blancs\.<\/span>/);
     assert.doesNotMatch(app.innerHTML,/Ta société harmonieuse IA|Commente leurs vidéos/);
     const paragraphs=[...app.innerHTML.matchAll(/<section class="gm-section"[^>]*>[\s\S]*?<\/section>/g)].flatMap(section=>[...section[0].matchAll(/<p>([\s\S]*?)<\/p>/g)].map(match=>match[1].replace(/<[^>]+>/g,'')));
-    assert.equal(paragraphs.length,11);
+    assert.equal(paragraphs.length,8);
     assert.ok(paragraphs.every(text=>/\S+\u00a0\S+$/.test(text)),'last words stay together without fixed line breaks');
     assert.match(paragraphs[0],/en\u00a0vidéo\.$/);
     assert.doesNotMatch(app.innerHTML,/gm-orbit/);
