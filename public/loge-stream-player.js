@@ -6,13 +6,14 @@ const glyph={play:'<path d="M8 5 20 12 8 19Z"/>',fullscreen:'<path d="M8 3H3v5m1
 export function validStreamURL(value){
   try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&(/^(?:customer-[a-z0-9-]+\.)?cloudflarestream\.com$/.test(u.hostname)||u.hostname==='videodelivery.net')?u.href:null;}catch{return null;}
 }
-export function createStreamPlayer({container,post,getPlayback,isEligible=()=>true,onReady=()=>{},onState=()=>{},loadLibrary=loadHls}={}){
+export function createStreamPlayer({container,post,getPlayback,isEligible=()=>true,onReady=()=>{},onState=()=>{},loadLibrary=loadHls,fullscreen:withFullscreen=true}={}){
   const element=document.createElement('div');element.className='loge-stream-frame';
   const video=document.createElement('video');video.className='loge-stream-video';video.playsInline=true;video.setAttribute('playsinline','');video.preload='metadata';video.controls=false;video.autoplay=false;video.muted=false;video.setAttribute('aria-label','Vidéo : '+(post.title||''));
   const play=document.createElement('button');play.type='button';play.className='loge-stream-play';play.setAttribute('aria-label','Lire la vidéo');play.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+glyph.play+'</svg>';
   const full=document.createElement('button');full.type='button';full.className='loge-stream-fullscreen';full.setAttribute('aria-label','Afficher en plein écran');full.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+glyph.fullscreen+'</svg>';
   const message=document.createElement('span');message.className='loge-stream-message';message.setAttribute('role','status');message.textContent='Chargement…';
-  element.append(video,play,full,message);container.append(element);play.disabled=true;
+  // The Loge reels go without a fullscreen button; the videography keeps it.
+  element.append(video,play,...(withFullscreen?[full]:[]),message);container.append(element);play.disabled=true;
   let destroyed=false,hls=null,preparing=null,expires=0,sequence=0,state=-1,failed=false,requestVersion=0;
   const listeners=[];
   function listen(target,type,callback){target.addEventListener(type,callback);listeners.push(()=>target.removeEventListener(type,callback));}
