@@ -218,7 +218,9 @@ async function seriesList(){
   const s=session,[{series},videos]=await Promise.all([api('/api/life-tree/series'),allVideos()]);if(!live(s))return;
   const byId=new Map(videos.map(e=>[e.id,e]));s.series=series;
   const card=item=>{const first=byId.get(item.items[0]);return `<button type="button" class="series-card" data-series="${esc(item.id)}"><span class="series-cover"><span class="video-tile-poster"${first?.creation?.videoProvider==='stream'?` data-poster="${esc(first.id)}"`:''}></span><span class="series-stack" aria-hidden="true"></span></span><strong>${esc(item.title)}</strong><small>${seriesCount(item.items.length)}</small></button>`;};
-  const dialog=modal('Mes sériographies',`<div class="series-toolbar">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nouvelle sériographie','series-new','')}</div><div class="series-grid">${series.map(card).join('')||'<p class="series-empty">Aucune sériographie pour le moment.</p>'}</div>`);
+  // Creating one is the first card of the grid, where the eye starts.
+  const create=`<button type="button" class="series-card series-create" id="series-new"><span class="series-cover"><span class="series-create-frame"><span class="series-plus" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></span></span><strong>Nouvelle sériographie</strong></button>`;
+  const dialog=modal('Mes sériographies',`<div class="series-grid">${create}${series.map(card).join('')}</div>`);
   dialog.classList.add('is-series');loadPosters(dialog);
   bind('series-new',()=>seriesEditor());
   dialog.querySelectorAll('[data-series]').forEach(b=>b.onclick=()=>seriesView(series.find(x=>x.id===b.dataset.series)));

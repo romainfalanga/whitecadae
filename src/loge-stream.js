@@ -46,7 +46,18 @@ export const LOGE_SHARED_SCHEMA=[
     upload_id TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_loge_shared_upload ON loge_shared_videos(upload_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_loge_shared_user ON loge_shared_videos(user_id,event_id)`
+  `CREATE INDEX IF NOT EXISTS idx_loge_shared_user ON loge_shared_videos(user_id,event_id)`,
+  // A sériographie published as one post: its videos, in order. The same
+  // video may appear in several sériographies, each a post of its own.
+  `CREATE TABLE IF NOT EXISTS loge_shared_series (
+    post_id INTEGER NOT NULL REFERENCES loge_posts(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    event_id TEXT NOT NULL,
+    upload_id TEXT NOT NULL,
+    PRIMARY KEY(post_id,position)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_loge_series_user ON loge_shared_series(user_id,event_id)`
 ];
 // The shared upload must still be the published media of a videography entry.
 export const SHARED_UPLOAD_LIVE=`s.id=v.upload_id AND s.user_id=v.user_id AND s.event_id=v.event_id AND s.purpose='videography' AND s.state='published'
@@ -222,7 +233,22 @@ async function postUpload(env,postId){
     ||await env.DB.prepare(`SELECT s.* FROM loge_shared_videos v JOIN loge_posts p ON p.id=v.post_id JOIN loge_stream_uploads s ON ${SHARED_UPLOAD_LIVE}
     WHERE v.post_id=?1 AND p.deleted_at IS NULL AND p.author_id=v.user_id`).bind(postId).first();
 }
-export async function logePlayback(env,postId,json){
+// The live parts of a published sériographie, in order (none for a single video).
+async function seriesParts(env,postId){
+  return (await env.DB.prepare(`SELECT v.position,s.* FROM loge_shared_series v JOIN loge_posts p ON p.id=v.post_id JOIN loge_stream_uploads s ON ${SHARED_UPLOAD_LIVE}
+    WHERE v.post_id=?1 AND p.deleted_at IS NULL AND p.author_id=v.user_id ORDER BY v.position`).bind(postId).all()).results||[];
+}
+export async function logePlayback(env,postId,json,part=null){
+  const parts=await seriesParts(env,postId);
+  if(parts.length){
+    // A sériographie plays as one video: every part is signed when it is reached.
+    const index=part===null?0:Number(part);
+    if(!Number.isSafeInteger(index)||index<0||index>=parts.length)fail('Vidéo introuvable.',404);
+    const output=await signedStreamPlayback(env,parts[index]);
+    const current=await seriesParts(env,postId);
+    if(current[index]?.id!==parts[index].id)fail('Vidéo introuvable.',404);
+    return json({...output,part:index,parts:current.map(row=>({duration:Number(row.duration_seconds)>0?Number(row.duration_seconds):0}))});
+  }
   const row=await postUpload(env,postId);
   if(!row)fail('Vidéo introuvable.',404);
   const output=await signedStreamPlayback(env,row);

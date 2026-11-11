@@ -15,18 +15,21 @@ export function createStreamPlayer({container,post,getPlayback,isEligible=()=>tr
   // Neither the Loge reels nor the videography show a fullscreen button.
   element.append(video,play,...(withFullscreen?[full]:[]),message);container.append(element);play.disabled=true;
   let destroyed=false,hls=null,preparing=null,expires=0,sequence=0,state=-1,failed=false,requestVersion=0;
+  // A published sériographie arrives as ordered parts that play as one video.
+  let parts=null,partIndex=0,pendingSeek=0;
   const listeners=[];
   function listen(target,type,callback){target.addEventListener(type,callback);listeners.push(()=>target.removeEventListener(type,callback));}
   function paint(){element.classList.toggle('is-playing',state===1);play.hidden=state===1;play.setAttribute('aria-label',failed?'Réessayer la lecture':state===0?'Relire la vidéo':'Lire la vidéo');}
   function change(next){state=next;paint();onState(next);}
   function error(text){if(destroyed)return;failed=true;play.disabled=false;message.textContent=text;change(2);}
   function releaseSource(){hls?.destroy();hls=null;video.removeAttribute('src');video.load();}
-  async function prepare(){
+  async function prepare(index=partIndex){
     if(preparing)return preparing;
     const version=++requestVersion;
     preparing=(async()=>{
       play.disabled=true;message.textContent='Chargement…';failed=false;
-      const data=await getPlayback(post.id);if(destroyed||version!==requestVersion)return;
+      const data=await (parts?getPlayback(post.id,index):getPlayback(post.id));if(destroyed||version!==requestVersion)return;
+      if(Array.isArray(data.parts)&&data.parts.length){parts=data.parts.map(part=>({duration:Number(part.duration)>0?Number(part.duration):0}));partIndex=Number.isSafeInteger(data.part)&&data.part>=0&&data.part<parts.length?data.part:Math.min(index,parts.length-1);}
       const source=validStreamURL(data.hls),poster=validStreamURL(data.poster);
       if(!source||!poster)throw Error('Source vidéo indisponible.');
       expires=Date.parse(data.expiresAt)||Date.now()+30*60*1000;video.poster=poster;
@@ -44,12 +47,30 @@ export function createStreamPlayer({container,post,getPlayback,isEligible=()=>tr
     return preparing;
   }
   function pause(){sequence++;if(!video.paused)video.pause();hls?.stopLoad();if(state===1)change(2);}
+  const lengths=()=>parts.map((part,index)=>part.duration||(index===partIndex&&Number.isFinite(video.duration)?video.duration:0));
+  const offset=index=>lengths().slice(0,index).reduce((sum,value)=>sum+value,0);
+  // Moving to another part keeps playing only when the series was playing.
+  async function switchTo(index,at=0,resume=state===1){
+    if(destroyed||!parts||index<0||index>=parts.length)return false;
+    const attempt=++sequence;if(!video.paused)video.pause();hls?.stopLoad();
+    releaseSource();partIndex=index;pendingSeek=Math.max(0,at);
+    await prepare(index);
+    if(destroyed||attempt!==sequence||failed)return false;
+    onReady();
+    if(resume&&isEligible()){
+      hls?.startLoad(pendingSeek>0?pendingSeek:-1);
+      try{await video.play();if(destroyed||attempt!==sequence||!isEligible())pause();}catch(e){if(e.name!=='AbortError'&&!destroyed){hls?.stopLoad();change(2);}}
+    }else if(pendingSeek>0)hls?.startLoad(pendingSeek);
+    return true;
+  }
   async function start(){
     if(destroyed||!isEligible())return;
     if(state===1){pause();return;}
     const attempt=++sequence;
     if(failed||expires<=Date.now()+30000){releaseSource();await prepare();}
     if(destroyed||attempt!==sequence||failed||!isEligible())return;
+    // The end of the last part restarts the series from its first video.
+    if(video.ended&&parts&&partIndex===parts.length-1&&parts.length>1){await switchTo(0,0,true);return;}
     if(video.ended)video.currentTime=0;
     message.textContent='';hls?.startLoad(-1);
     try{await video.play();if(destroyed||attempt!==sequence||!isEligible())pause();}
@@ -69,16 +90,33 @@ export function createStreamPlayer({container,post,getPlayback,isEligible=()=>tr
   listen(play,'click',start);listen(video,'click',start);listen(full,'click',fullscreen);
   listen(video,'play',()=>{if(!isEligible()){pause();return;}message.textContent='';change(1);});
   listen(video,'pause',()=>{if(!destroyed){hls?.stopLoad();change(2);}});
-  listen(video,'ended',()=>{hls?.stopLoad();change(0);});
-  listen(video,'loadedmetadata',()=>{if(!destroyed)onReady();});
+  listen(video,'ended',()=>{hls?.stopLoad();if(parts&&partIndex<parts.length-1){void switchTo(partIndex+1,0,true);return;}change(0);});
+  listen(video,'loadedmetadata',()=>{if(destroyed)return;if(pendingSeek>0&&Number.isFinite(video.duration)){video.currentTime=Math.min(video.duration,pendingSeek);pendingSeek=0;}onReady();});
   listen(video,'error',()=>{if(!destroyed&&video.getAttribute('src'))error('Lecture interrompue. Réessaie.');});
   listen(video,'waiting',()=>{if(!destroyed&&state===1)message.textContent='Chargement…';});
   listen(video,'playing',()=>{if(!destroyed)message.textContent='';});
   listen(video,'keydown',event=>{if(event.key===' '||event.key==='Enter'){event.preventDefault();void start();}});video.tabIndex=0;
   void prepare();
   return {
-    element,video,getDuration:()=>Number.isFinite(video.duration)?video.duration:0,getCurrentTime:()=>video.currentTime||0,getPlayerState:()=>state,
-    pauseVideo:pause,seekTo(value){if(Number.isFinite(video.duration)){video.currentTime=Math.min(video.duration,Math.max(0,value));if(state===1)hls?.startLoad(-1);}},
+    element,video,
+    getDuration:()=>parts?lengths().reduce((sum,value)=>sum+value,0):Number.isFinite(video.duration)?video.duration:0,
+    getCurrentTime:()=>parts?offset(partIndex)+(video.currentTime||0):video.currentTime||0,
+    getPlayerState:()=>state,
+    pauseVideo:pause,
+    seekTo(value){
+      if(parts){
+        const all=lengths();let index=0,start=0,target=Math.max(0,value);
+        while(index<all.length-1&&target>=start+all[index]){start+=all[index];index++;}
+        const at=Math.max(0,target-start);
+        if(index!==partIndex){void switchTo(index,at,state===1);return;}
+        if(Number.isFinite(video.duration)){video.currentTime=Math.min(video.duration,at);if(state===1)hls?.startLoad(-1);}
+        return;
+      }
+      if(Number.isFinite(video.duration)){video.currentTime=Math.min(video.duration,Math.max(0,value));if(state===1)hls?.startLoad(-1);}
+    },
+    // The parts of a sériographie (null for a single video) and the move to the next one.
+    getParts:()=>parts?{durations:lengths(),index:partIndex}:null,
+    next:()=>parts&&partIndex<parts.length-1?switchTo(partIndex+1,0,state===1):Promise.resolve(false),
     isFullscreen:()=>!!video.webkitDisplayingFullscreen,
     destroy(){if(destroyed)return;destroyed=true;sequence++;requestVersion++;for(const off of listeners)off();video.pause();if(video.webkitDisplayingFullscreen)video.webkitExitFullscreen?.();releaseSource();element.remove();}
   };

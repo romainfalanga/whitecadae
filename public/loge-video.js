@@ -54,8 +54,23 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     record.range.style?.setProperty?.('--progress',(length?value/length*100:0).toFixed(2)+'%');
     if(record.timeLabel)record.timeLabel.textContent=description;
   }
+  // A sériographie shows where each video ends on the shared timeline, and
+  // which video is playing beside its « next » control.
+  function paintParts(record){
+    const parts=record.player?.getParts?.()||null,card=record.container.closest?.('.loge-reel-card');
+    const marks=record.timeline?.querySelector?.('[data-timeline-marks]'),position=card?.querySelector?.('[data-series-position]'),next=card?.querySelector?.('[data-series-next]');
+    if(position&&parts)position.textContent=(parts.index+1)+'/'+parts.durations.length;
+    if(next&&parts){next.disabled=parts.index>=parts.durations.length-1;next.setAttribute('aria-label',next.disabled?'Dernière vidéo de la sériographie':'Vidéo suivante ('+(parts.index+2)+' sur '+parts.durations.length+')');}
+    if(!marks)return;
+    const total=parts?parts.durations.reduce((sum,value)=>sum+value,0):0;
+    let start=0;const points=[];
+    if(parts&&total>0)for(const value of parts.durations.slice(0,-1)){start+=value;points.push((start/total*100).toFixed(2));}
+    const key=points.join(',');if(marks.dataset.points===key)return;marks.dataset.points=key;
+    marks.innerHTML=points.map(point=>`<i style="left:${point}%"></i>`).join('');
+  }
   function syncTimeline(record){
     if(!record.range)return;
+    paintParts(record);
     const length=timelineEligible(record)?duration(record):0;
     record.timeline.hidden=!length;record.range.disabled=!length;
     if(!length){record.scrubbing=false;paintTimeline(record,0,0);return;}
@@ -286,6 +301,8 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     },
     remove(id){const record=records.get(String(id));if(!record)return;release(record);attachTimeline(record,null);observer?.unobserve(record.observed);record.label?.remove();records.delete(record.key);if(active===record){active=null;musicClip=null;}refresh();},
     refresh,
+    // Jump to the next video of a sériographie; playback continues only if it was playing.
+    async next(id){const record=records.get(String(id));if(!record?.player?.next)return false;const moved=await record.player.next();refreshTimelines();return moved;},
     pause(){if(destroyed)return;paused=true;exitOwnedFullscreen();observer?.disconnect();for(const record of records.values())stop(record);refreshTimelines();},
     resume(){if(destroyed)return;paused=false;for(const record of records.values())observe(record);refresh();},
     destroy(){
