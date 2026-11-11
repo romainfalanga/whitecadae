@@ -4,7 +4,7 @@ const {readFileSync}=require('node:fs');
 const vm=require('node:vm');
 const source=readFileSync(require('node:path').join(__dirname,'../public/loge-upload.js'),'utf8').replace(/export /g,'');
 const sandbox=vm.createContext({DOMException,setTimeout,clearTimeout,URL});
-vm.runInContext(source+';globalThis.helpers={validateLogeFile,ensureLogeUpload,uploadLogeFile,readLogeDuration};',sandbox);
+vm.runInContext(source+';globalThis.helpers={validateLogeFile,ensureLogeUpload,uploadLogeFile,readLogeDuration,probeLogeFile};',sandbox);
 const {validateLogeFile,ensureLogeUpload,uploadLogeFile}=sandbox.helpers;
 const file={name:'video.mp4',size:1000,type:'video/mp4'};
 const draft=()=>({file,requestId:'publication-request'});
@@ -153,6 +153,17 @@ test('a cut after bytes were sent keeps the file as it is; an unreadable file st
   await ensureLogeUpload(draft(),options({request:async path=>path==='/api/loge/uploads'?reservation(path):{status:sources.length>1?'ready':'waiting'},upload:midway,reconnect:async()=>{},snapshot:async()=>{copies++;return {};}}));
   assert.deepEqual(sources,[file,file]);assert.equal(copies,0);
   let uploads=0;
-  await assert.rejects(ensureLogeUpload(draft(),options({request:reservation,reconnect:async()=>{},upload:async()=>{uploads++;throw Object.assign(Error('cut'),{network:true});},snapshot:async()=>{throw new DOMException('gone','NotReadableError');}})),error=>error.unreadable===true&&/ne peut pas être lue/.test(error.message));
+  await assert.rejects(ensureLogeUpload(draft(),options({request:reservation,reconnect:async()=>{},upload:async()=>{uploads++;throw Object.assign(Error('cut'),{network:true});},snapshot:async()=>{throw new DOMException('gone','NotReadableError');}})),error=>error.unreadable===true&&/empêche le site de lire/.test(error.message));
   assert.equal(uploads,1,'no further attempt once the file cannot be read');
+});
+
+test('a video the phone refuses to read is caught before anything is reserved',async()=>{
+  const {probeLogeFile}=sandbox.helpers;
+  let reserved=0;
+  const refused={size:5e6,type:'video/mp4',name:'v.mp4',slice:()=>({arrayBuffer:async()=>{throw new DOMException('gone','NotReadableError');}})};
+  await assert.rejects(probeLogeFile(refused),error=>error.unreadable===true&&/Fichiers/.test(error.message));
+  await assert.rejects(ensureLogeUpload({file:refused,requestId:'r'},{request:async()=>{reserved++;return {};},duration:async()=>10}),error=>error.unreadable===true);
+  assert.equal(reserved,0);
+  const fine={size:5e6,type:'video/mp4',name:'v.mp4',slice:()=>({arrayBuffer:async()=>new ArrayBuffer(8)})};
+  await probeLogeFile(fine);
 });
