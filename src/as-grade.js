@@ -6,7 +6,7 @@ export const AS_GRADE = {
   sections:[
     {title:'Être un AS',paragraphs:[
       'Devenir l’AS d’une personne, c’est chercher à être le point de vue dont tu penses qu’elle a besoin pour s’améliorer, selon ce qu’elle veut devenir.',
-      'Aide-la à mieux se comprendre et à avancer plus facilement sur le chemin qu’elle s’est choisi.'
+      'Aide-la à mieux se comprendre et à avancer vers le chemin qu’elle a choisi.'
     ]},
     {title:'Dans les deux sens',paragraphs:[
       'Quand tu deviens l’AS de quelqu’un, cette personne devient aussi ton AS. Elle cherche à son tour à être le point de vue dont tu as besoin.'

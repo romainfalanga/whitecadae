@@ -1,6 +1,6 @@
 import {createLogeCommentViewport} from './loge-comment-viewport.js';
 import {LOGE_THEMES_ENABLED} from './loge-features.js';
-import {videoLabel,LOGE_ROOMS,logeRoom,logeRoomLabel} from './video-model.js';
+import {videoLabel,LOGE_ROOMS,logeRoom,logeRoomLabel,EXPANSION_ICON_PATHS} from './video-model.js';
 import {createLogeVideoFeed} from './loge-video.js';
 import {themeOverviewMarkup,proposalMarkup,historyMarkup} from './loge-themes-ui.js';
 
@@ -54,7 +54,7 @@ function immersion(enabled){
   if(enabled)siteHeaderSize();else document.body.style.removeProperty?.('--loge-site-header-height');
 }
 function icon(kind){
-  const paths={up:'<path d="m6 15 6-6 6 6"/>',down:'<path d="m6 9 6 6 6-6"/>',home:'<path d="m3 10 9-7 9 7v10H7V10m2 10v-6h6v6"/>',back:'<path d="m14 5-7 7 7 7"/>',profile:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',plus:'<path d="M12 4v16M4 12h16"/>',comment:'<path d="M21 11a9 9 0 0 1-9 9H4l-2 2V11a9 9 0 0 1 19 0Z"/>'};
+  const paths={up:'<path d="m6 15 6-6 6 6"/>',down:'<path d="m6 9 6 6 6-6"/>',home:'<path d="m3 10 9-7 9 7v10H7V10m2 10v-6h6v6"/>',back:'<path d="m14 5-7 7 7 7"/>',profile:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',plus:'<path d="M12 4v16M4 12h16"/>',comment:EXPANSION_ICON_PATHS};
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[kind]||''}</svg>`;
 }
 function shell(html){
@@ -210,10 +210,10 @@ function refreshLayout(view){
   if(reels?.getBoundingClientRect){const top=reels.getBoundingClientRect().top,height=Math.max(200,(window.innerHeight||800)-Math.max(0,top));reels.style.setProperty('--loge-reel-height',height+'px');}
   view.player?.refresh();
 }
-function ownerMenu(kind,id){return `<details class="loge-menu${kind==='comment'?' loge-comment-menu':''}"><summary aria-label="Options de ${kind==='post'?'la publication':'ton commentaire'}">${kind==='comment'?'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>':'…'}</summary><div>${button('Modifier',`data-${kind}-edit="${esc(id)}"`,true)}${button('Supprimer',`data-${kind}-delete="${esc(id)}"`,true)}</div></details>`;}
+function ownerMenu(kind,id){return `<details class="loge-menu${kind==='comment'?' loge-comment-menu':''}"><summary aria-label="Options de ${kind==='post'?'la publication':'ton expansion harmonieuse'}">${kind==='comment'?'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>':'…'}</summary><div>${button('Modifier',`data-${kind}-edit="${esc(id)}"`,true)}${button('Supprimer',`data-${kind}-delete="${esc(id)}"`,true)}</div></details>`;}
 function postMarkup(post){
   const manage=own(post)&&canManagePosts(),count=Number.isInteger(post.commentCount)?post.commentCount:0;
-  return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage"><div class="loge-reel-card">${videoMarkup(post)}<footer class="loge-reel-info">${avatarLink(post.author)}<div class="loge-reel-copy"><div class="loge-reel-byline"><a class="loge-reel-username" href="${memberPath(post.author.id)}" data-link>${esc(post.author.username)}</a>${manage?ownerMenu('post',post.id):''}</div>${session.current?.kind!=='feed'?`<p class="loge-post-category">${esc(logeRoomLabel(post.loge))}</p>`:''}<h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2>${dateValue(post.createdAt)?`<p class="loge-post-date">${stamp(post.createdAt)}</p>`:''}${LOGE_THEMES_ENABLED&&post.theme?`<a class="loge-post-theme" href="${themePath(post.theme.id)}" data-link>${esc(post.theme.title)}</a>`:''}${statusMarkup('loge-post-status-'+post.id)}</div><div class="loge-reel-actions" role="group" aria-label="Actions de la vidéo"><button type="button" class="loge-reel-icon" data-comments-open="${esc(post.id)}" aria-label="Commentaires (${count})" aria-expanded="false">${icon('comment')}<small data-comment-count>${count}</small></button></div><div class="loge-intervention-context" id="loge-interventions-post-${esc(post.id)}" hidden></div></footer></div></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div>${manage?`<div id="loge-post-editor-${esc(post.id)}" class="loge-edit-sheet" role="dialog" aria-modal="true" aria-label="Modifier le titre" hidden></div>`:''}</article>`;
+  return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage"><div class="loge-reel-card">${videoMarkup(post)}<footer class="loge-reel-info">${avatarLink(post.author)}<div class="loge-reel-copy"><div class="loge-reel-byline"><a class="loge-reel-username" href="${memberPath(post.author.id)}" data-link>${esc(post.author.username)}</a>${manage?ownerMenu('post',post.id):''}</div>${session.current?.kind!=='feed'?`<p class="loge-post-category">${esc(logeRoomLabel(post.loge))}</p>`:''}<h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2>${dateValue(post.createdAt)?`<p class="loge-post-date">${stamp(post.createdAt)}</p>`:''}${LOGE_THEMES_ENABLED&&post.theme?`<a class="loge-post-theme" href="${themePath(post.theme.id)}" data-link>${esc(post.theme.title)}</a>`:''}${statusMarkup('loge-post-status-'+post.id)}</div><div class="loge-reel-actions" role="group" aria-label="Actions de la vidéo"><button type="button" class="loge-reel-icon" data-comments-open="${esc(post.id)}" aria-label="Expansions harmonieuses (${count})" aria-expanded="false">${icon('comment')}<small data-comment-count>${count}</small></button></div><div class="loge-intervention-context" id="loge-interventions-post-${esc(post.id)}" hidden></div></footer></div></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div>${manage?`<div id="loge-post-editor-${esc(post.id)}" class="loge-edit-sheet" role="dialog" aria-modal="true" aria-label="Modifier le titre" hidden></div>`:''}</article>`;
 }
 function removeProfileClip(postId){
   const view=session.current,list=node('loge-profile-list');if(!list)return;
@@ -300,7 +300,7 @@ async function currentPost(id){const data=await request('/api/loge/posts/'+encod
 async function currentComment(comment){
   const data=await request(`/api/loge/posts/${encodeURIComponent(comment.postId)}/comments?focus=${encodeURIComponent(comment.id)}`);
   const found=data.comments.find(item=>String(item.id)===String(comment.id));
-  if(!found)throw Object.assign(Error('Ce commentaire n’est plus disponible.'),{status:404});
+  if(!found)throw Object.assign(Error('Cette expansion harmonieuse n’est plus disponible.'),{status:404});
   session.comments.set(String(found.id),found);updateComment(found);return found;
 }
 function conflict(form,kind,id,draft){
@@ -340,7 +340,7 @@ function refreshAfterConflict(kind,id,error){
   },next=>notice(target,next.message,true));
 }
 function deletePost(id){
-  const s=session,post=s.posts.get(String(id));if(!canManagePosts()||!post||!own(post)||!confirm('Retirer cette vidéo des Loges virtuelles ? Ses commentaires seront supprimés ; la vidéo reste dans ta vidéographie.'))return;
+  const s=session,post=s.posts.get(String(id));if(!canManagePosts()||!post||!own(post)||!confirm('Retirer cette vidéo des Loges virtuelles ? Ses expansions harmonieuses seront supprimées ; la vidéo reste dans ta vidéographie.'))return;
   perform('post-'+id,node('loge-post-'+id),async()=>{
     const result=await request('/api/loge/posts/'+encodeURIComponent(id),{method:'DELETE',body:{revision:post.revision}});
     acceptSelf(result);invalidateOtherViews();s.current.player?.remove(id);s.posts.delete(String(id));forgetDraft('post-'+id);
@@ -352,7 +352,7 @@ function commentMarkup(comment){
   const person=comment.author,avatar=typeof person.avatar==='string'&&/^\/api\/(?:loge|roadmap)\//.test(person.avatar)?`<img src="${esc(person.avatar)}" alt="" loading="lazy" decoding="async">`:esc(person.username?.slice(0,1)||'·');
   return `<article class="loge-comment" id="loge-comment-${esc(comment.id)}" data-comment-id="${esc(comment.id)}"><a class="loge-avatar loge-comment-avatar" href="${memberPath(person.id)}" data-link aria-label="Profil de ${esc(person.username)}">${avatar}</a><div class="loge-comment-main"><div class="loge-comment-content${own(comment)?' is-own':''}"><div class="loge-comment-bubble"><a class="loge-comment-author" href="${memberPath(person.id)}" data-link>${esc(person.username)}</a><p id="loge-comment-body-${esc(comment.id)}">${esc(comment.body)}</p></div>${own(comment)?ownerMenu('comment',comment.id):''}</div><div class="loge-comment-meta">${stamp(comment.createdAt)}</div><div id="loge-comment-editor-${esc(comment.id)}"></div>${statusMarkup('loge-comment-status-'+comment.id)}</div></article>`;
 }
-function commentCount(postId,change){const post=session.posts.get(String(postId));if(!post)return;post.commentCount=Math.max(0,(post.commentCount||0)+change);const toggle=node('loge-post-'+postId)?.querySelector('[data-comments-open]');if(toggle){toggle.setAttribute('aria-label','Commentaires ('+post.commentCount+')');const count=toggle.querySelector('[data-comment-count]');if(count)count.textContent=String(post.commentCount);}}
+function commentCount(postId,change){const post=session.posts.get(String(postId));if(!post)return;post.commentCount=Math.max(0,(post.commentCount||0)+change);const toggle=node('loge-post-'+postId)?.querySelector('[data-comments-open]');if(toggle){toggle.setAttribute('aria-label','Expansions harmonieuses ('+post.commentCount+')');const count=toggle.querySelector('[data-comment-count]');if(count)count.textContent=String(post.commentCount);}}
 function updateComment(comment){const el=node('loge-comment-body-'+comment.id);if(el)el.textContent=comment.body;const context=session.current?.root?.querySelector('[data-intervention-id="'+comment.id+'"]')?.querySelector('span');if(context)context.textContent=comment.body;}
 function insertComment(comment,list){
   const s=session;s.comments.set(String(comment.id),comment);
@@ -368,18 +368,18 @@ function openCommentEdit(id){
   node('loge-comment-'+id)?.querySelector('details')?.removeAttribute('open');
   const root=node('loge-comment-editor-'+id);if(root.innerHTML){root.hidden=!root.hidden;return;}
   const draft=getDraft('comment-'+id,{body:comment.body,revision:comment.revision});
-  root.hidden=false;root.innerHTML=`<form class="loge-edit-form"><label>Ton commentaire<textarea name="body" required maxlength="2000" rows="5">${esc(draft.body)}</textarea></label><div class="loge-form-actions"><button class="loge-button" type="submit">Enregistrer</button>${button('Fermer','data-edit-close',true)}</div>${statusMarkup('loge-comment-edit-status-'+id)}</form>`;
+  root.hidden=false;root.innerHTML=`<form class="loge-edit-form"><label>Ton expansion harmonieuse<textarea name="body" required maxlength="2000" rows="5">${esc(draft.body)}</textarea></label><div class="loge-form-actions"><button class="loge-button" type="submit">Enregistrer</button>${button('Fermer','data-edit-close',true)}</div>${statusMarkup('loge-comment-edit-status-'+id)}</form>`;
   const form=root.querySelector('form');rememberFields(form,draft,['body']);growingComment(form);form.querySelector('[data-edit-close]').onclick=()=>{root.hidden=true;};
   form.onsubmit=event=>{event.preventDefault();if(!form.reportValidity())return;readFields(form,draft,['body']);perform('comment-'+id,form,async()=>{
     const result=await request('/api/loge/comments/'+encodeURIComponent(id),{method:'PUT',body:{body:draft.body.trim(),revision:draft.revision}});
-    invalidateOtherViews();session.comments.set(String(id),result.comment);updateComment(result.comment);forgetDraft('comment-'+id);root.innerHTML='';root.hidden=true;notice('loge-comment-status-'+id,'Ton commentaire est mis à jour.');
+    invalidateOtherViews();session.comments.set(String(id),result.comment);updateComment(result.comment);forgetDraft('comment-'+id);root.innerHTML='';root.hidden=true;notice('loge-comment-status-'+id,'Ton expansion harmonieuse est mise à jour.');
   },error=>{notice('loge-comment-edit-status-'+id,error.message,true);if(error.status===409&&error.data?.conflict)conflict(form,'comment',id,draft);});};
 }
 function deleteComment(id){
-  const comment=session.comments.get(String(id));if(!comment||!own(comment)||!confirm('Supprimer ce commentaire ?'))return;
+  const comment=session.comments.get(String(id));if(!comment||!own(comment)||!confirm('Supprimer cette expansion harmonieuse ?'))return;
   perform('comment-'+id,node('loge-comment-'+id),async()=>{
     await request('/api/loge/comments/'+encodeURIComponent(id),{method:'DELETE',body:{revision:comment.revision}});
-    invalidateOtherViews();commentCount(comment.postId,-1);session.comments.delete(String(id));forgetDraft('comment-'+id);node('loge-comment-'+id)?.remove();removeIntervention(comment);notice('loge-comments-status','Ton commentaire est supprimé.');
+    invalidateOtherViews();commentCount(comment.postId,-1);session.comments.delete(String(id));forgetDraft('comment-'+id);node('loge-comment-'+id)?.remove();removeIntervention(comment);notice('loge-comments-status','Ton expansion harmonieuse est supprimée.');
   },error=>refreshAfterConflict('comment',id,error));
 }
 function growComment(field){
@@ -400,19 +400,19 @@ function commentWriting(panel,writing,{focus=true}={}){
 }
 function bindCommentComposer(panel){
   const id=panel.postId,draft=getDraft('create-comment-'+id,{body:''}),root=panel.root.querySelector('.loge-comment-composer');
-  root.innerHTML=`<form><textarea name="body" aria-label="Écrire un commentaire" placeholder="Ton commentaire…" required maxlength="2000" rows="5">${esc(draft.body)}</textarea><div class="loge-form-actions">${button('Annuler','data-comment-cancel',true)}<button class="loge-button loge-comment-submit" type="submit">Publier</button></div>${statusMarkup('loge-comment-create-status')}</form>`;
+  root.innerHTML=`<form><textarea name="body" aria-label="Écrire une expansion harmonieuse" placeholder="Ton expansion harmonieuse…" required maxlength="2000" rows="5">${esc(draft.body)}</textarea><div class="loge-form-actions">${button('Annuler','data-comment-cancel',true)}<button class="loge-button loge-comment-submit" type="submit">Publier</button></div>${statusMarkup('loge-comment-create-status')}</form>`;
   const form=root.querySelector('form');rememberFields(form,draft,['body']);growingComment(form);form.querySelector('[data-comment-cancel]').onclick=()=>commentWriting(panel,false);
   form.onsubmit=event=>{event.preventDefault();if(!form.reportValidity())return;readFields(form,draft,['body']);const submitted={body:draft.body.trim(),requestId:draft.requestId},writingVersion=panel.writingVersion;perform('create-comment-'+id,form,async()=>{
     const result=await request(`/api/loge/posts/${encodeURIComponent(id)}/comments`,{method:'POST',body:submitted});
     invalidateOtherViews();if(!session.comments.has(String(result.comment.id)))commentCount(id,1);node('loge-comments-empty')?.remove();insertComment(result.comment,node('loge-comments-list'));if(session.current.tab==='interventions')insertIntervention({...result.comment,post:session.posts.get(String(id))},node('loge-profile-list'));
     const unchanged=draft.requestId===submitted.requestId&&draft.body.trim()===submitted.body;
     draft.requestId=crypto.randomUUID();if(unchanged){draft.body='';form.elements.namedItem('body').value='';growComment(form.elements.namedItem('body'));if(panel.writing&&panel.writingVersion===writingVersion){commentWriting(panel,false);node('loge-comment-'+result.comment.id)?.scrollIntoView({block:'nearest',inline:'nearest'});}}
-    notice('loge-comments-status','Ton commentaire est publié.');
+    notice('loge-comments-status','Ton expansion harmonieuse est publiée.');
   },error=>notice(panel.writing?'loge-comment-create-status':'loge-comments-status',error.message,true));};
 }
 
 function invalidateOtherViews(){const s=session;for(const view of s.views.values())if(view!==s.current){view.dirty=true;view.version++;}}
-function commentsMarkup(drawer=false){return `<header class="loge-comments-heading"><h2 id="loge-comments-title">Commentaires</h2>${drawer?'<button type="button" class="loge-comments-close" data-discussion-close aria-label="Fermer les commentaires" title="Fermer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>':''}</header><div class="loge-comments-scroll" id="loge-comments-scroll"><div id="loge-comments-list"></div>${button('Voir d’autres commentaires','id="loge-comments-more"',true)}${statusMarkup('loge-comments-status')}</div><button type="button" class="loge-comment-prompt" data-comment-write aria-expanded="false" aria-controls="loge-comment-compose">Écrire un commentaire<span class="loge-comment-prompt-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></span></button><div id="loge-comment-compose" class="loge-comment-composer" hidden></div>`;}
+function commentsMarkup(drawer=false){return `<header class="loge-comments-heading"><h2 id="loge-comments-title">Expansions harmonieuses</h2>${drawer?'<button type="button" class="loge-comments-close" data-discussion-close aria-label="Fermer les expansions harmonieuses" title="Fermer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>':''}</header><div class="loge-comments-scroll" id="loge-comments-scroll"><div id="loge-comments-list"></div>${button('Voir d’autres expansions harmonieuses','id="loge-comments-more"',true)}${statusMarkup('loge-comments-status')}</div><button type="button" class="loge-comment-prompt" data-comment-write aria-expanded="false" aria-controls="loge-comment-compose">Écrire une expansion harmonieuse<span class="loge-comment-prompt-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></span></button><div id="loge-comment-compose" class="loge-comment-composer" hidden></div>`;}
 function bindComments(panel){
   const s=session;node('loge-comments-more').onclick=()=>loadComments(panel.postId,panel.next);
   panel.root.querySelector('[data-discussion-close]')?.addEventListener('click',()=>closeDiscussion());panel.root.querySelector('[data-comment-write]').onclick=()=>commentWriting(panel,true);
@@ -432,7 +432,7 @@ async function openDiscussion(postId){
   const cardBefore=node('loge-post-'+postId),media=node('loge-video-'+postId),full=document.fullscreenElement||document.webkitFullscreenElement,nativeVideo=media?.querySelector('video'),navigation=s.navigationVersion;
   if(full&&(full===cardBefore?.querySelector('.loge-reel-stage')||full===media?.querySelector('iframe')||full===nativeVideo)){
     const exit=document.exitFullscreen||document.webkitExitFullscreen;
-    if(exit)try{await exit.call(document);}catch{notice('loge-status','Quitte le plein écran pour ouvrir les commentaires.',true);return;}
+    if(exit)try{await exit.call(document);}catch{notice('loge-status','Quitte le plein écran pour ouvrir les expansions harmonieuses.',true);return;}
   }else if(nativeVideo?.webkitDisplayingFullscreen){try{nativeVideo.webkitExitFullscreen?.();}catch{return;}}
   if(!live(s)||s.current!==view||s.navigationVersion!==navigation)return;
   closeDiscussion();
@@ -447,18 +447,18 @@ async function openDiscussion(postId){
 }
 async function loadComments(id,after=null){
   const s=session,view=s.current,panel=view.activePanel;if(!panel||String(panel.postId)!==String(id)||panel.loading)return;
-  panel.loading=true;const more=node('loge-comments-more');if(more)more.disabled=true;notice('loge-comments-status','Chargement des commentaires…');
+  panel.loading=true;const more=node('loge-comments-more');if(more)more.disabled=true;notice('loge-comments-status','Chargement des expansions harmonieuses…');
   try{
     const query=new URLSearchParams();if(after!==null)query.set('after',after);else if(panel.focusComment)query.set('focus',panel.focusComment);
     const result=await request(`/api/loge/posts/${encodeURIComponent(id)}/comments${query.size?'?'+query:''}`);
     if(s.current!==view||view.activePanel!==panel)return;
     const list=node('loge-comments-list');for(const comment of result.comments)insertComment(comment,list);
-    if(!list.querySelector('[data-comment-id]'))list.innerHTML='<p class="loge-empty" id="loge-comments-empty">Aucun commentaire pour le moment.</p>';
+    if(!list.querySelector('[data-comment-id]'))list.innerHTML='<p class="loge-empty" id="loge-comments-empty">Aucune expansion harmonieuse pour le moment.</p>';
     notice('loge-comments-status','');panel.loaded=true;panel.next=result.next;const next=node('loge-comments-more');next.hidden=result.next==null;next.disabled=false;
     if(panel.focusComment){const target=node('loge-comment-'+panel.focusComment);if(target){target.classList.add('is-focused');target.setAttribute('tabindex','-1');if(!panel.writing){target.scrollIntoView({block:'nearest',inline:'nearest'});target.focus({preventScroll:true});}}panel.focusComment=null;}
     return true;
   }catch(error){
-    if(live(s)&&s.current===view&&view.activePanel===panel&&error.status===404&&after===null&&panel.focusComment){panel.focusComment=null;panel.loading=false;const loaded=await loadComments(id);if(loaded&&live(s)&&s.current===view)notice('loge-comments-status','Ce commentaire n’est plus disponible. Les autres échanges sont affichés.');return loaded;}
+    if(live(s)&&s.current===view&&view.activePanel===panel&&error.status===404&&after===null&&panel.focusComment){panel.focusComment=null;panel.loading=false;const loaded=await loadComments(id);if(loaded&&live(s)&&s.current===view)notice('loge-comments-status','Cette expansion harmonieuse n’est plus disponible. Les autres sont affichées.');return loaded;}
     if(live(s)&&s.current===view&&view.activePanel===panel&&error.name!=='AbortError')notice('loge-comments-status',error.message,true);
     return false;
   }finally{panel.loading=false;if(live(s)&&s.current===view&&view.activePanel===panel&&node('loge-comments-more'))node('loge-comments-more').disabled=false;}

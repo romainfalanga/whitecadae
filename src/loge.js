@@ -135,10 +135,10 @@ async function ownedPost(env,id,userId){
 }
 async function visibleComment(env,id){
   const row=await env.DB.prepare(commentSelect+' WHERE c.id=?1 AND c.deleted_at IS NULL AND p.deleted_at IS NULL').bind(id).first();
-  if(!row)fail('Commentaire introuvable.',404);return row;
+  if(!row)fail('Expansion harmonieuse introuvable.',404);return row;
 }
 async function ownedComment(env,id,userId){
-  const row=await visibleComment(env,id);if(row.author_id!==userId)fail('Commentaire introuvable.',404);return row;
+  const row=await visibleComment(env,id);if(row.author_id!==userId)fail('Expansion harmonieuse introuvable.',404);return row;
 }
 function sameRequest(row,hash){
   if(row.request_fingerprint!==hash)fail('Cet envoi a déjà été utilisé avec un autre contenu.',409);
@@ -354,7 +354,7 @@ async function listComments(env,postId,url,json){
   await visiblePost(env,postId);let after=cursor(url);
   if(url.searchParams.has('focus')){
     const focus=integer(Number(url.searchParams.get('focus')),1),target=await visibleComment(env,focus);
-    if(target.post_id!==postId)fail('Commentaire introuvable.',404);
+    if(target.post_id!==postId)fail('Expansion harmonieuse introuvable.',404);
     const previous=(await env.DB.prepare('SELECT id FROM loge_comments WHERE post_id=?1 AND deleted_at IS NULL AND id<?2 ORDER BY id DESC LIMIT 10').bind(postId,focus).all()).results||[];
     after=(previous.at(-1)?.id??focus)-1;
   }

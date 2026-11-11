@@ -192,7 +192,7 @@ test('a deleted focused comment falls back to the existing discussion instead of
   assert.match(f.requests[1].url,/comments\?focus=99$/);
   assert.equal(f.requests[2].url,'/api/loge/posts/7/comments');
   assert.equal(f.node('loge-comment-body-8').textContent,'Une réponse');
-  assert.match(f.node('loge-comments-status').textContent,/Les autres échanges sont affichés/);
+  assert.match(f.node('loge-comments-status').textContent,/Les autres sont affichées/);
   f.client.clear();
 });
 
@@ -291,8 +291,8 @@ test('a late creation synchronizes the quota immediately and refetches the affec
 });
 
 test('comments update the reel count and late panel acknowledgements refresh when the discussion reopens',async()=>{
-  const f=fixture();await f.page();const open=f.find('[data-comments-open]');f.click(open);await flush();let compose=f.writeComment();f.fill(compose,'body','Une piste');f.submit(compose);await flush();assert.equal(open.getAttribute('aria-label'),'Commentaires (1)');
-  f.click(f.find('[data-comment-delete="18"]'));await flush();assert.equal(open.getAttribute('aria-label'),'Commentaires (0)');
+  const f=fixture();await f.page();const open=f.find('[data-comments-open]');f.click(open);await flush();let compose=f.writeComment();f.fill(compose,'body','Une piste');f.submit(compose);await flush();assert.equal(open.getAttribute('aria-label'),'Expansions harmonieuses (1)');
+  f.click(f.find('[data-comment-delete="18"]'));await flush();assert.equal(open.getAttribute('aria-label'),'Expansions harmonieuses (0)');
   compose=f.writeComment();f.fill(compose,'body','Un envoi tardif');const release=f.defer();f.submit(compose);f.click(f.find('[data-discussion-close]'));release({comment:{...comment(29),body:'Un envoi tardif'}});await flush();
   f.queue({comments:[{...comment(29),body:'Un envoi tardif'}],next:null});f.click(open);await flush();assert.equal(f.node('loge-comment-body-29').textContent,'Un envoi tardif');compose=f.writeComment();assert.equal(compose.elements.namedItem('body').value,'');f.client.clear();
 });
@@ -578,9 +578,9 @@ test('comment options stay with their bubble, use centered SVG dots and retain o
   const f=fixture({comments:[{...comment(),body:'Court'},{...comment(9,{id:12,username:'Bob'}),body:'Autre avis'}]});await f.page();f.click(f.find('[data-comments-open]'));await flush();
   const own=f.node('loge-comment-8'),other=f.node('loge-comment-9'),content=f.find('.loge-comment-content',own),menu=f.find('.loge-comment-menu',content),summary=menu.querySelector('summary');
   assert(content.classList.contains('is-own'));assert.equal(menu.parent,content);assert.equal(own.querySelector('.loge-comment-meta').querySelector('details'),null);assert.equal(other.querySelector('.loge-comment-menu'),null);
-  assert.equal(summary.getAttribute('aria-label'),'Options de ton commentaire');assert.equal(summary.querySelectorAll('circle').length,3);assert.deepEqual(summary.querySelectorAll('circle').map(circle=>circle.getAttribute('cy')),['12','12','12']);assert.equal(summary.textContent,'');
+  assert.equal(summary.getAttribute('aria-label'),'Options de ton expansion harmonieuse');assert.equal(summary.querySelectorAll('circle').length,3);assert.deepEqual(summary.querySelectorAll('circle').map(circle=>circle.getAttribute('cy')),['12','12','12']);assert.equal(summary.textContent,'');
   menu.setAttribute('open','');f.click(f.find('[data-comment-edit="8"]',menu));assert.equal(menu.getAttribute('open'),null);const edit=f.find('form',f.node('loge-comment-editor-8'));f.fill(edit,'body','Avis corrigé');f.submit(edit);await flush();assert.equal(f.node('loge-comment-body-8').textContent,'Avis corrigé');
-  const writer=f.writeComment();assert.equal(writer.querySelector('label'),null);assert.equal(writer.elements.namedItem('body').getAttribute('aria-label'),'Écrire un commentaire');assert.doesNotMatch(writer.textContent,/Écrire un commentaire/);f.click(writer.querySelector('[data-comment-cancel]'));assert.equal(f.find('[data-comment-write]').textContent,'Écrire un commentaire');f.client.clear();
+  const writer=f.writeComment();assert.equal(writer.querySelector('label'),null);assert.equal(writer.elements.namedItem('body').getAttribute('aria-label'),'Écrire une expansion harmonieuse');assert.doesNotMatch(writer.textContent,/Écrire une expansion harmonieuse/);f.click(writer.querySelector('[data-comment-cancel]'));assert.equal(f.find('[data-comment-write]').textContent,'Écrire une expansion harmonieuse');f.client.clear();
 });
 
 

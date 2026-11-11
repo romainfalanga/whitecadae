@@ -12,7 +12,7 @@ export function createStreamPlayer({container,post,getPlayback,isEligible=()=>tr
   const play=document.createElement('button');play.type='button';play.className='loge-stream-play';play.setAttribute('aria-label','Lire la vidéo');play.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+glyph.play+'</svg>';
   const full=document.createElement('button');full.type='button';full.className='loge-stream-fullscreen';full.setAttribute('aria-label','Afficher en plein écran');full.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+glyph.fullscreen+'</svg>';
   const message=document.createElement('span');message.className='loge-stream-message';message.setAttribute('role','status');message.textContent='Chargement…';
-  // The Loge reels go without a fullscreen button; the videography keeps it.
+  // Neither the Loge reels nor the videography show a fullscreen button.
   element.append(video,play,...(withFullscreen?[full]:[]),message);container.append(element);play.disabled=true;
   let destroyed=false,hls=null,preparing=null,expires=0,sequence=0,state=-1,failed=false,requestVersion=0;
   const listeners=[];

@@ -753,3 +753,14 @@ CREATE TABLE IF NOT EXISTS loge_shared_videos (
 );
 CREATE INDEX IF NOT EXISTS idx_loge_shared_upload ON loge_shared_videos(upload_id);
 CREATE INDEX IF NOT EXISTS idx_loge_shared_user ON loge_shared_videos(user_id,event_id);
+
+-- Sériographies: ordered selections of the member's own videos (sealed title and order).
+CREATE TABLE IF NOT EXISTS life_series (
+  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY(owner_id,id)
+);

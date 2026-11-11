@@ -198,3 +198,9 @@ L’envoi direct vers Stream est un seul formulaire. Une coupure réseau, ou un 
 ## Échanges avec les AS
 
 Le bouton « Échanges AS » du lecteur ouvre la conversation juste sous la vidéo, avant la navigation. Sur un écran d’au moins 900 px, elle s’ouvre d’elle-même dans une colonne à droite de la vidéo, avec la zone de réponse en bas. Chaque message affiche une initiale, une bulle, une date relative, Répondre et Signaler ou Supprimer.
+
+## Lecteur et modification
+
+Le lecteur de la vidéographie n’a plus de bouton plein écran. Modifier une vidéo ne propose que son titre et sa catégorie : le fichier n’est jamais remplacé depuis la fiche.
+
+Les échanges entre AS et les commentaires des Loges s’appellent « expansions harmonieuses », avec une même icône (une bulle et une étoile, `EXPANSION_ICON_PATHS` dans `public/video-model.js`).

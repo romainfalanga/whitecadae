@@ -9,6 +9,55 @@ import {youtubeLink} from '../public/youtube-video.js';
 export const EVENT_KINDS=['rencontre','famille','relation','études','travail','santé','changement','réussite','perte','autre'];
 export const EVENT_IMPACTS=['ressource','difficulté','mixte','à explorer'];
 const context=lifeEventContext;
+// Sériographies: ordered selections of the member's own videos, under a title.
+// Title and order are sealed like the videos themselves.
+export const SERIES_SCHEMA=`CREATE TABLE IF NOT EXISTS life_series (
+  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY(owner_id,id)
+)`;
+export const SERIES_LIMIT=60,SERIES_ITEMS=100;
+const seriesReady=new WeakSet();
+export async function ensureSeries(env){if(seriesReady.has(env.DB))return;await env.DB.prepare(SERIES_SCHEMA).run();seriesReady.add(env.DB);}
+const seriesContext=(owner,id)=>`series:${owner}:${id}`;
+async function seriesRoute(env,user,suffix,method,body,json){
+  await ensureSeries(env);
+  if(suffix==='/series'){
+    if(method!=='GET')fail('Méthode indisponible.',405);
+    const rows=(await env.DB.prepare('SELECT id,payload,revision,updated_at FROM life_series WHERE owner_id=?1 ORDER BY updated_at DESC,id LIMIT ?2').bind(user.id,SERIES_LIMIT).all()).results;
+    const videos=new Set((await env.DB.prepare('SELECT id FROM life_events WHERE owner_id=?1 AND video_branch IS NOT NULL').bind(user.id).all()).results.map(r=>r.id));
+    // A deleted video simply leaves the series it belonged to.
+    return json({series:await Promise.all(rows.map(async row=>{const value=await unseal(env,seriesContext(user.id,row.id),row.payload);return {id:row.id,title:value.title,items:(value.items||[]).filter(id=>videos.has(id)),revision:row.revision,updatedAt:row.updated_at};}))});
+  }
+  const id=identifier(suffix.slice('/series/'.length));
+  if(method==='DELETE'){
+    const result=await env.DB.prepare('DELETE FROM life_series WHERE owner_id=?1 AND id=?2 AND revision=?3').bind(user.id,id,integer(body.revision,1)).run();
+    if(!result.meta.changes&&await env.DB.prepare('SELECT 1 FROM life_series WHERE owner_id=?1 AND id=?2').bind(user.id,id).first())fail('Cette sériographie a changé entre-temps. Recharge la page.',409);
+    return json({ok:true});
+  }
+  if(method!=='PUT')fail('Méthode indisponible.',405);
+  const title=text(body.title,120,true);
+  if(!Array.isArray(body.items)||!body.items.length)fail('Choisis au moins une vidéo.');
+  if(body.items.length>SERIES_ITEMS)fail(`Une sériographie compte ${SERIES_ITEMS} vidéos au plus.`);
+  const items=[...new Set(body.items.map(identifier))];
+  const owned=(await env.DB.prepare(`SELECT id FROM life_events WHERE owner_id=?1 AND video_branch IS NOT NULL AND id IN (${items.map((_,i)=>'?'+(i+2)).join(',')})`).bind(user.id,...items).all()).results;
+  if(owned.length!==items.length)fail('Une des vidéos choisies n’est plus dans ta vidéographie.',409);
+  const payload=await seal(env,seriesContext(user.id,id),{title,items});
+  const revision=integer(body.revision);
+  const result=revision===0
+    ?await env.DB.prepare('INSERT OR IGNORE INTO life_series(owner_id,id,payload) SELECT ?1,?2,?3 WHERE (SELECT count(*) FROM life_series WHERE owner_id=?1)<?4').bind(user.id,id,payload,SERIES_LIMIT).run()
+    :await env.DB.prepare("UPDATE life_series SET payload=?3,revision=revision+1,updated_at=datetime('now') WHERE owner_id=?1 AND id=?2 AND revision=?4").bind(user.id,id,payload,revision).run();
+  if(!result.meta.changes){
+    if(revision===0&&!await env.DB.prepare('SELECT 1 FROM life_series WHERE owner_id=?1 AND id=?2').bind(user.id,id).first())fail(`Tu as déjà ${SERIES_LIMIT} sériographies.`,409);
+    fail('Cette sériographie a changé entre-temps. Recharge la page.',409);
+  }
+  const row=await env.DB.prepare('SELECT revision,updated_at FROM life_series WHERE owner_id=?1 AND id=?2').bind(user.id,id).first();
+  return json({series:{id,title,items,revision:row.revision,updatedAt:row.updated_at}});
+}
 // The member's day, not UTC's: Paris is ahead of UTC, so either may be today.
 export function parisToday(now=new Date()){return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);}
 const latestToday=()=>{const utc=new Date().toISOString().slice(0,10),paris=parisToday();return paris>utc?paris:utc;};
@@ -87,8 +136,8 @@ export async function lifeRoute(request,env,url,user,body,json){
   // of progression. They never grant access to somebody else's data.
   if((suffix==='/export'&&method==='GET')||(suffix===''&&method==='DELETE')){
     if(method==='DELETE'){
-      if(body.confirm!=='SUPPRIMER')fail('Confirme la suppression de ton arbre.');
-      await env.DB.batch([env.DB.prepare("UPDATE loge_stream_uploads SET state='deleting',upload_url=NULL,cleanup_after=CASE WHEN stream_id IS NULL THEN cleanup_after ELSE 0 END,updated_at=unixepoch() WHERE user_id=?1 AND purpose='videography' AND state<>'deleted'").bind(user.id),...['DELETE FROM life_events WHERE owner_id=?1','DELETE FROM life_drafts WHERE owner_id=?1'].map(q=>env.DB.prepare(q).bind(user.id)),...await sharedPostWithdrawal(env,user.id)]);
+      if(body.confirm!=='SUPPRIMER')fail('Confirme la suppression de ton arbre.');await ensureSeries(env);
+      await env.DB.batch([env.DB.prepare("UPDATE loge_stream_uploads SET state='deleting',upload_url=NULL,cleanup_after=CASE WHEN stream_id IS NULL THEN cleanup_after ELSE 0 END,updated_at=unixepoch() WHERE user_id=?1 AND purpose='videography' AND state<>'deleted'").bind(user.id),...['DELETE FROM life_events WHERE owner_id=?1','DELETE FROM life_drafts WHERE owner_id=?1','DELETE FROM life_series WHERE owner_id=?1'].map(q=>env.DB.prepare(q).bind(user.id)),...await sharedPostWithdrawal(env,user.id)]);
       return json({ok:true});
     }
     const after=url.searchParams.get('after')||'';if(after)identifier(after);
@@ -101,7 +150,8 @@ export async function lifeRoute(request,env,url,user,body,json){
   await requireLevel(env,user,GAME_MASTER_BLANC_LEVEL);
   const owner=url.searchParams.has('owner')?integer(Number(url.searchParams.get('owner')),1):user.id;
   const access=await circleAccess(env,user,owner,true);
-  if(method!=='GET'){if(owner!==user.id)fail('Seul l’auteur peut modifier son arbre.',403);if(!/^\/(?:events\/[a-zA-Z0-9_-]+|uploads(?:\/[0-9a-f-]+)?)$/i.test(suffix))await requireStorage(env,user.id);}
+  if(method!=='GET'){if(owner!==user.id)fail('Seul l’auteur peut modifier son arbre.',403);if(!/^\/(?:events\/[a-zA-Z0-9_-]+|uploads(?:\/[0-9a-f-]+)?|series\/[a-zA-Z0-9_-]+)$/i.test(suffix))await requireStorage(env,user.id);}
+  if(suffix==='/series'||/^\/series\/[^/]+$/.test(suffix)){if(owner!==user.id)fail('Ces sériographies sont privées.',403);return seriesRoute(env,user,suffix,method,body,json);}
   if(suffix==='/uploads'){
     if(owner!==user.id)fail('Ces envois sont privés.',403);
     if(method!=='POST')fail('Méthode indisponible.',405);

@@ -10,10 +10,10 @@ function when(value){
   const days=Math.round(hours/24);if(days===1)return 'hier';if(days<7)return `il y a ${days} j`;
   return date.toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
 }
-export async function mountComments({root,id,api,user,esc,onDraft,onClose,title='Échanges avec les AS',placeholder='Écris un message…'}){
+export async function mountComments({root,id,api,user,esc,onDraft,onClose,title='Expansions harmonieuses',placeholder='Ton expansion harmonieuse…'}){
   let alive=true,busy=false,parent=null,requestId=crypto.randomUUID(),replies=[],more=false,membership=null;
   const find=selector=>root.querySelector(selector);
-  root.innerHTML=`<header class="as-comments-head"><h4>${esc(title)}</h4><button type="button" data-close aria-label="Fermer les échanges"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header><div data-replies class="as-thread topic-replies" role="log" aria-live="polite" aria-relevant="additions"></div><button type="button" data-new class="private-button subtle as-new" hidden>Voir les nouvelles réponses</button><form class="as-compose"><p data-parent class="as-replying" hidden></p><div class="as-compose-row"><label class="sr-only" for="as-message-${id}">Ta réponse</label><textarea id="as-message-${id}" name="message" maxlength="4000" rows="1" required placeholder="${esc(placeholder)}"></textarea><button type="submit" class="as-send" aria-label="Envoyer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></div><button type="button" data-cancel class="as-cancel" hidden>Annuler la réponse</button></form><p data-status class="private-status" role="status"></p>`;
+  root.innerHTML=`<header class="as-comments-head"><h4>${esc(title)}</h4><button type="button" data-close aria-label="Fermer les expansions harmonieuses"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header><div data-replies class="as-thread topic-replies" role="log" aria-live="polite" aria-relevant="additions"></div><button type="button" data-new class="private-button subtle as-new" hidden>Voir les nouvelles expansions harmonieuses</button><form class="as-compose"><p data-parent class="as-replying" hidden></p><div class="as-compose-row"><label class="sr-only" for="as-message-${id}">Ta réponse</label><textarea id="as-message-${id}" name="message" maxlength="4000" rows="1" required placeholder="${esc(placeholder)}"></textarea><button type="submit" class="as-send" aria-label="Envoyer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></div><button type="button" data-cancel class="as-cancel" hidden>Annuler la réponse</button></form><p data-status class="private-status" role="status"></p>`;
   const form=find('form'),messages=find('[data-replies]');
   const current=()=>alive&&root.isConnected;
   function status(text='',error=false){if(current()){find('[data-status]').textContent=text;find('[data-status]').classList.toggle('is-error',error);}}
@@ -27,7 +27,7 @@ export async function mountComments({root,id,api,user,esc,onDraft,onClose,title=
       const ancestor=replies.find(r=>r.id===m.parentId);
       const own=m.author.id===user,initial=esc((m.author.username||'?').trim().charAt(0).toUpperCase());
       return `<article class="as-message ace-message topic-reply ${own?'is-self':''} ${m.parentId?'is-reply':''}"><span class="as-avatar" aria-hidden="true">${initial}</span><div class="as-body"><div class="as-bubble"><strong>${esc(own?'Toi':m.author.username)}</strong>${m.parentId?`<small>En réponse à ${esc(ancestor?(ancestor.author.id===user?'toi':ancestor.author.username):'une réponse précédente')}</small>`:''}<p>${esc(m.text)}</p></div><div class="as-meta"><time datetime="${esc(m.createdAt)}">${esc(when(m.createdAt))}</time><button type="button" data-reply="${m.id}">Répondre</button>${own?`<button type="button" data-delete="${m.id}">Supprimer</button>`:`<button type="button" data-report="${m.id}">Signaler</button>`}</div></div></article>`;
-    }).join('')||'<p class="as-empty">Aucun échange pour le moment.</p>');});
+    }).join('')||'<p class="as-empty">Aucune expansion harmonieuse pour le moment.</p>');});
     root.querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>{parent=Number(b.dataset.reply);const m=replies.find(r=>r.id===parent);find('[data-parent]').textContent='En réponse à '+(m.author.id===user?'toi':m.author.username);find('[data-parent]').hidden=false;find('[data-cancel]').hidden=false;form.elements.message.focus({preventScroll:true});});
     root.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>action(b,async()=>{await api('/api/ace-circles/messages/'+b.dataset.delete,{method:'DELETE',body:{}});await refresh(true);}));
     root.querySelectorAll('[data-report]').forEach(b=>b.onclick=()=>{
@@ -53,7 +53,7 @@ export async function mountComments({root,id,api,user,esc,onDraft,onClose,title=
       const read=replies.at(-1)?.id;if(read)await api('/api/ace-circles/topics/'+id+'/read',{method:'PUT',body:{lastId:read}});
       status();
     }catch(e){
-      if(current()&&[401,403,404,409].includes(e.status)){root.replaceChildren();const note=document.createElement('p');note.textContent='Ces échanges ne sont plus accessibles.';root.append(note);alive=false;onDraft(false);}throw e;
+      if(current()&&[401,403,404,409].includes(e.status)){root.replaceChildren();const note=document.createElement('p');note.textContent='Ces expansions harmonieuses ne sont plus accessibles.';root.append(note);alive=false;onDraft(false);}throw e;
     }finally{busy=false;}
   }
   find('[data-new]').onclick=()=>action(find('[data-new]'),()=>refresh(true));
