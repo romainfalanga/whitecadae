@@ -8,7 +8,7 @@ const uploads=readFileSync(require('node:path').join(__dirname,'../public/video-
 const uploadExports='startVideoJob,currentVideoJob,onVideoJob,setVideoJobOpener,takePendingJobOpen,retryVideoJob,cancelVideoJob,dismissVideoJob,jobActive,jobSummary,jobCategory';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 class Element extends EventTarget{
-  constructor(){super();this.isConnected=true;this.dataset={};this.children=[];const styles={};this.style={setProperty:(key,value)=>{styles[key]=value;},getPropertyValue:key=>styles[key]};this.value='';this.innerHTML='';this.classList={toggle(){}};}
+  constructor(){super();this.isConnected=true;this.dataset={};this.children=[];const styles={};this.style={setProperty:(key,value)=>{styles[key]=value;},getPropertyValue:key=>styles[key]};this.value='';this.innerHTML='';this.classList={toggle(){},add(){},remove(){},contains(){return false;}};}
   insertBefore(child){this.children.unshift(child);}
   setAttribute(key,value){this[key]=value;}
   append(...items){this.children.push(...items);}
@@ -29,7 +29,7 @@ function fixture({upload,request}={}){
     const video=new Element(),element=new Element();let position=0,pauses=0,destroys=0;const player={video,element,getDuration:()=>120,getCurrentTime:()=>position,seekTo:value=>position=value,pauseVideo:()=>pauses++,destroy:()=>destroys++};players.push({options,player,get pauses(){return pauses;},get destroys(){return destroys;}});options.container.append(element);return player;
   }});
   vm.runInContext(`Object.assign(globalThis,(()=>{${uploads};return {${uploadExports}};})());`,sandbox);
-  vm.runInContext(source+`;globalThis.client={page,leave,videoPage,loadVideos,videoForm,eventVideoPlayer,wireStreamPlayers,pauseVideoPlayers,destroyVideoPlayers,getSession:()=>session,setSession:value=>session=value};`,sandbox);
+  vm.runInContext(source+`;globalThis.client={page,leave,videoPage,loadVideos,videoForm,videoTile,openVideoViewer,eventVideoPlayer,wireStreamPlayers,pauseVideoPlayers,destroyVideoPlayers,getSession:()=>session,setSession:value=>session=value};`,sandbox);
   const session={ctx,user:19,controller:new AbortController(),dirty:false,dialog:null};sandbox.client.setSession(session);
   // A form-only DOM keeps these tests focused on real submit and upload handlers.
   sandbox.formDialog=()=>{const dialog=new Element();dialog.close=()=>{session.dialogCleanup?.();session.dialog=null;};session.dialog=dialog;return dialog;};
@@ -165,3 +165,16 @@ test('Ajouter reopens the follow-up while a video is on its way, and one upload 
   h.sandbox.markup='';h.get('video-add').onclick();await tick();assert.match(h.sandbox.markup,/class="video-job"/);
   assert.throws(()=>h.sandbox.startVideoJob({api:h.ctx.api,state:h.ctx.state,navigate(){},eventId:'other',body:{title:'Autre'},file:{name:'b.mp4',size:1}}),/déjà en cours/);h.client.leave();
 });
+
+test('the videography shows covers in a grid and opens one video at a time in a viewer',async()=>{
+  const events=[{id:'evt-a',title:'Première',video_branch:'self',sort_date:'2026-11-09',precision:'day',revision:1,creation:{videoProvider:'stream',url:''},loge_post_id:4},{id:'evt-b',title:'Seconde',video_branch:'self',sort_date:'2026-11-08',precision:'day',revision:1,creation:{videoProvider:'stream',url:''}}];
+  const h=fixture({request:async path=>path.startsWith('/api/life-tree?')?{events,next:null}:{consented:true,notice:{}}});await h.client.page('/videographie',h.ctx);
+  const grid=h.get('video-list').innerHTML;
+  assert.match(grid,/data-video-open="0"/);assert.match(grid,/data-video-open="1"/);
+  assert.match(grid,/data-poster="evt-a"/);assert.match(grid,/Dans les loges/);assert.doesNotMatch(grid,/data-stream-event/,'no player is created until a video is opened');
+  assert.equal(h.get('video-section-count').textContent,'2 vidéos');
+  h.client.openVideoViewer(1);const viewer=h.sandbox.markup;
+  assert.match(viewer,/data-stream-event="evt-b"/);assert.match(viewer,/2 \/ 2/);assert.match(viewer,/id="video-viewer-next"[^>]*disabled/);assert.doesNotMatch(viewer,/id="video-viewer-prev"[^>]*disabled/);assert.match(viewer,/Modifier/);
+  h.client.openVideoViewer(0);assert.match(h.sandbox.markup,/id="video-viewer-prev"[^>]*disabled/);assert.match(h.sandbox.markup,/Dans les loges/);h.client.leave();
+});
+

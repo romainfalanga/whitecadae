@@ -54,7 +54,7 @@ function immersion(enabled){
   if(enabled)siteHeaderSize();else document.body.style.removeProperty?.('--loge-site-header-height');
 }
 function icon(kind){
-  const paths={home:'<path d="m3 10 9-7 9 7v10H7V10m2 10v-6h6v6"/>',back:'<path d="m14 5-7 7 7 7"/>',profile:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',plus:'<path d="M12 4v16M4 12h16"/>',comment:'<path d="M21 11a9 9 0 0 1-9 9H4l-2 2V11a9 9 0 0 1 19 0Z"/>'};
+  const paths={up:'<path d="m6 15 6-6 6 6"/>',down:'<path d="m6 9 6 6 6-6"/>',home:'<path d="m3 10 9-7 9 7v10H7V10m2 10v-6h6v6"/>',back:'<path d="m14 5-7 7 7 7"/>',profile:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',plus:'<path d="M12 4v16M4 12h16"/>',comment:'<path d="M21 11a9 9 0 0 1-9 9H4l-2 2V11a9 9 0 0 1 19 0Z"/>'};
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[kind]||''}</svg>`;
 }
 function shell(html){
@@ -196,6 +196,13 @@ function initMedia(view){
   for(const post of view.posts.values()){const container=view.root.querySelector('[data-video-post="'+post.id+'"]');if(container)view.player.add(post,container,node('loge-timeline-'+post.id));}
   refreshLayout(view);
 }
+// One reel per screen: step to the previous or next one, as a swipe would.
+function stepReel(view,direction){
+  const s=session;if(!live(s)||s.current!==view||!videoView(view)||view.activePanel||view.editingId)return false;
+  const reels=view.root?.querySelector('.loge-reels');if(!reels)return false;
+  const height=reels.clientHeight||window.innerHeight||0;if(!height)return false;
+  reels.scrollBy?.({top:direction*height,behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});return true;
+}
 function viewScroller(view){return view?.root?.querySelector('.loge-publish-scroll')||view?.root?.querySelector('.loge-reels')||view?.root?.querySelector('.loge-themes-scroll')||view?.root?.querySelector('.loge-feed');}
 function refreshLayout(view){
   if(!view||!live(session)||session.current!==view)return;
@@ -206,7 +213,7 @@ function refreshLayout(view){
 function ownerMenu(kind,id){return `<details class="loge-menu${kind==='comment'?' loge-comment-menu':''}"><summary aria-label="Options de ${kind==='post'?'la publication':'ton commentaire'}">${kind==='comment'?'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>':'…'}</summary><div>${button('Modifier',`data-${kind}-edit="${esc(id)}"`,true)}${button('Supprimer',`data-${kind}-delete="${esc(id)}"`,true)}</div></details>`;}
 function postMarkup(post){
   const manage=own(post)&&canManagePosts(),count=Number.isInteger(post.commentCount)?post.commentCount:0;
-  return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage">${videoMarkup(post)}<footer class="loge-reel-info">${avatarLink(post.author)}<div class="loge-reel-copy"><div class="loge-reel-byline"><a class="loge-reel-username" href="${memberPath(post.author.id)}" data-link>${esc(post.author.username)}</a>${manage?ownerMenu('post',post.id):''}</div>${session.current?.kind!=='feed'?`<p class="loge-post-category">${esc(logeRoomLabel(post.loge))}</p>`:''}<h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2>${dateValue(post.createdAt)?`<p class="loge-post-date">${stamp(post.createdAt)}</p>`:''}${LOGE_THEMES_ENABLED&&post.theme?`<a class="loge-post-theme" href="${themePath(post.theme.id)}" data-link>${esc(post.theme.title)}</a>`:''}${statusMarkup('loge-post-status-'+post.id)}</div><div class="loge-reel-actions" role="group" aria-label="Actions de la vidéo"><button type="button" class="loge-reel-icon" data-comments-open="${esc(post.id)}" aria-label="Commentaires (${count})" aria-expanded="false">${icon('comment')}<small data-comment-count>${count}</small></button></div><div class="loge-intervention-context" id="loge-interventions-post-${esc(post.id)}" hidden></div></footer></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div>${manage?`<div id="loge-post-editor-${esc(post.id)}" class="loge-edit-sheet" role="dialog" aria-modal="true" aria-label="Modifier le titre" hidden></div>`:''}</article>`;
+  return `<article class="loge-publication loge-reel" id="loge-post-${esc(post.id)}" data-post-id="${esc(post.id)}"><div class="loge-reel-stage"><div class="loge-reel-card">${videoMarkup(post)}<footer class="loge-reel-info">${avatarLink(post.author)}<div class="loge-reel-copy"><div class="loge-reel-byline"><a class="loge-reel-username" href="${memberPath(post.author.id)}" data-link>${esc(post.author.username)}</a>${manage?ownerMenu('post',post.id):''}</div>${session.current?.kind!=='feed'?`<p class="loge-post-category">${esc(logeRoomLabel(post.loge))}</p>`:''}<h2 class="loge-post-title" id="loge-post-title-${esc(post.id)}"><a href="${postPath(post.id)}" data-link>${esc(post.title)}</a></h2>${dateValue(post.createdAt)?`<p class="loge-post-date">${stamp(post.createdAt)}</p>`:''}${LOGE_THEMES_ENABLED&&post.theme?`<a class="loge-post-theme" href="${themePath(post.theme.id)}" data-link>${esc(post.theme.title)}</a>`:''}${statusMarkup('loge-post-status-'+post.id)}</div><div class="loge-reel-actions" role="group" aria-label="Actions de la vidéo"><button type="button" class="loge-reel-icon" data-comments-open="${esc(post.id)}" aria-label="Commentaires (${count})" aria-expanded="false">${icon('comment')}<small data-comment-count>${count}</small></button></div><div class="loge-intervention-context" id="loge-interventions-post-${esc(post.id)}" hidden></div></footer></div></div><div class="loge-reel-discussion" id="loge-panel-slot-${esc(post.id)}" hidden></div>${manage?`<div id="loge-post-editor-${esc(post.id)}" class="loge-edit-sheet" role="dialog" aria-modal="true" aria-label="Modifier le titre" hidden></div>`:''}</article>`;
 }
 function removeProfileClip(postId){
   const view=session.current,list=node('loge-profile-list');if(!list)return;
@@ -414,7 +421,7 @@ function bindComments(panel){
 function closeDiscussion(){
   const view=session?.current,panel=view?.activePanel;if(!panel||!videoView(view))return;
   commentWriting(panel,false,{focus:false});panel.scrollTop=node('loge-comments-scroll')?.scrollTop||0;panel.root.remove();
-  const card=node('loge-post-'+panel.postId);card?.classList.remove('is-comments-open');
+  const card=node('loge-post-'+panel.postId);card?.classList.remove('is-comments-open');view.root?.classList.remove('has-open-comments');
   const slot=node('loge-panel-slot-'+panel.postId);if(slot)slot.hidden=true;
   const toggle=card?.querySelector('[data-comments-open]');toggle?.setAttribute('aria-expanded','false');toggle?.focus({preventScroll:true});
   view.activePanel=null;session?.commentViewport?.refresh();refreshLayout(view);
@@ -433,7 +440,7 @@ async function openDiscussion(postId){
   if(!panel){panel={postId,root:document.createElement('section'),next:null,loaded:false,loading:false,focusComment:view.kind==='post'?view.focusComment:view.interventionFocus.get(String(postId))||null,scrollTop:0};panel.root.className='loge-comments-panel';panel.root.setAttribute('aria-labelledby','loge-comments-title');panel.root.innerHTML=commentsMarkup(true);view.panels.set(String(postId),panel);}
   if(panel.dirty){panel.root.innerHTML=commentsMarkup(true);panel.loaded=false;panel.bound=false;panel.next=null;panel.dirty=false;}
   view.activePanel=panel;node('loge-panel-slot-'+postId).hidden=false;node('loge-panel-slot-'+postId).append(panel.root);
-  const card=node('loge-post-'+postId);card.classList.add('is-comments-open');card.querySelector('[data-comments-open]').setAttribute('aria-expanded','true');
+  const card=node('loge-post-'+postId);card.classList.add('is-comments-open');view.root?.classList.add('has-open-comments');card.querySelector('[data-comments-open]').setAttribute('aria-expanded','true');
   if(!panel.bound){bindComments(panel);panel.bound=true;}else node('loge-comments-scroll').scrollTop=panel.scrollTop;commentWriting(panel,false,{focus:false});
   refreshLayout(view);panel.root.querySelector('[data-discussion-close]')?.focus({preventScroll:true});
   if(!panel.loaded)await loadComments(postId);
@@ -618,7 +625,8 @@ function renderView(view,result){
   }else{
     const listId=view.kind==='feed'?'loge-feed':view.kind==='profile'?'loge-profile-list':'loge-detail-post',moreId=view.kind==='profile'?'loge-profile-more':'loge-feed-more';
     const listLabel=view.kind==='feed'?'Loge '+logeRoomLabel(view.room):ownPublications(view)?'Mes publications':'Publications';
-    shell(`${topbar(view)}<div id="${listId}" class="loge-reels" aria-label="${esc(listLabel)}"><div class="loge-feed-pagination">${button('Voir la suite',`id="${moreId}"`,true)}</div></div>`);
+    shell(`${topbar(view)}<div id="${listId}" class="loge-reels" aria-label="${esc(listLabel)}"><div class="loge-feed-pagination">${button('Voir la suite',`id="${moreId}"`,true)}</div></div>${view.kind==='post'?'':`<div class="loge-reel-nav" role="group" aria-label="Changer de vidéo"><button type="button" data-reel-step="-1" aria-label="Vidéo précédente">${icon('up')}</button><button type="button" data-reel-step="1" aria-label="Vidéo suivante">${icon('down')}</button></div>`}`);
+    for(const control of view.root.querySelectorAll('[data-reel-step]'))control.addEventListener('click',()=>stepReel(view,Number(control.dataset.reelStep)));
     bindRooms(view);
     if(view.kind==='profile'){node(moreId).onclick=moreProfile;addProfileRows(view,result);}
     else{
@@ -727,6 +735,9 @@ export async function page(path,ctx){
   s.navOpen=document.body.classList.contains('nav-open');s.menuPaused=null;if(typeof MutationObserver==='function'){s.menuObserver=new MutationObserver(()=>menuState(s));s.menuObserver.observe(document.body,{attributes:true,attributeFilter:['class']});}
   s.keydown=event=>{if(!live(s))return;const editor=s.current?.editingId?node('loge-post-editor-'+s.current.editingId):null,dialog=editor&&!editor.hidden?editor:null;
     if(event.key==='Tab'&&dialog){const controls=[...dialog.querySelectorAll('button,input,textarea,a')].filter(el=>!el.disabled),first=controls[0],last=controls.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}return;}
+    // Arrow keys move between reels, unless the member is typing or reading comments.
+    const typing=event.target?.closest?.('input,textarea,select,[contenteditable="true"]');
+    if(['ArrowDown','ArrowUp','PageDown','PageUp'].includes(event.key)&&!typing&&!dialog&&!event.altKey&&!event.ctrlKey&&!event.metaKey){if(stepReel(s.current,['ArrowDown','PageDown'].includes(event.key)?1:-1))event.preventDefault();return;}
     if(event.key!=='Escape')return;if(editor&&!editor.hidden)closePostEditor(s.current.editingId);else if(videoView(s.current))closeDiscussion();};document.addEventListener('keydown',s.keydown);
   immersion(logeView(parseDestination(path+location.search)));ctx.app.innerHTML='<section class="loge-page"><p class="loge-empty" role="status">Chargement…</p></section>';
   await navigate(path+location.search+location.hash);
