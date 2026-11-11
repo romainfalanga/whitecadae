@@ -235,7 +235,7 @@ function renderNav() {
   if(state.user&&state.access.gameMaster)liens.push('<a href="/game-master-orange" data-link>Game Master Orange</a>');
   if(state.user&&state.access.gameMasterBlanc)liens.push('<a href="/game-master-blanc" data-link>Game Master Blanc</a>');
   if(state.user&&state.access.videographie)liens.push('<a href="/videographie" data-link>Vidéographie</a>');
-  if(state.user&&state.access.loge)liens.push('<a href="/loge-virtuelle" data-link>Loge virtuelle</a>');
+  if(state.user&&state.access.loge)liens.push('<a href="/loge-virtuelle" data-link>Loges virtuelles</a>');
   nav.innerHTML = liens.join('\n       ');
   nav.querySelectorAll('a').forEach((a) => { if (a.getAttribute('href') === location.pathname) a.setAttribute('aria-current', 'page'); });
 

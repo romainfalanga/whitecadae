@@ -130,8 +130,8 @@ test('the file picker is one tappable zone that shows the chosen file and how to
 test('a video published in the Loge locks its file and warns before deletion',async()=>{
   const h=fixture(),prompts=[];h.sandbox.confirm=message=>{prompts.push(message);return false;};
   h.client.videoForm(event({loge_post_id:5}));
-  assert.match(h.sandbox.markup,/<label class="video-file is-locked"[^>]*><input type="file"[^>]*disabled>/);assert.match(h.sandbox.markup,/Vidéo publiée dans la Loge<\/strong><small id="video-file-help">Supprime sa publication dans la Loge pour remplacer le fichier\./);
-  h.get('video-delete').onclick();await tick();assert.match(prompts[0],/retirée de la Loge/);assert.equal(h.calls.some(call=>call.method==='DELETE'),false);
+  assert.match(h.sandbox.markup,/<label class="video-file is-locked"[^>]*><input type="file"[^>]*disabled>/);assert.match(h.sandbox.markup,/Vidéo publiée dans les Loges virtuelles<\/strong><small id="video-file-help">Supprime sa publication dans les Loges virtuelles pour remplacer le fichier\./);
+  h.get('video-delete').onclick();await tick();assert.match(prompts[0],/retirée des Loges virtuelles/);assert.equal(h.calls.some(call=>call.method==='DELETE'),false);
   const plain=fixture(),asked=[];plain.sandbox.confirm=message=>{asked.push(message);return false;};plain.client.videoForm(event());
   assert.match(plain.sandbox.markup,/Choisir une autre vidéo<\/strong><small id="video-file-help">200 Mo et 30 minutes maximum · sans nouveau fichier, la vidéo actuelle est conservée/);
   plain.get('video-delete').onclick();await tick();assert.doesNotMatch(asked[0],/Loge/);

@@ -115,15 +115,18 @@ catégories de la vidéographie restent personnelles (`logeRoomLabel` dans
 
 ### Navigation
 
-- Le menu principal de la Loge est celui des trois loges, sous une barre légère
-  qui porte le titre et deux icônes : profil pour « Mes publications », plus pour
-  « Publier » (nommées pour les lecteurs d’écran et au survol).
-- « Mes publications » (les vidéos que le membre a mises dans la Loge, avec le
-  nom de leur loge) et « Publier » sont des pages secondaires avec un retour vers
-  la dernière loge visitée. Le profil d’un autre membre et le détail d’une
-  publication utilisent le même retour.
-- Publier ouvre la loge où la vidéo est arrivée, sur la nouvelle publication.
-  Les vidéos à publier sont regroupées par loge de destination.
+Le site les nomme « Loges virtuelles » (menu, titre, Game Master Blanc).
+
+- Toutes les pages ont le même en-tête : le titre, une capsule compacte avec deux
+  icônes (profil pour « Mes publications », plus pour « Publier »), puis les trois
+  loges. Seul le contenu change d’une page à l’autre.
+- L’icône de la page ouverte est surlignée et la referme : elle ramène à la
+  dernière loge visitée. Les trois loges restent à un geste ; aucune n’est
+  surlignée sur Mes publications, Publier ou le profil d’un membre, qu’un discret
+  intitulé nomme. Une publication ouverte surligne sa loge.
+- « Mes publications » montre les vidéos que le membre a mises dans les loges,
+  avec le nom de leur loge. Publier regroupe les vidéos par loge de destination
+  et ouvre ensuite cette loge sur la nouvelle publication.
 - Une loge déjà ouverte est restaurée sans nouvelle requête, et une loge se
   prépare dès le survol, le toucher ou le focus de son onglet.
 
