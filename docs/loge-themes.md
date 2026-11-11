@@ -1,6 +1,6 @@
 # Thèmes hebdomadaires de la Loge
 
-La sous-page `/loge-virtuelle/theme` est réservée aux Game Masters Blancs au niveau réel 33, comme toutes les autres vues et API de la Loge. Elle garde le menu du site et la navigation Loge, Mes réflexions, Thème. Les favoris et interventions ne réapparaissent pas dans les menus.
+La sous-page `/loge-virtuelle/theme` est réservée aux Game Masters Blancs au niveau réel 15, comme toutes les autres vues et API de la Loge. Elle garde le menu du site et la navigation Loge, Mes réflexions, Thème. Les favoris et interventions ne réapparaissent pas dans les menus.
 
 ## Semaine et vote
 

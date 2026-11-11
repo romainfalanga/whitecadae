@@ -139,7 +139,7 @@ test('signed playback is owner/accepted-AS only, rechecks revocation and replace
     const original=f.binding.video;let once=false;f.binding.video=uid=>{const handle=original(uid),generate=handle.generateToken;handle.generateToken=async()=>{if(!once){once=true;await f.call('/api/ace-circles/sharing','PUT',{enabled:false});}return generate();};return handle;};
     assert.equal((await f.call(path+'?owner=11','GET',undefined,12)).status,403);
     assert.equal((await f.call(path)).status,200);
-    setEarnedLevel(f,11,32);assert.equal((await f.call(path)).status,403);
+    setEarnedLevel(f,11,14);assert.equal((await f.call(path)).status,403);
   }finally{f.sql.close();}
 });
 test('event deletion, whole-tree erasure, private erasure and account deletion remove only attached owned media',async()=>{

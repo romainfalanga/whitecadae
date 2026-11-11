@@ -5,7 +5,7 @@ import {NODES} from '../src/echelon.js';
 import worker from '../src/index.js';
 import {fixture} from './community-fixture.mjs';
 const ids=NODES.flatMap(n=>n.answers.map(a=>a.id));
-const expected=[[1,'music-30-vins-divins'],[2,'music-sans-indice-dans-les-des'],[4,'music-13h20'],[6,'music-orange'],[7,'page-gameMaster'],[12,'music-la-matiere-dense'],[18,'music-les-probabilites'],[25,'music-fais-mieux'],[30,'music-un-fil-entre-deux-infinis'],[33,'page-gameMasterBlanc'],[33,'page-loge']];
+const expected=[[1,'music-30-vins-divins'],[2,'music-sans-indice-dans-les-des'],[4,'music-13h20'],[6,'music-orange'],[7,'page-gameMaster'],[12,'music-la-matiere-dense'],[15,'page-gameMasterBlanc'],[15,'page-loge'],[18,'music-les-probabilites'],[25,'music-fais-mieux'],[33,'music-un-fil-entre-deux-infinis']];
 test('welcome shows earned discoveries in level order, without invented narrative or locked links',()=>{
   for(let level=1;level<=33;level++){
     const result=buildOrange(ids.slice(0,level-1).map(riddle_id=>({riddle_id,solved_at:'now'})),{id:1});
@@ -21,14 +21,13 @@ test('public home API ignores forged level parameters',async()=>{
   assert.deepEqual((await res.json()).openings.map(x=>x.id),['music-30-vins-divins']);
 });
 
-test('the AA story accompanies Un fil entre deux infinis only once it unlocks at echelon 30',()=>{
-  const before=buildOrange(ids.slice(0,28).map(riddle_id=>({riddle_id,solved_at:'now'})),{id:1});
-  const after=buildOrange(ids.slice(0,29).map(riddle_id=>({riddle_id,solved_at:'now'})),{id:1});
-  assert.ok(before.openings.every(item=>!item.paragraph));
-  const stories=after.openings.filter(item=>item.paragraph);
-  assert.equal(stories.length,1);assert.equal(stories[0].id,'music-un-fil-entre-deux-infinis');assert.equal(stories[0].level,30);
-  assert.match(stories[0].paragraph,/s’appelait AA/);
-  assert.match(stories[0].paragraph,/18 juillet 2019/);
+test('Un fil entre deux infinis joins the welcome at echelon 33 with its title only',()=>{
+  const before=buildOrange(ids.slice(0,31).map(riddle_id=>({riddle_id,solved_at:'now'})),{id:1});
+  const after=buildOrange(ids.slice(0,32).map(riddle_id=>({riddle_id,solved_at:'now'})),{id:1});
+  assert.ok(!before.openings.some(item=>item.id==='music-un-fil-entre-deux-infinis'));
+  const song=after.openings.find(item=>item.id==='music-un-fil-entre-deux-infinis');
+  assert.equal(song.level,33);assert.equal(song.title,'Un fil entre deux infinis');
+  assert.ok(after.openings.every(item=>!item.paragraph),'the AA paragraph is gone');assert.doesNotMatch(JSON.stringify(after),/s’appelait AA/);
 });
 
 test('Game Master API and session access switch together between echelon 6 and 7',async()=>{

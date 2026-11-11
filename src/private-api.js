@@ -3,6 +3,7 @@ import {sharedPostWithdrawal} from './loge.js';
 import {fail,objectBody,limitWrites,unseal,integer,identifier} from './private-data.js';
 import {NOTICE_VERSION,PRIVATE_NOTICE,requireLevel,storageConsent} from './private-access.js';
 import {GAME_MASTER_BLANC} from './game-master-blanc.js';
+import {GAME_MASTER_BLANC_LEVEL} from './content-access.js';
 import {lifeRoute} from './life-tree.js';
 import {mechanismsRoute} from './mechanisms.js';
 import {aceRoute} from './ace-circles.js';
@@ -13,7 +14,7 @@ export async function handlePrivate(request,env,url,{getUser,json}){
     if(request.method!=='GET')fail('Méthode indisponible.',405);await requireLevel(env,user,7);return json({ok:true});
   }
   if(url.pathname==='/api/game-master-blanc'){
-    if(request.method!=='GET')fail('Méthode indisponible.',405);await requireLevel(env,user,33);return json({ok:true,page:GAME_MASTER_BLANC});
+    if(request.method!=='GET')fail('Méthode indisponible.',405);await requireLevel(env,user,GAME_MASTER_BLANC_LEVEL);return json({ok:true,page:GAME_MASTER_BLANC});
   }
   if(env.PRIVATE_SPACES_ENABLED!=='true')fail('Cet espace est momentanément indisponible.',503);
   let body=null;

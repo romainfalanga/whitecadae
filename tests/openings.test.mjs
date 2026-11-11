@@ -5,7 +5,7 @@ import {NODES,gameLevel} from '../src/echelon.js';
 import {buildJourney} from '../src/journey.js';
 const ids=NODES.flatMap(n=>n.answers.map(a=>a.id));
 const rows=level=>ids.slice(0,level-1).map(riddle_id=>({riddle_id,solved_at:'now'}));
-const schedule=[[1,'music-30-vins-divins'],[2,'music-sans-indice-dans-les-des'],[4,'music-13h20'],[6,'music-orange'],[7,'page-gameMaster'],[12,'music-la-matiere-dense'],[18,'music-les-probabilites'],[25,'music-fais-mieux'],[30,'music-un-fil-entre-deux-infinis'],[33,'page-gameMasterBlanc'],[33,'page-loge']];
+const schedule=[[1,'music-30-vins-divins'],[2,'music-sans-indice-dans-les-des'],[4,'music-13h20'],[6,'music-orange'],[7,'page-gameMaster'],[12,'music-la-matiere-dense'],[15,'page-gameMasterBlanc'],[15,'page-loge'],[18,'music-les-probabilites'],[25,'music-fais-mieux'],[33,'music-un-fil-entre-deux-infinis']];
 test('songs and Game Master follow the revised unlock schedule for every existing score',()=>{
   assert.ok(ids.length>=29,'The game must allow reaching the final music threshold.');
   for(let level=1;level<=ids.length+1;level++){
@@ -23,16 +23,18 @@ test('author access never forges solved puzzles; retired spaces are disabled at 
   assert.deepEqual(author.nodes,buildJourney([]).nodes);
   for(const user of [null,{}, {is_admin:true}])for(const level of [1,2,12,18,23,30]){
     const access=contentAccess(user,rows(level));
-    for(const key of ['conversation','topics','videographie','mechanisms','lifeTree','aceSquare'])assert.equal(access[key],false);
+    for(const key of ['conversation','topics','mechanisms','lifeTree','aceSquare'])assert.equal(access[key],false);
+    // The videography opens with Game Master Blanc and the loges, never before 15.
+    for(const key of ['videographie','gameMasterBlanc','loge'])assert.equal(access[key],!!user&&level>=15,key+' at '+level);
     assert.equal(access.level,gameLevel(rows(level)));
   }
 });
 
-test('Orange presents the AA story through the surviving song only',async()=>{
+test('Orange lists Un fil entre deux infinis at 33 only, without any story paragraph',async()=>{
   const {buildOrange}=await import('../src/orange-access.js');
-  assert.ok(!buildOrange(rows(29),{}).openings.some(item=>item.id==='music-un-fil-entre-deux-infinis'));
-  const story=buildOrange(rows(30),{}).openings;
+  assert.ok(!buildOrange(rows(32),{}).openings.some(item=>item.id==='music-un-fil-entre-deux-infinis'));
+  const story=buildOrange(rows(33),{}).openings;
   assert.ok(!story.some(item=>/wanheda|quand-je-vois/.test(item.id)));
   const item=story.find(item=>item.id==='music-un-fil-entre-deux-infinis');
-  assert.match(item.paragraph,/AA/);assert.match(item.paragraph,/Un fil entre deux infinis/);assert.match(item.paragraph,/18 juillet 2019/);assert.doesNotMatch(item.paragraph,/Wanheda/);
+  assert.equal(item.level,33);assert.equal(item.paragraph,undefined);assert.ok(story.every(entry=>!entry.paragraph));
 });

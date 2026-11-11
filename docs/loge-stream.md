@@ -18,7 +18,7 @@ the same additive schema is initialized by the API for existing installations.
 
 ## Limits and lifecycle
 
-- Earned level 33, active authenticated account, existing publication quota.
+- Earned level 15, active authenticated account, existing publication quota.
 - One publication per rolling seven days. Uploading alone does not spend it.
 - 200 MB per file, 30 minutes maximum, upload URL valid for one hour.
 - One active upload per member and space (Loge or Vidéographie), up to three

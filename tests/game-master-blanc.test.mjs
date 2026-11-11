@@ -18,7 +18,7 @@ function navigation(session){
   return nav.innerHTML;
 }
 
-test('the final page requires 33 real earned levels, including for admins; forged parameters disclose no content',async()=>{
+test('the final page requires 15 real earned levels, including for admins; forged parameters disclose no content',async()=>{
   const f=fixture();try{
     assert.equal(ids.length,32);
     for(const token of ['invalid','qa99','qa7']){
@@ -27,12 +27,12 @@ test('the final page requires 33 real earned levels, including for admins; forge
       assert.match(res.headers.get('cache-control'),/no-store/);
       assert.doesNotMatch(await res.text(),/Extériorise|Partage dans les Loges virtuelles|discord|y83ewhS49/);
     }
-    add(f,1,ids.slice(0,-1));
+    add(f,1,ids.slice(0,13));
     assert.equal((await request(f,'/api/game-master-blanc')).status,403);
     const below=await(await request(f,'/api/me')).json();
-    assert.equal(below.gameEchelon,32);assert.equal(below.access.gameMasterBlanc,false);
+    assert.equal(below.gameEchelon,14);assert.equal(below.access.gameMasterBlanc,false);
     assert.doesNotMatch(navigation(below),/href="\/game-master-blanc"/);
-    add(f,1,ids.slice(-1));
+    add(f,1,ids.slice(13,14));
     const res=await request(f,'/api/game-master-blanc');assert.equal(res.status,200);
     const content=await res.json();assert.equal(content.page.title,'Game Master Blanc');
     assert.deepEqual(content.page.opening,['Façonne ton paradis pour le rejoindre.','Deviens ton propre Game Master.']);
@@ -52,7 +52,7 @@ test('the final page requires 33 real earned levels, including for admins; forge
     // A historical account keeps canonical signs and gains the same final access.
     add(f,3,[...ids,'eg-20-1','eg-20-1.p0','eg-02-2','eg-03-3']);
     assert.equal((await request(f,'/api/game-master-blanc','qa2')).status,200);
-    f.sql.prepare('DELETE FROM riddle_progress WHERE user_id=1 AND riddle_id=?').run(ids.at(-1));
+    f.sql.prepare('DELETE FROM riddle_progress WHERE user_id=1 AND riddle_id=?').run(ids[13]);
     assert.equal((await request(f,'/api/game-master-blanc')).status,403);
     assert.equal((await(await request(f,'/api/me')).json()).access.gameMasterBlanc,false);
     const seven=await(await request(f,'/api/me','qa7')).json();

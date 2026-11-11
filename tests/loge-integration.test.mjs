@@ -17,18 +17,18 @@ function menu(state){
   return nav.innerHTML;
 }
 
-test('Loge joins Game Master Blanc only at 33 real levels and existing accounts gain access immediately',async()=>{
+test('Loge joins Game Master Blanc only at 15 real levels and existing accounts gain access immediately',async()=>{
   const f=fixture();
   const call=(path,token='qa0')=>worker.fetch(new Request('https://test.local'+path,{headers:{Cookie:'wc_session='+token}}),f.env);
   try{
-    for(const id of ids.slice(0,-1))f.sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(1,id,'now');
+    for(const id of ids.slice(0,13))f.sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(1,id,'now');
     const before=await(await call('/api/me')).json();
-    assert.equal(before.gameEchelon,32);assert.equal(before.access.loge,false);
+    assert.equal(before.gameEchelon,14);assert.equal(before.access.loge,false);
     assert.doesNotMatch(menu(before),/href="\/loge-virtuelle"/);
     assert.equal((await call('/api/loge')).status,403);
     assert.equal((await call('/api/loge','qa99')).status,403,'admin access is earned too');
     assert.equal((await call('/api/loge','invalid')).status,401);
-    f.sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(1,ids.at(-1),'now');
+    f.sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(1,ids[13],'now');
     const after=await(await call('/api/me')).json();
     assert.equal(after.access.loge,true);assert.equal(after.access.gameMasterBlanc,true);
     assert.match(menu(after),/href="\/loge-virtuelle"/);assert.match(menu(after),/href="\/game-master-blanc"/);
@@ -41,7 +41,7 @@ test('Loge joins Game Master Blanc only at 33 real levels and existing accounts 
     ]});
     for(const room of ['ideas','projects','society'])assert.equal((await(await call('/api/loge?loge='+room)).json()).loge,room);
     assert.equal((await(await call('/api/loge')).json()).loge,'ideas');assert.equal((await call('/api/loge?loge=self')).status,404);assert.equal((await call('/api/loge?loge=version')).status,404);
-    f.sql.prepare('DELETE FROM riddle_progress WHERE user_id=1 AND riddle_id=?').run(ids.at(-1));
+    f.sql.prepare('DELETE FROM riddle_progress WHERE user_id=1 AND riddle_id=?').run(ids[13]);
     assert.equal((await call('/api/loge')).status,403);
     assert.equal((await(await call('/api/me')).json()).access.loge,false);
   }finally{f.sql.close();}

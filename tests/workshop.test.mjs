@@ -97,7 +97,7 @@ test('old drafts are migrated and old completed 2 Jesus keeps its rung without c
 });
 test('Horloge workshops follow exact song thresholds and require the clock password',async()=>{
   const f=fixture(),ids=NODES.flatMap(n=>n.answers.map(a=>a.id)).filter(id=>id!=='eg-03-1');
-  for(const level of [2,3,4,5,6,11,12,29,30]){
+  for(const level of [2,3,4,5,6,11,12,24,25]){
     const user=level+1;
     f.sql.prepare('INSERT OR IGNORE INTO users(id,email,username,password_hash) VALUES(?,?,?,?)').run(user,'qa'+level+'@local.test','QA'+level,'unused');
     f.sql.prepare('INSERT OR IGNORE INTO sessions(token,user_id,expires_at) VALUES(?,?,?)').run('qa'+level,user,'2099-01-01');
@@ -108,7 +108,7 @@ test('Horloge workshops follow exact song thresholds and require the clock passw
     for(const id of ['eg-18','eg-19','eg-20','eg-21'])assert.equal((await call('/api/echelon/draft/'+id)).status,404);
     insert('eg-03-1');
     assert.equal((await call('/api/echelon/draft/eg-20')).status,404);
-    for(const [id,min]of [['eg-11',4],['eg-13',6],['eg-18',12],['eg-19',30],['eg-21',30]]){
+    for(const [id,min]of [['eg-11',4],['eg-13',6],['eg-18',12],['eg-19',25],['eg-21',25]]){
       const res=await call('/api/echelon/draft/'+id);assert.equal(res.status,level>=min?200:404,id+' '+level);
       if(res.status===200){const data=await res.json();assert.ok(data.spec.slots);assert.equal(data.draft.version,2);assert.ok(!('solutions' in data));assert.ok(!('prompt' in data.spec));}
     }

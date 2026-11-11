@@ -1,6 +1,6 @@
 # Vidéographie et mécanismes — 3 octobre 2026
 
-Historique de la première livraison. L’état actuel (Stream, échelon 33 et catégories)
+Historique de la première livraison. L’état actuel (Stream, échelon 15 et catégories)
 est décrit dans [videography-stream.md](videography-stream.md).
 L’intégration YouTube, les quatre catégories
 et la simplification du 4 octobre sont décrites dans [youtube-videography.md](youtube-videography.md).
