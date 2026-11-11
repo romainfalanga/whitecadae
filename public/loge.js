@@ -235,8 +235,9 @@ function insertPost(post,list,detail=false){
   card.querySelector('[data-post-edit]')?.addEventListener('click',()=>openPostEdit(post.id));
   card.querySelector('[data-post-delete]')?.addEventListener('click',()=>deletePost(post.id));
 }
-function postFields(draft,create=false){return `<label>Titre<input name="title" required maxlength="140" value="${esc(draft.title)}" autocomplete="off"></label>${create&&LOGE_THEMES_ENABLED?`<div id="loge-theme-choice-slot">${themeChoiceMarkup(draft)}</div>`:''}`;}
-const newPostDraft=()=>getDraft('create-post',{title:'',eventId:null,autoTitle:'',themeWeek:null});
+function postFields(draft){return `<label>Titre<input name="title" required maxlength="140" value="${esc(draft.title)}" autocomplete="off"></label>`;}
+// The publication takes the title the video has in the videography.
+const newPostDraft=()=>getDraft('create-post',{title:'',eventId:null,themeWeek:null});
 function choiceDate(video){
   const date=/^\d{4}-\d{2}-\d{2}$/.test(video.date||'')?new Date(video.date+'T12:00:00Z'):null;
   return date&&Number.isFinite(date.getTime())?date.toLocaleDateString('fr-FR',{...(video.precision==='month'?{}:{day:'numeric'}),month:'long',year:'numeric',timeZone:'UTC'}):'';
@@ -254,31 +255,28 @@ function bindPublishForm(){
   const view=s.current,videos=view.videoChoices||[],draft=newPostDraft();
   if(draft.eventId&&!videos.some(video=>String(video.id)===String(draft.eventId)&&!video.postId)){draft.eventId=null;draft.requestId=crypto.randomUUID();}
   if(root.logeDraft!==draft){root.innerHTML='';root.logeDraft=draft;}
-  if(root.innerHTML){const form=node('loge-new-form');if(form&&!form.dataset.busy)form.elements.namedItem('title').value=draft.title;syncComposerTheme();updateQuota();return;}
+  if(root.innerHTML){syncComposerTheme();updateQuota();return;}
   // Each video is listed under the loge it will join.
   const groups=LOGE_ROOMS.map(room=>[room,videos.filter(video=>logeRoom(video.category)===room)]).filter(([,items])=>items.length);
-  root.innerHTML=`<h2 id="loge-compose-title" class="loge-visually-hidden">Publier une vidéo</h2><div id="loge-quota" class="loge-quota" hidden></div>${videos.length?`<form id="loge-new-form"><fieldset class="loge-video-choices"><legend>Choisis une vidéo de ta vidéographie</legend><div class="loge-video-list">${groups.map(([room,items])=>`<p class="loge-video-group">${esc(logeRoomLabel(room))}</p>${items.map(video=>videoChoiceMarkup(video,draft)).join('')}`).join('')}</div>${view.moreVideoChoices?'<p class="loge-note">Tes 100 vidéos les plus récentes sont proposées.</p>':''}</fieldset>${postFields(draft,true)}<div class="loge-form-actions"><button class="loge-button" type="submit" id="loge-new-submit">Publier</button></div>${statusMarkup('loge-new-status')}</form>`:`<div class="loge-video-empty"><p>Ici, tu publies une vidéo de ta vidéographie classée dans ${LOGE_ROOMS.map(room=>videoLabel(room)).join(', ').replace(/, ([^,]*)$/,' ou $1')}.</p><a class="loge-button" href="/videographie" data-link>Ouvrir ma vidéographie</a></div>`}`;
+  root.innerHTML=`<h2 id="loge-compose-title" class="loge-visually-hidden">Publier une vidéo</h2><div id="loge-quota" class="loge-quota" hidden></div>${videos.length?`<form id="loge-new-form"><fieldset class="loge-video-choices"><legend>Choisis une vidéo de ta vidéographie</legend><div class="loge-video-list">${groups.map(([room,items])=>`<p class="loge-video-group">${esc(logeRoomLabel(room))}</p>${items.map(video=>videoChoiceMarkup(video,draft)).join('')}`).join('')}</div>${view.moreVideoChoices?'<p class="loge-note">Tes 100 vidéos les plus récentes sont proposées.</p>':''}</fieldset>${LOGE_THEMES_ENABLED?`<div id="loge-theme-choice-slot">${themeChoiceMarkup(draft)}</div>`:''}<div class="loge-form-actions"><button class="loge-button" type="submit" id="loge-new-submit">Publier</button></div>${statusMarkup('loge-new-status')}</form>`:`<div class="loge-video-empty"><p>Ici, tu publies une vidéo de ta vidéographie classée dans ${LOGE_ROOMS.map(room=>videoLabel(room)).join(', ').replace(/, ([^,]*)$/,' ou $1')}.</p><a class="loge-button" href="/videographie" data-link>Ouvrir ma vidéographie</a></div>`}`;
   const form=root.querySelector('form');if(!form){updateQuota();return;}
-  rememberFields(form,draft,['title']);syncComposerTheme();
+  syncComposerTheme();
   if(session.currentTheme?.endsAt*1000<=Date.now()+session.clockOffset)void refreshThemeBoundary(session);
   for(const radio of form.querySelectorAll('input[name="eventId"]'))radio.addEventListener('change',()=>{
     if(!radio.checked)return;
-    const video=videos.find(item=>String(item.id)===String(radio.value)),field=form.elements.namedItem('title');
     // Another video is another publication: never replay the previous nonce.
     if(String(draft.eventId)!==String(radio.value))draft.requestId=crypto.randomUUID();
     draft.eventId=radio.value;
-    // Offer the video's own title until the member writes one.
-    if(video&&(!field.value.trim()||field.value===draft.autoTitle)){field.value=String(video.title||'').slice(0,140);draft.title=field.value;draft.autoTitle=field.value;}
     notice('loge-new-status','');
   });
   form.onsubmit=event=>{
-    event.preventDefault();if(!form.reportValidity())return;readFields(form,draft,['title']);
+    event.preventDefault();
     if(!draft.eventId){notice('loge-new-status','Choisis une vidéo de ta vidéographie.',true);return;}
     const version=s.navigationVersion;
     perform('create-post',form,async()=>{
       const choice=form.elements.namedItem('themeWeek');draft.themeWeek=choice?.checked?choice.value:null;
       // A reply that arrives after navigation is reconciled by request().
-      const result=await request('/api/loge/posts',{method:'POST',body:{title:draft.title.trim(),eventId:draft.eventId,requestId:draft.requestId,...(draft.themeWeek?{themeWeek:draft.themeWeek}:{})}});
+      const result=await request('/api/loge/posts',{method:'POST',body:{eventId:draft.eventId,requestId:draft.requestId,...(draft.themeWeek?{themeWeek:draft.themeWeek}:{})}});
       acceptSelf(result);invalidateOtherViews();forgetDraft('create-post');root.innerHTML='';view.dirty=true;
       // Land in the loge the video joined, on the new post.
       const room=logeRoom(result.post.loge),destination=roomPath(room);

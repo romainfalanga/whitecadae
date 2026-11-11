@@ -6,6 +6,7 @@ import {fixture,setEarnedLevel} from './community-fixture.mjs';
 import worker from '../src/index.js';
 import {cleanupLogeStream,ensureLogeStreamTables,LOGE_STREAM_SCHEMA} from '../src/loge-stream.js';
 import {handleLoge,withdrawOrphanedSharedPosts} from '../src/loge.js';
+import {parisToday} from '../src/life-tree.js';
 const file=extra=>({filename:'reflexion.mp4',size:1000000,requestId:crypto.randomUUID(),...extra});
 const event=(uploadId,extra={})=>({title:'Une réflexion privée',entryType:'creation',medium:'vidéo',videoBranch:'self',url:'',precision:'day',date:'2026-10-01',kind:'autre',impact:'à explorer',themes:['Parcours'],work:'Notes chiffrées',revision:0,...(uploadId?{uploadId}:{}),...extra});
 function setup(){
@@ -287,5 +288,30 @@ test('erasing private data or the whole tree withdraws shared posts, and the sch
     f.sql.prepare("UPDATE loge_stream_uploads SET state='deleting' WHERE id=?").run(video.uploadId);
     await withdrawOrphanedSharedPosts(f.env);
     assert.equal((await f.call('/api/loge/posts/'+post.id,'GET',undefined,12)).status,404);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM loge_shared_videos').get().n,0);
+  }finally{f.sql.close();}
+});
+
+test('a new video without a date is dated today in Paris; an edit keeps its own date',async()=>{
+  const f=setup();try{
+    const u=await f.upload();f.ready(u.data.uploadId);const {date,precision,...body}=event(u.data.uploadId,room);
+    const saved=await f.put('dated-by-server',body);assert.equal(saved.status,200,JSON.stringify(saved.data));
+    assert.equal(saved.data.event.sort_date,parisToday());assert.equal(saved.data.event.precision,'day');
+    const kept=await f.put('dated-by-server',{...body,precision:'day',date:'2026-10-01',revision:saved.data.event.revision});assert.equal(kept.data.event.sort_date,'2026-10-01');
+    const edit=await f.put('dated-by-server',{...body,revision:kept.data.event.revision});assert.equal(edit.status,400,'an existing video never silently changes its date');
+    assert.equal(parisToday(new Date('2026-11-10T23:30:00Z')),'2026-11-11','Paris is ahead of UTC late in the evening');
+  }finally{f.sql.close();}
+});
+test('a Loge post takes the title the video has in the videography and a retry survives a rename',async()=>{
+  const f=setup();try{
+    const video=await f.attach('titled-video-001',{...room,title:'Mon titre de vidéographie'});
+    const body={eventId:video.id,requestId:crypto.randomUUID()},created=await f.call('/api/loge/posts','POST',body);assert.equal(created.status,201,JSON.stringify(created.data));
+    assert.equal(created.data.post.title,'Mon titre de vidéographie');
+    const stored=(await f.call('/api/life-tree/events/'+video.id)).data.event;
+    assert.equal((await f.put(video.id,event(undefined,{...room,title:'Renommée ensuite',revision:stored.revision}))).status,200);
+    const replay=await f.call('/api/loge/posts','POST',body);assert.equal(replay.status,200);assert.equal(replay.data.post.id,created.data.post.id);assert.equal(replay.data.post.title,'Mon titre de vidéographie');
+    assert.equal((await f.call('/api/loge/posts','POST',{eventId:'missing-video-01',requestId:crypto.randomUUID()})).status,404);
+    f.sql.prepare('UPDATE loge_publication_limits SET next_publish_at=0').run();
+    const other=await f.attach('titled-video-002',room),explicit=await f.call('/api/loge/posts','POST',{eventId:other.id,title:'Un titre choisi',requestId:crypto.randomUUID()});
+    assert.equal(explicit.status,201);assert.equal(explicit.data.post.title,'Un titre choisi','an explicit title is still accepted');
   }finally{f.sql.close();}
 });

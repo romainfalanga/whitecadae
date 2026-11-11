@@ -7,9 +7,10 @@ import {VIDEO_BRANCHES,videoLabel} from './video-model.js';
 import {youtubeId,youtubeEmbed} from './youtube-video.js';
 import {ensureLogeUpload,validateLogeFile} from './loge-upload.js';
 import {createStreamPlayer} from './loge-stream-player.js';
+import {startVideoJob,currentVideoJob,onVideoJob,setVideoJobOpener,takePendingJobOpen,retryVideoJob,cancelVideoJob,dismissVideoJob,jobActive,jobSummary,jobCategory} from './video-uploads.js';
 let session=null;
 export function leave(){
-  if(!session)return;clearInlineComments();destroyVideoPlayers();session.dialogCleanup?.();session.controller.abort();clearTimeout(session.timer);
+  if(!session)return;session.offJob?.();session.offJobOpener?.();clearInlineComments();destroyVideoPlayers();session.dialogCleanup?.();session.controller.abort();clearTimeout(session.timer);
   document.removeEventListener('visibilitychange',session.visibility);
   window.removeEventListener('beforeunload',session.beforeUnload);
   session.dialog?.remove();session.ctx.app.style.visibility='';session.ctx.app.inert=false;session=null;
@@ -114,11 +115,15 @@ function dateLabel(event){
 async function videoPage(){
   session.videos={branch:'self',events:[],next:null,request:0};
   shell(`${heading('Vidéographie')}<nav class="video-branches" aria-label="Rubriques de ma Vidéographie">${VIDEO_BRANCHES.map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${label}</button>`).join('')}</nav><div class="video-section-heading"><h2 id="video-section-title">${esc(videoLabel('self'))}</h2></div><div class="private-actions video-add-action">${button('Ajouter une vidéo','video-add','')}</div><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`);
-  bind('video-add',()=>videoForm(null,null,session.videos.branch||'self'));
+  // While a video is on its way, « Ajouter » shows where it stands instead.
+  bind('video-add',()=>currentVideoJob()?.phase&&currentVideoJob().phase!=='done'?videoJobView():videoForm(null,null,session.videos.branch||'self'));
+  const s=session;s.offJobOpener=setVideoJobOpener(()=>{if(live(s))videoJobView();});
+  s.offJob=onVideoJob(job=>{if(live(s)&&job?.phase==='done'&&s.videos&&s.reloadedJob!==job){s.reloadedJob=job;void loadVideos(true).catch(()=>{});}});
   bind('video-more',()=>loadVideos());
   const select=async branch=>{if(session.videos.branch===branch)return;session.videos.branch=branch;document.querySelectorAll('[data-video-branch]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.videoBranch===branch)));el('video-section-title').textContent=videoLabel(branch);await loadVideos(true);};
   document.querySelectorAll('[data-video-branch]').forEach(b=>b.onclick=()=>run(b,()=>select(b.dataset.videoBranch)));
   await loadVideos(true);
+  if(live(s)&&takePendingJobOpen())videoJobView();
 }
 async function loadVideos(reset=false){
   const state=session.videos,request=++state.request;
@@ -172,11 +177,13 @@ function videoForm(event=null,draft=null,branch='self'){
   closeModal();const s=session,d=draft?.payload.event||event||{},id=event?.id||draft?.id||uid();
   let revision=event?.revision||d.revision||0;const draftRevision=draft?.revision||0;
   branch=d.videoBranch||d.video_branch||branch;if(branch==='monthly')branch='ideas';
-  const now=new Date(),today=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-  const date=d.date||d.video_month||d.sort_date||today,existing=!!event&&(d.creation?.videoProvider==='stream'||!!youtubeId(d.creation?.url));
+  // The date is never typed: a new video takes the day it is added (set by the
+  // server, in Paris time) and an edit keeps the date already saved.
+  const precision=d.precision==='month'?'month':'day',saved=d.date||d.video_month||d.sort_date||null;
+  const date=saved?(precision==='month'?String(saved).slice(0,7):String(saved).slice(0,10)):null,existing=!!event&&(d.creation?.videoProvider==='stream'||!!youtubeId(d.creation?.url));
   // A video published in the Loge keeps its file: commenters answered that one.
   const shared=!!event?.loge_post_id,fileTitle=shared?'Vidéo publiée dans les Loges virtuelles':existing?'Choisir une autre vidéo':'Choisir une vidéo',fileHelp=shared?'Supprime sa publication dans les Loges virtuelles pour remplacer le fichier.':'200 Mo et 30 minutes maximum'+(existing?' · sans nouveau fichier, la vidéo actuelle est conservée':'');
-  const dialog=modal(event?'Modifier la vidéo':'Ajouter une vidéo',`<form id="video-form"><label>Titre<input name="title" required maxlength="140" value="${esc(d.title||'')}"></label><div class="video-file-field"><span class="video-file-caption" id="video-file-caption">${existing?'Remplacer la vidéo (facultatif)':'Vidéo'}</span><label class="video-file${shared?' is-locked':''}" id="video-file-zone"><input type="file" name="video" accept="video/*" aria-labelledby="video-file-caption video-file-name" aria-describedby="video-file-help" ${existing?'':'required'} ${shared?'disabled':''}><span class="video-file-icon" aria-hidden="true"><svg class="video-file-icon-add" viewBox="0 0 24 24"><path d="M12 16V5m0 0-4 4m4-4 4 4M5 19h14"/></svg><svg class="video-file-icon-ready" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><span class="video-file-text"><strong id="video-file-name">${fileTitle}</strong><small id="video-file-help">${fileHelp}</small></span><span class="video-file-action" id="video-file-action" hidden>Changer</span></label></div><p id="video-upload-state" class="private-note" role="status"></p><progress id="video-upload-progress" max="100" value="0" hidden aria-label="Progression de l’envoi"></progress>${button('Annuler l’envoi','video-upload-cancel','subtle','hidden')}${button('Annuler l’envoi précédent et recommencer','video-upload-restart','subtle','hidden')}<label>Catégorie<select name="videoBranch">${VIDEO_BRANCHES.map(([key,label])=>`<option value="${key}" ${branch===key?'selected':''}>${label}</option>`).join('')}</select></label>${dateFields('videoDate',date,'Date')}<div class="private-actions form-actions"><button class="private-button" type="submit">Enregistrer la vidéo</button>${event?button('Supprimer','video-delete','subtle'):''}</div><div id="video-conflict" hidden>${button('Comparer la version enregistrée','video-compare','quiet')}<div id="video-current"></div></div></form>`);
+  const dialog=modal(event?'Modifier la vidéo':'Ajouter une vidéo',`<form id="video-form"><label>Titre<input name="title" required maxlength="140" value="${esc(d.title||'')}"></label><div class="video-file-field"><span class="video-file-caption" id="video-file-caption">${existing?'Remplacer la vidéo (facultatif)':'Vidéo'}</span><label class="video-file${shared?' is-locked':''}" id="video-file-zone"><input type="file" name="video" accept="video/*" aria-labelledby="video-file-caption video-file-name" aria-describedby="video-file-help" ${existing?'':'required'} ${shared?'disabled':''}><span class="video-file-icon" aria-hidden="true"><svg class="video-file-icon-add" viewBox="0 0 24 24"><path d="M12 16V5m0 0-4 4m4-4 4 4M5 19h14"/></svg><svg class="video-file-icon-ready" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><span class="video-file-text"><strong id="video-file-name">${fileTitle}</strong><small id="video-file-help">${fileHelp}</small></span><span class="video-file-action" id="video-file-action" hidden>Changer</span></label></div><p id="video-upload-state" class="private-note" role="status"></p><progress id="video-upload-progress" max="100" value="0" hidden aria-label="Progression de l’envoi"></progress>${button('Annuler l’envoi','video-upload-cancel','subtle','hidden')}${button('Annuler l’envoi précédent et recommencer','video-upload-restart','subtle','hidden')}<label>Catégorie<select name="videoBranch">${VIDEO_BRANCHES.map(([key,label])=>`<option value="${key}" ${branch===key?'selected':''}>${label}</option>`).join('')}</select></label><div class="private-actions form-actions"><button class="private-button" type="submit">Enregistrer la vidéo</button>${event?button('Supprimer','video-delete','subtle'):''}</div><div id="video-conflict" hidden>${button('Comparer la version enregistrée','video-compare','quiet')}<div id="video-current"></div></div></form>`);
   const form=el('video-form'),picker=form.elements.video,upload={file:null,requestId:uid(),abandonedUploads:[]};let active=null,closed=false,committed=false,publishing=false;
   const current=()=>live(s)&&!closed&&s.dialog===dialog;
   const uploadRequest=async(path,options={})=>{
@@ -205,7 +212,8 @@ function videoForm(event=null,draft=null,branch='self'){
   s.dialogCleanup=dispose;s.controller.signal.addEventListener('abort',dispose,{once:true});
   const display=(message='',progress)=>{
     if(!current())return;el('video-upload-state').textContent=message;el('video-upload-progress').hidden=progress===undefined;if(progress!==undefined)el('video-upload-progress').value=progress;
-    el('video-upload-cancel').hidden=!upload.file;
+    // A new video sends nothing before « Enregistrer »: « Changer » is enough until then.
+    el('video-upload-cancel').hidden=!upload.file||!event;
     // The picker itself carries the selection: name, size and a way to change it.
     const file=upload.file;el('video-file-name').textContent=file?file.name:fileTitle;el('video-file-help').textContent=file?fileSize(file.size):fileHelp;
     el('video-file-zone').classList.toggle('has-file',!!file);el('video-file-action').hidden=!file;
@@ -223,11 +231,18 @@ function videoForm(event=null,draft=null,branch='self'){
     if(!current())return;
     const file=upload.file;resetUpload(file);display();form.onsubmit({preventDefault(){}});
   });
-  const precision=d.precision==='month'?'month':'day';configureDate(el('videoDate-fields'),precision);
-  const body=()=>({title:form.elements.title.value,videoBranch:form.elements.videoBranch.value,entryType:'creation',medium:'vidéo',url:upload.file?'':(d.url||d.creation?.url||''),work:d.work||d.creation?.work||'',understanding:d.understanding||'',story:d.story||'',feelings:d.feelings||'',resources:d.resources||'',kind:d.kind||'autre',impact:d.impact||'à explorer',themes:d.themes||[],precision,date:readDate(form,'videoDate',precision),revision});
+  const body=()=>({title:form.elements.title.value,videoBranch:form.elements.videoBranch.value,entryType:'creation',medium:'vidéo',url:upload.file?'':(d.url||d.creation?.url||''),work:d.work||d.creation?.work||'',understanding:d.understanding||'',story:d.story||'',feelings:d.feelings||'',resources:d.resources||'',kind:d.kind||'autre',impact:d.impact||'à explorer',themes:d.themes||[],...(date?{precision,date}:{}),revision});
   const afterSave=()=>s.videos?loadVideos(true):s.ctx.navigate('/videographie');
   form.onsubmit=e=>{
     e.preventDefault();if(active)return;
+    if(!event){
+      // A new video uploads in the background: the window can close at once.
+      if(!form.reportValidity())return;
+      if(!upload.file){status('Choisis une vidéo.',true,'dialog-status');return;}
+      try{startVideoJob({api:s.ctx.api,state:s.ctx.state,navigate:s.ctx.navigate,eventId:id,body:body(),file:upload.file});}
+      catch(error){status(error.message,true,'dialog-status');return;}
+      upload.file=null;s.dirty=false;videoJobView();return;
+    }
     run(form.querySelector('[type=submit]'),async()=>{
       const controller=new AbortController();active=controller;
       const check=()=>{if(!current()||controller.signal.aborted)throw new DOMException('Envoi interrompu','AbortError');};
@@ -257,7 +272,35 @@ function videoForm(event=null,draft=null,branch='self'){
   bind('video-delete',async()=>{if(!confirm(shared?'Supprimer cette vidéo ? Elle sera aussi retirée des Loges virtuelles, avec les commentaires qu’elle y a reçus.':'Supprimer cette fiche et tous les commentaires qui lui sont liés ?'))return;await api('/api/life-tree/events/'+id,{method:'DELETE',body:{revision}});s.dirty=false;closeModal();await afterSave();});
   bind('video-compare',async()=>{const current=await api('/api/life-tree/events/'+id);destroyVideoPlayers(el('video-current'));el('video-current').innerHTML=`<section class="private-panel"><h3>${esc(current.event.title)}</h3>${videoReading(current.event)}${button('Conserver ma saisie','video-keep','quiet')}</section>`;wireVideoPlayers(el('video-current'),()=>api('/api/life-tree/events/'+id));bind('video-keep',()=>{revision=current.event.revision;el('video-conflict').hidden=true;status('Ta saisie est conservée. Tu peux l’enregistrer après comparaison.',false,'dialog-status');});});
 }
-const fileSize=bytes=>bytes>=1e6?(bytes/1e6).toLocaleString('fr-FR',{maximumFractionDigits:1})+' Mo':Math.max(1,Math.round(bytes/1e3)).toLocaleString('fr-FR')+' Ko';
+// Where a background upload stands, with what can be done about it.
+function videoJobView(){
+  const s=session,job=currentVideoJob();if(!job){videoForm(null,null,s.videos?.branch||'self');return;}
+  const dialog=modal('Ajout de ta vidéo',`<div class="video-job"><p class="video-job-title">${esc(job.title)}</p><p class="video-job-meta">${esc(jobCategory(job))} · ${esc(job.fileName)} · ${esc(fileSize(job.fileSize))}</p><ol class="video-job-steps" id="video-job-steps">${['Envoi','Traitement','Enregistrement'].map((label,index)=>`<li data-step="${index}"><span aria-hidden="true"></span>${label}</li>`).join('')}</ol><div class="video-job-bar" aria-hidden="true"><span id="video-job-fill"></span></div><p class="video-job-status" id="video-job-status" role="status" aria-live="polite"></p><p class="private-note video-job-note" id="video-job-note"></p><div class="private-actions video-job-actions" id="video-job-actions"></div></div>`);
+  const steps=dialog.querySelectorAll('[data-step]');
+  const render=()=>{
+    const current=currentVideoJob();if(s.dialog!==dialog)return;
+    if(!current){dialog.close();return;}
+    const step=current.phase==='done'?3:current.phase==='saving'?2:current.phase==='processing'?1:0;
+    steps.forEach((item,index)=>{item.dataset.state=index<step?'done':index===step&&current.phase!=='error'?'current':index===step?'failed':'pending';});
+    const fill=el('video-job-fill');fill.style.width=(current.phase==='uploading'?current.progress||0:current.phase==='done'?100:current.phase==='error'?Math.max(4,current.progress||0):step===0?6:step===1?72:90)+'%';
+    fill.classList.toggle('is-moving',['checking','preparing','processing','saving'].includes(current.phase));
+    dialog.classList.toggle('is-error',current.phase==='error');
+    el('video-job-status').textContent=current.phase==='error'?current.error:jobSummary(current);
+    el('video-job-note').textContent=current.phase==='done'?'Ta vidéo est dans ta vidéographie.':current.phase==='error'?'Ta vidéo n’a pas été ajoutée. Tu peux réessayer ou annuler.':current.phase==='processing'?'Le service vidéo prépare la lecture : cela peut prendre quelques minutes. Tu peux fermer cette fenêtre et continuer ; le cercle près de ton échelon indique où en est l’envoi.':'Tu peux fermer cette fenêtre et continuer à utiliser le site ; le cercle près de ton échelon indique où en est l’envoi. Garde l’onglet ouvert jusqu’à la fin.';
+    // Buttons are rebuilt only when the phase changes, never on each progress tick.
+    if(dialog.dataset.phase===current.phase)return;dialog.dataset.phase=current.phase;
+    const actions=el('video-job-actions');
+    actions.innerHTML=current.phase==='done'?button('Fermer','video-job-close',''):current.phase==='error'?button('Réessayer','video-job-retry','')+button('Annuler l’ajout','video-job-cancel','subtle'):button('Continuer en arrière-plan','video-job-close','')+(current.phase==='saving'?'':button('Annuler l’envoi','video-job-cancel','subtle'));
+    bind('video-job-close',()=>dialog.close());
+    bind('video-job-retry',async()=>{if(currentVideoJob()?.blockedUploadId&&!confirm('Un envoi précédent (autre onglet ou ancienne session) occupe la place. L’annuler et recommencer ?'))return;await retryVideoJob();});
+    bind('video-job-cancel',async()=>{if(!confirm('Annuler l’ajout de cette vidéo ?'))return;await cancelVideoJob();});
+  };
+  job.viewing=true;
+  const off=onVideoJob(render);
+  s.dialogCleanup=()=>{off();const current=currentVideoJob();if(current){current.viewing=false;if(current.phase==='done')dismissVideoJob();}};
+  render();
+}
+const fileSize=bytes=>bytes>=1e6?(bytes/1e6).toLocaleString('fr-FR',{maximumFractionDigits:1})+'\u00a0Mo':Math.max(1,Math.round(bytes/1e3)).toLocaleString('fr-FR')+'\u00a0Ko';
 function destroyVideoPlayers(root=document){
   if(!root||!session?.videoPlayers)return;
   for(const [container,entry] of session.videoPlayers){if(root===document||root===container||root.contains(container)){entry.destroy();session.videoPlayers.delete(container);}}

@@ -17,7 +17,7 @@ export const GAME_MASTER_BLANC = {
     {title:'Loges virtuelles',paragraphs:[
       'Partage dans les Loges virtuelles tes réflexions et tes avancées aux autres Game Masters Blancs.',
       'Ces échanges vous permettent de grandir ensemble. Enrichissez mutuellement vos arborescences de réflexion et aidez-vous à les faire grandir de manière harmonieuse.',
-      'Dans chacune des trois loges, deviens aussi le Game Master des autres : aide-les à prendre du recul et à faire grandir leurs idées. Quand tu n’es pas d’accord, fais émerger les inconvénients que tu perçois pour affiner ensemble votre vision.'
+      'Dans chacune des trois loges, deviens aussi le Game Master des autres : aide-les à prendre du recul et à faire grandir leurs idées. Quand tu n’es pas d’accord, fais émerger les inconvénients que tu perçois dans le point de vue de l’autre pour affiner ensemble votre vision.'
     ]}
   ]
 };

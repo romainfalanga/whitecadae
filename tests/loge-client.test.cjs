@@ -97,7 +97,7 @@ function fixture({posts=[post()],comments=[],user=self,search='',observeUI=false
       savedComments[index]={...savedComments[index],body:options.body.body,revision:options.body.revision+1};return {comment:savedComments[index]};
     }
     if(url==='/api/loge/posts'){
-      const category=videos.find(item=>item.id===options.body.eventId)?.category||null,item={...post(20),title:options.body.title,videoProvider:'stream',category,loge:['ideas','projects','society'].includes(category)?category:'ideas',youtubeUrl:null,...(options.body.themeWeek?{theme:{id:themes.current.themeId,title:themes.current.title,week:options.body.themeWeek}}:{})};savedPosts.unshift(item);
+      const category=videos.find(item=>item.id===options.body.eventId)?.category||null,item={...post(20),title:options.body.title??videos.find(item=>item.id===options.body.eventId)?.title,videoProvider:'stream',category,loge:['ideas','projects','society'].includes(category)?category:'ideas',youtubeUrl:null,...(options.body.themeWeek?{theme:{id:themes.current.themeId,title:themes.current.title,week:options.body.themeWeek}}:{})};savedPosts.unshift(item);
       savedNextPublicationAt=new Date(Date.now()+604800000).toISOString();return {post:item,nextPublicationAt:savedNextPublicationAt};
     }
     const id=Number(url.split('/').at(-1)),index=savedPosts.findIndex(p=>p.id===id);
@@ -152,12 +152,12 @@ test('feed delegates videos to the shared controller and exposes no extra player
   f.client.clear();assert.equal(controller.destroyed,true);assert.equal(controller.options.isCurrent(),false);
 });
 
-test('publication reads the title and chosen video, retains an idempotent draft on errors and applies the weekly quota',async()=>{
+test('publication sends only the chosen video, retains an idempotent draft on errors and applies the weekly quota',async()=>{
   const f=fixture({posts:[]});await f.page();await f.click('loge-open-compose');const form=f.node('loge-new-form');
-  f.fill(form,'title','  Ma réflexion  ',{input:false});f.selectVideo(form);
+  assert.equal(form.elements.namedItem('title'),null,'the title comes from the videography');f.selectVideo(form);
   f.queue(error(503,'Réessaie'));f.submit(form);await flush();const first=f.requests.at(-1);
-  assert.equal(first.body.title,'Ma réflexion');assert.equal(Object.hasOwn(first.body,'description'),false);assert.equal(form.elements.namedItem('description'),null);assert.equal(first.body.eventId,'video-0001');assert.equal(Object.hasOwn(first.body,'url'),false);assert.equal(Object.hasOwn(first.body,'uploadId'),false);assert.match(first.body.requestId,/^[\da-f-]{36}$/i);
-  assert.equal(form.elements.namedItem('title').value,'  Ma réflexion  ');assert.equal(f.node('loge-new-status').textContent,'Réessaie');
+  assert.equal(Object.hasOwn(first.body,'title'),false);assert.equal(Object.hasOwn(first.body,'description'),false);assert.equal(form.elements.namedItem('description'),null);assert.equal(first.body.eventId,'video-0001');assert.equal(Object.hasOwn(first.body,'url'),false);assert.equal(Object.hasOwn(first.body,'uploadId'),false);assert.match(first.body.requestId,/^[\da-f-]{36}$/i);
+  assert.equal(form.querySelector('input[name="eventId"]').checked,true);assert.equal(f.node('loge-new-status').textContent,'Réessaie');
   f.submit(form);await flush();assert.equal(f.requests.filter(r=>r.url==='/api/loge/posts').at(-1).body.requestId,first.body.requestId);assert(f.node('loge-post-20'));assert.equal(f.document.getElementById('loge-compose'),null);assert.equal(f.location.pathname,'/loge-virtuelle');assert.equal(f.location.search,'');
   assert.equal(f.node('loge-open-compose').getAttribute('href'),'/loge-virtuelle/publier');await f.click('loge-open-compose');assert.equal(f.node('loge-new-submit').disabled,true);assert.match(f.node('loge-quota').textContent,/Prochaine publication/);assert.equal(f.timers.size,1);
   f.client.clear();assert.equal(f.timers.size,0);
@@ -165,11 +165,10 @@ test('publication reads the title and chosen video, retains an idempotent draft 
 
 test('missing videos and quota refusals preserve the composer without sending duplicate publications',async()=>{
   const f=fixture({posts:[]});await f.page();await f.click('loge-open-compose');const form=f.node('loge-new-form');
-  f.fill(form,'title','Titre');
   const baseline=f.requests.length;f.submit(form);assert.equal(f.requests.length,baseline);assert.match(f.node('loge-new-status').textContent,/Choisis une vidéo/);
   f.selectVideo(form);const release=f.defer();f.submit(form);f.submit(form);await flush();assert.equal(f.requests.length,baseline+1);assert.equal(f.node('loge-new-submit').disabled,true);
   release(error(429,'Une seule réflexion par semaine',{nextPublicationAt:new Date(Date.now()+60000).toISOString(),serverNow:new Date().toISOString()}));await flush();
-  assert.equal(form.elements.namedItem('title').value,'Titre');assert.equal(f.node('loge-new-submit').disabled,true);assert.match(f.node('loge-quota').textContent,/Prochaine publication/);
+  assert.equal(form.querySelector('input[name="eventId"]').checked,true);assert.equal(f.node('loge-new-submit').disabled,true);assert.match(f.node('loge-quota').textContent,/Prochaine publication/);
   f.client.clear();
 });
 
@@ -217,12 +216,12 @@ test('CAS conflicts preserve edited text and resolve against the current revisio
 });
 
 test('leave aborts requests and ignores delayed replies; clear removes private drafts across account changes',async()=>{
-  const f=fixture();await f.page();await f.click('loge-open-compose');let form=f.node('loge-new-form');f.fill(form,'title','Brouillon privé');
-  f.client.leave();await f.page();await f.click('loge-open-compose');assert.equal(f.node('loge-new-form').elements.namedItem('title').value,'Brouillon privé');
-  form=f.node('loge-new-form');f.selectVideo(form);
+  const f=fixture();await f.page();await f.click('loge-open-compose');let form=f.node('loge-new-form');f.selectVideo(form);
+  f.client.leave();await f.page();await f.click('loge-open-compose');assert.equal(f.node('loge-new-form').querySelector('input[name="eventId"]').checked,true,'the chosen video survives leaving');
+  form=f.node('loge-new-form');
   const release=f.defer();f.submit(form);await flush();const request=f.requests.at(-1);f.client.clear();f.app.innerHTML='Autre page';f.state.user={id:12,username:'Bob'};
   assert.equal(request.signal.aborted,true);release({post:post(20),nextPublicationAt:null});await flush();assert.equal(f.app.textContent,'Autre page');
-  f.state.user={...self};await f.page();await f.click('loge-open-compose');assert.equal(f.node('loge-new-form').elements.namedItem('title').value,'');f.client.clear();
+  f.state.user={...self};await f.page();await f.click('loge-open-compose');assert.equal(f.node('loge-new-form').querySelector('input[name="eventId"]').checked,false);f.client.clear();
   const response=f.defer();const opening=f.page();const loading=f.requests.at(-1);f.client.leave();f.app.innerHTML='Nouvelle route';response({self,posts:[post()],next:null});await opening;
   assert.equal(loading.signal.aborted,true);assert.equal(f.app.textContent,'Nouvelle route');
 });
@@ -285,7 +284,7 @@ test('successful late edits invalidate rendered caches and reconcile the acknowl
 });
 
 test('a late creation synchronizes the quota immediately and refetches the affected profile and feed',async()=>{
-  const f=fixture();await f.page();await f.click('loge-open-compose');const form=f.node('loge-new-form');f.fill(form,'title','Nouvelle vidéo');f.selectVideo(form);
+  const f=fixture();await f.page();await f.click('loge-open-compose');const form=f.node('loge-new-form');f.selectVideo(form);
   const release=f.defer();f.submit(form);await flush();await f.navigate('/loge-virtuelle/membres/11?onglet=reflexions');const profile=f.node('loge-profile-list'),created={...post(20),title:'Nouvelle vidéo',description:'Ma réflexion'},nextPublicationAt=new Date(Date.now()+604800000).toISOString();
   release({post:created,nextPublicationAt});await flush();assert.equal(f.node('loge-profile-list'),profile);
   f.queue({self,posts:[created,post()],next:null,nextPublicationAt});await f.navigate('/loge-virtuelle');assert(f.node('loge-post-20'));assert.equal(f.node('loge-open-compose').getAttribute('href'),'/loge-virtuelle/publier');await f.click('loge-open-compose');assert.equal(f.node('loge-new-submit').disabled,true);assert.match(f.node('loge-quota').textContent,/Prochaine publication/);assert.equal(f.requests.filter(request=>request.method==='POST').length,1);f.client.clear();
@@ -317,9 +316,9 @@ test('favorite tabs and comment panels reuse cached scenes with one active contr
   f.click(f.find('[data-comments-open="7"]'));await flush();assert.equal(f.writeComment(),form);assert.equal(form.elements.namedItem('body').value,'Brouillon de réponse');assert.equal(f.controllers.filter(controller=>!controller.destroyed).length,1);f.client.clear();assert.equal(f.document.body.classList.contains('loge-immersive'),false);
 });
 
-test('publication forms offer videography videos and send only the title, video and creation nonce',async()=>{
+test('publication forms offer videography videos and send only the video and creation nonce',async()=>{
   const f=fixture({posts:[]});await f.page();await flush();await f.click('loge-open-compose');const form=f.node('loge-new-form');assert.equal(form.querySelector('textarea'),null);
-  f.fill(form,'title','Mon titre');f.selectVideo(form);f.submit(form);await flush();const create=f.requests.find(request=>request.method==='POST');assert.equal(form.querySelector('input[type="file"]'),null);assert.deepEqual(Object.keys(create.body).sort(),['eventId','requestId','title']);
+  f.selectVideo(form);f.submit(form);await flush();const create=f.requests.find(request=>request.method==='POST');assert.equal(form.querySelector('input[type="file"]'),null);assert.deepEqual(Object.keys(create.body).sort(),['eventId','requestId']);assert.equal(f.node('loge-post-title-20').textContent,'Vidéo de ma vidéographie','the post shows the videography title');
   await f.navigate('/loge-virtuelle/membres/11?onglet=reflexions');f.click(f.find('[data-post-edit="20"]'));const edit=f.find('form',f.node('loge-post-editor-20'));assert.equal(edit.elements.namedItem('url'),null);assert.equal(edit.elements.namedItem('description'),null);f.fill(edit,'title','Titre revu');f.submit(edit);await flush();const update=f.requests.find(request=>request.method==='PUT');assert.deepEqual(update.body,{title:'Titre revu',revision:1});assert.equal(f.node('loge-post-title-20').textContent,'Titre revu');f.client.clear();
 });
 
@@ -450,7 +449,7 @@ test('a historical theme is proposed by canonical ID and its archive stays avail
 test('weekly publication tagging is opt-in, preserved on retry and absent when unchecked',async()=>{
   for(const checked of [false,true]){
     const f=fixture({posts:[],themesEnabled:true,themeData:currentThemes()});await f.page();await flush();await f.click('loge-open-compose');const form=f.node('loge-new-form'),choice=form.elements.namedItem('themeWeek');assert(choice);assert.equal(choice.checked,false);
-    f.fill(form,'title','Mes avancées');f.selectVideo(form);choice.checked=checked;choice.dispatchEvent(new Event('change'));
+    f.selectVideo(form);choice.checked=checked;choice.dispatchEvent(new Event('change'));
     f.queue(error(503,'Réessaie'));f.submit(form);await flush();assert.equal(choice.checked,checked);const first=f.requests.filter(r=>r.method==='POST').at(-1);
     f.submit(form);await flush();const second=f.requests.filter(r=>r.method==='POST').at(-1);assert.equal(first.body.requestId,second.body.requestId);assert.equal(second.body.themeWeek,checked?'2026-11-02':undefined);
     if(checked)assert.equal(f.find('.loge-post-theme').textContent,'Grandir ensemble');f.client.clear();assert.equal(f.timers.size,0);
@@ -470,9 +469,9 @@ test('late history searches cannot replace a newer selection or another page',as
 });
 
 test('the week boundary refreshes the winner and preserves a publication draft without retagging it silently',async()=>{
-  const f=fixture({themesEnabled:true,themeData:currentThemes()});await f.page('/loge-virtuelle/theme');await flush();await f.click('loge-open-compose');let form=f.node('loge-new-form');f.fill(form,'title','Brouillon conservé');form.elements.namedItem('themeWeek').checked=true;form.elements.namedItem('themeWeek').dispatchEvent(new Event('change'));
+  const f=fixture({themesEnabled:true,themeData:currentThemes()});await f.page('/loge-virtuelle/theme');await flush();await f.click('loge-open-compose');let form=f.node('loge-new-form');f.selectVideo(form);form.elements.namedItem('themeWeek').checked=true;form.elements.namedItem('themeWeek').dispatchEvent(new Event('change'));
   const boundary=[...f.timers.values()].find(job=>job.delay>1000000);assert(boundary);f.themes.current={...f.themes.current,week:'2026-11-09',themeId:3,title:'Nouveau thème'};f.themes.nextWeek={...f.themes.nextWeek,week:'2026-11-16'};
-  boundary.fn();for(let i=0;i<5;i++)await flush();form=f.node('loge-new-form');assert.equal(form.elements.namedItem('title').value,'Brouillon conservé');assert.equal(form.elements.namedItem('themeWeek').checked,false);assert.match(f.app.textContent,/Nouveau thème/);
+  boundary.fn();for(let i=0;i<5;i++)await flush();form=f.node('loge-new-form');assert.equal(form.querySelector('input[name="eventId"]').checked,true);assert.equal(form.elements.namedItem('themeWeek').checked,false);assert.match(f.app.textContent,/Nouveau thème/);
   f.client.clear();assert.equal(f.timers.size,0);const count=f.requests.length;boundary.fn();await flush();assert.equal(f.requests.length,count);
 });
 
@@ -488,7 +487,7 @@ test('publishing off theme never inserts a video into an empty Theme page and a 
   const f=fixture({posts:[],themesEnabled:true,themeData:currentThemes({current:{week:'2026-11-02',themeId:null,title:null,endsAt:Math.floor(Date.now()/1000)+60000}})});await f.page('/loge-virtuelle/theme');await flush();
   let form=f.node('loge-theme-propose-form');f.fill(form,'title','Premier thème');f.submit(form);await flush();f.fill(form,'title','Deuxième brouillon');
   await f.navigate('/loge-virtuelle');await f.navigate('/loge-virtuelle/theme');assert.equal(f.node('loge-theme-propose-form').elements.namedItem('title').value,'Deuxième brouillon');
-  await f.click('loge-open-compose');form=f.node('loge-new-form');f.fill(form,'title','Hors thème');f.selectVideo(form);f.submit(form);await flush();await f.navigate('/loge-virtuelle/theme');assert.equal(f.node('loge-theme-posts').querySelector('[data-post-id]'),null);f.client.clear();
+  await f.click('loge-open-compose');form=f.node('loge-new-form');f.selectVideo(form);f.submit(form);await flush();await f.navigate('/loge-virtuelle/theme');assert.equal(f.node('loge-theme-posts').querySelector('[data-post-id]'),null);f.client.clear();
 });
 
 
@@ -513,7 +512,7 @@ test('temporarily suspended themes expose no entry points, metadata, tagging or 
   assert.equal(f.requests.some(r=>r.url.startsWith('/api/loge/themes')),false);assert.equal(f.timers.size,0);
   f.window.dispatchEvent(new Event('focus'));f.document.dispatchEvent(new Event('visibilitychange'));await flush();
   assert.equal(f.requests.some(r=>r.url.startsWith('/api/loge/themes')),false);
-  await f.navigate('/loge-virtuelle');await f.click('loge-open-compose');const form=f.node('loge-new-form');f.fill(form,'title','Sans thème');f.selectVideo(form);f.submit(form);await flush();
+  await f.navigate('/loge-virtuelle');await f.click('loge-open-compose');const form=f.node('loge-new-form');f.selectVideo(form);f.submit(form);await flush();
   assert.equal(Object.hasOwn(f.requests.find(r=>r.method==='POST').body,'themeWeek'),false);f.client.clear();
 });
 
@@ -613,21 +612,21 @@ test('the legacy publish query navigates to the canonical page without creating 
 });
 
 test('publish links and back navigation preserve the draft and independently restore both scroll positions',async()=>{
-  const f=fixture();await f.page();const feed=f.node('loge-feed');feed.scrollTop=270;await f.click('loge-open-compose');const form=f.node('loge-new-form'),scroll=f.find('.loge-publish-scroll');f.fill(form,'title','Une pensée en cours',{input:false});f.selectVideo(form);scroll.scrollTop=180;const calls=f.requests.length;
+  const f=fixture();await f.page();const feed=f.node('loge-feed');feed.scrollTop=270;await f.click('loge-open-compose');const form=f.node('loge-new-form'),scroll=f.find('.loge-publish-scroll');f.selectVideo(form);scroll.scrollTop=180;const calls=f.requests.length;
   await f.click('loge-open-compose');assert.equal(f.location.pathname,'/loge-virtuelle');assert.equal(f.node('loge-feed'),feed);assert.equal(feed.scrollTop,270);assert.equal(f.document.getElementById('loge-new-form'),null);
-  await f.navigate('/loge-virtuelle/publier');assert.equal(f.node('loge-new-form'),form);assert.equal(form.elements.namedItem('title').value,'Une pensée en cours');assert.equal(form.querySelector('input[name="eventId"]').checked,true);assert.equal(f.find('.loge-publish-scroll').scrollTop,180);assert.equal(f.requests.length,calls);assert.equal(f.controllers.filter(player=>!player.destroyed).length,0);assert.equal(f.find('.loge-context').textContent,'Publier une vidéo');f.client.clear();
+  await f.navigate('/loge-virtuelle/publier');assert.equal(f.node('loge-new-form'),form);assert.equal(form.querySelector('input[name="eventId"]').checked,true);assert.equal(f.find('.loge-publish-scroll').scrollTop,180);assert.equal(f.requests.length,calls);assert.equal(f.controllers.filter(player=>!player.destroyed).length,0);assert.equal(f.find('.loge-context').textContent,'Publier une vidéo');f.client.clear();
 });
 
 test('Tab and Escape on the publish page do not trap focus, close a dialog or navigate',async()=>{
-  const f=fixture();await f.page('/loge-virtuelle/publier');const form=f.node('loge-new-form'),title=form.elements.namedItem('title');title.focus();
+  const f=fixture();await f.page('/loge-virtuelle/publier');const form=f.node('loge-new-form'),choice=form.querySelector('input[name="eventId"]');choice.focus();
   for(const [key,shiftKey]of [['Tab',true],['Tab',false],['Escape',false]]){const event=new Event('keydown',{cancelable:true});Object.assign(event,{key,shiftKey});f.document.dispatchEvent(event);assert.equal(event.defaultPrevented,false);assert.equal(f.location.pathname,'/loge-virtuelle/publier');assert.equal(f.node('loge-new-form'),form);assert.equal(f.node('loge-compose').hidden,false);}
   assert.equal(f.navigations.length,0);f.client.clear();
 });
 
 test('successful publication lands in the loge the video joined, on the new post',async()=>{
-  const f=fixture({posts:[]});await f.page('/loge-virtuelle/publier');const form=f.node('loge-new-form');f.fill(form,'title','Ma première réflexion');f.selectVideo(form);f.submit(form);await flush();await flush();
-  const publication=f.requests.find(request=>request.url==='/api/loge/posts');assert.deepEqual(Object.keys(publication.body).sort(),['eventId','requestId','title']);assert.equal(publication.body.title,'Ma première réflexion');assert.equal(f.location.pathname,'/loge-virtuelle');assert.equal(f.location.search,'');assert.equal(f.find('.loge-rooms').querySelector('a[aria-current="page"]').textContent,'Réflexions');assert.equal(f.node('loge-post-title-20').textContent,'Ma première réflexion');assert.equal(f.node('loge-post-20').scrolled,true);assert.equal(f.document.getElementById('loge-new-form'),null);assert.equal(f.controllers.filter(player=>!player.destroyed).length,1);assert.equal(f.node('loge-status').textContent,'Ta vidéo est publiée dans Réflexions.');
-  await f.click('loge-open-compose');assert.equal(f.node('loge-new-form').elements.namedItem('title').value,'');assert.equal(f.node('loge-new-form').querySelector('input[name="eventId"]').checked,false);assert.equal(f.node('loge-new-submit').disabled,true);f.client.clear();
+  const f=fixture({posts:[]});await f.page('/loge-virtuelle/publier');const form=f.node('loge-new-form');f.selectVideo(form);f.submit(form);await flush();await flush();
+  const publication=f.requests.find(request=>request.url==='/api/loge/posts');assert.deepEqual(Object.keys(publication.body).sort(),['eventId','requestId']);assert.equal(f.location.pathname,'/loge-virtuelle');assert.equal(f.location.search,'');assert.equal(f.find('.loge-rooms').querySelector('a[aria-current="page"]').textContent,'Réflexions');assert.equal(f.node('loge-post-title-20').textContent,'Vidéo de ma vidéographie');assert.equal(f.node('loge-post-20').scrolled,true);assert.equal(f.document.getElementById('loge-new-form'),null);assert.equal(f.controllers.filter(player=>!player.destroyed).length,1);assert.equal(f.node('loge-status').textContent,'Ta vidéo est publiée dans Réflexions.');
+  await f.click('loge-open-compose');assert.equal(f.node('loge-new-form').querySelector('input[name="eventId"]').checked,false);assert.equal(f.node('loge-new-submit').disabled,true);f.client.clear();
 });
 
 test('the publish page applies the weekly quota and is an authenticated return destination',async()=>{
@@ -647,10 +646,9 @@ test('the publish page lists videography videos under the loge they will join an
   assert.equal(choices[0].querySelector('small').textContent,'1 novembre 2026');assert.equal(choices[1].querySelector('small').textContent,'octobre 2026 · Déjà publiée');
   assert.deepEqual(form.querySelectorAll('input[name="eventId"]').map(radio=>radio.disabled),[false,true,false]);assert(choices[1].classList.contains('is-published'));
   f.submit(form);await flush();assert.equal(f.requests.filter(request=>request.method==='POST').length,0);assert.equal(f.node('loge-new-status').textContent,'Choisis une vidéo de ta vidéographie.');
-  f.selectVideo(form,'video-0001');assert.equal(form.elements.namedItem('title').value,'Ma société','the video title is offered');assert.equal(f.node('loge-new-status').textContent,'');
-  f.selectVideo(form,'video-0003');assert.equal(form.elements.namedItem('title').value,'','an untouched suggestion follows the selection');
-  f.fill(form,'title','Mon propre titre');f.selectVideo(form,'video-0001');assert.equal(form.elements.namedItem('title').value,'Mon propre titre','a written title is never replaced');
-  f.submit(form);await flush();const sent=f.requests.find(request=>request.method==='POST');assert.deepEqual({...sent.body,requestId:''},{title:'Mon propre titre',eventId:'video-0001',requestId:''});
+  assert.equal(form.elements.namedItem('title'),null,'no title to type: the videography one is used');
+  f.selectVideo(form,'video-0003');f.selectVideo(form,'video-0001');assert.equal(f.node('loge-new-status').textContent,'');
+  f.submit(form);await flush();const sent=f.requests.find(request=>request.method==='POST');assert.deepEqual({...sent.body,requestId:''},{eventId:'video-0001',requestId:''});assert.equal(f.node('loge-post-title-20').textContent,'Ma société');
   assert.equal(f.location.search,'?loge=societe-harmonieuse','publishing opens the loge the video joined');assert.equal(f.node('loge-status').textContent,'Ta vidéo est publiée dans Sociétés harmonieuses.');f.client.clear();
 });
 
@@ -663,17 +661,17 @@ test('an empty videography points to it instead of showing a form, and legacy po
 test('choosing another video changes the creation nonce, and a refused video keeps the draft with a retry',async()=>{
   const videos=[video('video-0001'),video('video-0002',{title:'Seconde'})],f=fixture({posts:[],videos});await f.page('/loge-virtuelle/publier');const form=f.node('loge-new-form');
   f.selectVideo(form,'video-0001');f.queue(error(409,'Cette vidéo est déjà publiée dans la Loge.'));f.submit(form);await flush();const first=f.requests.at(-1).body;
-  assert.equal(f.node('loge-new-status').textContent,'Cette vidéo est déjà publiée dans la Loge.');assert.equal(f.node('loge-new-submit').textContent,'Réessayer');assert.equal(form.elements.namedItem('title').value,'Vidéo de ma vidéographie');
+  assert.equal(f.node('loge-new-status').textContent,'Cette vidéo est déjà publiée dans la Loge.');assert.equal(f.node('loge-new-submit').textContent,'Réessayer');assert.equal(form.querySelector('input[name="eventId"]').checked,true);
   f.selectVideo(form,'video-0002');f.submit(form);await flush();const second=f.requests.filter(request=>request.method==='POST').at(-1).body;
-  assert.equal(second.eventId,'video-0002');assert.notEqual(second.requestId,first.requestId);assert.equal(second.title,'Seconde');assert.equal(f.location.pathname,'/loge-virtuelle');f.client.clear();
+  assert.equal(second.eventId,'video-0002');assert.notEqual(second.requestId,first.requestId);assert.equal(Object.hasOwn(second,'title'),false);assert.equal(f.location.pathname,'/loge-virtuelle');f.client.clear();
 });
 
 test('leaving during publication keeps the draft, and a late success clears it without duplicating',async()=>{
-  const f=fixture({posts:[]});await f.page('/loge-virtuelle/publier');let form=f.node('loge-new-form');f.fill(form,'title','En route');f.selectVideo(form);
+  const f=fixture({posts:[]});await f.page('/loge-virtuelle/publier');let form=f.node('loge-new-form');f.selectVideo(form);
   const release=f.defer();f.submit(form);f.submit(form);await flush();assert.equal(f.requests.filter(request=>request.method==='POST').length,1);
   await f.click(f.find('a[href="/loge-virtuelle"]'));release({post:{...post(20),title:'En route',videoProvider:'stream',category:'self',youtubeUrl:null},nextPublicationAt:new Date(Date.now()+604800000).toISOString()});await flush();await flush();
   assert.equal(f.location.pathname,'/loge-virtuelle');await f.click('loge-open-compose');form=f.node('loge-new-form');
-  assert.equal(form.elements.namedItem('title').value,'');assert.equal(form.querySelector('input[name="eventId"]').checked,false);assert.equal(f.node('loge-new-submit').disabled,true);assert.match(f.node('loge-quota').textContent,/Prochaine publication/);f.client.clear();
+  assert.equal(form.querySelector('input[name="eventId"]').checked,false);assert.equal(f.node('loge-new-submit').disabled,true);assert.match(f.node('loge-quota').textContent,/Prochaine publication/);f.client.clear();
 });
 
 test('the Loge opens on Réflexions and offers three loges, each with its own address and feed',async()=>{

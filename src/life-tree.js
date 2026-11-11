@@ -8,13 +8,16 @@ import {youtubeLink} from '../public/youtube-video.js';
 export const EVENT_KINDS=['rencontre','famille','relation','études','travail','santé','changement','réussite','perte','autre'];
 export const EVENT_IMPACTS=['ressource','difficulté','mixte','à explorer'];
 const context=lifeEventContext;
+// The member's day, not UTC's: Paris is ahead of UTC, so either may be today.
+export function parisToday(now=new Date()){return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);}
+const latestToday=()=>{const utc=new Date().toISOString().slice(0,10),paris=parisToday();return paris>utc?paris:utc;};
 function date(value,precision){
   if(precision==='unknown')return '9999-12-31';
   const re=precision==='year'?/^\d{4}$/:precision==='month'?/^\d{4}-\d{2}$/:/^\d{4}-\d{2}-\d{2}$/;
   if(typeof value!=='string'||!re.test(value))fail('Choisis un repère temporel valide.');
   const full=value+(precision==='year'?'-01-01':precision==='month'?'-01':'');
   const parsed=new Date(full+'T00:00:00Z');
-  if(!Number.isFinite(parsed.getTime())||parsed.toISOString().slice(0,10)!==full||full<'0001-01-01'||full>new Date().toISOString().slice(0,10))fail('Cette date n’est pas valide.');
+  if(!Number.isFinite(parsed.getTime())||parsed.toISOString().slice(0,10)!==full||full<'0001-01-01'||full>latestToday())fail('Cette date n’est pas valide.');
   return full;
 }
 export const CREATION_MEDIA=['musique','vidéo','texte','image','autre'];
@@ -169,6 +172,8 @@ export async function lifeRoute(request,env,url,user,body,json){
     }
     if(method==='PUT'){
       if(Object.hasOwn(body,'uploadId')&&!body.videoBranch)fail('Un envoi vidéo doit appartenir à la vidéographie.');
+      // A new video is dated by the server: the day it is added, in Paris.
+      if(body.videoBranch&&!row&&(body.date===undefined||body.date===null||body.date==='')){body.date=parisToday();body.precision='day';}
       if(!body.videoBranch)await requireStorage(env,user.id);
       const currentUpload=row?.video_branch?await eventUpload(env,owner,id):null;
       const incoming=Object.hasOwn(body,'uploadId')?uploadIdOf(body.uploadId):null;
