@@ -408,3 +408,27 @@
   .has-comments .as-comments-head button{display:none}
   .has-comments .as-comments-head{min-height:40px}
 }
+
+/* Carré d'AS: title with its « i », breathing room under the line. */
+.square-title{display:inline-flex;align-items:center;gap:.8rem}
+.square-title h1{margin:0}
+.square-info{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:50%;border:1px solid #d8aa6570;background:radial-gradient(circle at 35% 30%,#d8aa6533,#d8aa6508 70%);color:#f0c98b!important;text-decoration:none!important;font:italic 400 1.2rem/1 var(--serif);box-shadow:0 0 22px #d8aa651f;transition:border-color .2s,background .2s,transform .2s;-webkit-tap-highlight-color:transparent}
+.square-info span{transform:translateY(-1px)}
+.square-info:hover{border-color:#f0c98b;background:#d8aa6533;transform:translateY(-1px)}
+.square-info:focus-visible{outline:2px solid #e8c48b;outline-offset:3px}
+.private-heading.center-mobile .square-title{justify-content:center}
+.square-grid{margin-top:2.2rem}
+@media(max-width:620px){.square-grid{margin-top:1.4rem}}
+.square-member-head{flex-wrap:wrap}
+.square-remove{display:inline-flex;align-items:center;gap:.4rem;flex:none;height:36px;padding:0 .9rem 0 .75rem;border:1px solid #ffffff1f;border-radius:999px;background:#ffffff08;color:#cdb894;font:500 .78rem var(--sans);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .2s,color .2s}
+.square-remove svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.square-remove:hover{border-color:#e39b8a80;color:#f1b8aa}
+.square-remove:focus-visible{outline:2px solid #e8c48b;outline-offset:2px}
+
+/* AS exchanges: one simple field, the arrow centred in its button. */
+.as-compose{position:static;background:none;padding:0;margin-top:.9rem}
+.as-compose-row{align-items:center;padding:.3rem .3rem .3rem 1.05rem;border-radius:24px;background:#141317}
+.as-send{padding:0;line-height:0;margin:0}
+.as-send svg{display:block;width:18px;height:18px;margin:0}
+.as-compose textarea{padding:.5rem 0!important;margin:0!important}
+@media(min-width:900px){.has-comments .as-compose{margin-top:.8rem;padding-top:.8rem;border-top:1px solid #ffffff12}}
