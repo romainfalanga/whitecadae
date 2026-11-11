@@ -477,3 +477,14 @@
 .series-save span{font-size:.82rem;color:#c9ad83}
 @media(max-width:520px){.series-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}.series-picks{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .series-badge{display:inline-flex;align-items:center;max-width:100%;padding:.15rem .6rem;border-radius:999px;background:#d8aa651f;border:1px solid #d8aa6555;color:#ecc58a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.series-create-frame{position:absolute;inset:0;display:grid;place-items:center;border:1.5px dashed #d8aa6566;border-radius:14px;background:#d8aa6508;transition:border-color .2s,background .2s}
+.series-create:hover .series-create-frame{border-color:#ecc58a;background:#d8aa6514}
+.series-plus{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;border:1px solid #d8aa6599;color:#ecc58a}
+.series-plus svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+.series-create strong{color:#ecc58a}
+.series-grid>.series-card{width:100%;min-width:0}
+.series-grid>.series-card strong{display:block;max-width:100%}
+.series-create strong{white-space:normal;overflow:visible}
+.series-grid{grid-template-columns:repeat(auto-fill,minmax(min(170px,100%),1fr))}
+@media(max-width:520px){.series-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.series-card{grid-template-columns:minmax(0,1fr)}

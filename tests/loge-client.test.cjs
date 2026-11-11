@@ -342,7 +342,7 @@ test('every Loge page keeps one header: the three loges and a capsule whose open
   assert.deepEqual(f.find('.loge-rooms').querySelectorAll('a').map(link=>link.textContent),['Réflexions','Idées et projets','Sociétés harmonieuses']);assert.equal(f.app.querySelector('.loge-context'),null);
   assert.doesNotMatch(f.app.textContent,/Mes réflexions|Loge Virtuelle/);assert.equal(f.app.querySelector('[data-favorite]'),null);
   await f.navigate('/loge-virtuelle?loge=societe-harmonieuse');
-  for(const [destination,context,openId,closedId] of [['/loge-virtuelle/membres/11?onglet=reflexions','Mes publications','loge-open-mine','loge-open-compose'],['/loge-virtuelle/publier','Publier une vidéo','loge-open-compose','loge-open-mine']]){
+  for(const [destination,context,openId,closedId] of [['/loge-virtuelle/membres/11?onglet=reflexions','Mes publications','loge-open-mine','loge-open-compose'],['/loge-virtuelle/publier','Publier','loge-open-compose','loge-open-mine']]){
     await f.navigate(destination);
     assert.equal(f.find('h1').textContent,'Loges virtuelles','the header keeps its shape');assert.equal(f.find('.loge-context').textContent,context);
     const rooms=f.find('.loge-rooms');assert(rooms.classList.contains('is-idle'));assert.equal(rooms.querySelector('a[aria-current="page"]'),null);assert.equal(rooms.querySelectorAll('a').length,3,'the loges stay one tap away');
@@ -614,7 +614,7 @@ test('the legacy publish query navigates to the canonical page without creating 
 test('publish links and back navigation preserve the draft and independently restore both scroll positions',async()=>{
   const f=fixture();await f.page();const feed=f.node('loge-feed');feed.scrollTop=270;await f.click('loge-open-compose');const form=f.node('loge-new-form'),scroll=f.find('.loge-publish-scroll');f.selectVideo(form);scroll.scrollTop=180;const calls=f.requests.length;
   await f.click('loge-open-compose');assert.equal(f.location.pathname,'/loge-virtuelle');assert.equal(f.node('loge-feed'),feed);assert.equal(feed.scrollTop,270);assert.equal(f.document.getElementById('loge-new-form'),null);
-  await f.navigate('/loge-virtuelle/publier');assert.equal(f.node('loge-new-form'),form);assert.equal(form.querySelector('input[name="eventId"]').checked,true);assert.equal(f.find('.loge-publish-scroll').scrollTop,180);assert.equal(f.requests.length,calls);assert.equal(f.controllers.filter(player=>!player.destroyed).length,0);assert.equal(f.find('.loge-context').textContent,'Publier une vidéo');f.client.clear();
+  await f.navigate('/loge-virtuelle/publier');assert.equal(f.node('loge-new-form'),form);assert.equal(form.querySelector('input[name="eventId"]').checked,true);assert.equal(f.find('.loge-publish-scroll').scrollTop,180);assert.equal(f.requests.length,calls);assert.equal(f.controllers.filter(player=>!player.destroyed).length,0);assert.equal(f.find('.loge-context').textContent,'Publier');f.client.clear();
 });
 
 test('Tab and Escape on the publish page do not trap focus, close a dialog or navigate',async()=>{

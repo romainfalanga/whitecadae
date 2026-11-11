@@ -97,3 +97,31 @@ test('a player without fullscreen has no fullscreen button and still plays',asyn
 test('the Loge reels create their players without a fullscreen button',()=>{
   assert.match(readFileSync(new URL('../public/loge-video.js',import.meta.url),'utf8'),/createStreamPlayer\(\{[^}]*fullscreen:false/);
 });
+
+const partOf=(part,durations=[30,45,25])=>({...signed,hls:`https://customer-example.cloudflarestream.com/part-${part}/manifest/video.m3u8`,poster:`https://customer-example.cloudflarestream.com/part-${part}/thumbnails/thumbnail.jpg`,part,parts:durations.map(duration=>({duration}))});
+test('a sériographie plays as one video: total length, time across parts, seeking into another part',async()=>{
+  const asked=[];const h=fixture({native:true,getPlayback:async(_id,part)=>{asked.push(part);return partOf(part??0);}});try{
+    await tick();assert.deepEqual(asked,[undefined],'the first request needs no part');
+    assert.equal(h.player.getDuration(),100);assert.deepEqual(h.player.getParts(),{durations:[30,45,25],index:0});
+    h.player.video.currentTime=10;assert.equal(h.player.getCurrentTime(),10);
+    h.player.seekTo(50);await tick();await tick();assert.deepEqual(asked,[undefined,1]);assert.equal(h.player.getParts().index,1);assert.match(h.player.video.src,/part-1/);
+    h.player.video.duration=45;h.player.video.dispatchEvent(new Event('loadedmetadata'));assert.equal(h.player.video.currentTime,20,'50 s is 20 s into the second video');
+    assert.equal(h.player.getCurrentTime(),50);assert.equal(h.player.video.playCalls,0,'seeking while paused never starts playback');
+  }finally{h.close();}
+});
+
+test('the end of a part continues with the next, « next » skips ahead, and the last part ends the series',async()=>{
+  const h=fixture({native:true,getPlayback:async(_id,part)=>partOf(part??0)});try{
+    await tick();await h.click();assert.equal(h.player.getPlayerState(),1);
+    h.player.video.paused=true;h.player.video.dispatchEvent(new Event('pause'));h.player.video.dispatchEvent(new Event('ended'));await tick();await tick();
+    assert.equal(h.player.getParts().index,1);assert.equal(h.player.video.playCalls,2,'the next part plays on by itself');assert.equal(h.player.getPlayerState(),1);
+    assert.equal(await h.player.next(),true);assert.equal(h.player.getParts().index,2);assert.equal(h.player.video.playCalls,3);assert.equal(h.player.getCurrentTime(),75);
+    assert.equal(await h.player.next(),false,'nothing after the last video');
+    h.player.video.paused=true;h.player.video.dispatchEvent(new Event('pause'));h.player.video.dispatchEvent(new Event('ended'));await tick();assert.equal(h.player.getPlayerState(),0);
+    h.player.video.ended=true;await h.click();await tick();assert.equal(h.player.getParts().index,0,'playing again restarts from the first video');
+  }finally{h.close();}
+});
+
+test('a single video has no parts and no « next »',async()=>{
+  const h=fixture({native:true});try{await tick();assert.equal(h.player.getParts(),null);assert.equal(await h.player.next(),false);assert.equal(h.player.getDuration(),120);}finally{h.close();}
+});

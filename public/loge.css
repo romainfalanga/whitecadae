@@ -273,3 +273,24 @@ body.loge-immersive.loge-comment-keyboard main#app{z-index:70}
 .loge-comment-composer .loge-form-actions .loge-button{border-radius:999px;padding-inline:1rem}
 .loge-comment-composer textarea{resize:none}
 .loge-comment-composer textarea:focus,.loge-comment-composer textarea:focus-visible{outline:none;border-color:var(--loge-gold);box-shadow:none}
+
+/* Sériographies: one timeline for every video, a tick where each one ends. */
+.loge-timeline-track{position:relative;min-width:0}
+.loge-timeline-marks{position:absolute;left:0;right:0;top:50%;height:0;pointer-events:none}
+.loge-timeline-marks i{position:absolute;top:-5px;width:2px;height:10px;margin-left:-1px;border-radius:2px;background:#fbf0cfe6;box-shadow:0 0 0 1px #000a}
+.loge-reel-next svg path:first-child{fill:currentColor;stroke:none}
+.loge-reel-next:disabled{opacity:.35;cursor:default}
+.loge-reel-next small{font-variant-numeric:tabular-nums}
+
+/* Publier: one video or one sériographie. */
+.loge-publish-kind{display:grid;grid-template-columns:1fr 1fr;gap:.3rem;padding:.3rem;margin:0 0 1.3rem;border:1px solid #ffffff1f;border-radius:999px;background:#121216}
+.loge-publish-kind button{min-height:42px;padding:0 .8rem;border:0;border-radius:999px;background:transparent;color:#a9a9b3;font:500 .88rem/1.2 var(--sans);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background-color .2s,color .2s}
+.loge-publish-kind button[aria-pressed=true]{background:linear-gradient(180deg,#2a2519,#1f1b13);color:#f1dfa6;box-shadow:inset 0 0 0 1px #d8c07a66}
+.loge-publish-kind button:focus-visible{outline:2px solid var(--loge-gold);outline-offset:2px}
+.loge-video-choices[hidden]{display:none}
+/* On a phone the actions stand in a column at the card's right edge, so the
+   author's avatar stays beside the name even with two buttons. */
+@media(max-width:700px){
+  .loge-reel-card>.loge-reel-info{padding-right:76px}
+  .loge-reel-card>.loge-reel-info .loge-reel-actions{position:absolute;right:.75rem;bottom:.35rem;margin:0}
+}
