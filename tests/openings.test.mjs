@@ -5,7 +5,7 @@ import {NODES,gameLevel} from '../src/echelon.js';
 import {buildJourney} from '../src/journey.js';
 const ids=NODES.flatMap(n=>n.answers.map(a=>a.id));
 const rows=level=>ids.slice(0,level-1).map(riddle_id=>({riddle_id,solved_at:'now'}));
-const schedule=[[1,'music-30-vins-divins'],[2,'music-sans-indice-dans-les-des'],[4,'music-13h20'],[6,'music-orange'],[7,'page-gameMaster'],[12,'music-la-matiere-dense'],[15,'page-gameMasterBlanc'],[15,'page-loge'],[15,'page-videographie'],[18,'music-les-probabilites'],[25,'music-fais-mieux'],[33,'music-un-fil-entre-deux-infinis']];
+const schedule=[[1,'music-30-vins-divins'],[2,'music-sans-indice-dans-les-des'],[4,'music-13h20'],[6,'music-orange'],[7,'page-gameMaster'],[12,'music-la-matiere-dense'],[15,'page-gameMasterBlanc'],[15,'page-loge'],[15,'page-videographie'],[18,'music-les-probabilites'],[20,'page-aceSquare'],[25,'music-fais-mieux'],[33,'music-un-fil-entre-deux-infinis']];
 test('songs and Game Master follow the revised unlock schedule for every existing score',()=>{
   assert.ok(ids.length>=29,'The game must allow reaching the final music threshold.');
   for(let level=1;level<=ids.length+1;level++){
@@ -18,12 +18,13 @@ test('songs and Game Master follow the revised unlock schedule for every existin
     assert.deepEqual(newlyOpened(rows(level),rows(level),{}),[]);
   }
 });
-test('author access never forges solved puzzles; retired spaces are disabled at every level',()=>{
+test('author access never forges solved puzzles; retired spaces stay disabled and the Carré d’AS opens at 20',()=>{
   const author=buildJourney([],{is_admin:true});assert.ok(author.openings.items.filter(i=>i.id.startsWith('music-')).every(i=>i.open));assert.ok(author.openings.items.filter(i=>i.id.startsWith('page-')).every(i=>!i.open));
   assert.deepEqual(author.nodes,buildJourney([]).nodes);
   for(const user of [null,{}, {is_admin:true}])for(const level of [1,2,12,18,23,30]){
     const access=contentAccess(user,rows(level));
-    for(const key of ['conversation','topics','mechanisms','lifeTree','aceSquare'])assert.equal(access[key],false);
+    for(const key of ['conversation','topics','mechanisms','lifeTree'])assert.equal(access[key],false);
+    assert.equal(access.aceSquare,!!user&&level>=20,'aceSquare at '+level);
     // The videography opens with Game Master Blanc and the loges, never before 15.
     for(const key of ['videographie','gameMasterBlanc','loge'])assert.equal(access[key],!!user&&level>=15,key+' at '+level);
     assert.equal(access.level,gameLevel(rows(level)));

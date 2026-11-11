@@ -34,10 +34,10 @@ async function send(f,owner,author,extra={}){const key=extra.id||crypto.randomUU
 
 test('exact canonical thresholds; no anonymous, legacy or administrator bypass; old routes remain retired',async()=>{
  const f=setup();setEarnedLevel(f,201,14);try{
-   for(const [path,below,above] of [['/api/game-master-orange',7,8],['/api/life-tree',201,202],['/api/ace-circles',18,19]]){
+   for(const [path,below,above] of [['/api/game-master-orange',7,8],['/api/life-tree',201,202],['/api/ace-circles',20,21]]){
      assert.equal((await f.call(path,0)).status,401);assert.equal((await f.call(path,below)).status,403);assert.equal((await f.call(path,above)).status,200);assert.equal((await f.call(path,100)).status,403);
    }
-   const caps=(await f.ok('/api/me',201)).access;assert.ok(caps.gameMaster);assert.equal(caps.lifeTree,false);assert.equal(caps.aceSquare,false);
+   const caps=(await f.ok('/api/me',201)).access;assert.ok(caps.gameMaster);assert.equal(caps.lifeTree,false);assert.equal(caps.aceSquare,false);assert.equal((await f.ok('/api/me',21)).access.aceSquare,true);assert.equal((await f.ok('/api/me',20)).access.aceSquare,false);
    for(const path of ['/api/carre','/api/arbres','/api/conversation','/api/community'])assert.equal((await f.call(path,201)).status,410);
  }finally{f.sql.close();}
 });
@@ -118,9 +118,11 @@ test('simultaneous acceptance cannot exceed four angels or four accompanied circ
    assert.ok(f.sql.prepare('SELECT max(owner_slot) AS n FROM ace_memberships').get().n<=4);
  }finally{f.sql.close();}
 });
-test('reciprocal circles are independent; self, expiry, cancellation, outsiders and changed levels are rejected',async()=>{
+test('one accepted invitation links both members; self, duplicates, expiry, cancellation, outsiders and changed levels are rejected',async()=>{
  const f=setup();try{
-   await join(f,201,202);await join(f,202,201);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ace_memberships').get().n,2);
+   await join(f,201,202);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ace_memberships').get().n,2);
+   assert.deepEqual(f.sql.prepare('SELECT owner_id,angel_id,content_access FROM ace_memberships ORDER BY owner_id').all().map(r=>[r.owner_id,r.angel_id,r.content_access]),[[201,202,1],[202,201,1]]);
+   await preferences(f,201);assert.equal((await f.call('/api/ace-circles/invitations',202,'POST',{id:crypto.randomUUID(),target:201,recipientNotice:true})).status,409);
    assert.equal((await f.call('/api/ace-circles/invitations',201,'POST',{id:crypto.randomUUID(),target:201,recipientNotice:true})).status,404);
    const id=await invite(f,201,203);assert.equal((await f.call('/api/ace-circles/invitations/'+id,204,'PUT',{action:'accept'})).status,404);
    assert.equal((await f.call('/api/ace-circles/invitations/'+id,201,'PUT',{action:'accept'})).status,403);
@@ -158,10 +160,11 @@ test('historical messages stay readable and reportable while free chat writes ar
  }finally{f.sql.close();}
 });
 
-test('AS access is directed, never transitive between co-members, and pending invitations grant no tree access',async()=>{
+test('AS access is mutual, never transitive between the AS of one member, and pending invitations grant no tree access',async()=>{
  const f=setup();try{
-  await join(f,201,202);await join(f,201,203);await sharing(f,202);const e=await save(f,202,crypto.randomUUID(),{entryType:'creation',medium:'vidéo',url:'https://www.youtube.com/watch?v=M7lc1UVf-VE',videoBranch:'self',precision:'day',date:'2020-07-01'});
-  for(const who of [201,203,204]){
+  await join(f,201,202);await join(f,201,203);const e=await save(f,202,crypto.randomUUID(),{entryType:'creation',medium:'vidéo',url:'https://www.youtube.com/watch?v=M7lc1UVf-VE',videoBranch:'self',precision:'day',date:'2020-07-01'});
+  assert.equal((await f.ok('/api/life-tree?owner=202',201)).events[0].id,e.id,'the inviter sees the videography of the AS too');
+  for(const who of [203,204]){
    assert.equal((await f.call('/api/life-tree?owner=202',who)).status,403);
    assert.equal((await f.call('/api/life-tree/events/'+e.id+'?owner=202',who)).status,403);
   }

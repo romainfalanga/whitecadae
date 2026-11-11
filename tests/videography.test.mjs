@@ -14,11 +14,11 @@ function setup(promote=true){
  f.agree=level=>f.ok('/api/private/consent',level,'POST',{consent:true,version:'2026-10-01'});
  return f;
 }
-test('restored video access requires canonical level 15 while AS invitation thresholds stay unchanged',async()=>{
+test('restored video access requires canonical level 15 while the Carré d’AS opens at 20',async()=>{
  const f=setup(false);setEarnedLevel(f,15,14);setEarnedLevel(f,16,15);try{
   assert.equal((await f.call('/api/life-tree?videos=1',14)).status,403);assert.equal((await f.call('/api/life-tree?videos=1',15)).status,200);
-  assert.equal((await f.call('/api/ace-circles',17)).status,403);assert.equal((await f.call('/api/ace-circles',18)).status,200);
-  await f.agree(18);await f.agree(19);const id=crypto.randomUUID();await f.ok('/api/ace-circles/invitations',19,'POST',{id,target:19,recipientNotice:true});await f.ok('/api/ace-circles/invitations/'+id,18,'PUT',{action:'accept'});
+  assert.equal((await f.call('/api/ace-circles',19)).status,403);assert.equal((await f.call('/api/ace-circles',20)).status,200);
+  await f.agree(20);await f.agree(22);const id=crypto.randomUUID();await f.ok('/api/ace-circles/invitations',22,'POST',{id,target:21,recipientNotice:true});await f.ok('/api/ace-circles/invitations/'+id,20,'PUT',{action:'accept'});
   const access=(await f.ok('/api/me',15)).access;assert.equal(access.lifeTree,false);assert.equal(access.aceSquare,false);assert.equal(access.videographie,true);
  }finally{f.sql.close();}
 });
