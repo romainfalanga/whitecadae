@@ -237,8 +237,7 @@ function renderNav() {
   if(state.user&&state.access.gameMasterBlanc)liens.push('<a href="/game-master-blanc" data-link>Game Master Blanc</a>');
   if(state.user&&state.access.videographie)liens.push('<a href="/videographie" data-link>Vidéographie</a>');
   if(state.user&&state.access.loge)liens.push('<a href="/loge-virtuelle" data-link>Loges virtuelles</a>');
-  // The AS grade and its square close the menu.
-  if(state.user&&state.access.as)liens.push('<a href="/as" data-link>AS</a>');
+  // The square closes the menu; its AS page opens from the « i » beside its title.
   if(state.user&&state.access.aceSquare)liens.push('<a href="/carre-d-as" data-link>Carré d’AS</a>');
   nav.innerHTML = liens.join('\n       ');
   nav.querySelectorAll('a').forEach((a) => { if (a.getAttribute('href') === location.pathname) a.setAttribute('aria-current', 'page'); });

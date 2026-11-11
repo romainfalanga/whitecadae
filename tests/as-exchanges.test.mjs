@@ -12,7 +12,7 @@ test('AS exchanges open right under the video, beside it on wide screens, with a
   assert.match(toggle,/classList\.add\('has-comments'\)/);assert.match(toggle,/classList\.remove\('has-comments'\)/);
   assert.match(toggle,/title:own\?'Échanges avec tes AS':'Échanges entre AS'/);
   const viewer=pages.slice(pages.indexOf('function openVideoViewer('),pages.indexOf('function clearInlineComments('));
-  assert.match(viewer,/Échanges AS','','quiet',`data-video-comments=/);assert.match(viewer,/matchMedia\?\.\('\(min-width: 900px\)'\)\.matches\)void run\(asButton/);
+  assert.match(viewer,/<\/svg>AS','','quiet',`data-video-comments=/);assert.match(viewer,/matchMedia\?\.\('\(min-width: 900px\)'\)\.matches\)void run\(asButton/);
   assert.match(css,/\.has-comments \.video-viewer\{display:grid;grid-template-columns:minmax\(0,1fr\) 360px/);
 });
 
