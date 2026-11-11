@@ -55,7 +55,19 @@ export function uploadReconnect(ms,signal){
   });
 }
 export const UPLOAD_RETRY_DELAYS=[1500,4000,8000,15000,30000];
-export const UPLOAD_UNREADABLE='Cette vidéo ne peut pas être lue sur ton appareil. Si elle vient de Google Photos ou d’un espace en ligne, télécharge-la d’abord sur ton téléphone, puis choisis-la de nouveau.';
+export const UPLOAD_UNREADABLE='Ton téléphone empêche le site de lire cette vidéo. Choisis-la plutôt depuis l’application Fichiers (« Parcourir »), ou enregistre-en une copie depuis ta galerie, puis sélectionne cette copie.';
+// Some phones hand the browser a video it may not read (the gallery still
+// converts it, or holds it under a protected access). Reading its first and
+// last bytes tells at once, before anything is reserved or sent.
+export async function probeLogeFile(file){
+  const read=blob=>typeof blob.arrayBuffer==='function'?blob.arrayBuffer():new Response(blob).arrayBuffer();
+  try{
+    if(typeof file?.slice!=='function')return;
+    const size=file.size,chunk=64*1024;
+    await read(file.slice(0,Math.min(size,chunk)));
+    if(size>chunk)await read(file.slice(Math.max(chunk,size-chunk),size));
+  }catch{throw Object.assign(Error(UPLOAD_UNREADABLE),{unreadable:true});}
+}
 // A private copy of the picked file. Some phones refuse to send a gallery or
 // cloud file directly (its date shifts under the browser, and the transfer is
 // cut before the first byte); the same bytes read into memory go through.
@@ -69,10 +81,11 @@ function uploadWait(ms,signal){
     signal?.addEventListener('abort',abort,{once:true});
   });
 }
-export async function ensureLogeUpload(draft,{request,signal,onState=()=>{},upload=uploadLogeFile,duration=readLogeDuration,wait=uploadWait,reconnect=uploadReconnect,snapshot=snapshotLogeFile,retryDelays=UPLOAD_RETRY_DELAYS,maxPolls=300,basePath='/api/loge/uploads'}={}){
+export async function ensureLogeUpload(draft,{request,signal,onState=()=>{},upload=uploadLogeFile,duration=readLogeDuration,wait=uploadWait,reconnect=uploadReconnect,snapshot=snapshotLogeFile,probe=probeLogeFile,retryDelays=UPLOAD_RETRY_DELAYS,maxPolls=300,basePath='/api/loge/uploads'}={}){
   const file=draft.file,requestId=draft.requestId,sameDraft=()=>draft.file===file&&draft.requestId===requestId;
   const check=()=>{uploadActive(signal);if(!sameDraft())throw uploadAbort();};
   check();validateLogeFile(file);
+  if(!draft.readable&&!draft.uploadId){await probe(file);check();draft.readable=true;}
   const state=(status,progress)=>{if(!sameDraft())return;draft.uploadStatus=status;if(progress!==undefined)draft.uploadProgress=progress;if(!signal?.aborted)onState(status,progress);};
   if(!draft.durationChecked){state('checking');const seconds=await duration(file,{signal});check();if(Number.isFinite(seconds)&&seconds>LOGE_UPLOAD_MAX_SECONDS)throw Error('La vidéo doit durer 30 minutes maximum.');draft.durationChecked=true;}
   let result;

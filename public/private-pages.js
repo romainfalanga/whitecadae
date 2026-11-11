@@ -5,7 +5,7 @@ import {chatViewport} from './private-chat-scroll.js';
 import {normalizeMechanism,mechanismFields} from './mechanism-model.js';
 import {VIDEO_BRANCHES,videoLabel,expansionIcon} from './video-model.js';
 import {youtubeId,youtubeEmbed} from './youtube-video.js';
-import {ensureLogeUpload,validateLogeFile} from './loge-upload.js';
+import {ensureLogeUpload,probeLogeFile,validateLogeFile} from './loge-upload.js';
 import {createStreamPlayer} from './loge-stream-player.js';
 import {startVideoJob,currentVideoJob,onVideoJob,setVideoJobOpener,takePendingJobOpen,retryVideoJob,cancelVideoJob,dismissVideoJob,jobActive,jobSummary,jobCategory} from './video-uploads.js';
 let session=null;
@@ -329,7 +329,7 @@ function videoForm(event=null,draft=null,branch='self'){
   }
   function resetUpload(file=null){
     active?.abort();if(upload.uploadId)upload.abandonedUploads.push(upload.uploadId);
-    Object.assign(upload,{file,requestId:uid(),uploadId:null,uploadURL:null,uploadSent:false,durationChecked:false,uploadStatus:null,blockedUploadId:null});
+    Object.assign(upload,{file,requestId:uid(),uploadId:null,uploadURL:null,uploadSent:false,durationChecked:false,readable:false,uploadStatus:null,blockedUploadId:null});
     if(current())el('video-upload-restart').hidden=true;
     void cancelAbandoned().catch(()=>{});
   }
@@ -350,6 +350,10 @@ function videoForm(event=null,draft=null,branch='self'){
     const file=picker.files?.[0];if(!file)return;
     try{validateLogeFile(file);}catch(error){picker.value='';resetUpload();display();status(error.message,true,'dialog-status');return;}
     resetUpload(file);display();status('');s.dirty=true;
+    // Tell at once when the phone refuses to let the site read this video.
+    probeLogeFile(file).then(()=>{if(upload.file===file)upload.readable=true;},error=>{
+      if(closed||upload.file!==file)return;picker.value='';resetUpload();display();status(error.message,true,'dialog-status');
+    });
   };
   bind('video-upload-cancel',()=>{resetUpload();picker.value='';display('Envoi annulé.');});
   bind('video-upload-restart',async()=>{
