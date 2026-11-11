@@ -149,11 +149,16 @@ test('cancelling during the final write never frees a reservation that may alrea
   await h.sandbox.cancelVideoJob();assert.equal(h.calls.filter(c=>c.method==='DELETE').length,0);release({ok:true});await tick();assert.equal(h.calls.filter(c=>c.method==='DELETE').length,0);
 });
 
-test('a blocked or failed upload offers a retry that frees an outstanding reservation first',async()=>{
-  let attempts=0;const h=fixture({upload:async()=>{if(++attempts===1)throw Object.assign(Error('Termine ou annule ton envoi précédent.'),{status:409,data:{uploadId:'old-upload'}});return 'new-upload';}});
-  h.client.videoForm();choose(h);h.form.onsubmit({preventDefault(){}});await tick();
-  assert.equal(h.job().phase,'error');assert.equal(h.job().blockedUploadId,'old-upload');assert.equal(h.get('video-upload-indicator').dataset.phase,'error');
-  await h.sandbox.retryVideoJob();await tick();assert.equal(attempts,2);assert.deepEqual([h.calls[0].method,h.calls[0].path],['DELETE','/api/life-tree/uploads/old-upload']);assert.equal(h.calls.find(c=>c.method==='PUT').body.uploadId,'new-upload');assert.equal(h.job().phase,'done');
+test('a reservation left by a reloaded page is released and the upload starts again by itself, once',async()=>{
+  let attempts=0;const blocked=()=>Object.assign(Error('Termine ou annule ton envoi précédent.'),{status:409,data:{uploadId:'old-upload'}});
+  const h=fixture({upload:async()=>{if(++attempts===1)throw blocked();return 'new-upload';}});
+  h.client.videoForm();choose(h);h.form.onsubmit({preventDefault(){}});await tick();await tick();
+  assert.equal(attempts,2);assert.deepEqual([h.calls[0].method,h.calls[0].path],['DELETE','/api/life-tree/uploads/old-upload']);
+  assert.equal(h.calls.find(c=>c.method==='PUT').body.uploadId,'new-upload');assert.equal(h.job().phase,'done');
+  // A second refusal in the same job is not looped on: the member decides.
+  let again=0;const stuck=fixture({upload:async()=>{again++;throw blocked();}});
+  stuck.client.videoForm();choose(stuck);stuck.form.onsubmit({preventDefault(){}});await tick();await tick();
+  assert.equal(again,2);assert.equal(stuck.job().phase,'error');assert.equal(stuck.job().blockedUploadId,'old-upload');assert.equal(stuck.get('video-upload-indicator').dataset.phase,'error');
 });
 
 test('lost access stops the upload with a clear message and saves nothing',async()=>{

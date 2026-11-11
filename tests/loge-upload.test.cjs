@@ -8,7 +8,7 @@ vm.runInContext(source+';globalThis.helpers={validateLogeFile,ensureLogeUpload,u
 const {validateLogeFile,ensureLogeUpload,uploadLogeFile}=sandbox.helpers;
 const file={name:'video.mp4',size:1000,type:'video/mp4'};
 const draft=()=>({file,requestId:'publication-request'});
-const options=extra=>({duration:async()=>120,wait:async()=>{},...extra});
+const options=extra=>({duration:async()=>120,wait:async()=>{},snapshot:async source=>({copyOf:source}),...extra});
 
 test('file bounds and duration reject before reserving Stream storage',async()=>{
   assert.throws(()=>validateLogeFile(null),/Choisis/);assert.throws(()=>validateLogeFile({...file,size:200000001}),/200 Mo/);assert.throws(()=>validateLogeFile({...file,size:0}),/vide/);assert.throws(()=>validateLogeFile({...file,type:'text/plain'}),/vidéo/);
@@ -134,4 +134,25 @@ test('the reconnection wait holds until the page is visible and the network is b
   await new Promise(r=>setTimeout(r,20));assert.equal(resolved,false);
   nav.onLine=true;listeners['window:online']();await new Promise(r=>setTimeout(r,5));assert.equal(resolved,false,'still hidden');
   doc.hidden=false;listeners.visibilitychange();await wait;assert.equal(resolved,true);assert.equal(listeners.visibilitychange,undefined);
+});
+
+test('a file the browser refuses to send goes through as a copy held in memory, with a diagnostic on the status check',async()=>{
+  const d=draft(),sent=[],paths=[];let polls=0;
+  const request=async(path,init={})=>{paths.push(path);return path==='/api/loge/uploads'?{uploadId:'opaque-id',uploadURL:'https://upload.videodelivery.net/token',expiresAt:Date.now()+100000}:{status:++polls===1?'waiting':'ready'};};
+  const upload=async(_url,source,config)=>{sent.push([source,config.name]);if(sent.length===1)throw Object.assign(Error('cut before the first byte'),{network:true});config.onProgress(100);};
+  const states=[];
+  assert.equal(await ensureLogeUpload(d,options({request,upload,reconnect:async()=>{},onState:state=>states.push(state)})),'opaque-id');
+  assert.equal(sent[0][0],file);assert.equal(sent[0][1],undefined);assert.deepEqual(sent[1][0],{copyOf:file});assert.equal(sent[1][1],'video.mp4','the copy keeps the file name');
+  assert.ok(states.includes('reading'));assert.match(paths[1],/^\/api\/loge\/uploads\/opaque-id\?try=1&sent=0&ms=\d+&copy=1$/);
+});
+
+test('a cut after bytes were sent keeps the file as it is; an unreadable file stops with clear guidance',async()=>{
+  const reservation=async path=>path==='/api/loge/uploads'?{uploadId:'opaque-id',uploadURL:'https://upload.videodelivery.net/token',expiresAt:Date.now()+100000}:{status:'waiting'};
+  const sources=[];let copies=0;
+  const midway=async(_url,source,config)=>{sources.push(source);if(sources.length===1){config.onProgress(40);throw Object.assign(Error('cut'),{network:true});}};
+  await ensureLogeUpload(draft(),options({request:async path=>path==='/api/loge/uploads'?reservation(path):{status:sources.length>1?'ready':'waiting'},upload:midway,reconnect:async()=>{},snapshot:async()=>{copies++;return {};}}));
+  assert.deepEqual(sources,[file,file]);assert.equal(copies,0);
+  let uploads=0;
+  await assert.rejects(ensureLogeUpload(draft(),options({request:reservation,reconnect:async()=>{},upload:async()=>{uploads++;throw Object.assign(Error('cut'),{network:true});},snapshot:async()=>{throw new DOMException('gone','NotReadableError');}})),error=>error.unreadable===true&&/ne peut pas être lue/.test(error.message));
+  assert.equal(uploads,1,'no further attempt once the file cannot be read');
 });

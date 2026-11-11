@@ -66,6 +66,18 @@ async function run(current){
     // The account changed under the job: stop sending for the previous member.
     if(job===current&&current.state.user?.id!==current.user){abandonVideoJob();return;}
     if(!live()||error?.name==='AbortError')return;
+    // A reservation left by a reloaded page holds the member's only slot:
+    // release it and start again, once, instead of stopping on a refusal.
+    if(error.status===409&&error.data?.uploadId&&!current.released){
+      current.released=true;
+      try{
+        await request(current,basePath+'/'+encodeURIComponent(error.data.uploadId),{method:'DELETE',body:{}});
+        Object.assign(current.upload,{requestId:crypto.randomUUID(),uploadId:null,uploadURL:null,uploadSent:false,uploadStatus:null});
+        if(job===current)return run(current);
+        return;
+      }catch{/* the manual retry below stays available */}
+    }
+    if(!live())return;
     current.phase='error';
     current.error=[401,403].includes(error.status)?'Reconnecte-toi pour terminer l’envoi.':error.network?'La connexion a été coupée plusieurs fois pendant l’envoi. Vérifie ta connexion, garde cette page ouverte et touche Réessayer.':error.message||'L’envoi a échoué.';
     if(error.status===409&&error.data?.uploadId)current.blockedUploadId=error.data.uploadId;
@@ -112,7 +124,7 @@ if(typeof BroadcastChannel==='function'){
 }
 export function dismissVideoJob(){const current=currentVideoJob();if(current&&!jobActive(current)&&current.phase!=='error'){job=null;clearTimeout(doneTimer);emit();}}
 
-export const jobLabels={checking:'Vérification de la vidéo',preparing:'Préparation de l’envoi',uploading:'Envoi de la vidéo',reconnecting:'Connexion perdue · reprise automatique',processing:'Traitement de la vidéo',saving:'Enregistrement',done:'Vidéo ajoutée',error:'Envoi interrompu'};
+export const jobLabels={checking:'Vérification de la vidéo',preparing:'Préparation de l’envoi',reading:'Lecture de la vidéo',uploading:'Envoi de la vidéo',reconnecting:'Connexion perdue · reprise automatique',processing:'Traitement de la vidéo',saving:'Enregistrement',done:'Vidéo ajoutée',error:'Envoi interrompu'};
 export function jobSummary(value){
   if(!value)return '';
   if(value.phase==='uploading')return `${jobLabels.uploading} · ${value.progress||0} %`;
@@ -135,7 +147,7 @@ function renderIndicator(){
     });
     controls.insertBefore(button,controls.firstChild);
   }
-  const indeterminate=['checking','preparing','reconnecting','processing','saving'].includes(current.phase);
+  const indeterminate=['checking','preparing','reading','reconnecting','processing','saving'].includes(current.phase);
   button.dataset.phase=current.phase;button.classList.toggle('is-indeterminate',indeterminate);
   const value=current.phase==='uploading'?current.progress||0:current.phase==='done'?100:indeterminate?28:100;
   button.style.setProperty('--ring',String(value));
