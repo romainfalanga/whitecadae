@@ -32,9 +32,12 @@
     }
   ],
   "r2_buckets": [{"binding":"MEDIA","bucket_name":"whitecadae-media"}],
+  // Les erreurs du Worker (méthode, route aux identifiants masqués, début du
+  // message) sont conservées dans les journaux Cloudflare pour le diagnostic.
+  "observability": {"enabled": true},
   "vars": {
-    // Variable historique conservée ; aucune adresse déclarée à l'inscription
-    // ne confère de droits. Les rôles administrateur sont provisionnés en privé.
-    "ADMIN_EMAILS": "romainfalanga83@gmail.com", "PRIVATE_SPACES_ENABLED": "true"
+    // Aucune adresse déclarée à l'inscription ne confère de droits : les rôles
+    // administrateur sont provisionnés en privé, hors de ce fichier.
+    "PRIVATE_SPACES_ENABLED": "true"
   }
 }

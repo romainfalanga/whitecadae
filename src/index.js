@@ -1,5 +1,6 @@
 // WhiteCadae : Cloudflare Worker (API + service du site statique)
 
+import {networkOf} from './network.js';
 import {
   currentAnswerId, accessOf, progresOf,
   ECHELON_114,
@@ -25,22 +26,28 @@ const PBKDF2_ITERATIONS = 100000;
 
 export default {
   async scheduled(controller, env) {
-    await ensureLogeTables(env);
-    if(controller.cron !== '*/15 * * * *') await settleThemeWeeks(env, controller.scheduledTime);
-    await cleanupLogeStream(env);
-    await withdrawOrphanedSharedPosts(env);
+    // Each step runs on its own: one failure must not skip the others.
+    const step=async(name,work)=>{try{await work();}catch(error){logFailure('scheduled_failure',name,error);}};
+    await step('tables',()=>ensureLogeTables(env));
+    if(controller.cron !== '*/15 * * * *') await step('themes',()=>settleThemeWeeks(env, controller.scheduledTime));
+    await step('stream',()=>cleanupLogeStream(env));
+    await step('shared-posts',()=>withdrawOrphanedSharedPosts(env));
   },
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/music/')) return avecSecurite(await serveMusic(request, env));
+    if (url.pathname.startsWith('/music/')) {
+      try { return avecSecurite(await serveMusic(request, env)); }
+      catch (err) { logFailure('music_failure',request.method+' /music',err); return avecSecurite(json({ error: 'Erreur interne du serveur.' }, 500)); }
+    }
     if (url.pathname.startsWith('/api/')) {
       try {
         const refusal=checkWriteOrigin(request,url);
         return avecSecurite(refusal||await handleApi(request, env, url));
       } catch (err) {
         if(err instanceof Response)return avecSecurite(err);
-        // Never log request bodies, SQL parameters or private narratives.
-        console.error('api_failure',err?.name||'Error');
+        // A malformed percent-escape in the address is the caller's mistake.
+        if(err instanceof URIError)return avecSecurite(json({ error: 'Introuvable.' }, 404));
+        logFailure('api_failure',request.method+' '+routeLabel(url.pathname),err);
         return avecSecurite(json({ error: 'Erreur interne du serveur.' }, 500));
       }
     }
@@ -154,6 +161,12 @@ const SECURITE = {
   'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
 };
 
+// Diagnostics without private data: the method, the route with its ids masked,
+// and the start of the error text. Never request bodies, SQL values or narratives.
+const routeLabel=path=>path.replace(/\/(?:\d+|[0-9a-f]{8}-[0-9a-f-]{27}|[A-Za-z0-9_-]{20,})(?=\/|$)/g,'/:id').slice(0,120);
+function logFailure(kind,where,error){
+  console.error(kind,where,error?.name||'Error',String(error?.message||'').replace(/\s+/g,' ').slice(0,200));
+}
 function avecSecurite(reponse) {
   if(reponse.status===101)return reponse; // Preserve the accepted WebSocket.
   // 204 et 304 n'ont pas de corps : le recopier ferait échouer la construction.
@@ -545,7 +558,7 @@ function refInsert(env, annotationId, position, r) {
 // existe déjà : elle lui est greffée sans qu'il faille la réécrire.
 async function addReference(request, env, annotationId) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
   const ann = await env.DB.prepare('SELECT id, user_id FROM annotations WHERE id = ?1').bind(annotationId).first();
   if (!ann) return json({ error: 'Interprétation introuvable.' }, 404);
   if (ann.user_id !== user.id && !user.is_admin) return json({ error: 'Action non autorisée.' }, 403);
@@ -566,7 +579,7 @@ async function addReference(request, env, annotationId) {
 
 async function deleteReference(request, env, id) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
   const row = await env.DB.prepare(
     `SELECT r.id, a.user_id FROM annotation_references r
        JOIN annotations a ON a.id = r.annotation_id WHERE r.id = ?1`
@@ -607,7 +620,7 @@ async function ensureBarrageTable(env){
   }
   await barrageTables.get(env.DB);
 }
-function adresseDe(request){return request.headers.get('CF-Connecting-IP')||null;}
+function adresseDe(request){return networkOf(request.headers.get('CF-Connecting-IP'));}
 // Atomically reserve an attempt before hashing or writing, including simultaneous requests.
 async function barrage(request,env,quoi,max,fenetreSecondes,bucket=null){
   const ip=adresseDe(request);if(!ip&&!bucket)return null;
@@ -629,6 +642,7 @@ async function barrage(request,env,quoi,max,fenetreSecondes,bucket=null){
 // Assez large pour une famille derrière une même adresse, assez étroit pour
 // qu'on ne fabrique pas une armée de comptes jetables.
 const BARRAGE_CONNEXION = { max: 20, fenetre: 15 * 60 };
+const UNKNOWN_ACCOUNT_SALT=new Uint8Array(16);
 const BARRAGE_INSCRIPTION = { max: 6, fenetre: 60 * 60 };
 
 async function register(request, env) {
@@ -681,10 +695,17 @@ async function login(request, env) {
   const password = body.password;
 
   if(password.length>1024||email.length>254)return json({error:'Identifiants trop longs.'},400);
-  const accountStop=await barrage(request,env,'connexion-compte',20,900,'connexion-compte:'+await sessionDigest(email));if(accountStop)return accountStop;
+  // One network may try an account ten times per quarter hour; the account as a
+  // whole accepts sixty. A single visitor can therefore no longer keep a member
+  // (or the administrator) locked out by sending wrong passwords.
+  const account=await sessionDigest(email),network=adresseDe(request);
+  if(network){const networkStop=await barrage(request,env,'connexion-compte',10,900,'connexion-compte:'+account+':'+network);if(networkStop)return networkStop;}
+  const accountStop=await barrage(request,env,'connexion-compte',60,900,'connexion-compte:'+account);if(accountStop)return accountStop;
   const user = await env.DB.prepare(
     'SELECT id, email, username, password_hash, auth_version, is_admin FROM users WHERE email = ?1'
   ).bind(email).first();
+  // An unknown address costs the same key derivation, so timing reveals nothing.
+  if(!user)await pbkdf2(password,UNKNOWN_ACCOUNT_SALT);
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     return json({ error: 'Email ou mot de passe incorrect.' }, 401);
   }
@@ -852,7 +873,7 @@ async function getSong(env, request, slug) {
 
 async function createAnnotation(request, env) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
 
   const body = await readJson(request);
   if (!body) return json({ error: 'Requête invalide.' }, 400);
@@ -950,7 +971,7 @@ async function nextGridNumber(env, userId, songId, targetType, lineId, wordStart
 
 async function updateAnnotation(request, env, id) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
 
   const body = await readJson(request);
   const content = String((body && body.content) || '').trim();
@@ -975,7 +996,7 @@ async function updateAnnotation(request, env, id) {
 
 async function deleteAnnotation(request, env, id) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
 
   const ann = await env.DB.prepare('SELECT id, user_id FROM annotations WHERE id = ?1').bind(id).first();
   if (!ann) return json({ error: 'Annotation introuvable.' }, 404);
@@ -991,7 +1012,7 @@ async function deleteAnnotation(request, env, id) {
 
 async function createConnection(request, env) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
 
   const body = await readJson(request);
   if (!body) return json({ error: 'Requête invalide.' }, 400);
@@ -1016,7 +1037,7 @@ async function createConnection(request, env) {
 
 async function deleteConnection(request, env, id) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
 
   const conn = await env.DB.prepare('SELECT id, user_id FROM song_connections WHERE id = ?1').bind(id).first();
   if (!conn) return json({ error: 'Connexion introuvable.' }, 404);
@@ -1084,7 +1105,7 @@ async function replaceEssayLinks(env, essayId, links) {
 
 async function createEssay(request, env) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
 
   const body = await readJson(request);
   if (!body) return json({ error: 'Requête invalide.' }, 400);
@@ -1109,7 +1130,7 @@ async function createEssay(request, env) {
 
 async function updateEssay(request, env, id) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
 
   const essay = await env.DB.prepare('SELECT id, user_id FROM essays WHERE id = ?1').bind(id).first();
   if (!essay) return json({ error: 'Interprétation introuvable.' }, 404);
@@ -1134,7 +1155,7 @@ async function updateEssay(request, env, id) {
 
 async function deleteEssay(request, env, id) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
 
   const essay = await env.DB.prepare('SELECT id, user_id FROM essays WHERE id = ?1').bind(id).first();
   if (!essay) return json({ error: 'Interprétation introuvable.' }, 404);
@@ -1151,7 +1172,7 @@ async function deleteEssay(request, env, id) {
 
 async function updateUsername(request, env) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
 
   const body = await readJson(request);
   const username = String((body && body.username) || '').trim();
@@ -1172,7 +1193,7 @@ async function updateUsername(request, env) {
 
 async function updatePassword(request, env) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
 
   const body = await readJson(request);
   const stop=await barrage(request,env,'password:'+user.id,10,900);if(stop)return stop;
@@ -1205,7 +1226,7 @@ async function sessionDigest(token){return 'sha256:'+toHex(await crypto.subtle.d
 // on ne stocke jamais un fichier brut potentiellement lourd.
 async function updateAvatar(request, env) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
 
   const body = await readJson(request);
   const dataUrl = String((body && body.data) || '');
@@ -1300,7 +1321,7 @@ async function ensurePassageRefTable(env) {
 
 async function createPassageReference(request, env) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
   const body = await readJson(request);
   if (!body) return json({ error: 'Requête invalide.' }, 400);
 
@@ -1338,7 +1359,7 @@ async function createPassageReference(request, env) {
 
 async function deletePassageReference(request, env, id) {
   let user;
-  try { user = await requireUser(request, env); } catch (resp) { return resp; }
+  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
   await ensurePassageRefTable(env);
   const row = await env.DB.prepare('SELECT id, user_id FROM passage_references WHERE id = ?1').bind(id).first();
   if (!row) return json({ error: 'Référence introuvable.' }, 404);
@@ -1350,7 +1371,7 @@ async function deletePassageReference(request, env, id) {
 /* ---------------------------------------------------------------- admin */
 
 async function adminCreateAlbum(request, env) {
-  try { await requireAdmin(request, env); } catch (resp) { return resp; }
+  try { await requireAdmin(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
   const body = await readJson(request);
   const title = String((body && body.title) || '').trim();
   if (!title) return json({ error: 'Le titre est requis.' }, 400);
@@ -1365,7 +1386,7 @@ async function adminCreateAlbum(request, env) {
 }
 
 async function adminUpdateAlbum(request, env, id) {
-  try { await requireAdmin(request, env); } catch (resp) { return resp; }
+  try { await requireAdmin(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
   const body = await readJson(request);
   const album = await env.DB.prepare('SELECT id FROM albums WHERE id = ?1').bind(id).first();
   if (!album) return json({ error: 'Album introuvable.' }, 404);
@@ -1380,13 +1401,13 @@ async function adminUpdateAlbum(request, env, id) {
 }
 
 async function adminDeleteAlbum(request, env, id) {
-  try { await requireAdmin(request, env); } catch (resp) { return resp; }
+  try { await requireAdmin(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
   await env.DB.prepare('DELETE FROM albums WHERE id = ?1').bind(id).run();
   return json({ ok: true });
 }
 
 async function adminCreateSong(request, env) {
-  try { await requireAdmin(request, env); } catch (resp) { return resp; }
+  try { await requireAdmin(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
   const body = await readJson(request);
   const title = String((body && body.title) || '').trim();
   if (!title) return json({ error: 'Le titre est requis.' }, 400);
@@ -1405,7 +1426,7 @@ async function adminCreateSong(request, env) {
 }
 
 async function adminUpdateSong(request, env, id) {
-  try { await requireAdmin(request, env); } catch (resp) { return resp; }
+  try { await requireAdmin(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
   const body = await readJson(request);
   const song = await env.DB.prepare('SELECT id FROM songs WHERE id = ?1').bind(id).first();
   if (!song) return json({ error: 'Chanson introuvable.' }, 404);
@@ -1421,14 +1442,14 @@ async function adminUpdateSong(request, env, id) {
 }
 
 async function adminDeleteSong(request, env, id) {
-  try { await requireAdmin(request, env); } catch (resp) { return resp; }
+  try { await requireAdmin(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
   await env.DB.prepare('DELETE FROM songs WHERE id = ?1').bind(id).run();
   return json({ ok: true });
 }
 
 // Durée de la chanson, au format "m:ss" ou en secondes.
 async function adminSetDuration(request, env, id) {
-  try { await requireAdmin(request, env); } catch (resp) { return resp; }
+  try { await requireAdmin(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
   const body = await readJson(request);
   const song = await env.DB.prepare('SELECT id FROM songs WHERE id = ?1').bind(id).first();
   if (!song) return json({ error: 'Chanson introuvable.' }, 404);
@@ -1448,7 +1469,7 @@ async function adminSetDuration(request, env, id) {
 // Remplace l'intégralité du texte d'une chanson. Attention : les
 // annotations liées aux anciennes lignes sont supprimées (cascade).
 async function adminSetLyrics(request, env, id) {
-  try { await requireAdmin(request, env); } catch (resp) { return resp; }
+  try { await requireAdmin(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
   const body = await readJson(request);
   const song = await env.DB.prepare('SELECT id FROM songs WHERE id = ?1').bind(id).first();
   if (!song) return json({ error: 'Chanson introuvable.' }, 404);

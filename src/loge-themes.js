@@ -148,6 +148,7 @@ async function history(env,url){
 }
 function requestedNext(value,week){weekKey(value);if(value!==week.nextKey)fail('Les propositions de cette semaine sont closes. Recharge la page.',409);}
 const openGuard=`?3<=unixepoch() AND unixepoch()<?4 AND NOT EXISTS(SELECT 1 FROM loge_theme_weeks WHERE week_start=?2)`;
+export const THEME_PROPOSALS_PER_WEEK=3;
 async function propose(request,env,user,week,json){
   const body=await bodyOf(request,['title','themeId','targetWeek']);requestedNext(body.targetWeek,week);
   const hasTitle=Object.hasOwn(body,'title'),hasId=Object.hasOwn(body,'themeId');
@@ -158,11 +159,18 @@ async function propose(request,env,user,week,json){
     if(typeof body.themeId!=='number')fail('Identifiant invalide.');themeId=positiveId(body.themeId);
     if(!await env.DB.prepare('SELECT 1 FROM loge_theme_weeks WHERE theme_id=?1 LIMIT 1').bind(themeId).first())fail('Thème introuvable.',404);
   }
+  // A member proposes a few themes per week, not an endless list. Proposing
+  // again a theme already in the running stays a harmless replay.
+  const mine=await env.DB.prepare(`SELECT count(*) AS proposed,
+      EXISTS(SELECT 1 FROM loge_theme_candidates c JOIN loge_themes t ON t.id=c.theme_id WHERE c.target_week=?2 AND ${hasTitle?'t.normalized=?3':'t.id=?3'}) AS running
+    FROM loge_theme_candidates WHERE proposed_by=?1 AND target_week=?2`).bind(user.id,week.nextKey,hasTitle?normalized:themeId).first();
+  if(mine.proposed>=THEME_PROPOSALS_PER_WEEK&&!mine.running)fail(`Tu as déjà proposé ${THEME_PROPOSALS_PER_WEEK} thèmes pour cette semaine.`,429);
+  const within=who=>`(SELECT count(*) FROM loge_theme_candidates WHERE proposed_by=${who} AND target_week=?2)<${THEME_PROPOSALS_PER_WEEK}`;
   const statements=[];
   if(hasTitle)statements.push(env.DB.prepare(`INSERT INTO loge_themes(title,normalized,created_by)
-    SELECT ?1,?5,?6 WHERE ${openGuard} ON CONFLICT(normalized) DO NOTHING`).bind(title,week.nextKey,week.start,week.nextStart,normalized,user.id));
+    SELECT ?1,?5,?6 WHERE ${openGuard} AND ${within('?6')} ON CONFLICT(normalized) DO NOTHING`).bind(title,week.nextKey,week.start,week.nextStart,normalized,user.id));
   statements.push(env.DB.prepare(`INSERT INTO loge_theme_candidates(theme_id,target_week,opens_at,starts_at,proposed_by)
-    SELECT t.id,?2,?3,?4,?5 FROM loge_themes t WHERE ${hasTitle?'t.normalized=?1':'t.id=?1'} AND ${openGuard}
+    SELECT t.id,?2,?3,?4,?5 FROM loge_themes t WHERE ${hasTitle?'t.normalized=?1':'t.id=?1'} AND ${openGuard} AND ${within('?5')}
     ON CONFLICT(target_week,theme_id) DO NOTHING`).bind(hasTitle?normalized:themeId,week.nextKey,week.start,week.nextStart,user.id));
   const results=await env.DB.batch(statements);
   const row=await env.DB.prepare(proposalSelect+` WHERE c.target_week=?2 AND ${hasTitle?'t.normalized=?3':'t.id=?3'}`).bind(user.id,week.nextKey,hasTitle?normalized:themeId).first();

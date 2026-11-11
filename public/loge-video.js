@@ -239,8 +239,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     const box=root?.getBoundingClientRect?.();
     return box?{top:Math.max(0,box.top),left:Math.max(0,box.left),right:Math.min(screen.right,box.right),bottom:Math.min(screen.bottom,box.bottom)}:screen;
   }
-  function measureRecord(record,viewport){
-    const full=fullscreenRecord();
+  function measureRecord(record,viewport,full=fullscreenRecord()){
     if(!connected(record)||(full&&record!==full))return {ratio:0,distance:Infinity};
     if(full===record&&record.stream)return {ratio:1,distance:0};
     const box=(record.iframe||record.container).getBoundingClientRect(),width=box.width??box.right-box.left,height=box.height??box.bottom-box.top;
@@ -248,9 +247,10 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     return {ratio:width>0&&height>0?area/(width*height):0,distance:Math.abs((box.top+box.bottom-viewport.top-viewport.bottom)/2)};
   }
   function measure(){
-    const view=viewport();
+    // The fullscreen owner is looked up once for the whole pass, not per video.
+    const view=viewport(),full=fullscreenRecord();
     for(const record of records.values()){
-      Object.assign(record,measureRecord(record,view));
+      Object.assign(record,measureRecord(record,view,full));
     }
   }
   function refresh(){if(destroyed)return;if(!current())exitOwnedFullscreen();measure();reconcile();refreshTimelines();}
@@ -285,7 +285,14 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     refreshTimelines();
   }
   const scrollTarget=root||window;
-  scrollTarget.addEventListener('scroll',refresh,{passive:true});window.addEventListener('resize',refresh,{passive:true});
+  // Scrolling fires many events per frame: measure and reconcile once per frame.
+  let frame=0;
+  const onMove=()=>{
+    if(typeof requestAnimationFrame!=='function'){refresh();return;}
+    if(frame)return;
+    frame=requestAnimationFrame(()=>{frame=0;refresh();});
+  };
+  scrollTarget.addEventListener('scroll',onMove,{passive:true});window.addEventListener('resize',onMove,{passive:true});
   document.addEventListener('visibilitychange',visibility);window.addEventListener('wc:music',music);
   document.addEventListener('fullscreenchange',fullscreenChanged);document.addEventListener('webkitfullscreenchange',fullscreenChanged);
   return {
@@ -308,7 +315,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     destroy(){
       if(destroyed)return;destroyed=true;clearProgress();observer?.disconnect();
       exitOwnedFullscreen();
-      scrollTarget.removeEventListener('scroll',refresh);window.removeEventListener('resize',refresh);
+      scrollTarget.removeEventListener('scroll',onMove);window.removeEventListener('resize',onMove);if(frame&&typeof cancelAnimationFrame==='function')cancelAnimationFrame(frame);
       document.removeEventListener('visibilitychange',visibility);window.removeEventListener('wc:music',music);
       document.removeEventListener('fullscreenchange',fullscreenChanged);document.removeEventListener('webkitfullscreenchange',fullscreenChanged);
       for(const record of records.values()){release(record);attachTimeline(record,null);record.label?.remove();}records.clear();active=null;

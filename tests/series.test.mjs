@@ -43,3 +43,15 @@ test('sériographies reject foreign, missing or empty selections and stay privat
     await f.ok('/api/life-tree',15,'DELETE',{confirm:'SUPPRIMER'});assert.equal(f.sql.prepare('SELECT count(*) n FROM life_series').get().n,0,'erasing the videography erases its sériographies');
   }finally{f.sql.close();}
 });
+
+test('a full sériographie of 100 videos stays within the 100 bound parameters D1 accepts',async()=>{
+  const f=setup();try{
+    const prepare=f.env.DB.prepare;let most=0;
+    f.env.DB.prepare=query=>{const statement=prepare(query),bind=statement.bind;statement.bind=(...args)=>{most=Math.max(most,args.length);assert.ok(args.length<=100,`${args.length} parameters: ${query.slice(0,60)}`);return bind(...args);};return statement;};
+    const ids=Array.from({length:100},(_,i)=>'bulk-video-'+String(i).padStart(3,'0'));
+    for(const id of ids)f.sql.prepare("INSERT INTO life_events(id,owner_id,sort_date,precision,kind,impact,payload,entry_type,video_branch) VALUES(?,16,'2026-11-01','day','autre','à explorer','sealed','creation','ideas')").run(id);
+    const saved=await f.call('/api/life-tree/series/serie-full1',15,'PUT',{title:'Cent vidéos',items:ids,revision:0});
+    assert.equal(saved.status,200,JSON.stringify(saved.data));assert.equal(saved.data.series.items.length,100);
+    assert.equal((await f.ok('/api/life-tree/series')).series[0].items.length,100);assert.ok(most>0);
+  }finally{f.sql.close();}
+});

@@ -11,7 +11,8 @@ export function chatViewport(node, browser = window) {
       return node.getBoundingClientRect().bottom <= bottom - player + 40;
     },
     toEnd() {
-      if (page) node.closest('.ace-chat').querySelector('.ace-composer').scrollIntoView({block:'end',behavior:'instant'});
+      // The composer when the conversation has its own page; otherwise the last message.
+      if (page) (node.closest('.ace-chat')?.querySelector('.ace-composer') || node.lastElementChild || node).scrollIntoView?.({block:'end',behavior:'instant'});
       else node.scrollTop = node.scrollHeight;
     },
     preserve(update) {

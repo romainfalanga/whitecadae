@@ -43,13 +43,15 @@ function helpPage(base){const help=PRIVATE_HELP[base];shell(`<article class="pri
 function shell(html){destroyVideoPlayers();session.ctx.app.innerHTML=`<section class="private-page">${html}<p id="private-status" class="private-status" role="status"></p></section>`;}
 function avatar(person){return `<span class="ace-avatar">${person?.avatar?`<img src="${esc(person.avatar)}" alt="" loading="lazy" decoding="async">`:esc(person?.username?.slice(0,1)||'·')}</span>`;}
 function modal(title,html){
+  // Panels opened in the previous window die with it.
+  clearInlineComments();
   pauseVideoPlayers();session.dialogCleanup?.();session.dialogCleanup=null;destroyVideoPlayers(session.dialog);session.dialog?.remove();session.dialogCheck=null;const dialog=document.createElement('dialog');dialog.className='private-dialog';
   dialog.innerHTML=`<button type="button" class="private-close" aria-label="Fermer">×</button><h2>${esc(title)}</h2>${html}<p class="private-status" role="status" id="dialog-status"></p>`;
   document.body.append(dialog);session.dialog=dialog;
   const mayClose=()=>!session?.dirty||confirm('Fermer sans enregistrer tes modifications ?');
   dialog.querySelector('.private-close').onclick=()=>{if(mayClose())dialog.close();};
   dialog.addEventListener('cancel',event=>{if(!mayClose())event.preventDefault();});
-  dialog.addEventListener('close',()=>{destroyVideoPlayers(dialog);if(session?.dialog===dialog){session.dialogCleanup?.();session.dialogCleanup=null;session.dirty=false;session.dialog=null;}dialog.remove();});dialog.showModal();return dialog;
+  dialog.addEventListener('close',()=>{destroyVideoPlayers(dialog);if(session?.dialog===dialog){clearInlineComments();session.dialogCleanup?.();session.dialogCleanup=null;session.dirty=false;session.dialog=null;}dialog.remove();});dialog.showModal();return dialog;
 }
 function closeModal(){session?.dialog?.close();}
 async function verifyIdentity(){const current=await api('/api/me');if(current.user?.id!==session.user){destroyVideoPlayers();session.dialogCleanup?.();session.ctx.app.innerHTML='';session.dialog?.remove();session.ctx.navigate('/connexion?retour='+encodeURIComponent(location.pathname));return false;}return true;}
@@ -66,7 +68,15 @@ export async function page(path,ctx){
   s.visibility=async()=>{
     if(!live(s))return;
     if(document.hidden){pauseVideoPlayers();ctx.app.style.visibility='hidden';ctx.app.inert=true;if(s.dialog)s.dialog.style.visibility='hidden';clearTimeout(s.timer);}
-    else{try{if(await verifyIdentity()){if(s.poll)await s.poll();ctx.app.style.visibility='';ctx.app.inert=false;if(s.dialog)s.dialog.style.visibility='';schedule();}}catch(e){destroyVideoPlayers();s.dialogCleanup?.();ctx.app.innerHTML='<p>Reconnecte-toi pour retrouver cet espace.</p>';ctx.app.style.visibility='';ctx.app.inert=false;s.dialog?.remove();}}
+    else{try{if(await verifyIdentity()){if(s.poll)await s.poll();ctx.app.style.visibility='';ctx.app.inert=false;if(s.dialog)s.dialog.style.visibility='';schedule();}}catch(e){
+      // Another page took over, or the request was cancelled: nothing here is ours any more.
+      if(!live(s)||e.name==='AbortError')return;
+      // Only a refused session closes the space. A lost connection keeps the
+      // page and any text being written, and the next check retries.
+      if([401,403].includes(e.status)){destroyVideoPlayers();s.dialogCleanup?.();ctx.app.innerHTML='<p>Reconnecte-toi pour retrouver cet espace.</p>';ctx.app.style.visibility='';ctx.app.inert=false;s.dialog?.remove();return;}
+      ctx.app.style.visibility='';ctx.app.inert=false;if(s.dialog)s.dialog.style.visibility='';
+      status('Connexion interrompue. La mise à jour reprendra automatiquement.',true,s.dialog?'dialog-status':'private-status');schedule();
+    }}
   };document.addEventListener('visibilitychange',s.visibility);
   try{
     if(path==='/game-master-orange'){await api('/api/game-master-orange');gameMaster();return;}
@@ -86,7 +96,7 @@ export async function page(path,ctx){
 function schedule(){
   const s=session;clearTimeout(s.timer);if(!s.poll||document.hidden)return;
   const poll=s.poll;
-  s.timer=setTimeout(async()=>{if(!live(s)||s.poll!==poll)return;try{await poll();if(!live(s)||s.poll!==poll)return;s.failures=0;}catch(e){if(e.name==='AbortError'||!live(s)||s.poll!==poll)return;s.failures=(s.failures||0)+1;if([401,403,404,409].includes(e.status)){s.dialog?.remove();shell('<p>Cet espace n’est plus accessible. Reviens à la page pour vérifier tes accès.</p>');s.poll=null;}else status('Connexion interrompue. La mise à jour reprendra automatiquement.',true);}if(live(s))schedule();},Math.min(30000,5000*(1+(s.failures||0))));
+  s.timer=setTimeout(async()=>{if(!live(s)||s.poll!==poll)return;try{await poll();if(!live(s)||s.poll!==poll)return;s.failures=0;}catch(e){if(e.name==='AbortError'||!live(s)||s.poll!==poll)return;s.failures=(s.failures||0)+1;if([401,403,404,409].includes(e.status)){s.dialog?.remove();shell('<p>Cet espace n’est plus accessible. Reviens à la page pour vérifier tes accès.</p>');s.poll=null;}else status('Connexion interrompue. La mise à jour reprendra automatiquement.',true);}if(live(s))schedule();},Math.min(30000,(poll.every||5000)*(1+(s.failures||0))));
 }
 function gameMaster(){
   shell(`<div class="gm-layout"><header class="private-heading gm-heading"><h1 class="gm-title"><span>Game Master</span><span>Orange</span></h1></header><article class="gm-letter"><p class="gm-opening"><span>Avancer ensemble.</span><span>Devenir les Game Masters<br class="gm-desktop-break"> les uns des autres.</span></p><div class="gm-copy"><p>Pour avancer de la meilleure manière dans l’Escape Game Orange, trouve des partenaires dans ton entourage et invite-les à entrer dans le jeu. Au début, tu es leur Game Master : accompagne-les à partir des cheminements qui t’ont permis de comprendre ce que tu as compris et d’en arriver là.</p><p>Réécoutez les musiques, relisez les paroles, propose des parallèles ou des indices subtils. Aide-les à trouver par eux-mêmes, sans leur donner les réponses.</p><p>Le but est de devenir mutuellement les Game Masters les uns des autres. Dès que l’un de vous comprend une énigme qu’un autre cherche encore, il le guide sur cette énigme. Les rôles s’échangent au fil de vos découvertes, sans avoir besoin d’être au même échelon.</p><p>Fais grandir ce cercle de partenaires, chacun peut aider les autres à avancer et à se tirer vers le haut.</p><div class="gm-orbit" aria-hidden="true"></div>${button('Inviter mes partenaires','gm-share','')}</div></article></div>`);
@@ -247,15 +257,17 @@ async function seriesEditor(item=null){
   form.onsubmit=e=>{e.preventDefault();if(!form.reportValidity())return;if(!picked.length){status('Choisis au moins une vidéo.',true,'series-status');return;}
     run(form.querySelector('[type=submit]'),async()=>{const data=await api('/api/life-tree/series/'+encodeURIComponent(id),{method:'PUT',body:{title:form.elements.title.value,items:picked,revision:item?.revision||0}});s.dirty=false;await seriesView(data.series);});};
 }
+// The page's own refresh (the Carré d'AS) resumes whenever no panel needs the slot.
+function resumePagePoll(s=session){s.poll=s.pagePoll||null;clearTimeout(s.timer);schedule();}
 function clearInlineComments(){
-  if(!session?.commentPanels)return;
+  if(!session?.commentPanels?.size)return;
   for(const p of session.commentPanels.values()){p.component?.destroy();p.root.remove();}
-  session.commentPanels.clear();session.activeComments=null;session.poll=null;clearTimeout(session.timer);session.dirty=false;
+  session.commentPanels.clear();session.activeComments=null;session.dirty=false;resumePagePoll();
 }
 async function toggleInlineComments(button){
   const s=session,id=Number(button.dataset.videoComments),panels=s.commentPanels||=new Map();
   const viewer=button.closest('dialog');
-  const close=()=>{const p=panels.get(id);if(p){p.root.hidden=true;p.button.setAttribute('aria-expanded','false');}viewer?.classList.remove('has-comments');if(s.activeComments===id){s.activeComments=null;s.poll=null;clearTimeout(s.timer);}button.focus({preventScroll:true});};
+  const close=()=>{const p=panels.get(id);if(p){p.root.hidden=true;p.button.setAttribute('aria-expanded','false');}viewer?.classList.remove('has-comments');if(s.activeComments===id){s.activeComments=null;resumePagePoll(s);}button.focus({preventScroll:true});};
   if(s.activeComments===id){close();return;}
   for(const p of panels.values()){p.root.hidden=true;p.button.setAttribute('aria-expanded','false');}
   s.activeComments=id;s.poll=null;clearTimeout(s.timer);
@@ -272,7 +284,7 @@ async function toggleInlineComments(button){
       const own=(s.videos?.owner||s.user)===s.user;
       panel.component=await mountComments({root,id,api,user:s.user,esc,onClose:close,title:own?'Expansions harmonieuses de tes AS':'Expansions harmonieuses',placeholder:'Ton expansion harmonieuse…',onDraft:dirty=>{panel.draft=dirty;if(live(s))s.dirty=[...panels.values()].some(p=>p.draft);}});
       if(!live(s)||panels.get(id)!==panel){panel.component.destroy();return;}
-    }catch(e){panel.root.remove();panels.delete(id);if(s.activeComments===id)s.activeComments=null;throw e;}
+    }catch(e){panel.root.remove();panels.delete(id);if(s.activeComments===id){s.activeComments=null;resumePagePoll(s);}throw e;}
   }
   if(s.activeComments!==id)return;
   panel.root.hidden=false;button.setAttribute('aria-expanded','true');viewer?.classList.add('has-comments');
@@ -559,7 +571,9 @@ async function memberVideography(){
   });
   try{await loadVideos(true);}catch(e){if(e.status===403&&live(s)){root.innerHTML='<p class="private-note">Cette vidéographie n’est plus accessible.</p>';return;}throw e;}
   // New replies and access changes are picked up while the page stays open.
-  s.poll=async()=>{const current=await api('/api/ace-circles');if(!live(s))return;const before=JSON.stringify(squareMembers().map(m=>[m.id,m.reachable]));s.circle=current;if(JSON.stringify(squareMembers().map(m=>[m.id,m.reachable]))!==before&&!s.dialog?.open)await squareView(false);};schedule();
+  s.pagePoll=s.poll=async()=>{const current=await api('/api/ace-circles');if(!live(s))return;const before=JSON.stringify(squareMembers().map(m=>[m.id,m.reachable]));s.circle=current;if(JSON.stringify(squareMembers().map(m=>[m.id,m.reachable]))!==before&&!s.dialog?.open)await squareView(false);};
+  // The square changes rarely: a calm rhythm is enough, unlike an open conversation.
+  s.pagePoll.every=30000;schedule();
 }
 function squareInvitations(){
   const items=session.circle.invitations.map(i=>{const other=i.owner.id===session.user?i.angel:i.owner;return `<article class="square-invitation"><div><strong>${esc(other.username)}</strong><p class="private-note">${i.incoming?'Te propose de devenir AS l’un de l’autre.':'Invitation envoyée, en attente de réponse.'}</p></div><div class="private-actions">${i.incoming?button('Accepter','','',`data-invitation="${esc(i.id)}" data-action="accept"`)+button('Refuser','','subtle',`data-invitation="${esc(i.id)}" data-action="decline"`):button('Annuler','','subtle',`data-invitation="${esc(i.id)}" data-action="cancel"`)}</div></article>`;}).join('');
@@ -607,7 +621,7 @@ async function topicPage(id){
       if(reset){thread.replies=next.replies;thread.more=next.more;render();}else if(next.replies.length||next.removed?.length){thread.replies=thread.replies.filter(r=>!next.removed?.includes(r.id));thread.replies.push(...next.replies);if(next.removed?.includes(thread.parent))cancel();render();}
       if(next.more&&!reset)el('topic-new').hidden=false;
       if(follow||atEnd&&next.replies.length)viewport.toEnd();
-      if(!thread.topic.archived&&thread.last&&(follow||viewport.atEnd()))await api('/api/ace-circles/topics/'+id+'/read',{method:'PUT',body:{lastId:thread.last}});
+      if(!thread.topic.archived&&thread.last&&thread.last!==thread.acknowledged&&(follow||viewport.atEnd())){await api('/api/ace-circles/topics/'+id+'/read',{method:'PUT',body:{lastId:thread.last}});thread.acknowledged=thread.last;}
     }finally{thread.busy=false;}
   }
   thread.replies=data.replies;thread.more=data.more;render();bind('topic-new',async()=>{await refresh(true,true);el('topic-new').hidden=true;});

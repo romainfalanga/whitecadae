@@ -37,3 +37,12 @@ test('empty or removed message anchors never force a scroll',()=>{
 test('an append below the reader never interrupts scrolling or moves the page',()=>{
  const f=fixture(true);chatViewport(f.node,f.browser).preserve(()=>f.positions.set('4',400));assert.deepEqual(f.calls,[]);
 });
+
+test('page mode without a conversation page scrolls to the last message instead of failing',()=>{
+  const f=fixture(true),seen=[];
+  f.node.closest=()=>null;f.node.lastElementChild={scrollIntoView:options=>seen.push(options)};
+  chatViewport(f.node,f.browser).toEnd();
+  assert.deepEqual(seen,[{block:'end',behavior:'instant'}]);
+  f.node.lastElementChild=null;f.node.scrollIntoView=options=>seen.push('self');
+  assert.doesNotThrow(()=>chatViewport(f.node,f.browser).toEnd());assert.equal(seen.at(-1),'self');
+});

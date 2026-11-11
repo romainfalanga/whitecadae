@@ -139,6 +139,8 @@ test('an account change during the upload cannot publish under the new identity'
   h.ctx.state.user={id:20};
   await assert.rejects(options.request('/api/life-tree/uploads',{method:'POST',body:{}}),{name:'AbortError'});assert.equal(h.job(),null,'the old account’s job is no longer shown');
   release('stale');await tick();assert.equal(h.calls.some(c=>c.method==='PUT'||c.method==='POST'),false);
+  // Back on the first account, nothing stays frozen: a new video can be sent.
+  h.ctx.state.user={id:19};assert.equal(h.job(),null,'the abandoned job does not come back');
 });
 
 test('cancelling during the final write never frees a reservation that may already be attached',async()=>{
