@@ -2050,6 +2050,9 @@ body.avec-dock main { padding-bottom: 7rem; }
    and stays above the player so no entry can sit behind it. */
 body.nav-open .site-header{z-index:50}
 body.nav-open .site-nav{flex-wrap:nowrap}body.nav-open .site-nav>*{flex:none}
+/* A column that scrolls must start at its top: with flex-end, the first
+   entries overflowed above the menu and could not be reached. */
+body.nav-open .site-nav{justify-content:flex-start}
 /* Background video upload: a ring beside the echelon, on every page. */
 .video-upload-indicator{--ring:0;position:relative;display:inline-grid;place-items:center;flex:none;width:34px;height:34px;padding:0;border:0;border-radius:50%;background:transparent;color:#f3c57f;cursor:pointer}
 .video-upload-indicator::after{content:"";position:absolute;inset:-5px}

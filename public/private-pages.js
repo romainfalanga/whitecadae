@@ -57,10 +57,10 @@ export async function page(path,ctx){
   // The explanation page was removed; its address returns to the videography.
   if(path==='/videographie/comprendre'){leave();return ctx.navigate('/videographie',true);}
   if(path==='/carre-d-as/comprendre'){leave();return ctx.navigate('/carre-d-as',true);}
-  if(!['/game-master-orange','/game-master-blanc','/signalements','/videographie','/videographie/archives','/carre-d-as'].includes(path)&&!/^\/carre-d-as\/fil\/\d+$/.test(path)){leave();return ctx.navigate('/',true);}
+  if(!['/game-master-orange','/game-master-blanc','/as','/signalements','/videographie','/videographie/archives','/carre-d-as'].includes(path)&&!/^\/carre-d-as\/fil\/\d+$/.test(path)){leave();return ctx.navigate('/',true);}
   leave();const s=session={ctx,user:ctx.state.user?.id,controller:new AbortController(),timer:null,dialog:null,dirty:false};
   if(!document.querySelector('link[href="/private-pages.css"]')){const css=document.createElement('link');css.rel='stylesheet';css.href='/private-pages.css';document.head.append(css);}
-  const title=path.startsWith('/mecanisme')?'Mécanismes':path==='/game-master-orange'?'Game Master Orange':path==='/game-master-blanc'?'Game Master Blanc':path.startsWith('/videographie')?'Vidéographie':path==='/signalements'?'Signalements':'Carré d’AS';document.title=title+' · White Cadae';
+  const title=path.startsWith('/mecanisme')?'Mécanismes':path==='/game-master-orange'?'Game Master Orange':path==='/game-master-blanc'?'Game Master Blanc':path==='/as'?'AS':path.startsWith('/videographie')?'Vidéographie':path==='/signalements'?'Signalements':'Carré d’AS';document.title=title+' · White Cadae';
   if(!s.user){shell(heading(title)+ctx.accountEntryMarkup());return;}
   s.beforeUnload=e=>{if(s.dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',s.beforeUnload);
   s.visibility=async()=>{
@@ -70,7 +70,8 @@ export async function page(path,ctx){
   };document.addEventListener('visibilitychange',s.visibility);
   try{
     if(path==='/game-master-orange'){await api('/api/game-master-orange');gameMaster();return;}
-    if(path==='/game-master-blanc'){const content=await api('/api/game-master-blanc');gameMasterBlanc(content.page);return;} if(path==='/signalements'){await reportsPage();return;}
+    if(path==='/game-master-blanc'){const content=await api('/api/game-master-blanc');gameMasterBlanc(content.page);return;}
+    if(path==='/as'){const content=await api('/api/as');asGrade(content.page);return;} if(path==='/signalements'){await reportsPage();return;}
     const helpBase=path.endsWith('/comprendre')?path.slice(0,-11):null;
     if(PRIVATE_HELP[helpBase]){await api('/api/mechanisms');helpPage(helpBase);return;}
     const slot=Number(path.split('/')[2])||null,topic=/^\/carre-d-as\/fil\/(\d+)$/.exec(path);
@@ -99,6 +100,11 @@ function gameMasterBlanc(content){
     return esc(text.replace(/\s+(\S+)$/, '\u00a0$1'));
   };
   shell(`<div class="gm-layout gm-white"><header class="private-heading gm-heading"><h1 class="gm-title"><span>Game Master</span><span>Blanc</span></h1></header><article class="gm-letter"><p class="gm-opening">${content.opening.map(text=>`<span>${esc(text)}</span>`).join(' ')}</p><div class="gm-copy">${content.sections.map((section,index)=>`<section class="gm-section" aria-labelledby="gm-white-section-${index}"><h2 id="gm-white-section-${index}">${esc(section.title)}</h2>${section.paragraphs.map(text=>`<p>${prose(text)}</p>`).join('')}</section>`).join('')}</div></article></div>`);
+}
+// The AS grade continues the two Game Master pages, in the same frame.
+function asGrade(content){
+  const prose=text=>esc(text.replace(/\s+(\S+)$/, '\u00a0$1'));
+  shell(`<div class="gm-layout gm-as"><header class="private-heading gm-heading"><h1 class="gm-title"><span>${esc(content.title)}</span></h1></header><article class="gm-letter"><p class="gm-opening">${content.opening.map(text=>`<span>${esc(text)}</span>`).join(' ')}</p><div class="gm-copy">${content.sections.map((section,index)=>`<section class="gm-section" aria-labelledby="gm-as-section-${index}"><h2 id="gm-as-section-${index}">${esc(section.title)}</h2>${section.paragraphs.map(text=>`<p>${prose(text)}</p>`).join('')}</section>`).join('')}<div class="private-actions gm-as-action"><a class="private-button" href="/carre-d-as" data-link>Mon Carré d’AS</a></div></div></article></div>`);
 }
 function noticeMarkup(){const n=session.consent.notice;return `<div class="private-note"><p>${esc(n.purpose)}</p><p>${esc(n.storage)}</p><p>${esc(n.retention)}</p><p>${esc(n.care)}</p></div>`;}
 async function consent(){
@@ -466,7 +472,7 @@ async function eventDetail(id,owner=session.user){
 // The Carré d'AS: four chosen links. Each link opens both videographies, so
 // every member's square is their own and holds the people they help.
 async function circlePage(){
-  shell(`${heading('Carré d’AS')}<p class="square-lead">Choisis jusqu’à quatre AS. Chaque lien est réciproque : vous découvrez la vidéographie l’un de l’autre pour vous aider à avancer.</p><div id="square-view"></div>`);
+  shell(`${heading('Carré d’AS')}<div id="square-view"></div>`);
   session.selectedOwner=Number(/^#as-(\d+)$/.exec(location.hash)?.[1])||null;session.circle=session.initial?.data;
   await squareView(false);
 }
@@ -558,7 +564,7 @@ async function topicPage(id){
 }
 
 async function directoryView(){
-  modal('Choisir un AS',`<p class="private-note">Saisis le pseudo exact d’une personne qui a atteint l’échelon 20. Si elle accepte, vous devenez AS l’un de l’autre et chacun peut découvrir la vidéographie de l’autre.</p><form id="ace-search" class="ace-search"><label>Pseudo<input name="q" required minlength="3" maxlength="30" autocomplete="off" placeholder="Son pseudo exact"></label><button class="private-button" type="submit">Rechercher</button></form><div id="ace-directory" class="ace-search-results" aria-live="polite"></div>`);
+  modal('Choisir un AS',`<form id="ace-search" class="ace-search"><label>Pseudo<input name="q" required minlength="3" maxlength="30" autocomplete="off" placeholder="Son pseudo exact"></label><button class="private-button" type="submit">Rechercher</button></form><div id="ace-directory" class="ace-search-results" aria-live="polite"></div>`);
   const dialog=session.dialog;
   el('ace-search').onsubmit=e=>{e.preventDefault();const search=e.target.elements.q.value.trim();run(e.target.querySelector('button'),async()=>{const data=await api('/api/ace-circles/directory?q='+encodeURIComponent(search));if(session.dialog!==dialog)return;el('ace-directory').innerHTML=data.people.map(p=>`<article class="ace-person"><header>${avatar(p)}<h3>${esc(p.username)}</h3></header>${button('Inviter','','',`data-invite="${p.id}"`)}</article>`).join('')||'<p class="private-note">Aucune personne disponible avec ce pseudo. Vérifie son orthographe, vos invitations en attente ou ses places libres.</p>';el('ace-directory').querySelectorAll('[data-invite]').forEach(b=>b.onclick=()=>run(b,async()=>{await api('/api/ace-circles/invitations',{method:'POST',body:{target:Number(b.dataset.invite),direction:'invite',id:uid(),recipientNotice:true}});closeModal();await squareView();}));});};
 }

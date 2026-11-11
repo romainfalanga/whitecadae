@@ -39,7 +39,7 @@ Le signe `n-0-3` (Katikas) est retiré du score, sans suppression de son histori
 | 12 | La matière danse |
 | 15 | Game Master Blanc, Loges virtuelles et Vidéographie |
 | 18 | Les probabilités |
-| 20 | Carré d’AS |
+| 20 | AS et Carré d’AS |
 | 25 | Fais Mieux |
 | 33 | Un fil entre deux infinis |
 
