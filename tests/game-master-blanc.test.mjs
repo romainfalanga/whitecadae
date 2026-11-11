@@ -25,7 +25,7 @@ test('the final page requires 33 real earned levels, including for admins; forge
       const res=await request(f,'/api/game-master-blanc?level=33&admin=true',token);
       assert.equal(res.status,token==='invalid'?401:403);
       assert.match(res.headers.get('cache-control'),/no-store/);
-      assert.doesNotMatch(await res.text(),/Extériorise|Loge virtuelle|discord|y83ewhS49/);
+      assert.doesNotMatch(await res.text(),/Extériorise|Partage dans les Loges virtuelles|discord|y83ewhS49/);
     }
     add(f,1,ids.slice(0,-1));
     assert.equal((await request(f,'/api/game-master-blanc')).status,403);
@@ -37,7 +37,7 @@ test('the final page requires 33 real earned levels, including for admins; forge
     const content=await res.json();assert.equal(content.page.title,'Game Master Blanc');
     assert.deepEqual(content.page.opening,['Façonne ton paradis pour le rejoindre.','Deviens ton propre Game Master.']);
     assert.match(content.page.sections.at(-1).paragraphs[0],/aux autres Game Masters Blancs\./);
-    assert.deepEqual(content.page.sections.map(s=>s.title),['Vidéographie','Ta version harmonieuse','Ta société harmonieuse','Loge virtuelle']);
+    assert.deepEqual(content.page.sections.map(s=>s.title),['Vidéographie','Ta version harmonieuse','Ta société harmonieuse','Loges virtuelles']);
     assert.match(content.page.sections[0].paragraphs.join(' '),/Utilise ta vidéographie pour organiser/);assert.doesNotMatch(JSON.stringify(content.page),/plateforme/i);
     assert.match(content.page.sections[2].paragraphs.join(' '),/version harmonieuse soit cohérente avec cette société\./);assert.doesNotMatch(JSON.stringify(content.page),/trouver sa place|expansions harmonieuses/);
     assert.deepEqual(content.page.sections.map(s=>s.paragraphs.length),[2,1,2,3]);
@@ -110,7 +110,7 @@ test('the home omits the final block at 33 and keeps the discovered-page list in
   assert.ok(openings.innerHTML.indexOf('Game Master Blanc')<openings.innerHTML.indexOf('Loge virtuelle'));
   assert.doesNotMatch(openings.innerHTML,/<a /);
   const client=readFileSync(new URL('../public/private-pages.js',import.meta.url),'utf8');
-  assert.doesNotMatch(client,/Extériorise tes réflexions|Loge virtuelle|y83ewhS49/);
+  assert.doesNotMatch(client,/Extériorise tes réflexions|Partage dans les Loges virtuelles|deviens aussi le Game Master des autres|y83ewhS49/);
 });
 
 test('Signes, Horloge and the lyric workshop omit the final block even when the server reports level 33',async()=>{

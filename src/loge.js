@@ -168,7 +168,7 @@ function reserveComment(env,userId,claim,nonce=null){
 
 async function createPost(request,env,user,json,legacySources){
   const body=await bodyOf(request),fromVideography=Object.hasOwn(body,'eventId'),streamUpload=Object.hasOwn(body,'uploadId');
-  if(!fromVideography&&!legacySources)fail('Choisis une vidéo de ta vidéographie pour la publier dans la Loge.');
+  if(!fromVideography&&!legacySources)fail('Choisis une vidéo de ta vidéographie pour la publier dans les Loges virtuelles.');
   const title=titleOf(body.title),description=Object.hasOwn(body,'description')?clean(body.description,5000):title,eventId=fromVideography?identifier(body.eventId):null,video=fromVideography||streamUpload?LOGE_STREAM_MARKER:youtubeId(body.url),nonce=requestId(body.requestId);
   // Existing D1 tables require a nonempty description. A title-only client
   // fills that legacy column without rebuilding tables or changing old text.
@@ -203,7 +203,7 @@ async function createPost(request,env,user,json,legacySources){
       WHERE s.user_id=?1 AND s.event_id=?2 AND s.purpose='videography' AND s.state='published' AND e.video_branch IS NOT NULL`).bind(user.id,eventId).first();
     if(!shared)fail('Cette vidéo n’est plus dans ta vidéographie.',404);
     if(!LOGE_ROOMS.includes(shared.video_branch))fail('Cette catégorie n’a pas de loge : la vidéo reste dans ta vidéographie.',409);
-    if(await env.DB.prepare('SELECT 1 FROM loge_shared_videos v JOIN loge_posts p ON p.id=v.post_id WHERE v.upload_id=?1 AND p.deleted_at IS NULL').bind(shared.id).first())fail('Cette vidéo est déjà publiée dans la Loge.',409);
+    if(await env.DB.prepare('SELECT 1 FROM loge_shared_videos v JOIN loge_posts p ON p.id=v.post_id WHERE v.upload_id=?1 AND p.deleted_at IS NULL').bind(shared.id).first())fail('Cette vidéo est déjà publiée dans les Loges virtuelles.',409);
   }
   const claim=crypto.randomUUID();
   const activeWeek=assignment?`EXISTS(SELECT 1 FROM loge_theme_weeks w WHERE w.week_start=?9 AND w.theme_id=?10 AND w.starts_at<=unixepoch() AND unixepoch()<w.ends_at)`:'1';
@@ -422,7 +422,7 @@ export async function handleLoge(request,env,url,{getUser,json,legacySources=LOG
   const path=url.pathname.replace(/\/+$/,''),method=request.method;
   if(path==='/api/loge/uploads'){
     if(method!=='POST')fail('Méthode indisponible.',405);
-    if(!legacySources){await bodyOf(request);fail('Les vidéos de la Loge se publient maintenant depuis ta vidéographie.',410);}
+    if(!legacySources){await bodyOf(request);fail('Les vidéos des Loges virtuelles se publient maintenant depuis ta vidéographie.',410);}
     return createLogeUpload(await bodyOf(request),env,user,url,json);
   }
   if(path==='/api/loge/videos'){

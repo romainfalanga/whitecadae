@@ -256,7 +256,7 @@ test('a shared video leaves the Loge with its videography entry and cannot be re
     assert.equal((await f.call('/api/loge/posts/'+post.id+'/favorite','PUT',{favorite:true},12)).status,200);
     f.sql.prepare('UPDATE loge_stream_uploads SET created_at=unixepoch()-7200').run();
     const replacement=await f.upload();f.ready(replacement.data.uploadId);
-    const refused=await f.put(video.id,event(replacement.data.uploadId,{...room,revision:1}));assert.equal(refused.status,409);assert.match(refused.data.error,/Loge virtuelle/);
+    const refused=await f.put(video.id,event(replacement.data.uploadId,{...room,revision:1}));assert.equal(refused.status,409);assert.match(refused.data.error,/Loges virtuelles/);
     assert.equal(f.row(video.uploadId).state,'published');assert.equal((await f.call('/api/loge/posts/'+post.id)).status,200);
     assert.equal((await f.put(video.id,event(undefined,{...room,title:'Seulement le titre',revision:1}))).status,200);
     assert.equal((await f.call('/api/life-tree/events/'+video.id,'DELETE',{revision:2})).status,200);

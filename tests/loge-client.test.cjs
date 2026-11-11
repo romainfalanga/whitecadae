@@ -335,24 +335,30 @@ test('site header measurements and menu pauses are observed without leaking acro
   f.client.clear();assert.equal(f.document.body.style.getPropertyValue('--loge-site-header-height'),'');assert.equal(f.observers.resize[0].closed,true);assert.equal(menu.closed,true);
 });
 
-test('the three loges are the main menu; Mes publications and Publier are places with a way back',async()=>{
+test('every Loge page keeps one header: the three loges and a capsule whose open icon closes its place',async()=>{
   const f=fixture();await f.page();await flush();
-  const bar=f.find('.loge-bar');assert.equal(f.find('h1').textContent,'Loge virtuelle');assert.equal(f.app.querySelector('.loge-tabs'),null);
-  assert.deepEqual(bar.querySelectorAll('.loge-action').map(link=>[link.getAttribute('aria-label'),link.getAttribute('href'),link.textContent]),[['Mes publications','/loge-virtuelle/membres/11?onglet=reflexions',''],['Publier','/loge-virtuelle/publier','']],'icons only, named for assistive tech');assert(bar.querySelectorAll('.loge-action').every(link=>link.querySelector('svg')));
-  assert.deepEqual(f.find('.loge-rooms').querySelectorAll('a').map(link=>link.textContent),['Réflexions','Idées et projets','Sociétés harmonieuses']);
+  const bar=f.find('.loge-bar');assert.equal(f.find('h1').textContent,'Loges virtuelles');assert.equal(f.app.querySelector('.loge-tabs'),null);assert.equal(f.app.querySelector('.loge-back'),null);
+  assert.deepEqual(bar.querySelectorAll('.loge-action').map(link=>[link.getAttribute('aria-label'),link.getAttribute('href'),link.textContent,link.getAttribute('aria-current')]),[['Mes publications','/loge-virtuelle/membres/11?onglet=reflexions','',null],['Publier','/loge-virtuelle/publier','',null]],'icons only, named for assistive tech');
+  assert(bar.querySelectorAll('.loge-action').every(link=>link.querySelector('svg')));
+  assert.deepEqual(f.find('.loge-rooms').querySelectorAll('a').map(link=>link.textContent),['Réflexions','Idées et projets','Sociétés harmonieuses']);assert.equal(f.app.querySelector('.loge-context'),null);
   assert.doesNotMatch(f.app.textContent,/Mes réflexions|Loge Virtuelle/);assert.equal(f.app.querySelector('[data-favorite]'),null);
   await f.navigate('/loge-virtuelle?loge=societe-harmonieuse');
-  for(const [destination,title,actions] of [['/loge-virtuelle/membres/11?onglet=reflexions','Mes publications',['Publier']],['/loge-virtuelle/publier','Publier',['Mes publications']]]){
-    await f.navigate(destination);const header=f.find('.loge-bar');
-    assert(header.classList.contains('is-sub'));assert.equal(f.find('h1').textContent,title);assert.equal(f.app.querySelector('.loge-rooms'),null);
-    const back=f.find('.loge-back');assert.equal(back.getAttribute('href'),'/loge-virtuelle?loge=societe-harmonieuse','back returns to the loge last visited');assert.equal(back.textContent,'Sociétés harmonieuses');
-    assert.deepEqual(header.querySelectorAll('.loge-action').map(link=>link.getAttribute('aria-label')),actions);assert.equal(!!f.app.querySelector('.is-video-view'),destination!=='/loge-virtuelle/publier');
+  for(const [destination,context,openId,closedId] of [['/loge-virtuelle/membres/11?onglet=reflexions','Mes publications','loge-open-mine','loge-open-compose'],['/loge-virtuelle/publier','Publier une vidéo','loge-open-compose','loge-open-mine']]){
+    await f.navigate(destination);
+    assert.equal(f.find('h1').textContent,'Loges virtuelles','the header keeps its shape');assert.equal(f.find('.loge-context').textContent,context);
+    const rooms=f.find('.loge-rooms');assert(rooms.classList.contains('is-idle'));assert.equal(rooms.querySelector('a[aria-current="page"]'),null);assert.equal(rooms.querySelectorAll('a').length,3,'the loges stay one tap away');
+    const open=f.node(openId),closed=f.node(closedId);
+    assert.equal(open.getAttribute('aria-current'),'page');assert.equal(open.getAttribute('href'),'/loge-virtuelle?loge=societe-harmonieuse','an open place closes back to the last loge');assert.match(open.getAttribute('aria-label'),/^Fermer /);
+    assert.equal(closed.getAttribute('aria-current'),null);assert.notEqual(closed.getAttribute('href'),'/loge-virtuelle?loge=societe-harmonieuse');
+    assert.equal(!!f.app.querySelector('.is-video-view'),destination!=='/loge-virtuelle/publier');
   }
-  assert.equal(f.document.title,'Publier dans la Loge · Loge virtuelle · White Cadae');
-  await f.navigate('/loge-virtuelle/membres/11?onglet=reflexions');assert.equal(f.document.title,'Mes publications · Loge virtuelle · White Cadae');assert.equal(f.find('.loge-post-category',f.node('loge-post-7')).textContent,'Réflexions','each publication names its loge');
-  await f.navigate('/loge-virtuelle/membres/12?onglet=reflexions');assert.equal(f.find('h1').textContent,'Bob');assert.equal(f.find('.loge-bar').querySelectorAll('.loge-action').length,0);
+  assert.equal(f.document.title,'Publier · Loges virtuelles · White Cadae');
+  await f.click('loge-open-compose');assert.equal(f.location.search,'?loge=societe-harmonieuse');assert.equal(f.find('.loge-rooms').querySelector('a[aria-current="page"]').textContent,'Sociétés harmonieuses');
+  await f.navigate('/loge-virtuelle/membres/11?onglet=reflexions');assert.equal(f.document.title,'Mes publications · Loges virtuelles · White Cadae');assert.equal(f.find('.loge-post-category',f.node('loge-post-7')).textContent,'Réflexions','each publication names its loge');
+  await f.navigate('/loge-virtuelle/membres/12?onglet=reflexions');assert.equal(f.find('.loge-context').textContent,'Publications de Bob');assert.equal(f.find('.loge-bar').querySelectorAll('[aria-current="page"]').length,0);
   assert.equal(f.app.querySelector('.loge-member-tabs'),null);assert.equal(f.app.querySelector('[data-favorite]'),null);
-  assert.equal(f.app.querySelector('a[href="/loge-virtuelle/membres/12?onglet=favoris"]'),null);f.client.clear();
+  assert.equal(f.app.querySelector('a[href="/loge-virtuelle/membres/12?onglet=favoris"]'),null);
+  await f.navigate('/loge-virtuelle/publications/7');assert.equal(f.find('.loge-rooms').querySelector('a[aria-current="page"]').textContent,'Réflexions','a publication lights its loge');f.client.clear();
 });
 
 test('interventions play the shared videos once per post, retain every exchange and keep server cursor order',async()=>{
@@ -421,7 +427,7 @@ const currentThemes=(extra={})=>{const now=Math.floor(Date.now()/1000);return {c
 test('Theme shows the active week and its videos with the shared paused reader and comments',async()=>{
   const entries=[{...post(7),theme:{id:2,title:'Grandir ensemble',week:'2026-11-02'}},{...post(3),theme:{id:2,title:'Grandir ensemble',week:'2026-10-19'}},post(9)];
   const f=fixture({posts:entries,themesEnabled:true,themeData:currentThemes()});await f.page('/loge-virtuelle/theme');await flush();
-  assert.equal(f.find('h1').textContent,'Thème de la semaine');assert.equal(f.node('loge-theme-posts').querySelectorAll('[data-post-id]').length,2);
+  assert.equal(f.find('.loge-context').textContent,'Thème de la semaine');assert.equal(f.node('loge-theme-posts').querySelectorAll('[data-post-id]').length,2);
   const player=f.controllers.at(-1);assert.equal(player.options.root,f.find('.loge-themes-scroll'));assert.deepEqual([...player.items.keys()],['7','3']);
   f.click(f.find('[data-comments-open="7"]'));await flush();assert.equal(player.paused,false);assert(f.node('loge-comments-list'));assert.equal(f.app.querySelector('[data-favorite]'),null);
   f.client.clear();assert.equal(f.timers.size,0);assert.equal(player.destroyed,true);
@@ -438,7 +444,7 @@ test('Theme proposals and support use the announced week, keep drafts on failure
 test('a historical theme is proposed by canonical ID and its archive stays available across editions',async()=>{
   const f=fixture({themesEnabled:true,themeData:currentThemes(),posts:[{...post(),theme:{id:2,title:'Grandir ensemble',week:'2026-10-19'}}]});await f.page('/loge-virtuelle/theme');await flush();
   f.click(f.find('[data-theme-propose="2"]'));await flush();assert.deepEqual(f.requests.find(r=>r.method==='POST').body,{themeId:2,targetWeek:'2026-11-09'});
-  await f.navigate('/loge-virtuelle/theme?theme=2');assert(f.node('loge-post-7'));assert.equal(f.find('h1').textContent,'Thème de la semaine');f.client.clear();
+  await f.navigate('/loge-virtuelle/theme?theme=2');assert(f.node('loge-post-7'));assert.equal(f.find('.loge-context').textContent,'Thème de la semaine');f.client.clear();
 });
 
 test('weekly publication tagging is opt-in, preserved on retry and absent when unchecked',async()=>{
@@ -597,8 +603,8 @@ test('Safari native fullscreen exits before comments and preserves playback',asy
 
 test('the direct publish page has a way back, an inline form and no mounted player',async()=>{
   const f=fixture();await f.page('/loge-virtuelle/publier');await flush();
-  assert.equal(f.location.pathname,'/loge-virtuelle/publier');assert.equal(f.client.canNavigate('/loge-virtuelle/publier'),true);assert.equal(f.document.title,'Publier dans la Loge · Loge virtuelle · White Cadae');
-  const form=f.node('loge-new-form'),compose=f.node('loge-compose');assert.equal(f.find('.loge-back').getAttribute('href'),'/loge-virtuelle');assert.equal(f.document.getElementById('loge-open-compose'),null);assert.equal(f.node('loge-open-mine').getAttribute('href'),'/loge-virtuelle/membres/11?onglet=reflexions');
+  assert.equal(f.location.pathname,'/loge-virtuelle/publier');assert.equal(f.client.canNavigate('/loge-virtuelle/publier'),true);assert.equal(f.document.title,'Publier · Loges virtuelles · White Cadae');
+  const form=f.node('loge-new-form'),compose=f.node('loge-compose');assert.equal(f.node('loge-open-compose').getAttribute('href'),'/loge-virtuelle');assert.equal(f.node('loge-open-compose').getAttribute('aria-current'),'page');assert.equal(f.node('loge-open-mine').getAttribute('href'),'/loge-virtuelle/membres/11?onglet=reflexions');
   assert.equal(compose.hidden,false);assert.equal(compose.getAttribute('role'),null);assert.equal(compose.getAttribute('aria-modal'),null);assert.equal(compose.classList.contains('loge-composer-sheet'),false);assert.equal(form.querySelector('[data-compose-close]'),null);assert.equal(f.app.querySelector('.loge-reels'),null);assert.equal(f.app.querySelector('.loge-reel-media'),null);assert.equal(f.controllers.length,0);assert(f.find('.loge-publish-scroll'));assert(f.find('.is-publish-view'));assert.equal(f.requests[0].url,'/api/loge/videos');assert.equal(f.requests.some(request=>request.url.includes('/playback')||request.url.includes('/uploads')),false);assert.equal(form.querySelector('input[type="file"]'),null);assert.equal(form.querySelectorAll('input[name="eventId"]').length,1);f.client.clear();
 });
 
@@ -608,8 +614,8 @@ test('the legacy publish query navigates to the canonical page without creating 
 
 test('publish links and back navigation preserve the draft and independently restore both scroll positions',async()=>{
   const f=fixture();await f.page();const feed=f.node('loge-feed');feed.scrollTop=270;await f.click('loge-open-compose');const form=f.node('loge-new-form'),scroll=f.find('.loge-publish-scroll');f.fill(form,'title','Une pensée en cours',{input:false});f.selectVideo(form);scroll.scrollTop=180;const calls=f.requests.length;
-  await f.click(f.find('.loge-back'));assert.equal(f.location.pathname,'/loge-virtuelle');assert.equal(f.node('loge-feed'),feed);assert.equal(feed.scrollTop,270);assert.equal(f.document.getElementById('loge-new-form'),null);
-  await f.navigate('/loge-virtuelle/publier');assert.equal(f.node('loge-new-form'),form);assert.equal(form.elements.namedItem('title').value,'Une pensée en cours');assert.equal(form.querySelector('input[name="eventId"]').checked,true);assert.equal(f.find('.loge-publish-scroll').scrollTop,180);assert.equal(f.requests.length,calls);assert.equal(f.controllers.filter(player=>!player.destroyed).length,0);assert.equal(f.find('h1').textContent,'Publier');f.client.clear();
+  await f.click('loge-open-compose');assert.equal(f.location.pathname,'/loge-virtuelle');assert.equal(f.node('loge-feed'),feed);assert.equal(feed.scrollTop,270);assert.equal(f.document.getElementById('loge-new-form'),null);
+  await f.navigate('/loge-virtuelle/publier');assert.equal(f.node('loge-new-form'),form);assert.equal(form.elements.namedItem('title').value,'Une pensée en cours');assert.equal(form.querySelector('input[name="eventId"]').checked,true);assert.equal(f.find('.loge-publish-scroll').scrollTop,180);assert.equal(f.requests.length,calls);assert.equal(f.controllers.filter(player=>!player.destroyed).length,0);assert.equal(f.find('.loge-context').textContent,'Publier une vidéo');f.client.clear();
 });
 
 test('Tab and Escape on the publish page do not trap focus, close a dialog or navigate',async()=>{
@@ -627,7 +633,7 @@ test('successful publication lands in the loge the video joined, on the new post
 test('the publish page applies the weekly quota and is an authenticated return destination',async()=>{
   const f=fixture();f.queue({self,videos:[video()],more:false,nextPublicationAt:new Date(Date.now()+3600000).toISOString()});await f.page('/loge-virtuelle/publier');assert.equal(f.node('loge-new-submit').disabled,true);assert.match(f.node('loge-quota').textContent,/Prochaine publication/);
   const quota=f.node('loge-quota');assert.equal(quota.hidden,false);assert.equal(quota.querySelector('.loge-quota-label').textContent,'Prochaine publication');assert.match(quota.querySelector('time').textContent,/^\S+ \d{1,2} \S+ à \d{2}:\d{2}$/);assert.match(quota.querySelector('.loge-quota-countdown').textContent,/^dans (1 h|60 min|59 min)$/);assert.doesNotMatch(quota.textContent,/Tu pourras|\./);
-  const tick=[...f.timers.values()].find(job=>job.fn.name==='updateQuota');assert(tick.delay<=60050);assert(f.find('.loge-back'));f.client.clear();
+  const tick=[...f.timers.values()].find(job=>job.fn.name==='updateQuota');assert(tick.delay<=60050);assert.equal(f.node('loge-open-compose').getAttribute('aria-current'),'page');f.client.clear();
   const anonymous=fixture({user:null});await anonymous.page('/loge-virtuelle/publier');assert.deepEqual(anonymous.navigations,[['/connexion?retour=%2Floge-virtuelle%2Fpublier',true]]);assert.equal(anonymous.requests.length,0);anonymous.client.clear();
 });
 
@@ -676,13 +682,13 @@ test('the Loge opens on Réflexions and offers three loges, each with its own ad
   const rooms=f.find('.loge-rooms').querySelectorAll('a');
   assert.deepEqual(rooms.map(link=>[link.textContent,link.getAttribute('href'),link.getAttribute('aria-current')]),[['Réflexions','/loge-virtuelle','page'],['Idées et projets','/loge-virtuelle?loge=idees-et-projets',null],['Sociétés harmonieuses','/loge-virtuelle?loge=societe-harmonieuse',null]]);
   assert.equal(f.requests[0].url,'/api/loge');assert(f.node('loge-post-9'));assert.equal(f.document.getElementById('loge-post-8'),null);assert.equal(f.document.getElementById('loge-post-6'),null);
-  assert.equal(f.find('h1').textContent,'Loge virtuelle');assert.equal(f.node('loge-feed').getAttribute('aria-label'),'Loge Réflexions');
+  assert.equal(f.find('h1').textContent,'Loges virtuelles');assert.equal(f.node('loge-feed').getAttribute('aria-label'),'Loge Réflexions');
   const first=f.node('loge-feed');
   await f.click(rooms[1]);assert.equal(f.location.search,'?loge=idees-et-projets');assert(f.requests.some(request=>request.url==='/api/loge?loge=projects'));assert(f.node('loge-post-8'));assert.equal(f.document.getElementById('loge-post-9'),null);
   assert.equal(f.find('.loge-rooms').querySelector('a[aria-current="page"]').textContent,'Idées et projets');
   await f.navigate('/loge-virtuelle?loge=societe-harmonieuse');assert(f.node('loge-post-6'));assert.equal(f.find('.loge-reel-avatar').querySelector('img').getAttribute('src'),'/api/roadmap/avatar/12');
   const calls=f.requests.length;await f.navigate('/loge-virtuelle');assert.equal(f.node('loge-feed'),first,'a visited loge is restored, not rebuilt');assert.equal(f.requests.length,calls);
-  await f.click('loge-open-compose');assert.equal(f.app.querySelector('.loge-rooms'),null);assert.equal(f.find('.loge-back').getAttribute('href'),'/loge-virtuelle');f.client.clear();
+  await f.click('loge-open-compose');assert(f.find('.loge-rooms').classList.contains('is-idle'));assert.equal(f.node('loge-open-compose').getAttribute('href'),'/loge-virtuelle');f.client.clear();
   const unknown=fixture({posts,search:'?loge=metacognition'});await unknown.page();assert.equal(unknown.requests[0].url,'/api/loge');assert.equal(unknown.find('.loge-rooms').querySelector('a[aria-current="page"]').textContent,'Réflexions');unknown.client.clear();
 });
 

@@ -34,10 +34,10 @@ test('Loge joins Game Master Blanc only at 33 real levels and existing accounts 
     assert.match(menu(after),/href="\/loge-virtuelle"/);assert.match(menu(after),/href="\/game-master-blanc"/);
     assert.equal((await call('/api/loge')).status,200);
     const text=await(await call('/api/game-master-blanc')).json();
-    assert.deepEqual(text.page.sections.at(-1),{title:'Loge virtuelle',paragraphs:[
-      'Partage dans la Loge virtuelle tes réflexions et tes avancées aux autres Game Masters Blancs.',
+    assert.deepEqual(text.page.sections.at(-1),{title:'Loges virtuelles',paragraphs:[
+      'Partage dans les Loges virtuelles tes réflexions et tes avancées aux autres Game Masters Blancs.',
       'Ces échanges vous permettent de grandir ensemble. Enrichissez mutuellement vos arborescences de réflexion et aidez-vous à les faire grandir de manière harmonieuse.',
-      'Ses trois loges, Réflexions, Idées et projets et Sociétés harmonieuses, partagent un même esprit d’entraide : aide l’autre à prendre du recul, à faire grandir ses idées et, si tu n’es pas d’accord, montre-lui les inconvénients que tu vois pour affiner sa vision.'
+      'Dans chacune des trois loges, deviens aussi le Game Master des autres : aide-les à prendre du recul et à faire grandir leurs idées. Quand tu n’es pas d’accord, fais émerger les inconvénients que tu perçois pour affiner ensemble votre vision.'
     ]});
     for(const room of ['ideas','projects','society'])assert.equal((await(await call('/api/loge?loge='+room)).json()).loge,room);
     assert.equal((await(await call('/api/loge')).json()).loge,'ideas');assert.equal((await call('/api/loge?loge=self')).status,404);assert.equal((await call('/api/loge?loge=version')).status,404);

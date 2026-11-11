@@ -185,9 +185,9 @@ export async function lifeRoute(request,env,url,user,body,json){
       const repeated=await replay();if(repeated)return repeated;
       let upload=null;
       // A published video stays in a category that has a loge.
-      if(currentUpload?.loge_post_id&&!LOGE_ROOMS.includes(event.video_branch))fail('Cette vidéo est publiée dans la Loge virtuelle. Supprime sa publication avant de la passer dans une catégorie sans loge.',409);
+      if(currentUpload?.loge_post_id&&!LOGE_ROOMS.includes(event.video_branch))fail('Cette vidéo est publiée dans les Loges virtuelles. Supprime sa publication avant de la passer dans une catégorie sans loge.',409);
       // Commenters must keep seeing the video they answered.
-      if(incoming&&incoming!==currentUpload?.id&&currentUpload?.loge_post_id)fail('Cette vidéo est publiée dans la Loge virtuelle. Supprime sa publication avant de remplacer le fichier.',409);
+      if(incoming&&incoming!==currentUpload?.id&&currentUpload?.loge_post_id)fail('Cette vidéo est publiée dans les Loges virtuelles. Supprime sa publication avant de remplacer le fichier.',409);
       if(incoming&&incoming!==currentUpload?.id){
         try{upload=await readyLogeUpload(env,user,incoming,'videography');}catch(error){const retry=await replay();if(retry)return retry;throw error;}
       }
