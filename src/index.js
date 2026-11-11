@@ -358,12 +358,6 @@ function newToken() {
   return toHex(crypto.getRandomValues(new Uint8Array(32)));
 }
 
-function fromBase64(b64) {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-}
 
 function getCookie(request, name) {
   const cookies = request.headers.get('Cookie') || '';
@@ -431,13 +425,6 @@ async function viewerAccess(request, env) {
   return { user, echelon, solved, access: {...activeAccess(echelon), conversation:spaces.conversation,videographie:spaces.videographie} };
 }
 
-// L'échelon exigé par une pièce, et un refus prêt à servir. Le message ne dit
-// jamais ce qu'il faudrait trouver.
-async function requireEchelon(request, env, minimum, cle) {
-  const vu = await viewerAccess(request, env);
-  if (vu.echelon >= minimum) return { vu, refus: null };
-  return { vu, refus: json({ error: 'Ce n’est pas encore ouvert.', locked: cle }, 403) };
-}
 
 // Renvoie null si tout est ouvert, sinon la réponse à servir telle quelle.
 // Le message ne dit jamais ce qu'il faudrait trouver.
@@ -467,115 +454,11 @@ async function uniqueSlug(env, table, base) {
   throw new Error('Impossible de générer un slug unique.');
 }
 
-function countWords(text) {
-  const t = text.trim();
-  return t ? t.split(/\s+/).length : 0;
-}
 
-// Les colonnes artist/note (migration 0010) sont ajoutées à la volée si la
-// migration n'a pas encore été appliquée : ALTER TABLE n'est pas idempotent
-// en SQLite, on regarde donc d'abord ce qui existe.
-let refColumnsReady = false;
-async function ensureReferenceColumns(env) {
-  if (refColumnsReady) return;
-  const { results } = await env.DB.prepare('PRAGMA table_info(annotation_references)').all();
-  const have = new Set((results || []).map((c) => c.name));
-  for (const col of ['artist', 'note']) {
-    if (!have.has(col)) {
-      await env.DB.prepare(`ALTER TABLE annotation_references ADD COLUMN ${col} TEXT`).run();
-    }
-  }
-  refColumnsReady = true;
-}
 
-// Valide la liste de références d'une interprétation. Une référence libre
-// nomme l'œuvre et son artiste ; une référence interne vise un passage d'un
-// morceau (ref_line_id..ref_end_line_id). Les deux portent une explication.
-// Retourne un tableau normalisé, ou une Response d'erreur.
-async function parseReferences(env, raw) {
-  if (raw == null) return [];
-  if (!Array.isArray(raw)) return json({ error: 'Références invalides.' }, 400);
-  if (raw.length > 10) return json({ error: '10 références maximum par interprétation.' }, 400);
-  const refs = [];
-  for (const r of raw) {
-    if (r && r.ref_line_id != null) {
-      // référence interne vers un passage d'un morceau
-      const startId = Number(r.ref_line_id);
-      const endId = r.ref_end_line_id == null ? startId : Number(r.ref_end_line_id);
-      const start = await env.DB.prepare(
-        'SELECT l.id, l.text, l.line_number, l.song_id, s.title FROM lyric_lines l JOIN songs s ON s.id = l.song_id WHERE l.id = ?1'
-      ).bind(startId).first();
-      const end = startId === endId ? start : await env.DB.prepare(
-        'SELECT id, text, line_number, song_id FROM lyric_lines WHERE id = ?1'
-      ).bind(endId).first();
-      if (!start || !end) return json({ error: 'Passage référencé introuvable.' }, 400);
-      if (start.song_id !== end.song_id) return json({ error: 'Le passage référencé doit rester dans un même morceau.' }, 400);
-      if (end.line_number < start.line_number) return json({ error: 'Passage référencé invalide (fin avant le début).' }, 400);
-      const excerpt = start.text.length > 60 ? start.text.slice(0, 57) + '…' : start.text;
-      const label = `${start.title} : « ${excerpt}${endId !== startId ? ' […]' : ''} »`;
-      const note = String((r && r.note) || '').trim();
-      if (note.length > 2000) return json({ error: 'Explication de référence trop longue (2000 caractères max).' }, 400);
-      refs.push({
-        label, artist: null, note: note || null, url: null,
-        ref_song_id: start.song_id, ref_line_id: startId, ref_end_line_id: endId,
-      });
-      continue;
-    }
-    const label = String((r && r.label) || '').trim();
-    const artist = String((r && r.artist) || '').trim();
-    const note = String((r && r.note) || '').trim();
-    if (!label) continue;
-    if (label.length > 300) return json({ error: 'Nom de l’œuvre trop long (300 caractères max).' }, 400);
-    if (artist.length > 300) return json({ error: 'Nom de l’artiste trop long (300 caractères max).' }, 400);
-    if (note.length > 2000) return json({ error: 'Explication de référence trop longue (2000 caractères max).' }, 400);
-    refs.push({
-      label, artist: artist || null, note: note || null, url: null,
-      ref_song_id: null, ref_line_id: null, ref_end_line_id: null,
-    });
-  }
-  return refs;
-}
 
-async function replaceReferences(env, annotationId, refs) {
-  await ensureReferenceColumns(env);
-  const statements = [
-    env.DB.prepare('DELETE FROM annotation_references WHERE annotation_id = ?1').bind(annotationId),
-  ];
-  refs.forEach((r, i) => statements.push(refInsert(env, annotationId, i, r)));
-  await env.DB.batch(statements);
-}
 
-function refInsert(env, annotationId, position, r) {
-  return env.DB.prepare(
-    `INSERT INTO annotation_references
-      (annotation_id, position, label, artist, note, url, ref_song_id, ref_line_id, ref_end_line_id)
-     VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?8)`
-  ).bind(annotationId, position, r.label, r.artist || null, r.note || null,
-         r.ref_song_id || null, r.ref_line_id || null, r.ref_end_line_id || null);
-}
 
-// Une référence se publie seule, après coup, sur une interprétation qui
-// existe déjà : elle lui est greffée sans qu'il faille la réécrire.
-async function addReference(request, env, annotationId) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
-  const ann = await env.DB.prepare('SELECT id, user_id FROM annotations WHERE id = ?1').bind(annotationId).first();
-  if (!ann) return json({ error: 'Interprétation introuvable.' }, 404);
-  if (ann.user_id !== user.id && !user.is_admin) return json({ error: 'Action non autorisée.' }, 403);
-
-  const body = await readJson(request);
-  const parsed = await parseReferences(env, [body]);
-  if (parsed instanceof Response) return parsed;
-  if (!parsed.length) return json({ error: 'Référence vide.' }, 400);
-
-  await ensureReferenceColumns(env);
-  const n = (await env.DB.prepare(
-    'SELECT COUNT(*) AS n FROM annotation_references WHERE annotation_id = ?1'
-  ).bind(annotationId).first()).n;
-  if (n >= 10) return json({ error: '10 références maximum par interprétation.' }, 400);
-  await refInsert(env, annotationId, n, parsed[0]).run();
-  return json({ ok: true });
-}
 
 async function deleteReference(request, env, id) {
   let user;
@@ -871,128 +754,8 @@ async function getSong(env, request, slug) {
 
 /* ------------------------------------------------------------ annotations */
 
-async function createAnnotation(request, env) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
 
-  const body = await readJson(request);
-  if (!body) return json({ error: 'Requête invalide.' }, 400);
-  const songId = Number(body.song_id);
-  const lineId = body.line_id == null ? null : Number(body.line_id);
-  let wordStart = body.word_start == null ? null : Number(body.word_start);
-  let wordEnd = body.word_end == null ? wordStart : Number(body.word_end);
-  const content = String(body.content || '').trim();
 
-  if (!content) return json({ error: 'L’explication ne peut pas être vide.' }, 400);
-  if (content.length > 5000) return json({ error: 'Explication trop longue (5000 caractères max).' }, 400);
-
-  const song = await env.DB.prepare('SELECT id FROM songs WHERE id = ?1').bind(songId).first();
-  if (!song) return json({ error: 'Chanson introuvable.' }, 404);
-
-  let targetType;
-  let endLineId = body.end_line_id == null ? null : Number(body.end_line_id);
-  if (lineId != null && endLineId != null && endLineId !== lineId) {
-    // passage multi-phrases : de (line_id, word_start) à (end_line_id, word_end)
-    const start = await env.DB.prepare(
-      'SELECT id, text, line_number FROM lyric_lines WHERE id = ?1 AND song_id = ?2'
-    ).bind(lineId, songId).first();
-    const end = await env.DB.prepare(
-      'SELECT id, text, line_number FROM lyric_lines WHERE id = ?1 AND song_id = ?2'
-    ).bind(endLineId, songId).first();
-    if (!start || !end) return json({ error: 'Ligne introuvable.' }, 404);
-    if (end.line_number <= start.line_number) return json({ error: 'Passage invalide (fin avant le début).' }, 400);
-    if (wordStart == null) wordStart = 0;
-    if (body.word_end == null) wordEnd = countWords(end.text) - 1;
-    if (
-      !Number.isInteger(wordStart) || !Number.isInteger(wordEnd) ||
-      wordStart < 0 || wordStart >= countWords(start.text) ||
-      wordEnd < 0 || wordEnd >= countWords(end.text)
-    ) {
-      return json({ error: 'Position de mot invalide.' }, 400);
-    }
-    targetType = 'passage';
-  } else if (lineId != null) {
-    endLineId = null;
-    const line = await env.DB.prepare(
-      'SELECT id, text FROM lyric_lines WHERE id = ?1 AND song_id = ?2'
-    ).bind(lineId, songId).first();
-    if (!line) return json({ error: 'Ligne introuvable.' }, 404);
-    if (wordStart != null) {
-      const nWords = countWords(line.text);
-      if (
-        !Number.isInteger(wordStart) || !Number.isInteger(wordEnd) ||
-        wordStart < 0 || wordEnd < wordStart || wordEnd >= nWords
-      ) {
-        return json({ error: 'Position de mot invalide.' }, 400);
-      }
-      targetType = 'word';
-    } else {
-      wordEnd = null;
-      targetType = 'line';
-    }
-  } else {
-    wordStart = null;
-    wordEnd = null;
-    endLineId = null;
-    targetType = ['song', 'title', 'duration'].includes(body.target_type) ? body.target_type : 'song';
-  }
-
-  const refs = await parseReferences(env, body.references);
-  if (refs instanceof Response) return refs;
-
-  // Grille de lecture : le rang de cette lecture parmi celles que cet
-  // auteur a déjà écrites sur cette même cible exacte (superposition
-  // simultanée de plusieurs lectures possibles d'un même passage).
-  const gridNumber = await nextGridNumber(env, user.id, songId, targetType, lineId, wordStart, wordEnd, endLineId);
-
-  // Toute nouvelle interprétation naît en brouillon privé : elle ne devient
-  // visible des autres que lorsque son auteur publie une nouvelle version.
-  const result = await env.DB.prepare(
-    `INSERT INTO annotations (user_id, song_id, target_type, line_id, word_start, word_end, end_line_id, content, is_published, version_id, grid_number)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, NULL, ?9)`
-  ).bind(user.id, songId, targetType, lineId, wordStart, wordEnd, endLineId, content, gridNumber).run();
-
-  const annotationId = result.meta.last_row_id;
-  if (refs.length) await replaceReferences(env, annotationId, refs);
-
-  return json({ id: annotationId }, 201);
-}
-
-// Rang (à partir de 1) de la prochaine lecture de cet auteur sur cette cible
-// exacte, parmi celles qu'il a déjà écrites : jamais recalculé après coup.
-async function nextGridNumber(env, userId, songId, targetType, lineId, wordStart, wordEnd, endLineId) {
-  const row = await env.DB.prepare(
-    `SELECT COALESCE(MAX(grid_number), 0) AS n FROM annotations
-      WHERE user_id = ?1 AND song_id = ?2 AND target_type = ?3
-        AND line_id IS ?4 AND word_start IS ?5 AND word_end IS ?6 AND end_line_id IS ?7`
-  ).bind(userId, songId, targetType, lineId, wordStart, wordEnd, endLineId).first();
-  return row.n + 1;
-}
-
-async function updateAnnotation(request, env, id) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
-
-  const body = await readJson(request);
-  const content = String((body && body.content) || '').trim();
-  if (!content) return json({ error: 'L’explication ne peut pas être vide.' }, 400);
-  if (content.length > 5000) return json({ error: 'Explication trop longue (5000 caractères max).' }, 400);
-
-  const ann = await env.DB.prepare('SELECT id, user_id FROM annotations WHERE id = ?1').bind(id).first();
-  if (!ann) return json({ error: 'Annotation introuvable.' }, 404);
-  if (ann.user_id !== user.id && !user.is_admin) return json({ error: 'Vous ne pouvez modifier que vos propres explications.' }, 403);
-
-  const refs = await parseReferences(env, body.references);
-  if (refs instanceof Response) return refs;
-
-  // Toute modification repasse l'interprétation en brouillon : elle
-  // redevient invisible pour les autres jusqu'à la prochaine publication.
-  await env.DB.prepare(
-    `UPDATE annotations SET content = ?1, updated_at = datetime('now'), is_published = 0, version_id = NULL WHERE id = ?2`
-  ).bind(content, id).run();
-  if (body.references !== undefined) await replaceReferences(env, id, refs);
-  return json({ ok: true });
-}
 
 async function deleteAnnotation(request, env, id) {
   let user;
@@ -1010,30 +773,6 @@ async function deleteAnnotation(request, env, id) {
 
 /* ------------------------------------------------------------- connexions */
 
-async function createConnection(request, env) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
-
-  const body = await readJson(request);
-  if (!body) return json({ error: 'Requête invalide.' }, 400);
-  const songA = Number(body.song_a_id);
-  const songB = Number(body.song_b_id);
-  const explanation = String(body.explanation || '').trim();
-
-  if (!explanation) return json({ error: 'Expliquez en quoi les deux chansons sont reliées.' }, 400);
-  if (explanation.length > 5000) return json({ error: 'Explication trop longue (5000 caractères max).' }, 400);
-  if (!songA || !songB || songA === songB) return json({ error: 'Choisissez deux chansons différentes.' }, 400);
-
-  const found = (await env.DB.prepare(
-    'SELECT id FROM songs WHERE id IN (?1, ?2)'
-  ).bind(songA, songB).all()).results;
-  if (found.length !== 2) return json({ error: 'Chanson introuvable.' }, 404);
-
-  const result = await env.DB.prepare(
-    'INSERT INTO song_connections (song_a_id, song_b_id, user_id, explanation) VALUES (?1, ?2, ?3, ?4)'
-  ).bind(songA, songB, user.id, explanation).run();
-  return json({ id: result.meta.last_row_id }, 201);
-}
 
 async function deleteConnection(request, env, id) {
   let user;
@@ -1051,107 +790,9 @@ async function deleteConnection(request, env, id) {
 
 /* -------------------------------------------- interprétations d'ensemble */
 
-// Valide les connexions entre blocs d'une interprétation d'ensemble.
-// Retourne un tableau normalisé, ou une Response d'erreur.
-async function parseEssayLinks(env, raw) {
-  if (raw == null) return [];
-  if (!Array.isArray(raw)) return json({ error: 'Connexions invalides.' }, 400);
-  if (raw.length > 20) return json({ error: '20 connexions maximum par interprétation.' }, 400);
-  const links = [];
-  for (const l of raw) {
-    const note = String((l && l.note) || '').trim();
-    if (!note) return json({ error: 'Chaque connexion doit être expliquée.' }, 400);
-    if (note.length > 1000) return json({ error: 'Explication de connexion trop longue (1000 caractères max).' }, 400);
-    const spec = { note };
-    for (const side of ['from', 'to']) {
-      const lineId = Number(l && l[side + '_line_id']);
-      const line = await env.DB.prepare('SELECT id, text FROM lyric_lines WHERE id = ?1').bind(lineId).first();
-      if (!line) return json({ error: 'Phrase introuvable dans une connexion.' }, 400);
-      let ws = l[side + '_word_start'] == null ? null : Number(l[side + '_word_start']);
-      let we = l[side + '_word_end'] == null ? ws : Number(l[side + '_word_end']);
-      if (ws != null) {
-        const n = countWords(line.text);
-        if (!Number.isInteger(ws) || !Number.isInteger(we) || ws < 0 || we < ws || we >= n) {
-          return json({ error: 'Position de mot invalide dans une connexion.' }, 400);
-        }
-      } else {
-        we = null;
-      }
-      spec[side] = { line_id: lineId, ws, we };
-    }
-    if (spec.from.line_id === spec.to.line_id &&
-        spec.from.ws === spec.to.ws && spec.from.we === spec.to.we) {
-      return json({ error: 'Une connexion doit relier deux blocs différents.' }, 400);
-    }
-    links.push(spec);
-  }
-  return links;
-}
 
-async function replaceEssayLinks(env, essayId, links) {
-  const statements = [
-    env.DB.prepare('DELETE FROM essay_links WHERE essay_id = ?1').bind(essayId),
-  ];
-  links.forEach((l, i) => {
-    statements.push(env.DB.prepare(
-      `INSERT INTO essay_links
-        (essay_id, position, from_line_id, from_word_start, from_word_end,
-         to_line_id, to_word_start, to_word_end, note)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
-    ).bind(essayId, i, l.from.line_id, l.from.ws, l.from.we, l.to.line_id, l.to.ws, l.to.we, l.note));
-  });
-  await env.DB.batch(statements);
-}
 
-async function createEssay(request, env) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
 
-  const body = await readJson(request);
-  if (!body) return json({ error: 'Requête invalide.' }, 400);
-  const songId = Number(body.song_id);
-  const content = String(body.content || '').trim();
-  if (!content) return json({ error: 'L’interprétation ne peut pas être vide.' }, 400);
-  if (content.length > 10000) return json({ error: 'Interprétation trop longue (10 000 caractères max).' }, 400);
-
-  const song = await env.DB.prepare('SELECT id FROM songs WHERE id = ?1').bind(songId).first();
-  if (!song) return json({ error: 'Chanson introuvable.' }, 404);
-
-  const links = await parseEssayLinks(env, body.links);
-  if (links instanceof Response) return links;
-
-  const result = await env.DB.prepare(
-    'INSERT INTO essays (song_id, user_id, content, is_published, version_id) VALUES (?1, ?2, ?3, 0, NULL)'
-  ).bind(songId, user.id, content).run();
-  const essayId = result.meta.last_row_id;
-  if (links.length) await replaceEssayLinks(env, essayId, links);
-  return json({ id: essayId }, 201);
-}
-
-async function updateEssay(request, env, id) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
-
-  const essay = await env.DB.prepare('SELECT id, user_id FROM essays WHERE id = ?1').bind(id).first();
-  if (!essay) return json({ error: 'Interprétation introuvable.' }, 404);
-  if (essay.user_id !== user.id && !user.is_admin) {
-    return json({ error: 'Vous ne pouvez modifier que vos propres interprétations.' }, 403);
-  }
-
-  const body = await readJson(request);
-  const content = String((body && body.content) || '').trim();
-  if (!content) return json({ error: 'L’interprétation ne peut pas être vide.' }, 400);
-  if (content.length > 10000) return json({ error: 'Interprétation trop longue (10 000 caractères max).' }, 400);
-
-  const links = await parseEssayLinks(env, body.links);
-  if (links instanceof Response) return links;
-
-  await env.DB.prepare(
-    `UPDATE essays SET content = ?1, updated_at = datetime('now'), is_published = 0, version_id = NULL WHERE id = ?2`
-  ).bind(content, id).run();
-  if (body.links !== undefined) await replaceEssayLinks(env, id, links);
-  return json({ ok: true });
-}
 
 async function deleteEssay(request, env, id) {
   let user;
@@ -1319,43 +960,6 @@ async function ensurePassageRefTable(env) {
   passageRefTableReady = true;
 }
 
-async function createPassageReference(request, env) {
-  let user;
-  try { user = await requireUser(request, env); } catch (resp) { if(resp instanceof Response)return resp; throw resp; }
-  const body = await readJson(request);
-  if (!body) return json({ error: 'Requête invalide.' }, 400);
-
-  const songId = Number(body.song_id);
-  const song = await env.DB.prepare('SELECT id FROM songs WHERE id = ?1').bind(songId).first();
-  if (!song) return json({ error: 'Chanson introuvable.' }, 404);
-
-  // La cible est décrite comme celle d'une annotation.
-  const targetType = ['song', 'title', 'line', 'word', 'passage'].includes(body.target_type)
-    ? body.target_type : 'passage';
-  const lineId = body.line_id == null ? null : Number(body.line_id);
-  const endLineId = body.end_line_id == null ? null : Number(body.end_line_id);
-  const wordStart = body.word_start == null ? null : Number(body.word_start);
-  const wordEnd = body.word_end == null ? null : Number(body.word_end);
-
-  const parsed = await parseReferences(env, [body]);
-  if (parsed instanceof Response) return parsed;
-  if (!parsed.length) return json({ error: 'Référence vide.' }, 400);
-  const r = parsed[0];
-  if (!r.note) return json({ error: 'Expliquez en quoi c’est une référence.' }, 400);
-
-  await ensurePassageRefTable(env);
-  await env.DB.prepare(
-    `INSERT INTO passage_references
-      (user_id, song_id, target_type, line_id, word_start, word_end, end_line_id,
-       kind, label, artist, note, ref_song_id, ref_line_id, ref_end_line_id)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`
-  ).bind(
-    user.id, songId, targetType, lineId, wordStart, wordEnd, endLineId,
-    r.ref_line_id ? 'internal' : 'work', r.label, r.artist, r.note,
-    r.ref_song_id || null, r.ref_line_id || null, r.ref_end_line_id || null
-  ).run();
-  return json({ ok: true });
-}
 
 async function deletePassageReference(request, env, id) {
   let user;
