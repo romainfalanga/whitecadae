@@ -338,7 +338,7 @@ test('site header measurements and menu pauses are observed without leaking acro
 test('the three loges are the main menu; Mes publications and Publier are places with a way back',async()=>{
   const f=fixture();await f.page();await flush();
   const bar=f.find('.loge-bar');assert.equal(f.find('h1').textContent,'Loge virtuelle');assert.equal(f.app.querySelector('.loge-tabs'),null);
-  assert.deepEqual(bar.querySelectorAll('.loge-action').map(link=>[link.textContent,link.getAttribute('href')]),[['Mes publications','/loge-virtuelle/membres/11?onglet=reflexions'],['Publier','/loge-virtuelle/publier']]);
+  assert.deepEqual(bar.querySelectorAll('.loge-action').map(link=>[link.getAttribute('aria-label'),link.getAttribute('href'),link.textContent]),[['Mes publications','/loge-virtuelle/membres/11?onglet=reflexions',''],['Publier','/loge-virtuelle/publier','']],'icons only, named for assistive tech');assert(bar.querySelectorAll('.loge-action').every(link=>link.querySelector('svg')));
   assert.deepEqual(f.find('.loge-rooms').querySelectorAll('a').map(link=>link.textContent),['Réflexions','Idées et projets','Sociétés harmonieuses']);
   assert.doesNotMatch(f.app.textContent,/Mes réflexions|Loge Virtuelle/);assert.equal(f.app.querySelector('[data-favorite]'),null);
   await f.navigate('/loge-virtuelle?loge=societe-harmonieuse');
@@ -346,7 +346,7 @@ test('the three loges are the main menu; Mes publications and Publier are places
     await f.navigate(destination);const header=f.find('.loge-bar');
     assert(header.classList.contains('is-sub'));assert.equal(f.find('h1').textContent,title);assert.equal(f.app.querySelector('.loge-rooms'),null);
     const back=f.find('.loge-back');assert.equal(back.getAttribute('href'),'/loge-virtuelle?loge=societe-harmonieuse','back returns to the loge last visited');assert.equal(back.textContent,'Sociétés harmonieuses');
-    assert.deepEqual(header.querySelectorAll('.loge-action').map(link=>link.textContent),actions);assert.equal(!!f.app.querySelector('.is-video-view'),destination!=='/loge-virtuelle/publier');
+    assert.deepEqual(header.querySelectorAll('.loge-action').map(link=>link.getAttribute('aria-label')),actions);assert.equal(!!f.app.querySelector('.is-video-view'),destination!=='/loge-virtuelle/publier');
   }
   assert.equal(f.document.title,'Publier dans la Loge · Loge virtuelle · White Cadae');
   await f.navigate('/loge-virtuelle/membres/11?onglet=reflexions');assert.equal(f.document.title,'Mes publications · Loge virtuelle · White Cadae');assert.equal(f.find('.loge-post-category',f.node('loge-post-7')).textContent,'Réflexions','each publication names its loge');

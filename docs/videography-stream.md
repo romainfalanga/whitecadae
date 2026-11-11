@@ -116,7 +116,8 @@ catégories de la vidéographie restent personnelles (`logeRoomLabel` dans
 ### Navigation
 
 - Le menu principal de la Loge est celui des trois loges, sous une barre légère
-  qui porte le titre, « Mes publications » et « Publier ».
+  qui porte le titre et deux icônes : profil pour « Mes publications », plus pour
+  « Publier » (nommées pour les lecteurs d’écran et au survol).
 - « Mes publications » (les vidéos que le membre a mises dans la Loge, avec le
   nom de leur loge) et « Publier » sont des pages secondaires avec un retour vers
   la dernière loge visitée. Le profil d’un autre membre et le détail d’une
