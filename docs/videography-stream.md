@@ -1,6 +1,6 @@
 # Vidéographie Stream et page Publier
 
-La vidéographie, accessible à l’échelon réel 33, reçoit désormais des fichiers
+La vidéographie, accessible à l’échelon réel 15, reçoit désormais des fichiers
 vidéo par le même envoi direct Cloudflare Stream que la Loge. Les anciennes
 vidéos YouTube et leurs métadonnées sont conservées. Un changement de titre,
 de catégorie ou de date sans fichier conserve la vidéo existante.

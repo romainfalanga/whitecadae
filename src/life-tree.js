@@ -1,6 +1,7 @@
 import {ensureLogeStreamTables,createLogeUpload,getLogeUpload,deleteLogeUpload,readyLogeUpload,uploadIdOf,signedStreamPlayback} from './loge-stream.js';
 import {seal,unseal,tagHash,fail,text,identifier,integer,lifeEventContext} from './private-data.js';
 import {ensureLogeTables,sharedPostWithdrawal} from './loge.js';
+import {GAME_MASTER_BLANC_LEVEL} from './content-access.js';
 import {circleAccess,freshAccess,requireStorage,requireLevel} from './private-access.js';
 import {recordTopic} from './circle-topics.js';
 import {VIDEO_BRANCHES,LOGE_ROOMS,storedVideoBranch,videoBranchKey} from '../public/video-model.js';
@@ -97,7 +98,7 @@ export async function lifeRoute(request,env,url,user,body,json){
     const drafts=after?[]:(await env.DB.prepare('SELECT * FROM life_drafts WHERE owner_id=?1').bind(user.id).all()).results;
     return json({version:1,next:rows.length>30?last:null,events:await Promise.all(page.map(r=>unpack(env,r))),links:await Promise.all(links.map(async r=>({source:r.source_id,target:r.target_id,...await unseal(env,`link:${user.id}:${r.source_id}:${r.target_id}`,r.payload)}))),drafts:await Promise.all(drafts.map(async r=>({id:r.id,...await unseal(env,`draft:${user.id}:${r.id}`,r.payload)})))},200,{'Content-Disposition':'attachment; filename="arbre-de-vie.json"'});
   }
-  await requireLevel(env,user,33);
+  await requireLevel(env,user,GAME_MASTER_BLANC_LEVEL);
   const owner=url.searchParams.has('owner')?integer(Number(url.searchParams.get('owner')),1):user.id;
   const access=await circleAccess(env,user,owner,true);
   if(method!=='GET'){if(owner!==user.id)fail('Seul l’auteur peut modifier son arbre.',403);if(!/^\/(?:events\/[a-zA-Z0-9_-]+|uploads(?:\/[0-9a-f-]+)?)$/i.test(suffix))await requireStorage(env,user.id);}

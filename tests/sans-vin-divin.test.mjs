@@ -52,15 +52,15 @@ test('the new date rejects missing zeros steps, raw-number tricks, loose blocks 
   assert.deepEqual(initialDraft(boardSpec('first')).items,[src('a'),src('b')]);
 });
 
-test('all active signs remain reachable, the date opens with 13h20 and July has exactly its two clocks at 30',()=>{
+test('all active signs remain reachable, the date opens with 13h20 and July has exactly its two clocks at 25',()=>{
   const found=[];
   for(let round=0;round<20;round++)for(const n of NODES)if(isPlayable(n,progress(rows(found))))for(const a of n.answers)if(!found.includes(a.id))found.push(a.id);
   assert.equal(found.length,32);assert.equal(gameLevel(rows(found)),33);
   const at=level=>buildGameState(rows(found.slice(0,level-1)));
   assert.ok(!at(3).pages.some(n=>n.id==='eg-22'));
   const lyric=at(4).pages.find(n=>n.id==='eg-22');assert.equal(lyric.href,'/sans-vin-divin');assert.equal(lyric.locked,false);
-  assert.ok(!at(29).pages.some(n=>['eg-19','eg-21'].includes(n.id)));
-  const july=at(30).pages.filter(n=>n.music==='un-fil-entre-deux-infinis');
+  assert.ok(!at(24).pages.some(n=>['eg-19','eg-21'].includes(n.id)));
+  const july=at(25).pages.filter(n=>n.music==='un-fil-entre-deux-infinis');
   assert.deepEqual(july.map(n=>[n.title,n.subtitle]),[['18 juillet 2019','Un fil entre deux infinis'],['3:18','Un fil entre deux infinis']]);
   assert.ok(!NODES.some(n=>n.id==='eg-20'||n.music==='wanheda'||n.music==='quand-je-vois-je-pense'));
 });

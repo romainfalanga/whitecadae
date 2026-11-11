@@ -2,7 +2,7 @@
 
 ## Parcours
 
-La Loge est une communauté réservée au niveau réel 33. Son menu, ses publications, ses profils et toutes ses API appliquent cette même progression, sans exception pour les administrateurs. Elle reste indépendante de l’ancienne Vidéographie et des carrés d’AS.
+La Loge est une communauté réservée au niveau réel 15. Son menu, ses publications, ses profils et toutes ses API appliquent cette même progression, sans exception pour les administrateurs. Elle reste indépendante de l’ancienne Vidéographie et des carrés d’AS.
 
 Les vues vidéo occupent l’espace disponible sous l’en-tête du site dès leur ouverture. Le fil défile verticalement, une publication par écran. La vidéo verticale reste centrée, sans colonne de commande qui réduirait sa largeur ou la décalerait. Le cadre YouTube entier est conservé, sans recadrage de la vidéo. Les anciens contenus horizontaux restent lisibles.
 
@@ -60,8 +60,8 @@ Commente leurs vidéos pour leur apporter ton regard et des pistes d’améliora
 
 ## Vérifications
 
-Les tests utilisent les vrais handlers serveur, SQLite et un DOM client léger. Ils couvrent les niveaux 32/33 et les administrateurs, les profils privés, la propriété et les conflits, les quotas et rejeux, la pagination, les liens YouTube, les favoris privés et leur suppression, les publications avec titre seul, les réponses tardives, les changements de compte, les transitions entre Loge, Mes réflexions et Thème, l’absence des commandes et préchargements retirés, les anciennes routes d’historique et leurs positions de défilement et le cycle de pause/reprise du menu du site. Les tests du lecteur contrôlent les événements de l’API, le son, la visibilité, la limite de trois lecteurs, le plein écran natif, l’absence de démarrage automatique, la lecture manuelle, le déplacement dans la lecture, les durées inconnues et le nettoyage du compteur. Les tests client vérifient que les commentaires conservent le lecteur et sa barre sans appeler pause/reprise.
+Les tests utilisent les vrais handlers serveur, SQLite et un DOM client léger. Ils couvrent les niveaux 14/15 et les administrateurs, les profils privés, la propriété et les conflits, les quotas et rejeux, la pagination, les liens YouTube, les favoris privés et leur suppression, les publications avec titre seul, les réponses tardives, les changements de compte, les transitions entre Loge, Mes réflexions et Thème, l’absence des commandes et préchargements retirés, les anciennes routes d’historique et leurs positions de défilement et le cycle de pause/reprise du menu du site. Les tests du lecteur contrôlent les événements de l’API, le son, la visibilité, la limite de trois lecteurs, le plein écran natif, l’absence de démarrage automatique, la lecture manuelle, le déplacement dans la lecture, les durées inconnues et le nettoyage du compteur. Les tests client vérifient que les commentaires conservent le lecteur et sa barre sans appeler pause/reprise.
 
-Le DOM de test ne reproduit ni la mise en page réelle du navigateur ni la lecture YouTube physique sur téléphone. Aucun compte, publication ou commentaire de test n’est créé en production. Le contrôle du rendu réel exige une session authentifiée au niveau 33 et un appareil capable de lire YouTube.
+Le DOM de test ne reproduit ni la mise en page réelle du navigateur ni la lecture YouTube physique sur téléphone. Aucun compte, publication ou commentaire de test n’est créé en production. Le contrôle du rendu réel exige une session authentifiée au niveau 15 ou plus et un appareil capable de lire YouTube.
 
 Références : [API IFrame](https://developers.google.com/youtube/iframe_api_reference), [paramètres](https://developers.google.com/youtube/player_parameters), [visibilité et éléments du lecteur](https://developers.google.com/youtube/terms/required-minimum-functionality).

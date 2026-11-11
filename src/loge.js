@@ -3,6 +3,7 @@ import {LOGE_LEGACY_SOURCES} from './features.js';
 import {videoBranchKey,LOGE_ROOMS,logeRoom} from '../public/video-model.js';
 import {gameRows} from './echelon-api.js';
 import {gameLevel} from './echelon.js';
+import {GAME_MASTER_BLANC_LEVEL} from './content-access.js';
 import {fail,objectBody,text,integer,identifier,unseal,lifeEventContext} from './private-data.js';
 import {youtubeId} from '../public/youtube-video.js';
 import {ensureThemeTables,handleThemes,getCurrentTheme,postThemeAssignment} from './loge-themes.js';
@@ -423,7 +424,7 @@ async function videographyChoices(env,user,json){
 }
 export async function handleLoge(request,env,url,{getUser,json,legacySources=LOGE_LEGACY_SOURCES}){
   const user=await getUser(request,env);if(!user)fail('Connecte-toi pour ouvrir cette page.',401);
-  if(gameLevel(await gameRows(env,user.id))<33)fail('Cette page n’est pas encore disponible dans ton parcours.',403);
+  if(gameLevel(await gameRows(env,user.id))<GAME_MASTER_BLANC_LEVEL)fail('Cette page n’est pas encore disponible dans ton parcours.',403);
   const writing=!['GET','HEAD','OPTIONS'].includes(request.method);
   if(writing?request.headers.get('X-WC-User')!==String(user.id):request.headers.has('X-WC-User')&&request.headers.get('X-WC-User')!==String(user.id))fail('Le compte connecté a changé. Recharge la page.',409);
   await ensureLogeTables(env);

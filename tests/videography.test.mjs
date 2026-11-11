@@ -14,8 +14,8 @@ function setup(promote=true){
  f.agree=level=>f.ok('/api/private/consent',level,'POST',{consent:true,version:'2026-10-01'});
  return f;
 }
-test('restored video access requires canonical level 33 while AS invitation thresholds stay unchanged',async()=>{
- const f=setup(false);setEarnedLevel(f,15,32);setEarnedLevel(f,16,33);try{
+test('restored video access requires canonical level 15 while AS invitation thresholds stay unchanged',async()=>{
+ const f=setup(false);setEarnedLevel(f,15,14);setEarnedLevel(f,16,15);try{
   assert.equal((await f.call('/api/life-tree?videos=1',14)).status,403);assert.equal((await f.call('/api/life-tree?videos=1',15)).status,200);
   assert.equal((await f.call('/api/ace-circles',17)).status,403);assert.equal((await f.call('/api/ace-circles',18)).status,200);
   await f.agree(18);await f.agree(19);const id=crypto.randomUUID();await f.ok('/api/ace-circles/invitations',19,'POST',{id,target:19,recipientNotice:true});await f.ok('/api/ace-circles/invitations/'+id,18,'PUT',{action:'accept'});
@@ -128,18 +128,18 @@ test('session response reads canonical progression once and does not expose priv
  }finally{f.sql.close();}
 });
 
-test('restored videography rejects every read/write below 33 and grants final access without reopening retired spaces',async()=>{
+test('restored videography rejects every read/write below 15 and grants final access without reopening retired spaces',async()=>{
  const f=setup(false);try{
-  setEarnedLevel(f,16,32);
+  setEarnedLevel(f,16,14);
   for(const [path,method] of [['/api/life-tree?videos=1','GET'],['/api/life-tree?archive=1','GET'],['/api/life-tree/drafts','GET'],['/api/life-tree/events/video-gate','GET'],['/api/life-tree/events/video-gate','PUT'],['/api/life-tree/events/video-gate','DELETE']]){
    assert.equal((await f.call(path,15,method,method==='GET'?undefined:{})).status,403,path);
   }
   assert.equal((await f.call('/api/life-tree?videos=1',99)).status,403,'administrator is not a progression bypass');
   assert.equal((await f.ok('/api/me',15)).access.videographie,false);
-  setEarnedLevel(f,16,33);
+  setEarnedLevel(f,16,15);
   const access=(await f.ok('/api/me',15)).access;assert.equal(access.videographie,true);assert.equal(access.lifeTree,false);assert.equal(access.mechanisms,false);assert.equal(access.aceSquare,false);
   await f.ok('/api/life-tree/events/video-gate',15,'PUT',video());
   assert.equal((await f.ok('/api/life-tree?videos=1',15)).events.length,1);
-  setEarnedLevel(f,16,32);assert.equal((await f.call('/api/life-tree/events/video-gate',15)).status,403);
+  setEarnedLevel(f,16,14);assert.equal((await f.call('/api/life-tree/events/video-gate',15)).status,403);
  }finally{f.sql.close();}
 });

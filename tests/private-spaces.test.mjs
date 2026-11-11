@@ -33,7 +33,7 @@ async function save(f,owner=201,id=crypto.randomUUID(),extra={}){return (await f
 async function send(f,owner,author,extra={}){const key=extra.id||crypto.randomUUID(),payload=await seal(f.env,`message:${owner}:${author}:${key}`,{text:extra.text||'Un message privé.'});f.sql.prepare('INSERT OR IGNORE INTO ace_messages(owner_id,author_id,payload,request_id,event_id,parent_id) VALUES(?,?,?,?,?,?)').run(owner,author,payload,key,extra.eventId||null,extra.parentId||null);return {ok:true};}
 
 test('exact canonical thresholds; no anonymous, legacy or administrator bypass; old routes remain retired',async()=>{
- const f=setup();setEarnedLevel(f,201,32);try{
+ const f=setup();setEarnedLevel(f,201,14);try{
    for(const [path,below,above] of [['/api/game-master-orange',7,8],['/api/life-tree',201,202],['/api/ace-circles',18,19]]){
      assert.equal((await f.call(path,0)).status,401);assert.equal((await f.call(path,below)).status,403);assert.equal((await f.call(path,above)).status,200);assert.equal((await f.call(path,100)).status,403);
    }

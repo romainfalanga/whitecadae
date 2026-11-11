@@ -13,7 +13,7 @@ export const ALBUM57={
 export const JULY = {
   id:'18-juillet-2019', album:'18 juillet 2019', artist:'AA', cover:'/music/18-juillet-2019/cover.jpeg', coverType:'image/jpeg', lyricAlbums:['18-juillet-2019'],
   tracks:[
-    {slug:'un-fil-entre-deux-infinis',title:'Un fil entre deux infinis',src:'/music/18-juillet-2019/un-fil-entre-deux-infinis.mp3',duration:198.624,minLevel:30},
+    {slug:'un-fil-entre-deux-infinis',title:'Un fil entre deux infinis',src:'/music/18-juillet-2019/un-fil-entre-deux-infinis.mp3',duration:198.624,minLevel:33},
   ],
 };
 export const FAIS_MIEUX = {

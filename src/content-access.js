@@ -1,17 +1,19 @@
 import {gameLevel,accessLevel} from './echelon.js';
 import {RELEASES,canListen} from './music-catalogue.js';
 import {PLAYLISTS_ENABLED} from './features.js';
+// Game Master Blanc, the Loges virtuelles and the videography open together.
+export const GAME_MASTER_BLANC_LEVEL=15;
 
 export function contentAccess(user,rows=[]){
   const level=gameLevel(rows),legacy=accessLevel(rows),admin=!!user?.is_admin;
-  return {level,legacy,admin,gameMaster:!!user&&level>=7,playlist:PLAYLISTS_ENABLED&&!!user&&level>=10,gameMasterBlanc:!!user&&level>=33,loge:!!user&&level>=33,mechanisms:false,lifeTree:false,aceSquare:false,conversation:false,topics:false,videographie:!!user&&level>=33};
+  return {level,legacy,admin,gameMaster:!!user&&level>=7,playlist:PLAYLISTS_ENABLED&&!!user&&level>=10,gameMasterBlanc:!!user&&level>=GAME_MASTER_BLANC_LEVEL,loge:!!user&&level>=GAME_MASTER_BLANC_LEVEL,mechanisms:false,lifeTree:false,aceSquare:false,conversation:false,topics:false,videographie:!!user&&level>=GAME_MASTER_BLANC_LEVEL};
 }
 
 // A single schedule drives the home page, rewards and protected media.
 export function buildOpenings(rows=[],user={}){
   const access=contentAccess(user,rows);
   const items=RELEASES.flatMap(album=>album.tracks.map(track=>({id:'music-'+track.slug,title:track.title,description:album.album+' · musique et paroles',level:track.minLevel,open:canListen(track,access),href:'/musique#track-'+track.slug,lyricsHref:'/chanson/'+track.slug})));
-  const pages=[['gameMaster','Game Master Orange',7,'/game-master-orange'],['gameMasterBlanc','Game Master Blanc',33,'/game-master-blanc'],['loge','Loges virtuelles',33,'/loge-virtuelle']];
+  const pages=[['gameMaster','Game Master Orange',7,'/game-master-orange'],['gameMasterBlanc','Game Master Blanc',GAME_MASTER_BLANC_LEVEL,'/game-master-blanc'],['loge','Loges virtuelles',GAME_MASTER_BLANC_LEVEL,'/loge-virtuelle']];
   if(PLAYLISTS_ENABLED)pages.push(['playlist','Playlist',10,'/playlist']);
   for(const [id,title,level,href] of pages)items.push({id:'page-'+id,title,level,href,open:access[id]});
   const pending=items.filter(item=>!item.open&&item.level>access.level);

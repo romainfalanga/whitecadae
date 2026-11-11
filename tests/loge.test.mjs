@@ -15,7 +15,7 @@ function setup(){
     f.sql.prepare('DELETE FROM riddle_progress WHERE user_id=?').run(userId);
     for(const sign of signs.slice(0,number-1))f.sql.prepare('INSERT INTO riddle_progress(user_id,riddle_id,solved_at) VALUES(?,?,?)').run(userId,sign,'now');
   }
-  level(10,32);for(const id of [11,12,26])level(id,33);
+  level(10,14);for(const id of [11,12,26])level(id,33);
   const deps={legacySources:true,getUser:async request=>{
     const token=/wc_session=([^;]+)/.exec(request.headers.get('Cookie')||'')?.[1];
     return f.sql.prepare('SELECT u.* FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.token=?').get(token||'')||null;
@@ -50,7 +50,7 @@ test('the Loge checks the real level on every endpoint, including administrators
       assert.equal((await f.call(endpoint,{token:'invalid'})).status,401);
     }
     f.level(100,33);assert.equal((await f.call('/api/loge',{token:'qa99'})).status,200);
-    f.level(11,32);assert.equal((await f.call()).status,403);assert.equal((await f.post()).status,403);
+    f.level(11,14);assert.equal((await f.call()).status,403);assert.equal((await f.post()).status,403);
     assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_posts').get().n,1);
   }finally{f.sql.close();}
 });
@@ -335,7 +335,7 @@ test('favorites keep the real level and identity gates and expose each member’
     assert.equal((await favorite(f,id,true)).status,200);
     for(const member of [11,404404]){const other=await f.call('/api/loge/membres/'+member+'?tab=favoris',{token:'qa11'});assert.equal(other.status,403);assert.doesNotMatch(JSON.stringify(other.data),/posts|youtube|Réflexion/);}
     assert.deepEqual((await f.call('/api/loge/membres/12?tab=favoris',{token:'qa11'})).data.posts,[]);
-    f.level(11,32);assert.equal((await favorite(f,id,false)).status,403);assert.equal((await f.call('/api/loge/membres/11?tab=favoris')).status,403);
+    f.level(11,14);assert.equal((await favorite(f,id,false)).status,403);assert.equal((await f.call('/api/loge/membres/11?tab=favoris')).status,403);
     assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_favorites').get().n,1);
     f.level(11,33);assert.equal((await f.call('/api/loge/membres/11?tab=favoris')).data.posts[0].id,id);
   }finally{f.sql.close();}
