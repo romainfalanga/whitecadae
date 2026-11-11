@@ -3,7 +3,7 @@ import {mountComments} from './as-comments.js';
 import {PRIVATE_HELP} from './private-help.js';
 import {chatViewport} from './private-chat-scroll.js';
 import {normalizeMechanism,mechanismFields} from './mechanism-model.js';
-import {VIDEO_BRANCHES,videoLabel} from './video-model.js';
+import {VIDEO_BRANCHES,videoLabel,expansionIcon} from './video-model.js';
 import {youtubeId,youtubeEmbed} from './youtube-video.js';
 import {ensureLogeUpload,validateLogeFile} from './loge-upload.js';
 import {createStreamPlayer} from './loge-stream-player.js';
@@ -121,21 +121,21 @@ function dateLabel(event){
 }
 async function videoPage(){
   session.videos={branch:'self',events:[],next:null,request:0};
-  shell(`${heading('Vidéographie')}<nav class="video-branches" aria-label="Rubriques de ma Vidéographie">${VIDEO_BRANCHES.map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${label}</button>`).join('')}</nav><div class="video-section-heading"><div class="video-section-title"><h2 id="video-section-title">${esc(videoLabel('self'))}</h2><p class="video-section-count" id="video-section-count" aria-live="polite"></p></div><div class="private-actions video-add-action">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter une vidéo','video-add','')}</div></div><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`);
+  shell(`${heading('Vidéographie','',`<button type="button" class="series-open" id="series-open"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="13" height="13" rx="2.5"/><path d="M7 4h11.5A2.5 2.5 0 0 1 21 6.5V17"/><path d="m8.5 11 4 2.5-4 2.5Z"/></svg>Mes sériographies</button>`)}<nav class="video-branches" aria-label="Rubriques de ma Vidéographie">${VIDEO_BRANCHES.map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${label}</button>`).join('')}</nav><div class="video-section-heading"><div class="video-section-title"><h2 id="video-section-title">${esc(videoLabel('self'))}</h2><p class="video-section-count" id="video-section-count" aria-live="polite"></p></div><div class="private-actions video-add-action">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter une vidéo','video-add','')}</div></div><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`);
   // While a video is on its way, « Ajouter » shows where it stands instead.
   bind('video-add',()=>currentVideoJob()?.phase&&currentVideoJob().phase!=='done'?videoJobView():videoForm(null,null,session.videos.branch||'self'));
   const s=session;s.offJobOpener=setVideoJobOpener(()=>{if(live(s))videoJobView();});
   s.offJob=onVideoJob(job=>{if(!live(s)||!s.videos)return;if(job?.phase==='done'&&s.reloadedJob!==job){s.reloadedJob=job;void loadVideos(true).catch(()=>{});}else renderJobTile();});
   // The next page loads by itself as the grid's end comes into view.
   if(typeof IntersectionObserver==='function'){s.moreObserver=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting)&&live(s)&&!el('video-more').hidden&&!s.videos.loading)el('video-more').click();},{rootMargin:'600px 0px'});s.moreObserver.observe(el('video-more'));}
-  bind('video-more',()=>loadVideos());
+  bind('video-more',()=>loadVideos());bind('series-open',()=>seriesList());
   const select=async branch=>{if(session.videos.branch===branch)return;session.videos.branch=branch;document.querySelectorAll('[data-video-branch]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.videoBranch===branch)));el('video-section-title').textContent=videoLabel(branch);await loadVideos(true);};
   document.querySelectorAll('[data-video-branch]').forEach(b=>b.onclick=()=>run(b,()=>select(b.dataset.videoBranch)));
   await loadVideos(true);
   if(live(s)&&takePendingJobOpen())videoJobView();
 }
 async function loadVideos(reset=false){
-  const state=session.videos,request=++state.request;
+  const state=session.videos,request=++state.request;if(reset)session.allVideos=null;
   if(reset){clearInlineComments();destroyVideoPlayers(el('video-list'));state.events=[];state.next=null;el('video-list').replaceChildren();el('video-more').hidden=true;}
   const query=new URLSearchParams({videos:'1'});if(state.owner)query.set('owner',String(state.owner));if(state.branch)query.set('branch',state.branch);if(state.next)query.set('after',state.next);
   state.loading=true;let data;try{data=await api('/api/life-tree?'+query);}finally{state.loading=false;}
@@ -187,10 +187,11 @@ function renderJobTile(){
   tile.querySelector('[data-video-job]').setAttribute('aria-label',`${job.title} : ${jobSummary(job)||job.error}. Afficher le suivi.`);
 }
 // The viewer plays one video at a time, with its details and the way to the next.
-function openVideoViewer(index){
-  const s=session,events=s.videos?.events||[],e=events[index];if(!e)return;
-  const owner=s.videos.owner||s.user,own=owner===s.user;
-  const dialog=modal(e.title,`<article class="video-card video-viewer" data-video="${esc(e.id)}"><p class="video-viewer-meta"><span>${esc(videoLabel(e.video_branch))}</span><time>${esc(dateLabel(e))}</time>${e.loge_post_id?'<span class="video-tile-badge">Dans les loges</span>':''}</p>${eventVideoPlayer(e,true,true,owner)}${!own&&e.creation?.work?`<p class="video-viewer-notes">${esc(e.creation.work)}</p>`:''}<div class="video-card-footer">${own?button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Zm9-13 4 4"/></svg>Modifier','video-viewer-edit','quiet'):'<span></span>'}${e.topic_id&&s.ctx.state.access?.aceSquare?button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A2.5 2.5 0 0 1 4 13.5Z"/></svg>AS','','quiet',`data-video-comments="${e.topic_id}" aria-expanded="false" aria-controls="as-comments-${e.topic_id}"`):''}</div><nav class="video-viewer-nav" aria-label="Autres vidéos">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg><span>Précédente</span>','video-viewer-prev','quiet',index===0?'disabled':'')}<span class="video-viewer-position">${index+1} / ${events.length}${s.videos.next?'+':''}</span>${button('<span>Suivante</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>','video-viewer-next','quiet',index>=events.length-1&&!s.videos.next?'disabled':'')}</nav></article>`);
+// A sériographie passes its own ordered list; otherwise the loaded grid is used.
+function openVideoViewer(index,list=null){
+  const s=session,events=list?.events||s.videos?.events||[],e=events[index],more=!list&&!!s.videos?.next;if(!e)return;
+  const owner=list?s.user:s.videos.owner||s.user,own=owner===s.user;
+  const dialog=modal(e.title,`<article class="video-card video-viewer" data-video="${esc(e.id)}"><p class="video-viewer-meta">${list?`<span class="series-badge">${esc(list.title)}</span>`:''}<span>${esc(videoLabel(e.video_branch))}</span><time>${esc(dateLabel(e))}</time>${e.loge_post_id?'<span class="video-tile-badge">Dans les loges</span>':''}</p>${eventVideoPlayer(e,true,true,owner)}${!own&&e.creation?.work?`<p class="video-viewer-notes">${esc(e.creation.work)}</p>`:''}<div class="video-card-footer">${own?button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Zm9-13 4 4"/></svg>Modifier','video-viewer-edit','quiet'):'<span></span>'}${e.topic_id&&s.ctx.state.access?.aceSquare?button(expansionIcon()+'AS','','quiet',`aria-label="Expansions harmonieuses des AS" data-video-comments="${e.topic_id}" aria-expanded="false" aria-controls="as-comments-${e.topic_id}"`):''}</div><nav class="video-viewer-nav" aria-label="Autres vidéos">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg><span>Précédente</span>','video-viewer-prev','quiet',index===0?'disabled':'')}<span class="video-viewer-position">${index+1} / ${events.length}${more?'+':''}</span>${button('<span>Suivante</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>','video-viewer-next','quiet',index>=events.length-1&&!more?'disabled':'')}</nav></article>`);
   dialog.classList.add('is-viewer');wireVideoPlayers(dialog,()=>Promise.resolve());
   if(own)bind('video-viewer-edit',async()=>{const data=await api('/api/life-tree/events/'+encodeURIComponent(e.id));videoForm(data.event);});
   dialog.querySelectorAll('[data-video-comments]').forEach(b=>b.onclick=()=>run(b,()=>toggleInlineComments(b)));
@@ -198,11 +199,51 @@ function openVideoViewer(index){
   const asButton=dialog.querySelector('[data-video-comments]');if(asButton&&globalThis.matchMedia?.('(min-width: 900px)').matches)void run(asButton,()=>toggleInlineComments(asButton));
   const go=async step=>{
     const next=index+step;
+    if(list){if(live(s)&&list.events[next])openVideoViewer(next,list);return;}
     if(next>=events.length&&s.videos.next){await loadVideos();}
     if(live(s)&&s.videos.events[next])openVideoViewer(next);
   };
   bind('video-viewer-prev',()=>go(-1));bind('video-viewer-next',()=>go(1));
   dialog.addEventListener('keydown',event=>{if(event.target.closest?.('input,textarea,select'))return;if(event.key==='ArrowRight'){event.preventDefault();void go(1);}else if(event.key==='ArrowLeft'&&index>0){event.preventDefault();void go(-1);}});
+}
+// Sériographies: titled, ordered selections of one's own videos, played in order.
+async function allVideos(){
+  const s=session;if(s.allVideos)return s.allVideos;
+  const events=[];let next=null;
+  for(let page=0;page<20;page++){const query=new URLSearchParams({videos:'1'});if(next)query.set('after',next);const data=await api('/api/life-tree?'+query);events.push(...data.events);next=data.next;if(!next)break;}
+  return s.allVideos=events;
+}
+const seriesCount=n=>`${n} vidéo${n>1?'s':''}`;
+async function seriesList(){
+  const s=session,[{series},videos]=await Promise.all([api('/api/life-tree/series'),allVideos()]);if(!live(s))return;
+  const byId=new Map(videos.map(e=>[e.id,e]));s.series=series;
+  const card=item=>{const first=byId.get(item.items[0]);return `<button type="button" class="series-card" data-series="${esc(item.id)}"><span class="series-cover"><span class="video-tile-poster"${first?.creation?.videoProvider==='stream'?` data-poster="${esc(first.id)}"`:''}></span><span class="series-stack" aria-hidden="true"></span></span><strong>${esc(item.title)}</strong><small>${seriesCount(item.items.length)}</small></button>`;};
+  const dialog=modal('Mes sériographies',`<div class="series-toolbar">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nouvelle sériographie','series-new','')}</div><div class="series-grid">${series.map(card).join('')||'<p class="series-empty">Aucune sériographie pour le moment.</p>'}</div>`);
+  dialog.classList.add('is-series');loadPosters(dialog);
+  bind('series-new',()=>seriesEditor());
+  dialog.querySelectorAll('[data-series]').forEach(b=>b.onclick=()=>seriesView(series.find(x=>x.id===b.dataset.series)));
+}
+async function seriesView(item){
+  const s=session,videos=await allVideos();if(!live(s)||!item)return;
+  const byId=new Map(videos.map(e=>[e.id,e])),events=item.items.map(id=>byId.get(id)).filter(Boolean),list={title:item.title,events};
+  const dialog=modal(item.title,`<p class="series-meta">${seriesCount(events.length)}</p><div class="series-actions">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 20 12 8 19Z"/></svg>Lire','series-play','',events.length?'':'disabled')}${button('Modifier','series-edit','quiet')}${button('Supprimer','series-delete','subtle')}${button('Mes sériographies','series-back','subtle')}</div><div class="video-grid series-videos">${events.map((e,index)=>videoTile(e,index).replace('<article class="video-tile"',`<article class="video-tile" data-series-index="${index}"`).replace('<span class="video-tile-play"',`<span class="series-number" aria-hidden="true">${index+1}</span><span class="video-tile-play"`)).join('')}</div>`);
+  dialog.classList.add('is-series');loadPosters(dialog);
+  dialog.querySelectorAll('[data-video-open]').forEach(tile=>tile.onclick=()=>openVideoViewer(Number(tile.dataset.videoOpen),list));
+  bind('series-play',()=>openVideoViewer(0,list));bind('series-edit',()=>seriesEditor(item));bind('series-back',()=>seriesList());
+  bind('series-delete',async()=>{if(!confirm(`Supprimer la sériographie « ${item.title} » ? Les vidéos restent dans ta vidéographie.`))return;await api('/api/life-tree/series/'+encodeURIComponent(item.id),{method:'DELETE',body:{revision:item.revision}});await seriesList();});
+}
+async function seriesEditor(item=null){
+  const s=session,videos=await allVideos();if(!live(s))return;
+  const picked=[...(item?.items||[])].filter(id=>videos.some(e=>e.id===id)),id=item?.id||uid();
+  const tile=e=>`<button type="button" class="series-pick" data-pick="${esc(e.id)}" aria-pressed="false"><span class="video-tile-poster"${e.creation?.videoProvider==='stream'?` data-poster="${esc(e.id)}"`:''}></span><span class="series-pick-order" aria-hidden="true"></span><span class="series-pick-text"><strong>${esc(e.title)}</strong><small>${esc(videoLabel(e.video_branch))}</small></span></button>`;
+  const dialog=modal(item?'Modifier la sériographie':'Nouvelle sériographie',`<form id="series-form"><label>Titre<input name="title" required maxlength="120" value="${esc(item?.title||'')}"></label><div class="series-picks">${videos.map(tile).join('')||'<p class="series-empty">Aucune vidéo dans ta vidéographie.</p>'}</div><div class="series-save"><span id="series-picked" aria-live="polite"></span><button class="private-button" type="submit">Enregistrer</button></div><p id="series-status" class="private-status" role="status"></p></form>`);
+  dialog.classList.add('is-series');loadPosters(dialog);
+  const form=el('series-form');
+  const render=()=>{dialog.querySelectorAll('[data-pick]').forEach(b=>{const at=picked.indexOf(b.dataset.pick);b.setAttribute('aria-pressed',String(at>=0));b.querySelector('.series-pick-order').textContent=at>=0?String(at+1):'';});el('series-picked').textContent=picked.length?seriesCount(picked.length):'';};
+  dialog.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{const at=picked.indexOf(b.dataset.pick);if(at>=0)picked.splice(at,1);else picked.push(b.dataset.pick);s.dirty=true;render();});
+  form.oninput=()=>{s.dirty=true;};render();
+  form.onsubmit=e=>{e.preventDefault();if(!form.reportValidity())return;if(!picked.length){status('Choisis au moins une vidéo.',true,'series-status');return;}
+    run(form.querySelector('[type=submit]'),async()=>{const data=await api('/api/life-tree/series/'+encodeURIComponent(id),{method:'PUT',body:{title:form.elements.title.value,items:picked,revision:item?.revision||0}});s.dirty=false;await seriesView(data.series);});};
 }
 function clearInlineComments(){
   if(!session?.commentPanels)return;
@@ -218,7 +259,7 @@ async function toggleInlineComments(button){
   s.activeComments=id;s.poll=null;clearTimeout(s.timer);
   let panel=panels.get(id);
   if(!panel){
-    const root=document.createElement('section');root.id='as-comments-'+id;root.className='as-comments';root.setAttribute('aria-label','Échanges avec les AS');
+    const root=document.createElement('section');root.id='as-comments-'+id;root.className='as-comments';root.setAttribute('aria-label','Expansions harmonieuses');
     // Right under the video and its buttons, never after the navigation.
     const card=button.closest('.video-card'),footer=card.querySelector('.video-card-footer');if(footer)footer.after(root);else card.append(root);
     panel={root,button,component:null,draft:false};panels.set(id,panel);
@@ -227,7 +268,7 @@ async function toggleInlineComments(button){
       if(!live(s)||panels.get(id)!==panel)return;
       panel.root.hidden=s.activeComments!==id;
       const own=(s.videos?.owner||s.user)===s.user;
-      panel.component=await mountComments({root,id,api,user:s.user,esc,onClose:close,title:own?'Échanges avec tes AS':'Échanges entre AS',placeholder:own?'Réponds à tes AS…':'Partage ton regard…',onDraft:dirty=>{panel.draft=dirty;if(live(s))s.dirty=[...panels.values()].some(p=>p.draft);}});
+      panel.component=await mountComments({root,id,api,user:s.user,esc,onClose:close,title:own?'Expansions harmonieuses de tes AS':'Expansions harmonieuses',placeholder:'Ton expansion harmonieuse…',onDraft:dirty=>{panel.draft=dirty;if(live(s))s.dirty=[...panels.values()].some(p=>p.draft);}});
       if(!live(s)||panels.get(id)!==panel){panel.component.destroy();return;}
     }catch(e){panel.root.remove();panels.delete(id);if(s.activeComments===id)s.activeComments=null;throw e;}
   }
@@ -253,7 +294,7 @@ function videoForm(event=null,draft=null,branch='self'){
   const date=saved?(precision==='month'?String(saved).slice(0,7):String(saved).slice(0,10)):null,existing=!!event&&(d.creation?.videoProvider==='stream'||!!youtubeId(d.creation?.url));
   // A video published in the Loge keeps its file: commenters answered that one.
   const shared=!!event?.loge_post_id,fileTitle=shared?'Vidéo publiée dans les Loges virtuelles':existing?'Choisir une autre vidéo':'Choisir une vidéo',fileHelp=shared?'Supprime sa publication dans les Loges virtuelles pour remplacer le fichier.':'200 Mo et 30 minutes maximum'+(existing?' · sans nouveau fichier, la vidéo actuelle est conservée':'');
-  const dialog=modal(event?'Modifier la vidéo':'Ajouter une vidéo',`<form id="video-form"><label>Titre<input name="title" required maxlength="140" value="${esc(d.title||'')}"></label><div class="video-file-field"><span class="video-file-caption" id="video-file-caption">${existing?'Remplacer la vidéo (facultatif)':'Vidéo'}</span><label class="video-file${shared?' is-locked':''}" id="video-file-zone"><input type="file" name="video" accept="video/*" aria-labelledby="video-file-caption video-file-name" aria-describedby="video-file-help" ${existing?'':'required'} ${shared?'disabled':''}><span class="video-file-icon" aria-hidden="true"><svg class="video-file-icon-add" viewBox="0 0 24 24"><path d="M12 16V5m0 0-4 4m4-4 4 4M5 19h14"/></svg><svg class="video-file-icon-ready" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><span class="video-file-text"><strong id="video-file-name">${fileTitle}</strong><small id="video-file-help">${fileHelp}</small></span><span class="video-file-action" id="video-file-action" hidden>Changer</span></label></div><p id="video-upload-state" class="private-note" role="status"></p><progress id="video-upload-progress" max="100" value="0" hidden aria-label="Progression de l’envoi"></progress>${button('Annuler l’envoi','video-upload-cancel','subtle','hidden')}${button('Annuler l’envoi précédent et recommencer','video-upload-restart','subtle','hidden')}<label>Catégorie<select name="videoBranch">${VIDEO_BRANCHES.map(([key,label])=>`<option value="${key}" ${branch===key?'selected':''}>${label}</option>`).join('')}</select></label><div class="private-actions form-actions"><button class="private-button" type="submit">Enregistrer la vidéo</button>${event?button('Supprimer','video-delete','subtle'):''}</div><div id="video-conflict" hidden>${button('Comparer la version enregistrée','video-compare','quiet')}<div id="video-current"></div></div></form>`);
+  const dialog=modal(event?'Modifier la vidéo':'Ajouter une vidéo',`<form id="video-form"><label>Titre<input name="title" required maxlength="140" value="${esc(d.title||'')}"></label><div class="video-file-field"${event?' hidden':''}><span class="video-file-caption" id="video-file-caption">${existing?'Remplacer la vidéo (facultatif)':'Vidéo'}</span><label class="video-file${shared?' is-locked':''}" id="video-file-zone"><input type="file" name="video" accept="video/*" aria-labelledby="video-file-caption video-file-name" aria-describedby="video-file-help" ${existing?'':'required'} ${shared||event?'disabled':''}><span class="video-file-icon" aria-hidden="true"><svg class="video-file-icon-add" viewBox="0 0 24 24"><path d="M12 16V5m0 0-4 4m4-4 4 4M5 19h14"/></svg><svg class="video-file-icon-ready" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><span class="video-file-text"><strong id="video-file-name">${fileTitle}</strong><small id="video-file-help">${fileHelp}</small></span><span class="video-file-action" id="video-file-action" hidden>Changer</span></label></div><p id="video-upload-state" class="private-note" role="status"></p><progress id="video-upload-progress" max="100" value="0" hidden aria-label="Progression de l’envoi"></progress>${button('Annuler l’envoi','video-upload-cancel','subtle','hidden')}${button('Annuler l’envoi précédent et recommencer','video-upload-restart','subtle','hidden')}<label>Catégorie<select name="videoBranch">${VIDEO_BRANCHES.map(([key,label])=>`<option value="${key}" ${branch===key?'selected':''}>${label}</option>`).join('')}</select></label><div class="private-actions form-actions"><button class="private-button" type="submit">Enregistrer la vidéo</button>${event?button('Supprimer','video-delete','subtle'):''}</div><div id="video-conflict" hidden>${button('Comparer la version enregistrée','video-compare','quiet')}<div id="video-current"></div></div></form>`);
   const form=el('video-form'),picker=form.elements.video,upload={file:null,requestId:uid(),abandonedUploads:[]};let active=null,closed=false,committed=false,publishing=false;
   const current=()=>live(s)&&!closed&&s.dialog===dialog;
   const uploadRequest=async(path,options={})=>{
@@ -290,6 +331,8 @@ function videoForm(event=null,draft=null,branch='self'){
   };
   form.oninput=()=>{s.dirty=true;};
   picker.onchange=()=>{
+    // Editing changes the title and the category only; the video stays as it is.
+    if(event)return;
     const file=picker.files?.[0];if(!file)return;
     try{validateLogeFile(file);}catch(error){picker.value='';resetUpload();display();status(error.message,true,'dialog-status');return;}
     resetUpload(file);display();status('');s.dirty=true;
@@ -336,10 +379,10 @@ function videoForm(event=null,draft=null,branch='self'){
       }catch(error){
         if(current()&&!controller.signal.aborted&&error.name!=='AbortError'){if(error.status===409&&error.data?.uploadId){upload.blockedUploadId=error.data.uploadId;el('video-upload-restart').hidden=false;}display(error.message);form.querySelector('[type=submit]').textContent='Réessayer';if(error.status===409&&revision>0)el('video-conflict').hidden=false;}
         throw error;
-      }finally{publishing=false;if(closed&&!committed)resetUpload();if(active===controller)active=null;if(current()){picker.disabled=shared;el('video-upload-cancel').disabled=false;}}
+      }finally{publishing=false;if(closed&&!committed)resetUpload();if(active===controller)active=null;if(current()){picker.disabled=shared||!!event;el('video-upload-cancel').disabled=false;}}
     });
   };
-  bind('video-delete',async()=>{if(!confirm(shared?'Supprimer cette vidéo ? Elle sera aussi retirée des Loges virtuelles, avec les commentaires qu’elle y a reçus.':'Supprimer cette fiche et tous les commentaires qui lui sont liés ?'))return;await api('/api/life-tree/events/'+id,{method:'DELETE',body:{revision}});s.dirty=false;closeModal();await afterSave();});
+  bind('video-delete',async()=>{if(!confirm(shared?'Supprimer cette vidéo ? Elle sera aussi retirée des Loges virtuelles, avec les expansions harmonieuses qu’elle y a reçues.':'Supprimer cette fiche et toutes les expansions harmonieuses qui lui sont liées ?'))return;await api('/api/life-tree/events/'+id,{method:'DELETE',body:{revision}});s.dirty=false;closeModal();await afterSave();});
   bind('video-compare',async()=>{const current=await api('/api/life-tree/events/'+id);destroyVideoPlayers(el('video-current'));el('video-current').innerHTML=`<section class="private-panel"><h3>${esc(current.event.title)}</h3>${videoReading(current.event)}${button('Conserver ma saisie','video-keep','quiet')}</section>`;wireVideoPlayers(el('video-current'),()=>api('/api/life-tree/events/'+id));bind('video-keep',()=>{revision=current.event.revision;el('video-conflict').hidden=true;status('Ta saisie est conservée. Tu peux l’enregistrer après comparaison.',false,'dialog-status');});});
 }
 // Where a background upload stands, with what can be done about it.
@@ -393,7 +436,7 @@ function wireStreamPlayers(root){
     let player,entry;
     const clock=seconds=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
     const update=()=>{if(!player)return;const duration=player.getDuration(),position=player.getCurrentTime();seek.disabled=!duration;seek.max=String(duration||100);seek.value=String(position);time.textContent=clock(position)+' / '+clock(duration);};
-    player=createStreamPlayer({container,post:{id:container.dataset.streamEvent,title:container.dataset.streamTitle},getPlayback:id=>api('/api/life-tree/events/'+encodeURIComponent(id)+'/playback'+(String(s.user)===container.dataset.streamOwner?'':'?owner='+encodeURIComponent(container.dataset.streamOwner))),isEligible:()=>live(s)&&container.isConnected&&!document.hidden,onReady:update,onState:state=>{
+    player=createStreamPlayer({container,post:{id:container.dataset.streamEvent,title:container.dataset.streamTitle},fullscreen:false,getPlayback:id=>api('/api/life-tree/events/'+encodeURIComponent(id)+'/playback'+(String(s.user)===container.dataset.streamOwner?'':'?owner='+encodeURIComponent(container.dataset.streamOwner))),isEligible:()=>live(s)&&container.isConnected&&!document.hidden,onReady:update,onState:state=>{
       if(state===1){pauseVideoPlayers(entry);document.querySelectorAll('audio').forEach(audio=>audio.pause());}update();
     }});
     player.element.append(controls);
@@ -479,7 +522,7 @@ async function eventDetail(id,owner=session.user){
 // The Carré d'AS: four chosen links. Each link opens both videographies, so
 // every member's square is their own and holds the people they help.
 async function circlePage(){
-  shell(`<header class="private-heading center-mobile square-heading"><div class="square-title"><h1>Carré d’AS</h1><a class="square-info" href="/as" data-link aria-label="Le rôle d’un AS" title="Le rôle d’un AS"><span aria-hidden="true">i</span></a></div></header><div id="square-view"></div>`);
+  shell(`<header class="private-heading center-mobile square-heading"><div class="square-title"><h1>Carré d’<a class="square-as-link" href="/as" data-link title="Le rôle d’un AS">AS</a></h1></div></header><div id="square-view"></div>`);
   session.selectedOwner=Number(/^#as-(\d+)$/.exec(location.hash)?.[1])||null;session.circle=session.initial?.data;
   await squareView(false);
 }
@@ -491,9 +534,9 @@ async function squareView(refresh=true){
   const slots=Array.from({length:4},(_,i)=>{
     const m=members.find(m=>m.slot===i+1);
     if(!m)return `<button type="button" class="square-slot is-empty" data-square-add><span class="square-plus" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><strong>Choisir un AS</strong></button>`;
-    return `<button type="button" class="square-slot" data-square-member="${m.id}" aria-pressed="${m.id===s.selectedOwner}" ${m.reachable?'':'disabled'}>${avatar(m)}<strong>${esc(m.username)}</strong>${m.unread?`<span class="square-unread" aria-label="${m.unread} nouvelle${m.unread>1?'s':''} réponse${m.unread>1?'s':''}">${m.unread}</span>`:''}${m.reachable?'':'<small>Pas encore à l’échelon 20</small>'}</button>`;
+    return `<button type="button" class="square-slot" data-square-member="${m.id}" aria-pressed="${m.id===s.selectedOwner}" ${m.reachable?'':'disabled'}>${avatar(m)}<strong>${esc(m.username)}</strong>${m.unread?`<span class="square-unread" aria-label="${m.unread} nouvelle${m.unread>1?'s':''} expansion${m.unread>1?'s':''} harmonieuse${m.unread>1?'s':''}">${m.unread}</span>`:''}${m.reachable?'':'<small>Pas encore à l’échelon 20</small>'}</button>`;
   }).join('');
-  el('square-view').innerHTML=`<div class="square-grid" aria-label="Mes AS">${slots}</div><p class="square-count">${members.length} / 4 AS</p>${squareInvitations()}<section id="square-member" class="square-member" ${s.selectedOwner?'':'hidden'}></section>`;
+  el('square-view').innerHTML=`<div class="square-grid" aria-label="Mes AS">${slots}</div>${squareInvitations()}<section id="square-member" class="square-member" ${s.selectedOwner?'':'hidden'}></section>`;
   el('square-view').querySelectorAll('[data-square-add]').forEach(b=>b.onclick=()=>directoryView());
   el('square-view').querySelectorAll('[data-square-member]').forEach(b=>b.onclick=()=>run(b,async()=>{s.selectedOwner=Number(b.dataset.squareMember);history.replaceState(history.state,'','#as-'+s.selectedOwner);el('square-view').querySelectorAll('[data-square-member]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));await memberVideography();}));
   wireInvitations();
@@ -502,7 +545,7 @@ async function squareView(refresh=true){
 async function memberVideography(){
   const s=session,member=squareMembers().find(m=>m.id===s.selectedOwner),root=el('square-member');if(!member||!root)return;
   clearInlineComments();destroyVideoPlayers(root);root.hidden=false;
-  root.innerHTML=`<header class="square-member-head">${avatar(member)}<div><h2>Vidéographie de ${esc(member.username)}</h2><p class="video-section-count" id="video-section-count" aria-live="polite"></p></div><button type="button" id="square-remove" class="square-remove" aria-label="Retirer ${esc(member.username)} de mes AS"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M16 11h6"/></svg><span>Retirer</span></button></header><nav class="video-branches" aria-label="Rubriques de la vidéographie de ${esc(member.username)}">${VIDEO_BRANCHES.map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${label}</button>`).join('')}</nav><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`;
+  root.innerHTML=`<header class="square-member-head">${avatar(member)}<div><h2>Vidéographie de ${esc(member.username)}</h2><p class="video-section-count" id="video-section-count" aria-live="polite"></p></div><button type="button" id="square-remove" class="square-remove" aria-label="Retirer ${esc(member.username)} de mes AS">Retirer</button></header><nav class="video-branches" aria-label="Rubriques de la vidéographie de ${esc(member.username)}">${VIDEO_BRANCHES.map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${label}</button>`).join('')}</nav><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`;
   s.videos={branch:'self',owner:member.id,events:[],next:null,request:0};
   s.moreObserver?.disconnect();
   if(typeof IntersectionObserver==='function'){s.moreObserver=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting)&&live(s)&&!el('video-more')?.hidden&&!s.videos.loading)el('video-more').click();},{rootMargin:'600px 0px'});s.moreObserver.observe(el('video-more'));}

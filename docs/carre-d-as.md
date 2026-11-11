@@ -14,7 +14,7 @@ Le Carré d’AS (`/carre-d-as`) s’ouvre à l’échelon réel 20, dans le men
 
 ## Page AS
 
-`/as` est le grade qui suit Game Master Orange et Game Master Blanc, dans le même cadre graphique. Son contenu (`src/as-grade.js`) n’est transmis par `/api/as` qu’à partir de l’échelon réel 20. Il explique le rôle d’un AS (être le point de vue dont l’autre a besoin pour s’améliorer selon ce qu’il veut devenir), la réciprocité et le Carré d’AS. La page n’est ni dans le menu ni sur la page Escape Game Orange : on l’ouvre par le bouton « i » à côté du titre « Carré d’AS ».
+`/as` est le grade qui suit Game Master Orange et Game Master Blanc, dans le même cadre graphique. Son contenu (`src/as-grade.js`) n’est transmis par `/api/as` qu’à partir de l’échelon réel 20. Il explique le rôle d’un AS (être le point de vue dont l’autre a besoin pour s’améliorer selon ce qu’il veut devenir), la réciprocité et le Carré d’AS. La page n’est ni dans le menu ni sur la page Escape Game Orange : on l’ouvre par « AS », souligné, dans le titre « Carré d’AS ».
 
 ## Page Carré d’AS
 

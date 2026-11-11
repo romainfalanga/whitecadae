@@ -5,7 +5,7 @@ import {NOTICE_VERSION,PRIVATE_NOTICE,requireLevel,storageConsent} from './priva
 import {GAME_MASTER_BLANC} from './game-master-blanc.js';
 import {AS_GRADE} from './as-grade.js';
 import {GAME_MASTER_BLANC_LEVEL,ACE_SQUARE_LEVEL} from './content-access.js';
-import {lifeRoute} from './life-tree.js';
+import {lifeRoute,ensureSeries} from './life-tree.js';
 import {mechanismsRoute} from './mechanisms.js';
 import {aceRoute} from './ace-circles.js';
 export async function handlePrivate(request,env,url,{getUser,json}){
@@ -38,11 +38,11 @@ export async function handlePrivate(request,env,url,{getUser,json}){
   }
   if(url.pathname==='/api/private/data'&&request.method==='DELETE'){
     if(body.confirm!=='SUPPRIMER')fail('Confirme l’effacement de tes données personnelles.');
-    await ensureLogeStreamTables(env);
+    await ensureLogeStreamTables(env);await ensureSeries(env);
     await env.DB.batch([
       env.DB.prepare("UPDATE loge_stream_uploads SET state='deleting',upload_url=NULL,cleanup_after=CASE WHEN stream_id IS NULL THEN cleanup_after ELSE 0 END,updated_at=unixepoch() WHERE user_id=?1 AND purpose='videography' AND state<>'deleted'").bind(user.id),
       ...['DELETE FROM circle_topic_reads WHERE reader_id=?1','DELETE FROM ace_read_markers WHERE reader_id=?1'].map(sql=>env.DB.prepare(sql).bind(user.id)),
-      ...['DELETE FROM circle_topics WHERE owner_id=?1','DELETE FROM user_mechanisms WHERE owner_id=?1','DELETE FROM life_events WHERE owner_id=?1','DELETE FROM life_drafts WHERE owner_id=?1','DELETE FROM ace_circles WHERE owner_id=?1','DELETE FROM ace_memberships WHERE angel_id=?1','DELETE FROM ace_messages WHERE author_id=?1','DELETE FROM ace_invitations WHERE angel_id=?1','DELETE FROM ace_preferences WHERE user_id=?1','DELETE FROM ace_reports WHERE reporter_id=?1'].map(sql=>env.DB.prepare(sql).bind(user.id)),
+      ...['DELETE FROM circle_topics WHERE owner_id=?1','DELETE FROM user_mechanisms WHERE owner_id=?1','DELETE FROM life_events WHERE owner_id=?1','DELETE FROM life_drafts WHERE owner_id=?1','DELETE FROM life_series WHERE owner_id=?1','DELETE FROM ace_circles WHERE owner_id=?1','DELETE FROM ace_memberships WHERE angel_id=?1','DELETE FROM ace_messages WHERE author_id=?1','DELETE FROM ace_invitations WHERE angel_id=?1','DELETE FROM ace_preferences WHERE user_id=?1','DELETE FROM ace_reports WHERE reporter_id=?1'].map(sql=>env.DB.prepare(sql).bind(user.id)),
       // Videos shared in the Loge are erased with the videography they come from.
       ...await sharedPostWithdrawal(env,user.id),
       env.DB.prepare("INSERT INTO privacy_consents(user_id,purpose,version,granted) VALUES(?1,'storage',?2,0),(?1,'sharing',?2,0)").bind(user.id,NOTICE_VERSION),

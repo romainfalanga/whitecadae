@@ -63,10 +63,13 @@ test('existing Stream and legacy videos save metadata without requesting another
   }
 });
 
-test('a failed save retries the same ready upload and leaves the editor open',async()=>{
-  const drafts=[];let writes=0;const h=fixture({upload:async draft=>{draft.uploadId='ready-upload';drafts.push(draft);return draft.uploadId;},request:async(_path,options)=>{if(options.method==='PUT'&&++writes===1)throw Error('Connexion interrompue');return {};}});
-  h.client.videoForm(event());h.form.elements.video.files=[{name:'a.mp4',size:1000}];h.form.elements.video.onchange();h.form.onsubmit({preventDefault(){}});await tick();assert.ok(h.session.dialog);assert.equal(h.form.submit.textContent,'Réessayer');
-  h.form.onsubmit({preventDefault(){}});await tick();assert.equal(writes,2);assert.equal(drafts[0],drafts[1]);assert.equal(h.calls.filter(c=>c.method==='DELETE').length,0);
+test('editing offers the title and the category only: a file is never chosen nor sent',async()=>{
+  const uploads=[];const h=fixture({upload:async draft=>{uploads.push(draft);return 'never';}});
+  h.client.videoForm(event());
+  assert.match(h.sandbox.markup,/<div class="video-file-field" hidden>/);assert.match(h.sandbox.markup,/<input type="file" name="video"[^>]*disabled>/);
+  assert.match(h.sandbox.markup,/<label>Titre<input name="title"/);assert.match(h.sandbox.markup,/<label>Catégorie<select name="videoBranch">/);
+  h.form.elements.video.files=[{name:'a.mp4',size:1000}];h.form.elements.video.onchange();h.form.onsubmit({preventDefault(){}});await tick();
+  const save=h.calls.find(c=>c.method==='PUT');assert.ok(save);assert.equal(Object.hasOwn(save.body,'uploadId'),false);assert.equal(uploads.length,0);
 });
 
 test('Stream controls seek, pause peers and survive additional cards until their scope is destroyed',async()=>{
