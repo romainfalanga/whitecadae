@@ -29,7 +29,7 @@ test('XHR errors reject and abort cancels the network request without later prog
     const xhr={upload:{},open(){},send(){},abort(){aborted=true;this.onabort?.();}};
     const promise=uploadLogeFile('https://upload.videodelivery.net/token',file,{signal:controller.signal,xhrFactory:()=>xhr,formFactory:()=>({append(){}})});
     if(kind==='error')xhr.onerror();if(kind==='http'){xhr.status=500;xhr.onload();}if(kind==='timeout')xhr.ontimeout();if(kind==='abort')controller.abort();
-    await assert.rejects(promise,kind==='abort'?{name:'AbortError'}:/Réessaie/);assert.equal(aborted,kind==='abort');assert.equal(xhr.upload.onprogress,null);
+    await assert.rejects(promise,error=>kind==='abort'?error.name==='AbortError':kind==='http'?/Réessaie/.test(error.message)&&!error.network:error.network===true&&/interrompue|expiré/.test(error.message));assert.equal(aborted,kind==='abort');assert.equal(xhr.upload.onprogress,null);
   }
 });
 
@@ -96,4 +96,42 @@ test('Videography cancels a late replaced reservation in its own scope',async()=
   const pending=ensureLogeUpload(d,options({basePath:'/api/life-tree/uploads',request:(path,init={})=>{calls.push([path,init.method]);return init.method==='POST'?new Promise(resolve=>release=resolve):Promise.resolve({ok:true});}}));
   await new Promise(resolve=>setImmediate(resolve));d.requestId='replacement';d.file=null;release({uploadId:'abandoned'});
   await assert.rejects(pending,{name:'AbortError'});assert.deepEqual(calls,[['/api/life-tree/uploads','POST'],['/api/life-tree/uploads/abandoned','DELETE']]);
+});
+
+test('a cut connection resumes on the same address by itself, without a new reservation',async()=>{
+  const d=draft(),states=[],waits=[];let uploads=0,polls=0;
+  const request=async(path,init={})=>path==='/api/loge/uploads'?{uploadId:'opaque-id',uploadURL:'https://upload.videodelivery.net/token',expiresAt:Date.now()+100000}:{status:++polls<=2?'waiting':'ready'};
+  const upload=async url=>{assert.equal(url,'https://upload.videodelivery.net/token');if(++uploads<3)throw Object.assign(Error('La connexion a été interrompue pendant l’envoi.'),{network:true});};
+  assert.equal(await ensureLogeUpload(d,options({request,upload,reconnect:async ms=>{waits.push(ms);},onState:state=>states.push(state)})),'opaque-id');
+  assert.equal(uploads,3);assert.deepEqual(waits,[1500,4000]);assert.ok(states.filter(s=>s==='reconnecting').length===2);assert.equal(d.uploadSent,true);
+});
+
+test('after a cut, a file the server already received is not sent again',async()=>{
+  for(const status of ['processing','ready']){
+    const d=draft();let uploads=0,polls=0;
+    const request=async path=>path==='/api/loge/uploads'?{uploadId:'opaque-id',uploadURL:'https://upload.videodelivery.net/token',expiresAt:Date.now()+100000}:{status:++polls===1?status:'ready'};
+    const upload=async()=>{uploads++;throw Object.assign(Error('lost response'),{network:true});};
+    assert.equal(await ensureLogeUpload(d,options({request,upload,reconnect:async()=>{}})),'opaque-id');assert.equal(uploads,1,status);
+  }
+});
+
+test('repeated cuts end with a network error; HTTP refusals and cancellation are never retried',async()=>{
+  const reservation=async path=>path==='/api/loge/uploads'?{uploadId:'opaque-id',uploadURL:'https://upload.videodelivery.net/token',expiresAt:Date.now()+100000}:{status:'waiting'};
+  let uploads=0;
+  await assert.rejects(ensureLogeUpload(draft(),options({request:reservation,reconnect:async()=>{},upload:async()=>{uploads++;throw Object.assign(Error('cut'),{network:true});}})),error=>error.network===true);
+  assert.equal(uploads,6);
+  uploads=0;await assert.rejects(ensureLogeUpload(draft(),options({request:reservation,reconnect:async()=>{},upload:async()=>{uploads++;throw Error('L’envoi a échoué. Réessaie.');}})),/échoué/);assert.equal(uploads,1);
+  const controller=new AbortController();uploads=0;
+  await assert.rejects(ensureLogeUpload(draft(),options({signal:controller.signal,request:reservation,reconnect:async()=>{controller.abort();throw new DOMException('Envoi interrompu','AbortError');},upload:async()=>{uploads++;throw Object.assign(Error('cut'),{network:true});}})),{name:'AbortError'});assert.equal(uploads,1);
+});
+
+test('the reconnection wait holds until the page is visible and the network is back',async()=>{
+  const listeners={};const doc={hidden:true,addEventListener:(name,fn)=>{listeners[name]=fn;},removeEventListener:name=>{delete listeners[name];}};
+  const nav={onLine:false};
+  const box=vm.createContext({DOMException,setTimeout,clearTimeout,URL,document:doc,navigator:nav,addEventListener:(name,fn)=>{listeners['window:'+name]=fn;},removeEventListener:name=>{delete listeners['window:'+name];}});
+  vm.runInContext(source+';globalThis.helpers={uploadReconnect};',box);
+  let resolved=false;const wait=box.helpers.uploadReconnect(5).then(()=>{resolved=true;});
+  await new Promise(r=>setTimeout(r,20));assert.equal(resolved,false);
+  nav.onLine=true;listeners['window:online']();await new Promise(r=>setTimeout(r,5));assert.equal(resolved,false,'still hidden');
+  doc.hidden=false;listeners.visibilitychange();await wait;assert.equal(resolved,true);assert.equal(listeners.visibilitychange,undefined);
 });

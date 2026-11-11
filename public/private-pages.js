@@ -190,10 +190,12 @@ function renderJobTile(){
 function openVideoViewer(index){
   const s=session,events=s.videos?.events||[],e=events[index];if(!e)return;
   const owner=s.videos.owner||s.user,own=owner===s.user;
-  const dialog=modal(e.title,`<article class="video-card video-viewer" data-video="${esc(e.id)}"><p class="video-viewer-meta"><span>${esc(videoLabel(e.video_branch))}</span><time>${esc(dateLabel(e))}</time>${e.loge_post_id?'<span class="video-tile-badge">Dans les loges</span>':''}</p>${eventVideoPlayer(e,true,true,owner)}${!own&&e.creation?.work?`<p class="video-viewer-notes">${esc(e.creation.work)}</p>`:''}<div class="video-card-footer">${own?button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Zm9-13 4 4"/></svg>Modifier','video-viewer-edit','quiet'):'<span></span>'}${e.topic_id&&s.ctx.state.access?.aceSquare?button('AS','','quiet',`data-video-comments="${e.topic_id}" aria-expanded="false" aria-controls="as-comments-${e.topic_id}"`):''}</div><nav class="video-viewer-nav" aria-label="Autres vidéos">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg><span>Précédente</span>','video-viewer-prev','quiet',index===0?'disabled':'')}<span class="video-viewer-position">${index+1} / ${events.length}${s.videos.next?'+':''}</span>${button('<span>Suivante</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>','video-viewer-next','quiet',index>=events.length-1&&!s.videos.next?'disabled':'')}</nav></article>`);
+  const dialog=modal(e.title,`<article class="video-card video-viewer" data-video="${esc(e.id)}"><p class="video-viewer-meta"><span>${esc(videoLabel(e.video_branch))}</span><time>${esc(dateLabel(e))}</time>${e.loge_post_id?'<span class="video-tile-badge">Dans les loges</span>':''}</p>${eventVideoPlayer(e,true,true,owner)}${!own&&e.creation?.work?`<p class="video-viewer-notes">${esc(e.creation.work)}</p>`:''}<div class="video-card-footer">${own?button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Zm9-13 4 4"/></svg>Modifier','video-viewer-edit','quiet'):'<span></span>'}${e.topic_id&&s.ctx.state.access?.aceSquare?button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A2.5 2.5 0 0 1 4 13.5Z"/></svg>Échanges AS','','quiet',`data-video-comments="${e.topic_id}" aria-expanded="false" aria-controls="as-comments-${e.topic_id}"`):''}</div><nav class="video-viewer-nav" aria-label="Autres vidéos">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg><span>Précédente</span>','video-viewer-prev','quiet',index===0?'disabled':'')}<span class="video-viewer-position">${index+1} / ${events.length}${s.videos.next?'+':''}</span>${button('<span>Suivante</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>','video-viewer-next','quiet',index>=events.length-1&&!s.videos.next?'disabled':'')}</nav></article>`);
   dialog.classList.add('is-viewer');wireVideoPlayers(dialog,()=>Promise.resolve());
   if(own)bind('video-viewer-edit',async()=>{const data=await api('/api/life-tree/events/'+encodeURIComponent(e.id));videoForm(data.event);});
   dialog.querySelectorAll('[data-video-comments]').forEach(b=>b.onclick=()=>run(b,()=>toggleInlineComments(b)));
+  // With room beside the video, the AS exchanges open with it.
+  const asButton=dialog.querySelector('[data-video-comments]');if(asButton&&globalThis.matchMedia?.('(min-width: 900px)').matches)void run(asButton,()=>toggleInlineComments(asButton));
   const go=async step=>{
     const next=index+step;
     if(next>=events.length&&s.videos.next){await loadVideos();}
@@ -209,24 +211,29 @@ function clearInlineComments(){
 }
 async function toggleInlineComments(button){
   const s=session,id=Number(button.dataset.videoComments),panels=s.commentPanels||=new Map();
-  const close=()=>{const p=panels.get(id);if(p){p.root.hidden=true;p.button.setAttribute('aria-expanded','false');}if(s.activeComments===id){s.activeComments=null;s.poll=null;clearTimeout(s.timer);}button.focus({preventScroll:true});};
+  const viewer=button.closest('dialog');
+  const close=()=>{const p=panels.get(id);if(p){p.root.hidden=true;p.button.setAttribute('aria-expanded','false');}viewer?.classList.remove('has-comments');if(s.activeComments===id){s.activeComments=null;s.poll=null;clearTimeout(s.timer);}button.focus({preventScroll:true});};
   if(s.activeComments===id){close();return;}
   for(const p of panels.values()){p.root.hidden=true;p.button.setAttribute('aria-expanded','false');}
   s.activeComments=id;s.poll=null;clearTimeout(s.timer);
   let panel=panels.get(id);
   if(!panel){
-    const root=document.createElement('section');root.id='as-comments-'+id;root.className='as-comments';root.setAttribute('aria-label','Échanges avec les AS');button.closest('.video-card').append(root);
+    const root=document.createElement('section');root.id='as-comments-'+id;root.className='as-comments';root.setAttribute('aria-label','Échanges avec les AS');
+    // Right under the video and its buttons, never after the navigation.
+    const card=button.closest('.video-card'),footer=card.querySelector('.video-card-footer');if(footer)footer.after(root);else card.append(root);
     panel={root,button,component:null,draft:false};panels.set(id,panel);
     try{
       await api('/api/ace-circles',{method:'POST',body:{}});
       if(!live(s)||panels.get(id)!==panel)return;
       panel.root.hidden=s.activeComments!==id;
-      panel.component=await mountComments({root,id,api,user:s.user,esc,onClose:close,onDraft:dirty=>{panel.draft=dirty;if(live(s))s.dirty=[...panels.values()].some(p=>p.draft);}});
+      const own=(s.videos?.owner||s.user)===s.user;
+      panel.component=await mountComments({root,id,api,user:s.user,esc,onClose:close,title:own?'Échanges avec tes AS':'Échanges entre AS',placeholder:own?'Réponds à tes AS…':'Partage ton regard…',onDraft:dirty=>{panel.draft=dirty;if(live(s))s.dirty=[...panels.values()].some(p=>p.draft);}});
       if(!live(s)||panels.get(id)!==panel){panel.component.destroy();return;}
     }catch(e){panel.root.remove();panels.delete(id);if(s.activeComments===id)s.activeComments=null;throw e;}
   }
   if(s.activeComments!==id)return;
-  panel.root.hidden=false;button.setAttribute('aria-expanded','true');
+  panel.root.hidden=false;button.setAttribute('aria-expanded','true');viewer?.classList.add('has-comments');
+  if(!globalThis.matchMedia?.('(min-width: 900px)').matches)panel.root.scrollIntoView?.({block:'start',behavior:'smooth'});
   await panel.component.refresh();
   if(live(s)&&s.activeComments===id){s.poll=()=>panel.component.refresh();schedule();}
 }
@@ -315,7 +322,7 @@ function videoForm(event=null,draft=null,branch='self'){
         if(upload.file){
           payload.uploadId=await ensureLogeUpload(upload,{request:uploadRequest,basePath:'/api/life-tree/uploads',signal:controller.signal,onState:(state,progress)=>{
             if(!current())return;
-            const labels={checking:'Vérification de la vidéo…',preparing:'Préparation de l’envoi…',uploading:`Envoi de la vidéo : ${progress||0} %`,processing:'Vidéo reçue. Préparation en cours…',ready:'Vidéo prête. Enregistrement…'};
+            const labels={checking:'Vérification de la vidéo…',preparing:'Préparation de l’envoi…',reconnecting:'Connexion perdue. L’envoi reprend automatiquement…',uploading:`Envoi de la vidéo : ${progress||0} %`,processing:'Vidéo reçue. Préparation en cours…',ready:'Vidéo prête. Enregistrement…'};
             display(labels[state]||'',state==='uploading'?progress:undefined);
           }});check();
         }
@@ -346,7 +353,7 @@ function videoJobView(){
     const step=current.phase==='done'?3:current.phase==='saving'?2:current.phase==='processing'?1:0;
     steps.forEach((item,index)=>{item.dataset.state=index<step?'done':index===step&&current.phase!=='error'?'current':index===step?'failed':'pending';});
     const fill=el('video-job-fill');fill.style.width=(current.phase==='uploading'?current.progress||0:current.phase==='done'?100:current.phase==='error'?Math.max(4,current.progress||0):step===0?6:step===1?72:90)+'%';
-    fill.classList.toggle('is-moving',['checking','preparing','processing','saving'].includes(current.phase));
+    fill.classList.toggle('is-moving',['checking','preparing','reconnecting','processing','saving'].includes(current.phase));
     dialog.classList.toggle('is-error',current.phase==='error');
     el('video-job-status').textContent=current.phase==='error'?current.error:jobSummary(current);
     el('video-job-note').textContent=current.phase==='done'?'Ta vidéo est dans ta vidéographie.':current.phase==='error'?'Ta vidéo n’a pas été ajoutée. Tu peux réessayer ou annuler.':current.phase==='processing'?'Le service vidéo prépare la lecture : cela peut prendre quelques minutes. Tu peux fermer cette fenêtre et continuer ; le cercle près de ton échelon indique où en est l’envoi.':'Tu peux fermer cette fenêtre et continuer à utiliser le site ; le cercle près de ton échelon indique où en est l’envoi. Garde l’onglet ouvert jusqu’à la fin.';
