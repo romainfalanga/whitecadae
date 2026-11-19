@@ -1,12 +1,23 @@
 // Stream video is rendered by our own HTML video element. The player never
 // starts from scroll, readiness, navigation restoration, or a comment action.
 let hlsModule;
-function loadHls(){return hlsModule||(hlsModule=import('./vendor/hls.mjs').catch(error=>{hlsModule=null;throw error;}));}
+function loadHls(){
+  return hlsModule||(hlsModule=Promise.all([import('./vendor/hls.mjs'),import('./stream-edit-delay.js')])
+    .then(([hls,delay])=>({default:hls.default||hls.Hls,editDelayLoader:delay.editDelayLoader}))
+    .catch(error=>{hlsModule=null;throw error;}));
+}
+// Safari (iPhone, iPad, Mac) plays HLS itself, edit lists included. Elsewhere
+// the browser's own HLS support is recent: it ignores a delayed sound track and
+// always starts at the highest quality, so the site's player is used instead.
+const appleDevice=()=>/Apple/.test(globalThis.navigator?.vendor||'');
+// Quality follows the size of the player on screen, at most one and a half times its pixels:
+// a phone never downloads 1080p for a frame a few hundred pixels wide.
+const HLS_CONFIG={enableWorker:false,autoStartLoad:false,maxBufferLength:15,maxMaxBufferLength:30,backBufferLength:15,capLevelToPlayerSize:true,maxDevicePixelRatio:1.5,abrEwmaDefaultEstimate:1_200_000};
 const glyph={play:'<path d="M8 5 20 12 8 19Z"/>',fullscreen:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>'};
 export function validStreamURL(value){
   try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&(/^(?:customer-[a-z0-9-]+\.)?cloudflarestream\.com$/.test(u.hostname)||u.hostname==='videodelivery.net')?u.href:null;}catch{return null;}
 }
-export function createStreamPlayer({container,post,getPlayback,isEligible=()=>true,onReady=()=>{},onState=()=>{},loadLibrary=loadHls,fullscreen:withFullscreen=true}={}){
+export function createStreamPlayer({container,post,getPlayback,isEligible=()=>true,onReady=()=>{},onState=()=>{},loadLibrary=loadHls,preferNative=appleDevice(),fullscreen:withFullscreen=true}={}){
   const element=document.createElement('div');element.className='loge-stream-frame';
   const video=document.createElement('video');video.className='loge-stream-video';video.playsInline=true;video.setAttribute('playsinline','');video.preload='metadata';video.controls=false;video.autoplay=false;video.muted=false;video.setAttribute('aria-label','Vidéo : '+(post.title||''));
   const play=document.createElement('button');play.type='button';play.className='loge-stream-play';play.setAttribute('aria-label','Lire la vidéo');play.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+glyph.play+'</svg>';
@@ -33,18 +44,42 @@ export function createStreamPlayer({container,post,getPlayback,isEligible=()=>tr
       const source=validStreamURL(data.hls),poster=validStreamURL(data.poster);
       if(!source||!poster)throw Error('Source vidéo indisponible.');
       expires=Date.parse(data.expiresAt)||Date.now()+30*60*1000;video.poster=poster;
-      if(video.canPlayType('application/vnd.apple.mpegurl'))video.src=source;
-      else{
-        const module=await loadLibrary();if(destroyed||version!==requestVersion)return;
-        const Hls=module.default||module.Hls;if(!Hls?.isSupported())throw Error('Ce navigateur ne peut pas lire cette vidéo.');
-        hls=new Hls({enableWorker:false,autoStartLoad:false,maxBufferLength:15,maxMaxBufferLength:30,backBufferLength:15});
-        hls.on(Hls.Events.ERROR,(_event,data)=>{if(!destroyed&&data.fatal){pause();error('Lecture interrompue. Réessaie.');}});
-        hls.attachMedia(video);hls.loadSource(source);
+      const nativeHls=!!video.canPlayType('application/vnd.apple.mpegurl');
+      let Hls=null,module=null;
+      if(!(nativeHls&&preferNative)){
+        try{module=await loadLibrary();}catch(cause){if(!nativeHls)throw cause;}
+        if(destroyed||version!==requestVersion)return;
+        Hls=module&&(module.default||module.Hls);if(!Hls?.isSupported?.())Hls=null;
       }
+      if(Hls){
+        const delay=module.editDelayLoader&&Hls.DefaultConfig?.loader?{fLoader:module.editDelayLoader(Hls.DefaultConfig.loader)}:{};
+        hls=new Hls({...HLS_CONFIG,...delay});
+        hls.on(Hls.Events.ERROR,(_event,data)=>{if(!destroyed&&data.fatal){pause();error('Lecture interrompue. Réessaie.');}});
+        warmUp(hls,Hls);
+        hls.attachMedia(video);hls.loadSource(source);
+      }else if(nativeHls)video.src=source;
+      else throw Error('Ce navigateur ne peut pas lire cette vidéo.');
       if(destroyed)return;
       play.disabled=false;message.textContent='';onReady();
     })().catch(e=>{if(!destroyed){if(e.name==='AbortError')return;error(e.status===401||e.status===403?'Reconnecte-toi pour regarder cette vidéo.':'La vidéo ne se charge pas. Réessaie.');}}).finally(()=>{preparing=null;});
     return preparing;
+  }
+  // The video on screen fetches its first seconds ahead of a tap, then waits:
+  // pressing play starts at once. Nothing more loads until the member plays.
+  function warmUp(instance,Hls){
+    if(!Hls.Events?.MANIFEST_PARSED||!Hls.Events.FRAG_BUFFERED||typeof instance.once!=='function')return;
+    instance.once(Hls.Events.MANIFEST_PARSED,()=>{
+      if(destroyed||hls!==instance||state===1||!isEligible())return;
+      const kinds=new Set(),wanted=instance.audioTracks?.length?2:1;
+      const buffered=(_event,data)=>{
+        kinds.add(data?.frag?.type);
+        if(kinds.size<wanted)return;
+        instance.off?.(Hls.Events.FRAG_BUFFERED,buffered);
+        if(hls===instance&&state!==1&&video.paused)instance.stopLoad();
+      };
+      instance.on(Hls.Events.FRAG_BUFFERED,buffered);
+      instance.startLoad(pendingSeek>0?pendingSeek:-1);
+    });
   }
   function pause(){sequence++;if(!video.paused)video.pause();hls?.stopLoad();if(state===1)change(2);}
   const lengths=()=>parts.map((part,index)=>part.duration||(index===partIndex&&Number.isFinite(video.duration)?video.duration:0));

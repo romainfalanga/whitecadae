@@ -261,7 +261,36 @@ export async function logePlayback(env,postId,json,part=null){
   if((await postUpload(env,postId))?.id!==row.id)fail('Vidéo introuvable.',404);
   return json(output);
 }
+// Signing asks the video service twice (details, then a token): about a
+// second. A signed address is the same for every viewer allowed to see the
+// video, so it is kept, in memory and in the database (never in a public
+// cache), while it stays valid well beyond a viewing. Access is still checked
+// on every request before this runs.
+const PLAYBACK_REUSE_SECONDS=45*60;
+const PLAYBACK_SCHEMA=`CREATE TABLE IF NOT EXISTS loge_stream_playback(
+  upload_id TEXT PRIMARY KEY,stream_id TEXT NOT NULL,hls TEXT NOT NULL,poster TEXT NOT NULL,expires_at INTEGER NOT NULL)`;
+const playbackMemory=new Map(),playbackTables=new WeakSet();
+const reusable=(value,row)=>!!value&&value.stream_id===row.stream_id&&typeof value.hls==='string'&&typeof value.poster==='string'&&Number(value.expires_at)-Date.now()/1000>PLAYBACK_REUSE_SECONDS;
+const playbackView=value=>({hls:value.hls,poster:value.poster,expiresAt:iso(Number(value.expires_at))});
+export function clearPlaybackMemory(){playbackMemory.clear();}
+async function playbackTable(env){if(!playbackTables.has(env.DB)){await env.DB.prepare(PLAYBACK_SCHEMA).run();playbackTables.add(env.DB);}}
 export async function signedStreamPlayback(env,row){
+  const held=playbackMemory.get(row.id);
+  if(reusable(held,row))return playbackView(held);
+  try{
+    await playbackTable(env);
+    const stored=await env.DB.prepare('SELECT * FROM loge_stream_playback WHERE upload_id=?1').bind(row.id).first();
+    if(reusable(stored,row)){playbackMemory.set(row.id,stored);return playbackView(stored);}
+  }catch{/* a missing copy only costs a new signature */}
+  const output=await signStreamPlayback(env,row);
+  const value={upload_id:row.id,stream_id:row.stream_id,hls:output.hls,poster:output.poster,expires_at:Math.floor(Date.parse(output.expiresAt)/1000)};
+  if(playbackMemory.size>500)playbackMemory.clear();
+  playbackMemory.set(row.id,value);
+  try{await env.DB.prepare(`INSERT INTO loge_stream_playback(upload_id,stream_id,hls,poster,expires_at) VALUES(?1,?2,?3,?4,?5)
+    ON CONFLICT(upload_id) DO UPDATE SET stream_id=excluded.stream_id,hls=excluded.hls,poster=excluded.poster,expires_at=excluded.expires_at`).bind(value.upload_id,value.stream_id,value.hls,value.poster,value.expires_at).run();}catch{/* memory still holds it */}
+  return output;
+}
+async function signStreamPlayback(env,row){
   try{
     const video=provider(env).video(row.stream_id),details=await video.details();
     if(!isOwned(details,row)||!details.readyToStream||details.requireSignedURLs!==true)unavailable();
@@ -280,6 +309,9 @@ export async function signedStreamPlayback(env,row){
 export async function cleanupLogeStream(env){
   if(!env.STREAM||!env.DB)return {deleted:0,failed:0};
   await ensureLogeStreamTables(env);
+  // Signed addresses kept for reuse go once expired or once their video is going.
+  try{await playbackTable(env);await env.DB.prepare(`DELETE FROM loge_stream_playback WHERE expires_at<unixepoch()
+    OR upload_id NOT IN (SELECT id FROM loge_stream_uploads WHERE state='published')`).run();}catch{/* retried on the next run */}
   // Recover an interrupted create through the provider's read-only listing.
   // Only exact, server-authored ownership metadata can attach an id. A missing
   // result is inconclusive (listing is bounded), so retain the reservation and

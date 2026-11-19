@@ -34,7 +34,7 @@ function fixture({native=false,getPlayback=async()=>signed,playImplementation,fu
     fatal(){this.handlers.error('error',{fatal:true});}
   }
   const container=document.createElement('div');container.stage=document.createElement('section');
-  const player=createStreamPlayer({container,post:{id:7,title:'Ma réflexion'},getPlayback,isEligible:()=>eligible,onReady:()=>ready++,onState:value=>states.push(value),loadLibrary:async()=>{libraryCalls++;return {default:Hls};},fullscreen});players.push(player);
+  const player=createStreamPlayer({container,post:{id:7,title:'Ma réflexion'},getPlayback,isEligible:()=>eligible,onReady:()=>ready++,onState:value=>states.push(value),loadLibrary:async()=>{libraryCalls++;return {default:Hls};},preferNative:native,fullscreen});players.push(player);
   const button=player.element.children[1],full=player.element.children[2],message=player.element.children[3];
   return {player,button,full,message,container,document,instances,states,get ready(){return ready;},get libraryCalls(){return libraryCalls;},eligible:value=>eligible=value,async click(target=button){target.dispatchEvent(new Event('click'));await tick();},close(){for(const item of players)item.destroy();if(previous===undefined)delete globalThis.document;else globalThis.document=previous;}};
 }
@@ -124,4 +124,44 @@ test('the end of a part continues with the next, « next » skips ahead, and the
 
 test('a single video has no parts and no « next »',async()=>{
   const h=fixture({native:true});try{await tick();assert.equal(h.player.getParts(),null);assert.equal(await h.player.next(),false);assert.equal(h.player.getDuration(),120);}finally{h.close();}
+});
+
+test('outside Apple devices the site player is used even where the browser reads HLS, with quality capped and the sound delay applied',async()=>{
+  const previous=globalThis.document;
+  const instances=[];
+  class Hls{
+    static Events={ERROR:'error',MANIFEST_PARSED:'manifest',FRAG_BUFFERED:'buffered'};static isSupported(){return true;}
+    static DefaultConfig={loader:class{}};
+    constructor(config){this.config=config;this.handlers={};this.starts=[];this.stops=0;this.audioTracks=[{}];instances.push(this);}
+    on(type,fn){(this.handlers[type]||=[]).push(fn);}once(type,fn){this.on(type,fn);}
+    off(type,fn){this.handlers[type]=(this.handlers[type]||[]).filter(item=>item!==fn);}
+    emit(type,data){for(const fn of [...(this.handlers[type]||[])])fn(type,data);}
+    attachMedia(video){this.video=video;}loadSource(url){this.source=url;}startLoad(at){this.starts.push(at);}stopLoad(){this.stops++;}destroy(){}
+  }
+  class Element extends EventTarget{
+    constructor(){super();this.children=[];this.attributes=new Map();this.paused=true;this.classList={toggle(){}};}
+    append(...c){this.children.push(...c);}remove(){}setAttribute(k,v){this.attributes.set(k,String(v));}getAttribute(k){return this.attributes.get(k)||null;}removeAttribute(k){this.attributes.delete(k);}
+    set src(v){this.setAttribute('src',v);}get src(){return this.getAttribute('src');}
+    load(){}canPlayType(){return 'maybe';}pause(){}
+  }
+  globalThis.document={createElement:()=>new Element()};
+  const tick=()=>new Promise(resolve=>setImmediate(resolve));
+  try{
+    let delayed=0;
+    const make=(eligible,preferNative=false)=>createStreamPlayer({container:new Element(),post:{id:1,title:'x'},getPlayback:async()=>signed,isEligible:()=>eligible,preferNative,fullscreen:false,
+      loadLibrary:async()=>({default:Hls,editDelayLoader:Base=>{delayed++;return class extends Base{};}})});
+    const shown=make(true);await tick();
+    const hls=instances[0];
+    assert.equal(shown.video.src,null,'the browser’s own HLS is not used');
+    assert.equal(hls.config.capLevelToPlayerSize,true);assert.equal(hls.config.maxDevicePixelRatio,1.5);assert.equal(typeof hls.config.fLoader,'function');assert.equal(delayed,1);
+    // The visible video fetches its first seconds, sound and picture, then waits.
+    hls.emit('manifest');assert.deepEqual(hls.starts,[-1]);
+    hls.emit('buffered',{frag:{type:'main'}});assert.equal(hls.stops,0);
+    hls.emit('buffered',{frag:{type:'audio'}});assert.equal(hls.stops,1);
+    hls.emit('buffered',{frag:{type:'main'}});assert.equal(hls.stops,1,'warming up stops only once');
+    // A video off screen loads nothing ahead of a tap.
+    make(false);await tick();instances[1].emit('manifest');assert.deepEqual(instances[1].starts,[]);
+    // Apple devices keep their own player.
+    const apple=make(true,true);await tick();assert.equal(apple.video.src,signed.hls);assert.equal(instances.length,2);
+  }finally{if(previous===undefined)delete globalThis.document;else globalThis.document=previous;}
 });
