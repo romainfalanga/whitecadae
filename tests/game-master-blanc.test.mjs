@@ -41,7 +41,7 @@ test('the final page requires 15 real earned levels, including for admins; forge
     assert.deepEqual(content.page.sections[0].paragraphs,['Extériorise tes pensées en vidéo.','Utilise ta vidéographie pour visualiser tes trajectoires de réflexion et choisir celles que tu veux voir grandir.']);assert.match(content.page.sections[1].paragraphs[0],/Observe tes propres pensées.*la manière dont elles émergent\./);assert.doesNotMatch(JSON.stringify(content.page),/plateforme/i);
     assert.match(content.page.sections[2].paragraphs.join(' '),/version harmonieuse soit cohérente avec cette société\./);
     // Métacognition keeps its sentence and adds the harmonious version.
-    assert.equal(content.page.sections[1].paragraphs.length,1);assert.match(content.page.sections[1].paragraphs[0],/^Observe tes propres pensées et extériorise dans ta vidéographie ce que tu comprends de la manière dont elles émergent\. .*imagine ta version harmonieuse.*façonne-la/);assert.doesNotMatch(JSON.stringify(content.page),/trouver sa place|expansions harmonieuses/);
+    assert.equal(content.page.sections[1].paragraphs.length,1);assert.match(content.page.sections[1].paragraphs[0],/^Observe tes propres pensées et extériorise dans ta vidéographie ce que tu comprends de la manière dont elles émergent\. Imagine ta version harmonieuse et façonne-la dans ta vidéographie\.$/);assert.doesNotMatch(JSON.stringify(content.page),/trouver sa place|expansions harmonieuses/);
     assert.deepEqual(content.page.sections.map(s=>s.paragraphs.length),[2,1,2,3]);
     assert.doesNotMatch(JSON.stringify(content.page),/Crée ta propre plateforme|Ta version harmonieuse IA/);
     assert.ok(content.page.sections.every(s=>s.paragraphs.length&&s.paragraphs.every(p=>typeof p==='string'&&p.length>20)));
