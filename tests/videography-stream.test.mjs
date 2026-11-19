@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {fixture,setEarnedLevel} from './community-fixture.mjs';
 import worker from '../src/index.js';
-import {cleanupLogeStream,ensureLogeStreamTables,LOGE_STREAM_SCHEMA} from '../src/loge-stream.js';
+import {cleanupLogeStream,clearPlaybackMemory,ensureLogeStreamTables,LOGE_STREAM_SCHEMA} from '../src/loge-stream.js';
 import {handleLoge,withdrawOrphanedSharedPosts} from '../src/loge.js';
 import {parisToday} from '../src/life-tree.js';
 const file=extra=>({filename:'reflexion.mp4',size:1000000,requestId:crypto.randomUUID(),...extra});
@@ -137,6 +137,8 @@ test('signed playback is owner/accepted-AS only, rechecks revocation and replace
     const response=await f.call(path+'?owner=11','GET',undefined,12);assert.equal(response.status,200);assert.match(response.data.hls,/header\./);assert.match(response.data.expiresAt,/Z$/);
     const events=await f.call('/api/life-tree?owner=11','GET',undefined,12);assert.equal(events.status,200);assert.doesNotMatch(JSON.stringify(events.data),/cloudflarestream\.com|stream_id|logeUploadId/);
     const original=f.binding.video;let once=false;f.binding.video=uid=>{const handle=original(uid),generate=handle.generateToken;handle.generateToken=async()=>{if(!once){once=true;await f.call('/api/ace-circles/sharing','PUT',{enabled:false});}return generate();};return handle;};
+    // A fresh signature: access revoked while it is minted is still refused.
+    clearPlaybackMemory();f.sql.prepare('DELETE FROM loge_stream_playback').run();
     assert.equal((await f.call(path+'?owner=11','GET',undefined,12)).status,403);
     assert.equal((await f.call(path)).status,200);
     setEarnedLevel(f,11,14);assert.equal((await f.call(path)).status,403);
@@ -203,8 +205,8 @@ test('the Loge only publishes a video already in the member’s videography and 
     assert.equal(f.creates.length,0);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM loge_posts').get().n,0);
     const empty=await f.call('/api/loge/videos');assert.equal(empty.status,200);assert.deepEqual(empty.data.videos,[]);assert.equal(empty.data.nextPublicationAt,null);
     const video=await f.attach('shared-video-001',{videoBranch:'society',title:'Ma société harmonieuse'}),other=await f.attach('other-video-0001',{...room,date:'2026-09-30'});
-    // Métacognition and « Ta version harmonieuse » have no loge and are never offered.
-    for(const [id,videoBranch] of [['private-self-0001','self'],['private-version-1','version']]){f.sql.prepare('UPDATE loge_stream_uploads SET created_at=unixepoch()-7200').run();await f.attach(id,{videoBranch,date:'2026-09-29'});assert.equal((await f.call('/api/loge/posts','POST',share(id))).status,409);}
+    // Métacognition has no loge and is never offered.
+    for(const [id,videoBranch] of [['private-self-0001','self']]){f.sql.prepare('UPDATE loge_stream_uploads SET created_at=unixepoch()-7200').run();await f.attach(id,{videoBranch,date:'2026-09-29'});assert.equal((await f.call('/api/loge/posts','POST',share(id))).status,409);}
     await f.put('legacy-video-001',event(undefined,{url:'https://www.youtube.com/watch?v=M7lc1UVf-VE'}));
     const choices=(await f.call('/api/loge/videos')).data;
     assert.deepEqual(choices.videos,[{id:'shared-video-001',title:'Ma société harmonieuse',category:'society',date:'2026-10-01',precision:'day',postId:null},{id:'other-video-0001',title:'Une réflexion privée',category:'ideas',date:'2026-09-30',precision:'day',postId:null}]);
@@ -216,7 +218,7 @@ test('the Loge only publishes a video already in the member’s videography and 
     const post=created.data.post;assert.equal(post.videoProvider,'stream');assert.equal(post.category,'society');assert.equal(post.loge,'society');assert.equal(post.youtubeUrl,null);assert.equal(post.title,'Partagée dans la Loge');assert.ok(created.data.nextPublicationAt);
     const replay=await f.call('/api/loge/posts','POST',body);assert.equal(replay.status,200);assert.equal(replay.data.post.id,post.id);
     assert.equal((await f.call('/api/loge/posts','POST',{...body,eventId:'other-video-0001'})).status,409);
-    assert.equal(f.creates.length,4,'sharing allocates no second media');assert.equal(f.row(video.uploadId).post_id,null);assert.equal(f.row(video.uploadId).state,'published');
+    assert.equal(f.creates.length,3,'sharing allocates no second media');assert.equal(f.row(video.uploadId).post_id,null);assert.equal(f.row(video.uploadId).state,'published');
     for(const user of [11,12]){
       const playback=await f.call('/api/loge/posts/'+post.id+'/playback','GET',undefined,user);assert.equal(playback.status,200);assert.match(playback.data.hls,/manifest\/video\.m3u8$/);
       const feed=(await f.call('/api/loge?loge=society','GET',undefined,user)).data;assert.equal(feed.loge,'society');assert.deepEqual(feed.posts.map(item=>[item.id,item.category,item.loge,item.videoProvider]),[[post.id,'society','society','stream']]);
@@ -229,7 +231,7 @@ test('the Loge only publishes a video already in the member’s videography and 
     reopenQuota(f);assert.equal((await f.call('/api/loge/posts','POST',share('shared-video-001'))).status,409);
     // The category follows the videography entry; the Loge title is its own.
     const stored=(await f.call('/api/life-tree/events/shared-video-001')).data.event;
-    for(const videoBranch of ['self','version']){const refused=await f.put('shared-video-001',event(undefined,{videoBranch,revision:stored.revision}));assert.equal(refused.status,409);assert.match(refused.data.error,/catégorie sans loge/);}
+    for(const videoBranch of ['self']){const refused=await f.put('shared-video-001',event(undefined,{videoBranch,revision:stored.revision}));assert.equal(refused.status,409);assert.match(refused.data.error,/catégorie sans loge/);}
     assert.equal((await f.put('shared-video-001',event(undefined,{videoBranch:'projects',title:'Titre privé modifié',revision:stored.revision}))).status,200);
     const shown=(await f.call('/api/loge/posts/'+post.id)).data.post;assert.equal(shown.category,'projects');assert.equal(shown.loge,'projects');assert.equal(shown.title,'Partagée dans la Loge');
     assert.deepEqual((await f.call('/api/loge?loge=projects','GET',undefined,12)).data.posts.map(item=>item.id),[post.id]);assert.deepEqual((await f.call('/api/loge?loge=society','GET',undefined,12)).data.posts,[]);

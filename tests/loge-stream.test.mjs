@@ -2,7 +2,9 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {handleLoge} from '../src/loge.js';
-import {cleanupLogeStream,LOGE_STREAM_SCHEMA,LOGE_UPLOAD_MAX_BYTES} from '../src/loge-stream.js';
+import {cleanupLogeStream,clearPlaybackMemory,LOGE_STREAM_SCHEMA,LOGE_UPLOAD_MAX_BYTES} from '../src/loge-stream.js';
+// Signed addresses are reused; a test that changes the provider forgets them.
+const forget=f=>{clearPlaybackMemory();try{f.sql.prepare('DELETE FROM loge_stream_playback').run();}catch{/* not created yet */}};
 import {NODES} from '../src/echelon.js';
 import {fixture} from './community-fixture.mjs';
 const file=extra=>({filename:'réflexion.mp4',size:1000000,requestId:crypto.randomUUID(),...extra});
@@ -132,10 +134,10 @@ test('playback signs provider URLs only, uses token expiry, and rejects ownershi
     assert.doesNotMatch(response.data.hls,new RegExp(video.id));
     const original=video.hlsPlaybackUrl;
     for(const value of [`https://evil.test/${video.id}/manifest/video.m3u8`,`https://customer-example.cloudflarestream.com.evil.test/${video.id}/manifest/video.m3u8`,`http://videodelivery.net/${video.id}/manifest/video.m3u8`,`https://videodelivery.net/wrong/manifest/video.m3u8`]){
-      video.hlsPlaybackUrl=value;assert.equal((await f.call(path)).status,503);
+      video.hlsPlaybackUrl=value;forget(f);assert.equal((await f.call(path)).status,503);
     }
-    video.hlsPlaybackUrl=original;video.meta={source:'other'};assert.equal((await f.call(path)).status,503);
-    video.meta=f.created[0].meta;video.requireSignedURLs=false;assert.equal((await f.call(path)).status,503);
+    video.hlsPlaybackUrl=original;video.meta={source:'other'};forget(f);assert.equal((await f.call(path)).status,503);
+    video.meta=f.created[0].meta;video.requireSignedURLs=false;forget(f);assert.equal((await f.call(path)).status,503);
   }finally{f.sql.close();}
 });
 test('delete queues owned media atomically, cleanup retries failures and never deletes unrelated videos',async()=>{
@@ -264,8 +266,27 @@ test('playback accepts native string and numeric expiries, rejecting malformed, 
     const path='/api/loge/posts/'+published.data.post.id+'/playback',video=f.env.STREAM.video.bind(f.env.STREAM),future=Math.floor(Date.now()/1000)+3600;
     for(const [exp,ok] of [[String(future),true],[future,true],[null,false],[true,false],[[future],false],['',false],['tomorrow',false],['1e20',false],['123.5',false],[future+.5,false],[String(Number.MAX_SAFE_INTEGER+1),false],[String(Math.floor(Date.now()/1000)-1),false]]){
       f.env.STREAM.video=uid=>({...video(uid),async generateToken(){return 'header.'+Buffer.from(JSON.stringify({sub:uid,exp})).toString('base64url')+'.signature';}});
-      const response=await f.call(path);assert.equal(response.status,ok?200:503,JSON.stringify(exp));
+      forget(f);const response=await f.call(path);assert.equal(response.status,ok?200:503,JSON.stringify(exp));
       if(ok)assert.equal(response.data.expiresAt,new Date(future*1000).toISOString());
     }
+  }finally{f.sql.close();}
+});
+
+test('a signed address is reused for every allowed viewer while it stays valid, never for a refused one',async()=>{
+  const f=setup();try{
+    forget(f);
+    const id=(await f.upload()).data.uploadId;f.ready(id);const published=await f.publish(post(id)),path='/api/loge/posts/'+published.data.post.id+'/playback';
+    const video=f.env.STREAM.video.bind(f.env.STREAM);let signed=0;
+    f.env.STREAM.video=uid=>({...video(uid),async generateToken(){signed++;return 'header.'+Buffer.from(JSON.stringify({sub:uid,exp:Math.floor(Date.now()/1000)+7200})).toString('base64url')+'.signature';}});
+    const first=await f.call(path,{user:12});assert.equal(first.status,200);
+    const again=await f.call(path);assert.equal(again.status,200);assert.equal(again.data.hls,first.data.hls);
+    clearPlaybackMemory();const stored=await f.call(path,{user:12});assert.equal(stored.data.hls,first.data.hls);
+    assert.equal(signed,1,'one signature serves every viewer');
+    assert.equal((await f.call(path,{user:null})).status===200,false,'access is still checked first');
+    // A deleted post never serves its kept address, and cleanup drops it.
+    assert.equal((await f.call('/api/loge/posts/'+published.data.post.id,{method:'DELETE',body:{revision:1}})).status,200);
+    assert.equal((await f.call(path)).status,404);
+    await cleanupLogeStream(f.env);
+    assert.equal(f.sql.prepare('SELECT count(*) n FROM loge_stream_playback').get().n,0);
   }finally{f.sql.close();}
 });
