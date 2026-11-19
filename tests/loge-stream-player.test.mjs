@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
-import {createStreamPlayer,validStreamURL} from '../public/loge-stream-player.js';
+import {createStreamPlayer,validStreamURL,cachedPlayback} from '../public/loge-stream-player.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const signed={hls:'https://customer-example.cloudflarestream.com/signed-token/manifest/video.m3u8',poster:'https://customer-example.cloudflarestream.com/signed-token/thumbnails/thumbnail.jpg',expiresAt:new Date(Date.now()+3600000).toISOString()};
 function fixture({native=false,getPlayback=async()=>signed,playImplementation,fullscreen=true}={}){
@@ -163,5 +163,49 @@ test('outside Apple devices the site player is used even where the browser reads
     make(false);await tick();instances[1].emit('manifest');assert.deepEqual(instances[1].starts,[]);
     // Apple devices keep their own player.
     const apple=make(true,true);await tick();assert.equal(apple.video.src,signed.hls);assert.equal(instances.length,2);
+  }finally{if(previous===undefined)delete globalThis.document;else globalThis.document=previous;}
+});
+
+test('signed playback is reused until shortly before it expires, shared while pending, and refetched on demand',async()=>{
+  let calls=0;const soon=new Date(Date.now()+60000).toISOString(),later=new Date(Date.now()+3600000).toISOString();
+  const get=cachedPlayback(async(id,part)=>{calls++;return {...signed,expiresAt:id==='soon'?soon:later,part:part??null};});
+  const [a,b]=await Promise.all([get('v'),get('v')]);assert.equal(calls,1);assert.equal(a,b,'one request while pending');
+  await get('v');assert.equal(calls,1,'reused while valid');
+  await get('v',null,{fresh:true});assert.equal(calls,2,'fresh skips the reuse');
+  await get('v',1);assert.equal(calls,3,'each part is its own entry');
+  await get('soon');await get('soon');assert.equal(calls,5,'an address about to expire is asked again');
+  const failing=cachedPlayback(async()=>{calls++;throw Error('down');});
+  await assert.rejects(failing('x'));await assert.rejects(failing('x'));assert.equal(calls,7,'a failure is not kept');
+});
+
+test('a refused address is renewed once, keeping the position and the playback',async()=>{
+  const previous=globalThis.document;const instances=[];let fetches=0;
+  class Hls{
+    static Events={ERROR:'error',MANIFEST_PARSED:'manifest',FRAG_BUFFERED:'buffered'};static ErrorTypes={NETWORK_ERROR:'networkError',MEDIA_ERROR:'mediaError'};static isSupported(){return true;}
+    constructor(){this.handlers={};this.starts=[];this.recovered=0;instances.push(this);}
+    on(type,fn){(this.handlers[type]||=[]).push(fn);}once(type,fn){this.on(type,fn);}off(){}
+    emit(type,data){for(const fn of [...(this.handlers[type]||[])])fn(type,data);}
+    attachMedia(){}loadSource(url){this.source=url;}startLoad(at){this.starts.push(at);}stopLoad(){}destroy(){this.destroyed=true;}recoverMediaError(){this.recovered++;}
+  }
+  class Element extends EventTarget{
+    constructor(){super();this.children=[];this.attributes=new Map();this.paused=true;this.currentTime=0;this.duration=600;this.classList={toggle(){}};}
+    append(...c){this.children.push(...c);}remove(){}setAttribute(k,v){this.attributes.set(k,String(v));}getAttribute(k){return this.attributes.get(k)||null;}removeAttribute(k){this.attributes.delete(k);}
+    load(){}canPlayType(){return '';}async play(){this.paused=false;this.dispatchEvent(new Event('play'));}pause(){if(!this.paused){this.paused=true;this.dispatchEvent(new Event('pause'));}}
+  }
+  globalThis.document={createElement:()=>new Element()};
+  const tick=()=>new Promise(resolve=>setImmediate(resolve));
+  try{
+    const player=createStreamPlayer({container:new Element(),post:{id:1,title:'x'},getPlayback:async()=>{fetches++;return signed;},preferNative:false,fullscreen:false,loadLibrary:async()=>({default:Hls})});
+    await tick();await player.video.dispatchEvent(new Event('click'));await tick();
+    assert.equal(player.getPlayerState(),1);player.video.currentTime=95;
+    // A decoding hiccup is recovered in place, once.
+    instances[0].emit('error',{fatal:true,type:'mediaError'});assert.equal(instances[0].recovered,1);assert.equal(player.getPlayerState(),1);
+    // The video service refuses the address: a new one, from the same second, still playing.
+    instances[0].emit('error',{fatal:true,type:'networkError',response:{code:403}});await tick();await tick();
+    assert.equal(fetches,2);assert.equal(instances.length,2);assert.equal(instances[0].destroyed,true);
+    assert.deepEqual(instances[1].starts.at(-1),95);assert.equal(player.video.paused,false);
+    // A second refusal right away is not looped on.
+    instances[1].emit('error',{fatal:true,type:'networkError',response:{code:403}});await tick();
+    assert.equal(fetches,2);assert.equal(player.getPlayerState(),2);
   }finally{if(previous===undefined)delete globalThis.document;else globalThis.document=previous;}
 });

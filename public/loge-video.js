@@ -232,6 +232,8 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
     const keep=new Set(index<0?[]:list.slice(start,start+3));
     for(const record of records.values())if(!keep.has(record)&&record.iframe)release(record);
     for(const record of keep)warm(record);
+    // The reel on screen fetches its first seconds, so a tap starts at once.
+    if(active?.stream)active.player?.warm?.();
   }
   function viewport(){
     const screen={top:0,left:0,right:window.innerWidth,bottom:window.innerHeight};
@@ -257,7 +259,7 @@ export function createLogeVideoFeed({root=null,isCurrent=()=>true,onError=()=>{}
   const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(()=>{
     if(destroyed||paused)return;
     refresh();
-  },{root,threshold:Array.from({length:21},(_,i)=>i/20)}):null;
+  },{root,threshold:[0,0.25,0.5,0.75,1]}):null;
   function observe(record){
     if(record.observed)observer?.unobserve(record.observed);
     record.observed=record.iframe||record.container;

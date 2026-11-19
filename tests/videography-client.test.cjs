@@ -25,7 +25,7 @@ function fixture({upload,request,videoBranches=['self','ideas','projects','socie
   const form=get('video-form');form.elements={title:{value:'Titre modifié'},video:{files:[],value:''},videoBranch:{value:'self'}};form.submit=new Element();form.reportValidity=()=>true;const header=new Element();
   const document={hidden:false,querySelector:selector=>selector==='.header-controls'?header:({}),querySelectorAll:selector=>selector==='[data-video-branch]'?branches:[],createElement:()=>new Element(),getElementById:get,addEventListener(){},removeEventListener(){}};
   const ctx={state:{user:{id:19},access:{videoBranches}},app:new Element(),isCurrent:()=>true,esc:value=>String(value??''),navigate:()=>{},api:async(path,options={})=>{calls.push({path,...options});return request?request(path,options):{events:[],next:null};}};
-  const sandbox=vm.createContext({document,window:{addEventListener(){},removeEventListener(){}},DOMException,AbortController,URLSearchParams,URL,crypto:require('node:crypto').webcrypto,setTimeout,clearTimeout,confirm:()=>true,VIDEO_BRANCHES:[['self','Métacognition'],['ideas','Réflexions'],['projects','Idées et projets'],['society','Ma société harmonieuse']],videoLabel:key=>key==='self'?'Métacognition':key,PRIVATE_HELP:{},youtubeId:url=>url?.includes('youtube')?'M7lc1UVf-VE':null,youtubeEmbed:()=>'',dateFields:()=>'',configureDate(){},readDate:()=> '2026-11-10',validateLogeFile:file=>{if(!file?.size)throw Error('Choisis une vidéo.');},probeLogeFile:async()=>{},ensureLogeUpload:upload||(async()=>{throw Error('Unexpected upload');}),createStreamPlayer:options=>{
+  const sandbox=vm.createContext({document,window:{addEventListener(){},removeEventListener(){}},DOMException,AbortController,URLSearchParams,URL,crypto:require('node:crypto').webcrypto,setTimeout,clearTimeout,confirm:()=>true,VIDEO_BRANCHES:[['self','Métacognition'],['ideas','Réflexions'],['projects','Idées et projets'],['society','Ma société harmonieuse']],videoLabel:key=>key==='self'?'Métacognition':key,PRIVATE_HELP:{},youtubeId:url=>url?.includes('youtube')?'M7lc1UVf-VE':null,youtubeEmbed:()=>'',dateFields:()=>'',configureDate(){},readDate:()=> '2026-11-10',validateLogeFile:file=>{if(!file?.size)throw Error('Choisis une vidéo.');},probeLogeFile:async()=>{},ensureLogeUpload:upload||(async()=>{throw Error('Unexpected upload');}),sessionStorage:(()=>{const data=new Map();return {getItem:key=>data.has(key)?data.get(key):null,setItem:(key,value)=>data.set(key,String(value))};})(),cachedPlayback:fetch=>{const get=id=>fetch(id);get.cached=true;return get;},createStreamPlayer:options=>{
     const video=new Element(),element=new Element();let position=0,pauses=0,destroys=0;const player={video,element,getDuration:()=>120,getCurrentTime:()=>position,seekTo:value=>position=value,pauseVideo:()=>pauses++,destroy:()=>destroys++};players.push({options,player,get pauses(){return pauses;},get destroys(){return destroys;}});options.container.append(element);return player;
   }});
   vm.runInContext(`Object.assign(globalThis,(()=>{${uploads};return {${uploadExports}};})());`,sandbox);
@@ -85,7 +85,7 @@ test('Stream controls seek, pause peers and survive additional cards until their
   h.client.wireStreamPlayers(root);h.client.wireStreamPlayers(root);assert.equal(h.players.length,1);
   cards.push(second);h.client.wireStreamPlayers(root);assert.equal(h.players.length,2);
   await h.players[0].options.getPlayback('one');await h.players[1].options.getPlayback('two');assert.deepEqual(h.calls.map(c=>c.path),['/api/life-tree/events/one/playback','/api/life-tree/events/two/playback?owner=20']);
-  const controls=h.players[0].player.element.children[0],seek=controls.children[0];seek.value='30';seek.oninput();assert.equal(h.players[0].player.getCurrentTime(),30);assert.equal(controls.children[1].textContent,'0:30 / 2:00');
+  const controls=h.players[0].player.element.children[0],seek=controls.children[0];seek.value='30';seek.oninput();assert.equal(h.players[0].player.getCurrentTime(),0,'dragging only previews');seek.onchange();assert.equal(h.players[0].player.getCurrentTime(),30);assert.equal(controls.children[1].textContent,'0:30 / 2:00');
   h.players[0].options.onState(1);assert.equal(h.players[0].pauses,0);assert.equal(h.players[1].pauses,1);
   h.document.hidden=true;assert.equal(h.players[0].options.isEligible(),false);h.client.pauseVideoPlayers();assert.equal(h.players[0].pauses,1);
   h.client.destroyVideoPlayers(root);assert.equal(h.players[0].destroys,1);assert.equal(h.players[1].destroys,1);assert.equal(h.session.videoPlayers.size,0);
@@ -160,13 +160,23 @@ test('cancelling during the final write never frees a reservation that may alrea
 test('a reservation left by a reloaded page is released and the upload starts again by itself, once',async()=>{
   let attempts=0;const blocked=()=>Object.assign(Error('Termine ou annule ton envoi précédent.'),{status:409,data:{uploadId:'old-upload'}});
   const h=fixture({upload:async()=>{if(++attempts===1)throw blocked();return 'new-upload';}});
+  // This tab made that reservation before the page was reloaded.
+  h.sandbox.sessionStorage.setItem('wc-own-video-uploads','["old-upload"]');
   h.client.videoForm();choose(h);h.form.onsubmit({preventDefault(){}});await tick();await tick();
   assert.equal(attempts,2);assert.deepEqual([h.calls[0].method,h.calls[0].path],['DELETE','/api/life-tree/uploads/old-upload']);
   assert.equal(h.calls.find(c=>c.method==='PUT').body.uploadId,'new-upload');assert.equal(h.job().phase,'done');
   // A second refusal in the same job is not looped on: the member decides.
   let again=0;const stuck=fixture({upload:async()=>{again++;throw blocked();}});
+  stuck.sandbox.sessionStorage.setItem('wc-own-video-uploads','["old-upload"]');
   stuck.client.videoForm();choose(stuck);stuck.form.onsubmit({preventDefault(){}});await tick();await tick();
   assert.equal(again,2);assert.equal(stuck.job().phase,'error');assert.equal(stuck.job().blockedUploadId,'old-upload');assert.equal(stuck.get('video-upload-indicator').dataset.phase,'error');
+});
+
+test('another tab’s upload is never released without asking',async()=>{
+  let attempts=0;const h=fixture({upload:async()=>{attempts++;throw Object.assign(Error('Termine ou annule ton envoi précédent.'),{status:409,data:{uploadId:'other-tab-upload'}});}});
+  h.client.videoForm();choose(h);h.form.onsubmit({preventDefault(){}});await tick();await tick();
+  assert.equal(attempts,1);assert.equal(h.calls.some(c=>c.method==='DELETE'),false);
+  assert.equal(h.job().phase,'error');assert.equal(h.job().blockedUploadId,'other-tab-upload');
 });
 
 test('lost access stops the upload with a clear message and saves nothing',async()=>{

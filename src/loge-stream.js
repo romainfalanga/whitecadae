@@ -57,7 +57,9 @@ export const LOGE_SHARED_SCHEMA=[
     upload_id TEXT NOT NULL,
     PRIMARY KEY(post_id,position)
   )`,
-  `CREATE INDEX IF NOT EXISTS idx_loge_series_user ON loge_shared_series(user_id,event_id)`
+  `CREATE INDEX IF NOT EXISTS idx_loge_series_user ON loge_shared_series(user_id,event_id)`,
+  // Finds the sériographies a video belongs to, before its file or category changes.
+  `CREATE INDEX IF NOT EXISTS idx_loge_series_upload ON loge_shared_series(upload_id)`
 ];
 // The shared upload must still be the published media of a videography entry.
 export const SHARED_UPLOAD_LIVE=`s.id=v.upload_id AND s.user_id=v.user_id AND s.event_id=v.event_id AND s.purpose='videography' AND s.state='published'
@@ -88,6 +90,12 @@ export async function ensureLogeStreamTables(env){
 const iso=value=>new Date(value*1000).toISOString();
 const uuid=value=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 export function uploadIdOf(value){if(!uuid(value))fail('Vidéo introuvable.',404);return value.toLowerCase();}
+// The Stream binding hands out RPC stubs: each one is disposed once used, or
+// the runtime warns and keeps it alive until the request ends.
+async function withVideo(env,id,use){
+  const handle=provider(env).video(id);
+  try{return await use(handle);}finally{try{handle?.[Symbol.dispose]?.();}catch{/* already released */}}
+}
 const provider=env=>{if(!env.STREAM?.createDirectUpload||!env.STREAM?.video)fail('L’envoi de vidéos est momentanément indisponible.',503);return env.STREAM;};
 const creator=(userId,purpose='loge')=>purpose+':user:'+userId;
 const meta=(id,purpose='loge')=>purpose==='loge'?{source:'whitecadae-loge',logeUploadId:id}:{source:'whitecadae-videography',uploadId:id};
@@ -179,7 +187,7 @@ async function refresh(env,row){
     return {...row,status:'error'};
   }
   if(!row.stream_id)return {...row,status:'waiting'};
-  let details;try{details=await provider(env).video(row.stream_id).details();}catch(error){if(!isMissing(error))unavailable();details=null;}
+  let details;try{details=await withVideo(env,row.stream_id,video=>video.details());}catch(error){if(!isMissing(error))unavailable();details=null;}
   if(!isOwned(details,row)){if(details)unavailable();return {...row,status:'error'};}
   const invalid=details.status?.state==='error'||(Number.isFinite(details.size)&&details.size>LOGE_UPLOAD_MAX_BYTES)||(Number.isFinite(details.duration)&&details.duration>LOGE_UPLOAD_MAX_SECONDS);
   let state=invalid?'deleting':details.readyToStream===true&&Number.isFinite(details.duration)&&details.duration>0&&Number.isFinite(details.size)&&details.size>0?'ready':['pendingupload','pending'].includes(details.status?.state)?'waiting':'processing';
@@ -202,7 +210,7 @@ export async function readyLogeUpload(env,user,id,purpose='loge'){
   if(row.status!=='ready')fail(row.status==='error'?'Cette vidéo ne peut plus être publiée.':'La vidéo est encore en cours de préparation.',409);
   // Removing the provider safety timer before linking is safe: a failed
   // publication remains in D1 and is swept by the bounded cleanup queue.
-  try{await provider(env).video(row.stream_id).update({requireSignedURLs:true,scheduledDeletion:null});}catch{unavailable();}
+  try{await withVideo(env,row.stream_id,video=>video.update({requireSignedURLs:true,scheduledDeletion:null}));}catch{unavailable();}
   return row;
 }
 async function cleanupOne(env,row){
@@ -210,9 +218,11 @@ async function cleanupOne(env,row){
   // accepts ready, so a racing publisher can never link a video being removed.
   if(row.stream_id){
     try{
-      const video=provider(env).video(row.stream_id),details=await video.details();
-      if(!isOwned(details,row))throw new Error('Stream ownership mismatch');
-      await video.delete();
+      await withVideo(env,row.stream_id,async video=>{
+        const details=await video.details();
+        if(!isOwned(details,row))throw new Error('Stream ownership mismatch');
+        await video.delete();
+      });
     }catch(error){if(!isMissing(error))throw error;}
   }
   await env.DB.prepare("UPDATE loge_stream_uploads SET state='deleted',upload_url=NULL,updated_at=unixepoch() WHERE id=?1 AND state='deleting'").bind(row.id).run();
@@ -284,7 +294,12 @@ export async function signedStreamPlayback(env,row){
   }catch{/* a missing copy only costs a new signature */}
   const output=await signStreamPlayback(env,row);
   const value={upload_id:row.id,stream_id:row.stream_id,hls:output.hls,poster:output.poster,expires_at:Math.floor(Date.parse(output.expiresAt)/1000)};
-  if(playbackMemory.size>500)playbackMemory.clear();
+  // Expired entries go first; the oldest only when the memory is still full.
+  if(playbackMemory.size>=500){
+    const now=Date.now()/1000;
+    for(const [key,held] of playbackMemory)if(Number(held.expires_at)<=now+PLAYBACK_REUSE_SECONDS)playbackMemory.delete(key);
+    while(playbackMemory.size>=500)playbackMemory.delete(playbackMemory.keys().next().value);
+  }
   playbackMemory.set(row.id,value);
   try{await env.DB.prepare(`INSERT INTO loge_stream_playback(upload_id,stream_id,hls,poster,expires_at) VALUES(?1,?2,?3,?4,?5)
     ON CONFLICT(upload_id) DO UPDATE SET stream_id=excluded.stream_id,hls=excluded.hls,poster=excluded.poster,expires_at=excluded.expires_at`).bind(value.upload_id,value.stream_id,value.hls,value.poster,value.expires_at).run();}catch{/* memory still holds it */}
@@ -292,9 +307,11 @@ export async function signedStreamPlayback(env,row){
 }
 async function signStreamPlayback(env,row){
   try{
-    const video=provider(env).video(row.stream_id),details=await video.details();
-    if(!isOwned(details,row)||!details.readyToStream||details.requireSignedURLs!==true)unavailable();
-    const token=await video.generateToken();
+    const {details,token}=await withVideo(env,row.stream_id,async video=>{
+      const details=await video.details();
+      if(!isOwned(details,row)||!details.readyToStream||details.requireSignedURLs!==true)unavailable();
+      return {details,token:await video.generateToken()};
+    });
     if(typeof token!=='string'||! /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token))unavailable();
     let payload;try{payload=JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));}catch{unavailable();}
     // The native Stream binding returns exp as a decimal string. Accept its

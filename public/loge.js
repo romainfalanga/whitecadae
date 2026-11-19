@@ -2,6 +2,7 @@ import {createLogeCommentViewport} from './loge-comment-viewport.js';
 import {LOGE_THEMES_ENABLED} from './loge-features.js';
 import {videoLabel,LOGE_ROOMS,logeRoom,logeRoomLabel,EXPANSION_ICON_PATHS} from './video-model.js';
 import {createLogeVideoFeed} from './loge-video.js';
+import {cachedPlayback} from './loge-stream-player.js';
 import {themeOverviewMarkup,proposalMarkup,historyMarkup} from './loge-themes-ui.js';
 
 let session=null;
@@ -196,7 +197,7 @@ function closeVideo(s=session){for(const view of s?.views?.values()||[]){view.pl
 function bindVideo(id){const view=session.current,post=view.posts.get(String(id)),container=node('loge-video-'+id);if(view.player&&post&&container)view.player.add(post,container,node('loge-timeline-'+post.id));}
 function initMedia(view){
   const s=session;if(!live(s)||s.current!==view||!videoView(view))return;
-  view.player?.destroy();view.player=createLogeVideoFeed({root:videoView(view)?viewScroller(view):null,isCurrent:()=>live(s)&&s.current===view&&!view.destroyed,getPlayback:(id,part)=>request('/api/loge/posts/'+encodeURIComponent(id)+'/playback'+(Number.isSafeInteger(part)?'?part='+part:''),{}, {view,background:true}),onError:()=>{}});
+  view.player?.destroy();view.player=createLogeVideoFeed({root:videoView(view)?viewScroller(view):null,isCurrent:()=>live(s)&&s.current===view&&!view.destroyed,getPlayback:view.playback||=cachedPlayback((id,part)=>request('/api/loge/posts/'+encodeURIComponent(id)+'/playback'+(Number.isSafeInteger(part)?'?part='+part:''),{}, {view,background:true})),onError:()=>{}});
   for(const post of view.posts.values()){const container=view.root.querySelector('[data-video-post="'+post.id+'"]');if(container)view.player.add(post,container,node('loge-timeline-'+post.id));}
   refreshLayout(view);
 }

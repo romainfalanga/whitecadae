@@ -30,7 +30,11 @@ export default {
     const step=async(name,work)=>{try{await work();}catch(error){logFailure('scheduled_failure',name,error);}};
     await step('tables',()=>ensureLogeTables(env));
     if(controller.cron !== '*/15 * * * *') await step('themes',()=>settleThemeWeeks(env, controller.scheduledTime));
-    await step('stream',()=>cleanupLogeStream(env));
+    await step('stream',async()=>{
+      // A video the cleanup cannot delete is retried; say so instead of failing silently.
+      const result=await cleanupLogeStream(env);
+      if(result?.failed)console.warn(JSON.stringify({event:'stream_cleanup_failed',failed:result.failed,deleted:result.deleted}));
+    });
     await step('shared-posts',()=>withdrawOrphanedSharedPosts(env));
   },
   async fetch(request, env) {

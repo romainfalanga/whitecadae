@@ -107,7 +107,8 @@ function filteredQuery(url,owner){
 }
 async function eventUpload(env,owner,id){
   // loge_post_id is set while this entry is shared in the Loge.
-  return env.DB.prepare(`SELECT s.*,(SELECT v.post_id FROM loge_shared_videos v JOIN loge_posts p ON p.id=v.post_id WHERE v.upload_id=s.id AND p.deleted_at IS NULL) AS loge_post_id
+  return env.DB.prepare(`SELECT s.*,(SELECT v.post_id FROM loge_shared_videos v JOIN loge_posts p ON p.id=v.post_id WHERE v.upload_id=s.id AND p.deleted_at IS NULL) AS loge_post_id,
+    (SELECT v.post_id FROM loge_shared_series v JOIN loge_posts p ON p.id=v.post_id WHERE v.upload_id=s.id AND p.deleted_at IS NULL LIMIT 1) AS series_post_id
     FROM loge_stream_uploads s WHERE s.user_id=?1 AND s.event_id=?2 AND s.purpose='videography' AND s.state='published'`).bind(owner,id).first();
 }
 async function linkFingerprint(id,revision,event){
@@ -178,7 +179,16 @@ export async function lifeRoute(request,env,url,user,body,json){
     const after=url.searchParams.get('after');if(after){if(!/^\d{4}-\d{2}-\d{2}\|[a-zA-Z0-9_-]{8,64}$/.test(after))fail('Page invalide.');q.add("(e.sort_date||'|'||e.id)"+(videos?'<':'>')+'$',after);}
     const rows=(await env.DB.prepare(`SELECT e.*,(SELECT id FROM circle_topics WHERE owner_id=e.owner_id AND resource_key='event:'||e.id) AS topic_id FROM life_events e WHERE ${q.filters.join(' AND ')} ORDER BY e.sort_date ${videos?'DESC':'ASC'},e.id ${videos?'DESC':'ASC'} LIMIT 31`).bind(...q.values).all()).results;
     const events=await Promise.all(rows.slice(0,30).map(r=>unpack(env,r)));await freshAccess(env,access,user);
-    return json({events,next:rows.length>30?`${events.at(-1).sort_date}|${events.at(-1).id}`:null,owner,editable:owner===user.id,sharing:owner===user.id||!!access.member?.content_access,kinds:EVENT_KINDS,impacts:EVENT_IMPACTS});
+    // Covers already signed for a recent viewing come with the list: the page
+    // asks for the others one by one, instead of for every video.
+    const posters={};
+    try{
+      const ids=events.filter(e=>e.creation?.videoProvider==='stream').map(e=>e.id);
+      if(ids.length)for(const r of (await env.DB.prepare(`SELECT s.event_id,p.poster,p.expires_at FROM loge_stream_uploads s JOIN loge_stream_playback p ON p.upload_id=s.id AND p.stream_id=s.stream_id
+        WHERE s.user_id=?1 AND s.purpose='videography' AND s.state='published' AND s.event_id IN (SELECT value FROM json_each(?2)) AND p.expires_at>unixepoch()+600`).bind(owner,JSON.stringify(ids)).all()).results||[])
+        posters[r.event_id]={url:r.poster,expiresAt:new Date(r.expires_at*1000).toISOString()};
+    }catch{/* covers are then fetched one by one */}
+    return json({posters,events,next:rows.length>30?`${events.at(-1).sort_date}|${events.at(-1).id}`:null,owner,editable:owner===user.id,sharing:owner===user.id||!!access.member?.content_access,kinds:EVENT_KINDS,impacts:EVENT_IMPACTS});
   }
   if(suffix==='/drafts'&&method==='GET'){
     if(owner!==user.id)fail('Brouillons privés.',403);
@@ -236,6 +246,10 @@ export async function lifeRoute(request,env,url,user,body,json){
       if(currentUpload?.loge_post_id&&!LOGE_ROOMS.includes(event.video_branch))fail('Cette vidéo est publiée dans les Loges virtuelles. Supprime sa publication avant de la passer dans une catégorie sans loge.',409);
       // Commenters must keep seeing the video they answered.
       if(incoming&&incoming!==currentUpload?.id&&currentUpload?.loge_post_id)fail('Cette vidéo est publiée dans les Loges virtuelles. Supprime sa publication avant de remplacer le fichier.',409);
+      // A sériographie plays in one loge, with the files its commenters saw:
+      // a published part keeps its category and its file.
+      if(currentUpload?.series_post_id&&row&&videoBranchKey(event.video_branch)!==videoBranchKey(row.video_branch))fail('Cette vidéo fait partie d’une sériographie publiée dans les Loges virtuelles. Supprime cette publication avant de changer sa catégorie.',409);
+      if(incoming&&incoming!==currentUpload?.id&&currentUpload?.series_post_id)fail('Cette vidéo fait partie d’une sériographie publiée dans les Loges virtuelles. Supprime cette publication avant de remplacer le fichier.',409);
       if(incoming&&incoming!==currentUpload?.id){
         try{upload=await readyLogeUpload(env,user,incoming,'videography');}catch(error){const retry=await replay();if(retry)return retry;throw error;}
       }

@@ -43,10 +43,12 @@ export async function topicsRoute(request,env,url,user,body,json){
   if(feed&&method==='GET'){
     const owner=integer(Number(feed[1]),1),access=await accessTo(env,user,owner),v=visible(access,user);
     const archive=url.searchParams.get('archive')==='1';if(archive&&owner!==user.id)fail('Archives privées.',403);
-    const stamp=`${access.circle.access_revision}:${access.circle.content_revision}`;
-    if(url.searchParams.get('revision')===stamp){await freshAccess(env,access,user);return json({unchanged:true,revision:stamp});}
     // Exchanges follow their video: a category shows once both members reached it.
     const allowed=await viewableBranches(env,user.id,owner);
+    // The stamp also moves when a category opens or when the viewer reads a topic.
+    const reads=await env.DB.prepare('SELECT coalesce(sum(r.last_id),0) AS n FROM circle_topic_reads r JOIN circle_topics t ON t.id=r.topic_id WHERE r.reader_id=?1 AND t.owner_id=?2').bind(user.id,owner).first();
+    const stamp=`${access.circle.access_revision}:${access.circle.content_revision}:${allowed.join(',')}:${reads?.n||0}`;
+    if(url.searchParams.get('revision')===stamp){await freshAccess(env,access,user);return json({unchanged:true,revision:stamp});}
     const values=[owner,user.id,access.member?.joined_seq||0];let filter=archive?'AND (e.video_branch IS NULL OR t.kind<>\'creation\')':`AND e.video_branch IN (${branchList(allowed)}) AND t.kind='creation'`;const after=url.searchParams.get('after');
     if(after){if(!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{3})?\|\d+$/.test(after))fail('Page invalide.');const [date,id]=after.split('|');values.push(date,integer(Number(id),1));filter+=' AND (t.updated_at<?4 OR (t.updated_at=?4 AND t.id<?5))';}
     const visibleReply=`m.owner_id=t.owner_id AND m.topic_id=t.id AND m.kind='message' AND m.id>=?3 AND NOT EXISTS(SELECT 1 FROM ace_blocks b WHERE (b.user_id=?2 AND b.blocked_id=m.author_id) OR (b.blocked_id=?2 AND b.user_id=m.author_id))`;

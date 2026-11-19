@@ -135,7 +135,9 @@ test('signed playback is owner/accepted-AS only, rechecks revocation and replace
     assert.equal((await f.call(path+'?owner=11','GET',undefined,12)).status,403);
     await connectAS(f);
     const response=await f.call(path+'?owner=11','GET',undefined,12);assert.equal(response.status,200);assert.match(response.data.hls,/header\./);assert.match(response.data.expiresAt,/Z$/);
-    const events=await f.call('/api/life-tree?owner=11','GET',undefined,12);assert.equal(events.status,200);assert.doesNotMatch(JSON.stringify(events.data),/cloudflarestream\.com|stream_id|logeUploadId/);
+    const events=await f.call('/api/life-tree?owner=11','GET',undefined,12);assert.equal(events.status,200);assert.doesNotMatch(JSON.stringify(events.data.events),/cloudflarestream\.com|stream_id|logeUploadId/);
+    // Covers signed for an earlier viewing come along, only for the listed videos.
+    assert.deepEqual(Object.keys(events.data.posters),events.data.events.filter(e=>e.creation?.videoProvider==='stream').map(e=>e.id));assert.match(Object.values(events.data.posters)[0].url,/\/thumbnails\/thumbnail\.jpg$/);
     const original=f.binding.video;let once=false;f.binding.video=uid=>{const handle=original(uid),generate=handle.generateToken;handle.generateToken=async()=>{if(!once){once=true;await f.call('/api/ace-circles/sharing','PUT',{enabled:false});}return generate();};return handle;};
     // A fresh signature: access revoked while it is minted is still refused.
     clearPlaybackMemory();f.sql.prepare('DELETE FROM loge_stream_playback').run();
