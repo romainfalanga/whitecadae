@@ -82,6 +82,26 @@ test('the Loge client offers « Une vidéo » or « Une sériographie », and a 
   assert.match(loge,/body:\{\.\.\.\(series\?\{seriesId:draft\.seriesId\}:\{eventId:draft\.eventId\}\)/);
   assert.match(loge,/post\.seriesParts>1\?`<button type="button" class="loge-reel-icon loge-reel-next" data-series-next=/);
   assert.match(loge,/<span class="loge-timeline-marks" data-timeline-marks aria-hidden="true"><\/span>/);
-  assert.match(loge,/getPlayback:\(id,part\)=>request\('\/api\/loge\/posts\/'\+encodeURIComponent\(id\)\+'\/playback'\+\(Number\.isSafeInteger\(part\)\?'\?part='\+part:''\)/);
+  assert.match(loge,/getPlayback:view\.playback\|\|=cachedPlayback\(\(id,part\)=>request\('\/api\/loge\/posts\/'\+encodeURIComponent\(id\)\+'\/playback'\+\(Number\.isSafeInteger\(part\)\?'\?part='\+part:''\)/);
   assert.match(feed,/async next\(id\)\{/);assert.match(feed,/marks\.innerHTML=points\.map\(point=>`<i style="left:\$\{point\}%"><\/i>`\)/);
+});
+
+test('a video of a published sériographie keeps its category and its file while the post lives',async()=>{
+  const f=setup();try{
+    await f.video('video-one01');await f.video('video-two02');
+    await f.series('serie-0001',['video-one01','video-two02'],'Deux pas');
+    const post=(await f.call('/api/loge/posts','POST',{seriesId:'serie-0001',requestId:crypto.randomUUID()})).data.post;
+    const saved=(await f.call('/api/life-tree/events/video-one01')).data.event,dated={date:saved.sort_date,precision:'day'};
+    // Moving it to another loge would let viewers of this loge play a video they have not reached.
+    const moved=await f.call('/api/life-tree/events/video-one01','PUT',event(undefined,{...dated,videoBranch:'society',revision:saved.revision}));
+    assert.equal(moved.status,409,JSON.stringify(moved.data));assert.match(moved.data.error,/sériographie publiée/);
+    const u=await f.call('/api/life-tree/uploads','POST',{filename:'v.mp4',size:1000,requestId:crypto.randomUUID()});
+    const replaced=await f.call('/api/life-tree/events/video-one01','PUT',event(u.data.uploadId,{...dated,revision:saved.revision}));
+    assert.equal(replaced.status,409);
+    // Its title still changes freely, and once the post is gone the category does too.
+    assert.equal((await f.call('/api/life-tree/events/video-one01','PUT',event(undefined,{...dated,title:'Nouveau titre',revision:saved.revision}))).status,200);
+    assert.equal((await f.call('/api/loge/posts/'+post.id,'DELETE',{revision:post.revision||1})).status,200);
+    const current=(await f.call('/api/life-tree/events/video-one01')).data.event;
+    assert.equal((await f.call('/api/life-tree/events/video-one01','PUT',event(undefined,{...dated,videoBranch:'society',revision:current.revision}))).status,200);
+  }finally{f.sql.close();}
 });

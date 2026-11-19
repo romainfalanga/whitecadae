@@ -70,8 +70,17 @@ test('videography, an AS’s videography, the loges and Game Master Blanc follow
     assert.deepEqual(ideas.paragraphs,['Extériorise tes idées et tes projets dans ta vidéographie.','Revisualise tes vidéos pour prendre du recul sur eux et les améliorer.']);
     assert.doesNotMatch(reflections.paragraphs.join(' '),/version harmonieuse|société harmonieuse/);assert.match(reflections.paragraphs[0],/vidéographie/);
     assert.deepEqual(third.page.sections.map(section=>section.title),['Vidéographie','Métacognition','Ta société harmonieuse','Tes idées et tes projets','Tes réflexions','Loges virtuelles']);
+    // Exchanges about a Réflexions video stay closed to an AS below 30:
+    // the topic, its messages and the unread count all follow the category.
+    const topic=(await f.ok('/api/life-tree/events/video-ideas',22)).event.topic_id;
+    await f.ok('/api/ace-circles/topics/'+topic+'/replies',22,'POST',{id:crypto.randomUUID(),text:'Une expansion sur une réflexion'});
+    const seen=async()=>JSON.stringify(await f.ok('/api/ace-circles/23/messages',20)).includes('Une expansion sur une réflexion');
+    assert.equal(await seen(),true,'visible at 30');
     // An AS below 30 still keeps member 23's Réflexions closed to them, and theirs to 23.
     setEarnedLevel(f,21,24);
+    assert.equal(await seen(),false,'hidden at 24');
+    assert.equal((await f.call('/api/ace-circles/topics/'+topic,20)).status,404);
+    const circle=(await f.ok('/api/ace-circles',20)).circles.find(c=>c.owner.id===23);assert.equal(circle?.unread||0,0);
     assert.deepEqual((await f.ok('/api/ace-circles',22)).circles[0].members.find(m=>m.id===21).branches,['self','projects','society']);
   }finally{f.sql.close();}
 });

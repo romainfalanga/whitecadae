@@ -116,6 +116,8 @@ function fixture({posts=[post()],comments=[],user=self,search='',observeUI=false
   vm.runInContext(readFileSync(path.join(__dirname,'../public/video-model.js'),'utf8').replace(/export /g,''),sandbox);
   const youtube=readFileSync(path.join(__dirname,'../public/youtube-video.js'),'utf8').replace(/export /g,'');
   const source=readFileSync(path.join(__dirname,'../public/loge.js'),'utf8').replace(/^import .*\n/gm,'').replace(/export /g,'');
+  // The real playback cache: the feed sees the same fetch, called once per video.
+  sandbox.cachedPlayback=fetch=>{const get=(id,part=null)=>part===null?fetch(id):fetch(id,part);get.cached=true;return get;};
   sandbox.createLogeVideoFeed=options=>{const items=new Map(),controller={options,items,destroyed:false,paused:false,pauseCalls:0,resumeCalls:0,add:(post,container,timeline)=>items.set(String(post.id),{post,container,timeline}),remove:id=>items.delete(String(id)),refresh(){},pause(){this.pauseCalls++;this.paused=true;},resume(){this.resumeCalls++;this.paused=false;},destroy(){this.destroyed=true;for(const item of items.values())item.container.querySelector('iframe')?.remove();items.clear();}};controllers.push(controller);return controller;};
   const themeUI=readFileSync(path.join(__dirname,'../public/loge-themes-ui.js'),'utf8').replace(/export /g,'');
   vm.runInContext('Object.assign(globalThis,(()=>{'+themeUI+';return {themeOverviewMarkup,proposalMarkup,historyMarkup};})());',sandbox);

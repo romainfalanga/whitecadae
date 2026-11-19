@@ -6,7 +6,7 @@ import {normalizeMechanism,mechanismFields} from './mechanism-model.js';
 import {VIDEO_BRANCHES,videoLabel,expansionIcon} from './video-model.js';
 import {youtubeId,youtubeEmbed} from './youtube-video.js';
 import {ensureLogeUpload,probeLogeFile,validateLogeFile} from './loge-upload.js';
-import {createStreamPlayer} from './loge-stream-player.js';
+import {createStreamPlayer,cachedPlayback} from './loge-stream-player.js';
 import {startVideoJob,currentVideoJob,onVideoJob,setVideoJobOpener,takePendingJobOpen,retryVideoJob,cancelVideoJob,dismissVideoJob,jobActive,jobSummary,jobCategory} from './video-uploads.js';
 let session=null;
 export function leave(){
@@ -157,7 +157,13 @@ async function videoPage(){
   // While a video is on its way, « Ajouter » shows where it stands instead.
   bind('video-add',()=>currentVideoJob()?.phase&&currentVideoJob().phase!=='done'?videoJobView():videoForm(null,null,session.videos.branch||'self'));
   const s=session;s.offJobOpener=setVideoJobOpener(()=>{if(live(s))videoJobView();});
-  s.offJob=onVideoJob(job=>{if(!live(s)||!s.videos)return;if(job?.phase==='done'&&s.reloadedJob!==job){s.reloadedJob=job;void loadVideos(true).catch(()=>{});}else renderJobTile();});
+  s.offJob=onVideoJob(job=>{if(!live(s)||!s.videos)return;if(job?.phase==='done'&&s.reloadedJob!==job){
+    s.reloadedJob=job;
+    const reload=()=>{if(live(s)&&s.videos)void loadVideos(true).catch(()=>{});};
+    // A window being used (a video, an expansion being written) is left as it is:
+    // the grid refreshes once it closes. The upload's own window refreshes at once.
+    const open=s.dialog;if(open&&!open.querySelector('.video-job'))open.addEventListener('close',reload,{once:true});else reload();
+  }else renderJobTile();});
   // The next page loads by itself as the grid's end comes into view.
   if(typeof IntersectionObserver==='function'){s.moreObserver=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting)&&live(s)&&!el('video-more').hidden&&!s.videos.loading)el('video-more').click();},{rootMargin:'600px 0px'});s.moreObserver.observe(el('video-more'));}
   bind('video-more',()=>loadVideos());bind('series-open',()=>seriesList());
@@ -170,8 +176,18 @@ async function loadVideos(reset=false){
   const state=session.videos,request=++state.request;if(reset)session.allVideos=null;
   if(reset){clearInlineComments();destroyVideoPlayers(el('video-list'));state.events=[];state.next=null;el('video-list').replaceChildren();el('video-more').hidden=true;}
   const query=new URLSearchParams({videos:'1'});if(state.owner)query.set('owner',String(state.owner));if(state.branch)query.set('branch',state.branch);if(state.next)query.set('after',state.next);
-  state.loading=true;let data;try{data=await api('/api/life-tree?'+query);}finally{state.loading=false;}
+  state.loading=true;let data;
+  try{data=await api('/api/life-tree?'+query);}
+  catch(error){
+    // A failed first page says so in the grid instead of leaving it blank.
+    if(session.videos===state&&state.request===request&&!state.events.length&&error?.name!=='AbortError'){const list=el('video-list');if(list&&!list.querySelector('.video-load-error'))list.insertAdjacentHTML('beforeend',`<p class="private-note video-load-error">Les vidéos ne se chargent pas pour le moment. ${esc(error.message||'')}</p>`);}
+    throw error;
+  }finally{if(state.request===request)state.loading=false;}
   if(session.videos!==state||state.request!==request)return;
+  el('video-list').querySelector('.video-load-error')?.remove();
+  // Covers already signed for an earlier viewing come with the list.
+  const covers=session.posters||=new Map();
+  for(const [id,poster] of Object.entries(data.posters||{}))if(poster?.url)covers.set((state.owner||'')+':'+id,{url:poster.url,expires:Date.parse(poster.expiresAt)||0});
   const start=state.events.length;state.events.push(...data.events);state.next=data.next;
   // A grid of covers, as on a profile: each opens the video in a viewer.
   el('video-list').insertAdjacentHTML('beforeend',data.events.map((e,index)=>videoTile(e,start+index)).join(''));
@@ -181,27 +197,43 @@ async function loadVideos(reset=false){
   el('video-more').hidden=!state.next;
   const count=el('video-section-count');if(count)count.textContent=state.events.length?`${state.events.length}${state.next?'+':''} vidéo${state.events.length>1?'s':''}`:'';
   el('video-list').querySelectorAll('[data-video-open]:not([data-bound])').forEach(tile=>{tile.dataset.bound='1';tile.onclick=()=>openVideoViewer(Number(tile.dataset.videoOpen));});
-  if(!state.owner)renderJobTile();loadPosters(el('video-list'),state.owner);
+  if(!state.owner)renderJobTile();loadPosters(el('video-list'));
 }
 function videoTile(e,index){
   const shared=!!e.loge_post_id;
-  return `<article class="video-tile" data-video="${esc(e.id)}"><button type="button" class="video-tile-open" data-video-open="${index}" aria-label="Regarder ${esc(e.title)}"><span class="video-tile-poster"${e.creation?.videoProvider==='stream'?` data-poster="${esc(e.id)}"`:''}></span><span class="video-tile-shade" aria-hidden="true"></span><span class="video-tile-play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5 20 12 8 19Z"/></svg></span>${shared?'<span class="video-tile-badge">Dans les loges</span>':''}<span class="video-tile-text"><strong>${esc(e.title)}</strong><time>${esc(dateLabel(e))}</time></span></button></article>`;
+  return `<article class="video-tile" data-video="${esc(e.id)}"><button type="button" class="video-tile-open" data-video-open="${index}" aria-label="Regarder ${esc(e.title)}"><span class="video-tile-poster"${e.creation?.videoProvider==='stream'?` data-poster="${esc(e.id)}" data-poster-owner="${esc(session.videos?.owner||'')}"`:''}></span><span class="video-tile-shade" aria-hidden="true"></span><span class="video-tile-play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5 20 12 8 19Z"/></svg></span>${shared?'<span class="video-tile-badge">Dans les loges</span>':''}<span class="video-tile-text"><strong>${esc(e.title)}</strong><time>${esc(dateLabel(e))}</time></span></button></article>`;
 }
-// Covers are signed by the server one by one, only when a tile nears the screen.
-function loadPosters(root,owner=null){
-  const s=session,cache=s.posters||=new Map(),queue=s.posterQueue||=[],ownerQuery=owner?'?owner='+encodeURIComponent(owner):'';
+// The signed playback of a videography video, shared by its cover and its
+// player: one request serves both, until shortly before it expires.
+function videoPlayback(owner){
+  const s=session,key=String(owner||''),caches=s.playbackCaches||=new Map();
+  if(!caches.has(key))caches.set(key,cachedPlayback(id=>api('/api/life-tree/events/'+encodeURIComponent(id)+'/playback'+(key&&key!==String(s.user)?'?owner='+encodeURIComponent(key):''))));
+  return caches.get(key);
+}
+// Covers come with the list when already signed; the others are asked one by
+// one as their tile nears the screen, the most recently reached first.
+function loadPosters(root){
+  const s=session,cache=s.posters||=new Map(),queue=s.posterQueue||=[];
   const fill=(slot,url)=>{if(slot.querySelector('img'))return;const img=document.createElement('img');img.alt='';img.decoding='async';img.loading='lazy';img.onload=()=>slot.classList.add('is-loaded');img.src=url;slot.append(img);};
-  const pump=()=>{
+  const keyOf=slot=>(slot.dataset.posterOwner||'')+':'+slot.dataset.poster;
+  const pump=s.posterPump||=()=>{
     while((s.posterActive||0)<3&&queue.length){
-      const slot=queue.shift();if(!slot.isConnected||!live(s))continue;const id=slot.dataset.poster,hit=cache.get(id);
+      const slot=queue.pop();if(!slot.isConnected||!live(s))continue;
+      const hit=cache.get(keyOf(slot));
       if(hit&&hit.expires>Date.now()+60000){fill(slot,hit.url);continue;}
       s.posterActive=(s.posterActive||0)+1;
-      api('/api/life-tree/events/'+encodeURIComponent(id)+'/playback'+ownerQuery).then(data=>{if(data?.poster){cache.set(id,{url:data.poster,expires:Date.parse(data.expiresAt)||Date.now()+1800000});if(slot.isConnected)fill(slot,data.poster);}}).catch(()=>{}).finally(()=>{s.posterActive--;pump();});
+      videoPlayback(slot.dataset.posterOwner)(slot.dataset.poster).then(data=>{
+        if(data?.poster){cache.set(keyOf(slot),{url:data.poster,expires:Date.parse(data.expiresAt)||Date.now()+1800000});if(slot.isConnected)fill(slot,data.poster);}
+      }).catch(()=>{
+        // A failed cover is asked again when its tile comes back into view.
+        delete slot.dataset.posterQueued;if(slot.isConnected&&live(s))s.posterObserver?.observe(slot);
+      }).finally(()=>{s.posterActive--;pump();});
     }
   };
   const want=slot=>{if(slot.dataset.posterQueued)return;slot.dataset.posterQueued='1';queue.push(slot);pump();};
   const slots=[...root.querySelectorAll('[data-poster]')];
-  if(typeof IntersectionObserver!=='function'){slots.forEach(want);return;}
+  for(const slot of slots){const hit=cache.get(keyOf(slot));if(hit&&hit.expires>Date.now()+60000){slot.dataset.posterQueued='1';fill(slot,hit.url);}}
+  if(typeof IntersectionObserver!=='function'){slots.filter(slot=>!slot.dataset.posterQueued).forEach(want);return;}
   s.posterObserver||=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting){s.posterObserver.unobserve(entry.target);want(entry.target);}},{rootMargin:'300px 0px'});
   for(const slot of slots)if(!slot.dataset.posterQueued)s.posterObserver.observe(slot);
 }
@@ -233,7 +265,8 @@ function openVideoViewer(index,list=null){
     const next=index+step;
     if(list){if(live(s)&&list.events[next])openVideoViewer(next,list);return;}
     if(next>=events.length&&s.videos.next){await loadVideos();}
-    if(live(s)&&s.videos.events[next])openVideoViewer(next);
+    // Closed while the next page loaded: the viewer stays closed.
+    if(live(s)&&s.dialog===dialog&&s.videos.events[next])openVideoViewer(next);
   };
   bind('video-viewer-prev',()=>go(-1));bind('video-viewer-next',()=>go(1));
   dialog.addEventListener('keydown',event=>{if(event.target.closest?.('input,textarea,select'))return;if(event.key==='ArrowRight'){event.preventDefault();void go(1);}else if(event.key==='ArrowLeft'&&index>0){event.preventDefault();void go(-1);}});
@@ -243,6 +276,8 @@ async function allVideos(){
   const s=session;if(s.allVideos)return s.allVideos;
   const events=[];let next=null;
   for(let page=0;page<20;page++){const query=new URLSearchParams({videos:'1'});if(next)query.set('after',next);const data=await api('/api/life-tree?'+query);events.push(...data.events);next=data.next;if(!next)break;}
+  // Beyond the loaded pages, a sériographie keeps the videos it already holds.
+  s.allVideosComplete=!next;
   return s.allVideos=events;
 }
 const seriesCount=n=>`${n} vidéo${n>1?'s':''}`;
@@ -268,7 +303,7 @@ async function seriesView(item){
 }
 async function seriesEditor(item=null){
   const s=session,videos=await allVideos();if(!live(s))return;
-  const picked=[...(item?.items||[])].filter(id=>videos.some(e=>e.id===id)),id=item?.id||uid();
+  const picked=[...(item?.items||[])].filter(id=>!s.allVideosComplete||videos.some(e=>e.id===id)),id=item?.id||uid();
   const tile=e=>`<button type="button" class="series-pick" data-pick="${esc(e.id)}" aria-pressed="false"><span class="video-tile-poster"${e.creation?.videoProvider==='stream'?` data-poster="${esc(e.id)}"`:''}></span><span class="series-pick-order" aria-hidden="true"></span><span class="series-pick-text"><strong>${esc(e.title)}</strong><small>${esc(videoLabel(e.video_branch))}</small></span></button>`;
   const dialog=modal(item?'Modifier la sériographie':'Nouvelle sériographie',`<form id="series-form"><label>Titre<input name="title" required maxlength="120" value="${esc(item?.title||'')}"></label><div class="series-picks">${videos.map(tile).join('')||'<p class="series-empty">Aucune vidéo dans ta vidéographie.</p>'}</div><div class="series-save"><span id="series-picked" aria-live="polite"></span><button class="private-button" type="submit">Enregistrer</button></div><p id="series-status" class="private-status" role="status"></p></form>`);
   dialog.classList.add('is-series');loadPosters(dialog);
@@ -392,7 +427,7 @@ function videoForm(event=null,draft=null,branch='self'){
       // A new video uploads in the background: the window can close at once.
       if(!form.reportValidity())return;
       if(!upload.file){status('Choisis une vidéo.',true,'dialog-status');return;}
-      try{startVideoJob({api:s.ctx.api,state:s.ctx.state,navigate:s.ctx.navigate,eventId:id,body:body(),file:upload.file});}
+      try{startVideoJob({api:s.ctx.api,state:s.ctx.state,navigate:s.ctx.navigate,eventId:id,body:body(),file:upload.file,draftId:draftRevision?id:null});}
       catch(error){status(error.message,true,'dialog-status');return;}
       upload.file=null;s.dirty=false;videoJobView();return;
     }
@@ -475,12 +510,15 @@ function wireStreamPlayers(root){
     const time=document.createElement('span');time.textContent='0:00 / 0:00';controls.append(seek,time);
     let player,entry;
     const clock=seconds=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
-    const update=()=>{if(!player)return;const duration=player.getDuration(),position=player.getCurrentTime();seek.disabled=!duration;seek.max=String(duration||100);seek.value=String(position);time.textContent=clock(position)+' / '+clock(duration);};
-    player=createStreamPlayer({container,post:{id:container.dataset.streamEvent,title:container.dataset.streamTitle},fullscreen:false,getPlayback:id=>api('/api/life-tree/events/'+encodeURIComponent(id)+'/playback'+(String(s.user)===container.dataset.streamOwner?'':'?owner='+encodeURIComponent(container.dataset.streamOwner))),isEligible:()=>live(s)&&container.isConnected&&!document.hidden,onReady:update,onState:state=>{
+    // Dragging previews the position; the video moves once, when it is released.
+    let scrubbing=false;
+    const update=()=>{if(!player||scrubbing)return;const duration=player.getDuration(),position=player.getCurrentTime();seek.disabled=!duration;seek.max=String(duration||100);seek.value=String(position);time.textContent=clock(position)+' / '+clock(duration);};
+    player=createStreamPlayer({container,post:{id:container.dataset.streamEvent,title:container.dataset.streamTitle},fullscreen:false,getPlayback:videoPlayback(String(s.user)===container.dataset.streamOwner?'':container.dataset.streamOwner),isEligible:()=>live(s)&&container.isConnected&&!document.hidden,onReady:update,onState:state=>{
       if(state===1){pauseVideoPlayers(entry);document.querySelectorAll('audio').forEach(audio=>audio.pause());}update();
     }});
     player.element.append(controls);
-    seek.oninput=()=>{player.seekTo(Number(seek.value));update();};
+    seek.oninput=()=>{scrubbing=true;time.textContent=clock(Number(seek.value))+' / '+clock(player.getDuration());};
+    seek.onchange=()=>{scrubbing=false;player.seekTo(Number(seek.value));update();};
     const events=['timeupdate','durationchange','loadedmetadata'];for(const name of events)player.video.addEventListener(name,update);
     entry={player,destroy(){for(const name of events)player.video.removeEventListener(name,update);player.destroy();}};players.set(container,entry);
   });
@@ -597,7 +635,7 @@ async function memberVideography(){
   });
   try{await loadVideos(true);}catch(e){if(e.status===403&&live(s)){root.innerHTML='<p class="private-note">Cette vidéographie n’est plus accessible.</p>';return;}throw e;}
   // New replies and access changes are picked up while the page stays open.
-  s.pagePoll=s.poll=async()=>{const current=await api('/api/ace-circles');if(!live(s))return;const before=JSON.stringify(squareMembers().map(m=>[m.id,m.reachable]));s.circle=current;if(JSON.stringify(squareMembers().map(m=>[m.id,m.reachable]))!==before&&!s.dialog?.open)await squareView(false);};
+  s.pagePoll=s.poll=async()=>{const current=await api('/api/ace-circles');if(!live(s))return;const before=JSON.stringify(squareMembers().map(m=>[m.id,m.reachable,m.branches]));s.circle=current;if(JSON.stringify(squareMembers().map(m=>[m.id,m.reachable,m.branches]))!==before&&!s.dialog?.open)await squareView(false);};
   // The square changes rarely: a calm rhythm is enough, unlike an open conversation.
   s.pagePoll.every=30000;schedule();
 }

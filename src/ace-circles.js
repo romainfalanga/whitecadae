@@ -1,7 +1,8 @@
 import {seal,unseal,fail,text,identifier,integer,limitWrites} from './private-data.js';
 import {NOTICE_VERSION,requireLevel,requireStorage,levelOf,circleAccess,freshAccess,writeGuard,blocked,person} from './private-access.js';
 import {topicsRoute} from './circle-topics.js';
-import {sharedBranches} from '../public/video-model.js';
+import {sharedBranches,openBranches} from '../public/video-model.js';
+import {viewableBranches,branchList} from './video-access.js';
 import {ACE_SQUARE_LEVEL as LEVEL} from './content-access.js';
 
 const profileSQL='SELECT id,username,avatar_data IS NOT NULL AS has_avatar FROM users WHERE id=?1';
@@ -9,7 +10,8 @@ async function profile(env,id){const row=await env.DB.prepare(profileSQL).bind(i
 const messageContext=(owner,author,key)=>`message:${owner}:${author}:${key}`;
 async function messageView(env,row){return {id:row.id,author:row.author_id?{id:row.author_id,username:row.username}:null,eventId:row.event_id,parentId:row.parent_id,kind:row.kind,createdAt:row.created_at,...(row.kind==='message'?await unseal(env,messageContext(row.owner_id,row.author_id,row.request_id),row.payload):{})};}
 const invisibleBlocked=`NOT EXISTS(SELECT 1 FROM ace_blocks b WHERE (b.user_id=?3 AND b.blocked_id=m.author_id) OR (b.blocked_id=?3 AND b.user_id=m.author_id))`;
-function messageVisibility(access,user){return {sql:`m.owner_id=?1 AND m.id>=?2 AND (?1=?3 OR EXISTS(SELECT 1 FROM circle_topics t JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=m.topic_id AND t.kind='creation' AND e.video_branch IS NOT NULL)) AND ${invisibleBlocked} AND (m.event_id IS NULL OR ?4=1) AND (m.topic_id IS NULL OR ${access.owner===user.id||access.member?.content_access?1:0}=1)`,values:[access.owner,access.member?.joined_seq||0,user.id,access.owner===user.id||access.member?.content_access?1:0]};}
+// Messages about a video follow its category: an AS sees those both members reached.
+function messageVisibility(access,user,allowed){return {sql:`m.owner_id=?1 AND m.id>=?2 AND (?1=?3 OR EXISTS(SELECT 1 FROM circle_topics t JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=m.topic_id AND t.kind='creation' AND e.video_branch IN (${branchList(allowed)}))) AND ${invisibleBlocked} AND (m.event_id IS NULL OR ?4=1) AND (m.topic_id IS NULL OR ${access.owner===user.id||access.member?.content_access?1:0}=1)`,values:[access.owner,access.member?.joined_seq||0,user.id,access.owner===user.id||access.member?.content_access?1:0]};}
 async function ensureCircle(env,owner){await env.DB.prepare('INSERT OR IGNORE INTO ace_circles(owner_id) VALUES(?1)').bind(owner).run();}
 // A link between two members is stored as two mirrored memberships: each one
 // is the other's AS and both videographies open. Each member holds four links.
@@ -33,15 +35,17 @@ export async function aceRoute(request,env,url,user,body,json){
     const candidates=(await env.DB.prepare(`SELECT c.*,m.id AS membership_id,m.joined_seq,m.content_access,u.username,u.avatar_data IS NOT NULL AS has_avatar FROM ace_circles c
       JOIN users u ON u.id=c.owner_id LEFT JOIN ace_memberships m ON m.owner_id=c.owner_id AND m.angel_id=?1
       WHERE c.owner_id=?1 OR m.angel_id=?1 ORDER BY c.owner_id=?1 DESC,c.owner_id LIMIT 5`).bind(user.id).all()).results;
-    const circles=[];
+    const circles=[],mine=await levelOf(env,user.id);
     for(const row of candidates){
-      if(row.owner_id!==user.id&&(await levelOf(env,row.owner_id)<LEVEL||await blocked(env,user.id,row.owner_id)))continue;
+      const ownerLevel=row.owner_id===user.id?mine:await levelOf(env,row.owner_id);
+      if(row.owner_id!==user.id&&(ownerLevel<LEVEL||await blocked(env,user.id,row.owner_id)))continue;
+      const allowed=row.owner_id===user.id?openBranches(mine):sharedBranches(mine,ownerLevel);
       // Only one's own square lists its AS: no query for the others.
       const members=row.owner_id!==user.id?[]:(await env.DB.prepare(`SELECT m.id AS membership_id,m.owner_slot,u.id,u.username,u.avatar_data IS NOT NULL AS has_avatar FROM ace_memberships m JOIN users u ON u.id=m.angel_id WHERE m.owner_id=?1 ORDER BY m.owner_slot`).bind(row.owner_id).all()).results;
       // Each AS's videography shows the categories both members have reached.
-      if(members.length){const mine=await levelOf(env,user.id);for(const m of members)m.branches=sharedBranches(mine,await levelOf(env,m.id));}
+      for(const m of members)m.branches=sharedBranches(mine,await levelOf(env,m.id));
       const unread=await env.DB.prepare(`SELECT count(*) AS n FROM ace_messages m WHERE m.owner_id=?1 AND m.id>=?2 AND m.author_id<>?3 AND (m.event_id IS NULL OR ?4=1)
-        AND m.kind='message' AND EXISTS(SELECT 1 FROM circle_topics t JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=m.topic_id AND t.kind='creation' AND e.video_branch IS NOT NULL) AND (m.topic_id IS NULL OR ?5=1) AND m.id>COALESCE(CASE WHEN m.topic_id IS NULL THEN (SELECT last_id FROM ace_read_markers WHERE owner_id=?1 AND reader_id=?3) ELSE (SELECT last_id FROM circle_topic_reads WHERE topic_id=m.topic_id AND reader_id=?3) END,0) AND ${invisibleBlocked}`).bind(row.owner_id,row.joined_seq||0,user.id,row.owner_id===user.id||row.content_access?1:0,row.owner_id===user.id||row.content_access?1:0).first();
+        AND m.kind='message' AND EXISTS(SELECT 1 FROM circle_topics t JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=m.topic_id AND t.kind='creation' AND e.video_branch IN (${branchList(allowed)})) AND (m.topic_id IS NULL OR ?5=1) AND m.id>COALESCE(CASE WHEN m.topic_id IS NULL THEN (SELECT last_id FROM ace_read_markers WHERE owner_id=?1 AND reader_id=?3) ELSE (SELECT last_id FROM circle_topic_reads WHERE topic_id=m.topic_id AND reader_id=?3) END,0) AND ${invisibleBlocked}`).bind(row.owner_id,row.joined_seq||0,user.id,row.owner_id===user.id||row.content_access?1:0,row.owner_id===user.id||row.content_access?1:0).first();
       // Each member's square is their own: the AS of an AS stay private.
       circles.push({owner:person({...row,id:row.owner_id}),sharing:row.owner_id===user.id||!!row.content_access,combinedSharing:row.owner_id===user.id||!!row.content_access,membershipId:row.membership_id,members:row.owner_id===user.id?members.map(m=>({...person(m),membershipId:m.membership_id,slot:m.owner_slot,branches:m.branches})):[],unread:unread.n});
     }
@@ -162,7 +166,7 @@ export async function aceRoute(request,env,url,user,body,json){
   if(suffix==='/blocks'&&method==='DELETE'){await env.DB.prepare('DELETE FROM ace_blocks WHERE user_id=?1 AND blocked_id=?2').bind(user.id,integer(body.target,1)).run();return json({ok:true});}
   const chat=/^\/(\d+)\/(messages|read)$/.exec(suffix);
   if(chat){
-    const owner=integer(Number(chat[1]),1),access=await circleAccess(env,user,owner),visibility=messageVisibility(access,user);
+    const owner=integer(Number(chat[1]),1),access=await circleAccess(env,user,owner),visibility=messageVisibility(access,user,await viewableBranches(env,user.id,owner));
     if(chat[2]==='read'&&method==='PUT'){
       const last=integer(body.lastId),g=writeGuard(access,user);
       await env.DB.prepare(`INSERT INTO ace_read_markers(owner_id,reader_id,last_id) SELECT ?1,?3,?5 WHERE ${g.sql}
@@ -186,7 +190,7 @@ export async function aceRoute(request,env,url,user,body,json){
     await env.DB.prepare('DELETE FROM ace_messages WHERE id=?1 AND author_id=?2 AND kind=\'message\'').bind(integer(Number(message[1]),1),user.id).run();return json({ok:true});
   }
   if(suffix==='/reports'&&method==='POST'){
-    const owner=integer(body.owner,1),access=await circleAccess(env,user,owner),v=messageVisibility(access,user);
+    const owner=integer(body.owner,1),access=await circleAccess(env,user,owner),v=messageVisibility(access,user,await viewableBranches(env,user.id,owner));
     const row=await env.DB.prepare(`SELECT m.*,u.username FROM ace_messages m LEFT JOIN users u ON u.id=m.author_id WHERE ${v.sql} AND m.id=?5 AND m.kind='message'`).bind(...v.values,integer(body.messageId,1)).first();
     if(!row)fail('Message indisponible.',404);const reason=text(body.reason,1000,true),view=await messageView(env,row),id=crypto.randomUUID();
     const payload=await seal(env,`report:${user.id}:${id}`,{reason,message:view.text});await freshAccess(env,access,user);

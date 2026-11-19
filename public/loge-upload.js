@@ -28,8 +28,9 @@ export function uploadLogeFile(uploadURL,file,{signal,name=null,onProgress=()=>{
     const xhr=xhrFactory();let settled=false;
     const finish=error=>{if(settled)return;settled=true;signal?.removeEventListener('abort',abort);xhr.onload=xhr.onerror=xhr.onabort=xhr.ontimeout=null;xhr.upload.onprogress=null;error?reject(error):resolve();};
     const abort=()=>{xhr.abort();finish(uploadAbort());};
-    xhr.open('POST',uploadURL);xhr.timeout=30*60*1000;
-    xhr.upload.onprogress=event=>{if(!signal?.aborted&&event.lengthComputable)onProgress(Math.min(100,Math.round(event.loaded/event.total*100)));};
+    // The time allowed grows with the file: a slow but steady connection (40 Ko/s) finishes.
+    xhr.open('POST',uploadURL);xhr.timeout=Math.max(30*60*1000,Math.ceil((Number(file?.size)||0)/40))|0;
+    xhr.upload.onprogress=event=>{if(!signal?.aborted&&event.lengthComputable)onProgress(Math.min(100,Math.round(event.loaded/event.total*100)),event.loaded);};
     xhr.onload=()=>finish(xhr.status>=200&&xhr.status<300?null:Error('L’envoi a échoué. Réessaie.'));
     // A dropped connection or a lost response can be retried on the same address.
     xhr.onerror=()=>finish(Object.assign(Error('La connexion a été interrompue pendant l’envoi.'),{network:true}));xhr.ontimeout=()=>finish(Object.assign(Error('L’envoi a expiré.'),{network:true}));xhr.onabort=()=>finish(uploadAbort());
@@ -71,6 +72,7 @@ export async function probeLogeFile(file){
 // A private copy of the picked file. Some phones refuse to send a gallery or
 // cloud file directly (its date shifts under the browser, and the transfer is
 // cut before the first byte); the same bytes read into memory go through.
+export const SNAPSHOT_MAX_BYTES=100_000_000;
 export async function snapshotLogeFile(file){
   const bytes=typeof file.arrayBuffer==='function'?await file.arrayBuffer():await new Response(file).arrayBuffer();
   return new Blob([bytes],{type:file.type||'video/mp4'});
@@ -109,14 +111,17 @@ export async function ensureLogeUpload(draft,{request,signal,onState=()=>{},uplo
     state('uploading',0);
     let source=draft.snapshot||file;
     for(let attempt=0;;attempt++){
-      let sent=0;const started=Date.now();
-      try{await upload(draft.uploadURL,source,{signal,...(source===file?{}:{name:file.name}),onProgress:value=>{sent=value;state('uploading',value);}});check();draft.uploadSent=true;break;}
+      let sent=0,bytes=0;const started=Date.now();
+      try{await upload(draft.uploadURL,source,{signal,...(source===file?{}:{name:file.name}),onProgress:(value,loaded)=>{sent=value;bytes=Math.max(bytes,Number(loaded)||0);state('uploading',value);}});check();draft.uploadSent=true;break;}
       catch(error){
         if(!error?.network||attempt>=retryDelays.length)throw error;
         const elapsed=Date.now()-started;
         // Cut before anything left the device: the browser could not send the
         // picked file as it is. Read it once into memory and send that copy.
-        if(source===file&&sent===0){
+        // Only when the device was online and the file small enough to copy:
+        // a phone holding 200 Mo twice in memory may close the page.
+        const online=typeof navigator==='undefined'||navigator.onLine!==false;
+        if(source===file&&sent===0&&bytes===0&&online&&file.size<=SNAPSHOT_MAX_BYTES){
           state('reading');
           try{source=draft.snapshot=await snapshot(file);}
           catch(cause){if(cause?.name==='AbortError')throw cause;check();throw Object.assign(Error(UPLOAD_UNREADABLE),{unreadable:true});}

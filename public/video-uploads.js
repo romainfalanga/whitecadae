@@ -35,11 +35,16 @@ async function holdScreen(){
 function releaseScreen(){const lock=wakeLock;wakeLock=null;lock?.release?.().catch?.(()=>{});}
 globalThis.document?.addEventListener?.('visibilitychange',()=>{if(!globalThis.document.hidden)void holdScreen();});
 
-export function startVideoJob({api,state,navigate,eventId,body,file}){
+// The reservations this tab made, kept across a reload of the page: only
+// those may be released without asking, never another tab's live upload.
+const OWN_UPLOADS='wc-own-video-uploads';
+function ownUploads(){try{return new Set(JSON.parse(globalThis.sessionStorage?.getItem(OWN_UPLOADS)||'[]'));}catch{return new Set();}}
+function rememberUpload(id){if(!id)return;try{const list=[...ownUploads(),id].slice(-20);globalThis.sessionStorage?.setItem(OWN_UPLOADS,JSON.stringify(list));}catch{/* private browsing: nothing kept */}}
+export function startVideoJob({api,state,navigate,eventId,body,file,draftId=null}){
   if(jobActive(currentVideoJob()))throw Error('Une vidéo est déjà en cours d’envoi. Attends la fin ou annule-la.');
   clearTimeout(doneTimer);
   job={id:eventId,user:state.user?.id,api,state,navigate,body,title:body.title,branch:body.videoBranch,fileName:file.name,fileSize:file.size,
-    upload:{file,requestId:crypto.randomUUID(),abandonedUploads:[]},phase:'checking',progress:0,error:'',blockedUploadId:null,controller:null,startedAt:Date.now()};
+    upload:{file,requestId:crypto.randomUUID(),abandonedUploads:[]},draftId,phase:'checking',progress:0,error:'',blockedUploadId:null,controller:null,startedAt:Date.now()};
   window.addEventListener('beforeunload',guard);void holdScreen();
   void run(job);return job;
 }
@@ -50,15 +55,19 @@ function request(current,path,options={}){
 async function run(current){
   const controller=new AbortController();current.controller=controller;current.error='';current.blockedUploadId=null;
   const live=()=>job===current&&!controller.signal.aborted;
-  const set=(phase,progress)=>{if(!live())return;current.phase=phase;if(progress!==undefined)current.progress=progress;emit();};
+  const set=(phase,progress)=>{if(!live())return;rememberUpload(current.upload.uploadId);current.phase=phase;if(progress!==undefined)current.progress=progress;emit();};
   set(current.upload.uploadId?'processing':'checking',current.upload.uploadId?100:0);
+  // A retry needs the screen kept on as much as the first attempt.
+  void holdScreen();
   try{
     const uploadId=await ensureLogeUpload(current.upload,{request:(path,options)=>request(current,path,options),basePath,signal:controller.signal,onState:(phase,progress)=>set(phase==='ready'?'saving':phase,progress)});
     if(!live())return;set('saving');
     // Retrying this write is safe: the server recognises an already attached upload.
     await request(current,'/api/life-tree/events/'+encodeURIComponent(current.id),{method:'PUT',body:{...current.body,uploadId}});
     if(!live())return;
-    current.phase='done';current.progress=100;current.finishedAt=Date.now();emit();
+    current.phase='done';current.progress=100;current.finishedAt=Date.now();current.upload.snapshot=null;emit();
+    // A video resumed from a draft leaves the drafts once it is saved.
+    if(current.draftId)request(current,'/api/life-tree/drafts/'+encodeURIComponent(current.draftId),{method:'DELETE',body:{}}).catch(()=>{});
     window.removeEventListener('beforeunload',guard);releaseScreen();
     // A finished job lingers briefly so the ring can show its check mark.
     doneTimer=setTimeout(()=>{if(job===current&&!current.viewing){job=null;emit();}},6000);
@@ -68,7 +77,13 @@ async function run(current){
     if(!live()||error?.name==='AbortError')return;
     // A reservation left by a reloaded page holds the member's only slot:
     // release it and start again, once, instead of stopping on a refusal.
-    if(error.status===409&&error.data?.uploadId&&!current.released){
+    // The job's own reservation still being prepared: wait, then carry on.
+    if(error.status===409&&error.data?.uploadId&&error.data.uploadId===current.upload.uploadId&&(current.waits||0)<5){
+      current.waits=(current.waits||0)+1;await new Promise(resolve=>setTimeout(resolve,3000));
+      if(job===current&&!controller.signal.aborted)return run(current);
+      return;
+    }
+    if(error.status===409&&error.data?.uploadId&&!current.released&&ownUploads().has(error.data.uploadId)){
       current.released=true;
       try{
         await request(current,basePath+'/'+encodeURIComponent(error.data.uploadId),{method:'DELETE',body:{}});
@@ -78,7 +93,7 @@ async function run(current){
       }catch{/* the manual retry below stays available */}
     }
     if(!live())return;
-    current.phase='error';
+    current.phase='error';current.upload.snapshot=null;
     current.error=[401,403].includes(error.status)?'Reconnecte-toi pour terminer l’envoi.':error.network?'La connexion a été coupée plusieurs fois pendant l’envoi. Vérifie ta connexion, garde cette page ouverte et touche Réessayer.':error.message||'L’envoi a échoué.';
     if(error.status===409&&error.data?.uploadId)current.blockedUploadId=error.data.uploadId;
     // A reservation the video service refused or let expire cannot resume: start it again.
