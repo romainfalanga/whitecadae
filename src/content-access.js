@@ -1,6 +1,7 @@
 import {gameLevel,accessLevel} from './echelon.js';
 import {RELEASES,canListen} from './music-catalogue.js';
 import {PLAYLISTS_ENABLED} from './features.js';
+import {openBranches,openLogeRooms,gameMasterBlancTier,GAME_MASTER_BLANC_TIERS} from '../public/video-model.js';
 // Game Master Blanc, the Loges virtuelles and the videography open together.
 export const GAME_MASTER_BLANC_LEVEL=15;
 // Each member chooses up to four AS; a link opens both videographies.
@@ -9,14 +10,17 @@ export const ACE_SQUARE_SIZE=4;
 
 export function contentAccess(user,rows=[]){
   const level=gameLevel(rows),legacy=accessLevel(rows),admin=!!user?.is_admin;
-  return {level,legacy,admin,gameMaster:!!user&&level>=7,playlist:PLAYLISTS_ENABLED&&!!user&&level>=10,gameMasterBlanc:!!user&&level>=GAME_MASTER_BLANC_LEVEL,loge:!!user&&level>=GAME_MASTER_BLANC_LEVEL,mechanisms:false,lifeTree:false,aceSquare:!!user&&level>=ACE_SQUARE_LEVEL,as:!!user&&level>=ACE_SQUARE_LEVEL,conversation:false,topics:false,videographie:!!user&&level>=GAME_MASTER_BLANC_LEVEL};
+  return {level,legacy,admin,gameMaster:!!user&&level>=7,playlist:PLAYLISTS_ENABLED&&!!user&&level>=10,gameMasterBlanc:!!user&&level>=GAME_MASTER_BLANC_LEVEL,loge:!!user&&level>=GAME_MASTER_BLANC_LEVEL,mechanisms:false,lifeTree:false,aceSquare:!!user&&level>=ACE_SQUARE_LEVEL,as:!!user&&level>=ACE_SQUARE_LEVEL,conversation:false,topics:false,videographie:!!user&&level>=GAME_MASTER_BLANC_LEVEL,
+    // Video categories, loges and Game Master Blanc tiers open with the echelon.
+    videoBranches:user?openBranches(level):[],logeRooms:user?openLogeRooms(level):[],gameMasterBlancTier:user?gameMasterBlancTier(level):0,
+    gameMasterBlancII:!!user&&gameMasterBlancTier(level)>=2,gameMasterBlancIII:!!user&&gameMasterBlancTier(level)>=3};
 }
 
 // A single schedule drives the home page, rewards and protected media.
 export function buildOpenings(rows=[],user={}){
   const access=contentAccess(user,rows);
   const items=RELEASES.flatMap(album=>album.tracks.map(track=>({id:'music-'+track.slug,title:track.title,description:album.album+' · musique et paroles',level:track.minLevel,open:canListen(track,access),href:'/musique#track-'+track.slug,lyricsHref:'/chanson/'+track.slug})));
-  const pages=[['gameMaster','Game Master Orange',7,'/game-master-orange'],['gameMasterBlanc','Game Master Blanc',GAME_MASTER_BLANC_LEVEL,'/game-master-blanc'],['loge','Loges virtuelles',GAME_MASTER_BLANC_LEVEL,'/loge-virtuelle'],['videographie','Vidéographie',GAME_MASTER_BLANC_LEVEL,'/videographie'],['aceSquare','Carré d’AS',ACE_SQUARE_LEVEL,'/carre-d-as']];
+  const pages=[['gameMaster','Game Master Orange',7,'/game-master-orange'],['gameMasterBlanc','Game Master Blanc',GAME_MASTER_BLANC_LEVEL,'/game-master-blanc'],['gameMasterBlancII','Game Master Blanc II',GAME_MASTER_BLANC_TIERS[1],'/game-master-blanc'],['gameMasterBlancIII','Game Master Blanc III',GAME_MASTER_BLANC_TIERS[2],'/game-master-blanc'],['loge','Loges virtuelles',GAME_MASTER_BLANC_LEVEL,'/loge-virtuelle'],['videographie','Vidéographie',GAME_MASTER_BLANC_LEVEL,'/videographie'],['aceSquare','Carré d’AS',ACE_SQUARE_LEVEL,'/carre-d-as']];
   if(PLAYLISTS_ENABLED)pages.push(['playlist','Playlist',10,'/playlist']);
   for(const [id,title,level,href] of pages)items.push({id:'page-'+id,title,level,href,open:access[id]});
   const pending=items.filter(item=>!item.open&&item.level>access.level);

@@ -60,10 +60,12 @@ test('retired monthly videos retain encrypted content, dates, revisions and comm
  const f=setup();try{
   await f.agree(18);await f.ok('/api/ace-circles',18,'POST',{});
   await f.ok('/api/life-tree/events/old-monthly-video',18,'PUT',video({precision:'month',date:'2026-09',understanding:'Un détail à conserver'}));
-  f.sql.prepare("UPDATE life_events SET video_branch='monthly',video_month='2026-09' WHERE id='old-monthly-video'").run();
-  const before=f.sql.prepare("SELECT * FROM life_events WHERE id='old-monthly-video'").get();
+  // The exchange happens while the video sits in an open category; the retired
+  // value is restored afterwards, as it was stored before migration 0040.
   const topic=(await f.ok('/api/life-tree/events/old-monthly-video')).event.topic_id;
   await f.ok('/api/ace-circles/topics/'+topic+'/replies',18,'POST',{id:crypto.randomUUID(),text:'Une réponse préservée'});
+  f.sql.prepare("UPDATE life_events SET video_branch='monthly',video_month='2026-09',revision=revision WHERE id='old-monthly-video'").run();
+  const before=f.sql.prepare("SELECT * FROM life_events WHERE id='old-monthly-video'").get();
   const migration=readFileSync(new URL('../migrations/0040_video_reflections.sql',import.meta.url),'utf8');f.sql.exec(migration);
   const after=f.sql.prepare("SELECT * FROM life_events WHERE id='old-monthly-video'").get();
   assert.equal(after.payload,before.payload);assert.equal(after.sort_date,before.sort_date);assert.equal(after.precision,'month');assert.equal(after.video_month,null);assert.equal(after.video_branch,'ideas');assert.equal(after.revision,before.revision+1);

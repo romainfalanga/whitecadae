@@ -21,3 +21,29 @@ export const GAME_MASTER_BLANC = {
     ]}
   ]
 };
+
+// Game Master Blanc grows in three tiers, each opened by a video category:
+// Idées et projets at echelon 24 (II), Réflexions at 30 (III). A tier is the
+// first page with the new category's section after « Ta société harmonieuse ».
+const IDEAS_AND_PROJECTS={title:'Tes idées et tes projets',paragraphs:[
+  'Fais émerger tes idées et tes projets, et extériorise-les dans ta vidéographie.',
+  'Choisis ceux qui rapprochent le monde de ta société harmonieuse et fais-les grandir jusqu’à les concrétiser.'
+]};
+const REFLECTIONS={title:'Tes réflexions',paragraphs:[
+  'Extériorise dans ta vidéographie tes réflexions sur le monde qui t’entoure.',
+  'Confronte-les à ta version harmonieuse et à ta société harmonieuse pour affiner ta vision.'
+]};
+const withAfterSociety=(page,...added)=>{
+  const at=page.sections.findIndex(section=>section.title==='Ta société harmonieuse')+1;
+  return {...page,sections:[...page.sections.slice(0,at),...added,...page.sections.slice(at)]};
+};
+export const GAME_MASTER_BLANC_PAGES=[
+  GAME_MASTER_BLANC,
+  withAfterSociety(GAME_MASTER_BLANC,IDEAS_AND_PROJECTS),
+  withAfterSociety(GAME_MASTER_BLANC,IDEAS_AND_PROJECTS,REFLECTIONS)
+];
+// The tiers a member has reached, each with its page; the last is the current one.
+export function gameMasterBlancTiers(tier){
+  return GAME_MASTER_BLANC_PAGES.slice(0,Math.max(1,Math.min(tier,GAME_MASTER_BLANC_PAGES.length))).map((page,index)=>({tier:index+1,page}));
+}
+

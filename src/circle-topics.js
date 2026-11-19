@@ -2,6 +2,7 @@ import {seal,unseal,fail,text,integer,identifier} from './private-data.js';
 import {circleAccess,freshAccess,writeGuard,requireContentAccess} from './private-access.js';
 import {youtubeLink} from '../public/youtube-video.js';
 import {videoBranchKey} from '../public/video-model.js';
+import {viewableBranches,branchList} from './video-access.js';
 
 export function recordTopic(env,{owner,key,kind,event=null,target=null,slot=null,guard='1',values=[]}){
   return env.DB.prepare(`INSERT INTO circle_topics(owner_id,resource_key,kind,event_id,target_id,mechanism_slot)
@@ -44,7 +45,9 @@ export async function topicsRoute(request,env,url,user,body,json){
     const archive=url.searchParams.get('archive')==='1';if(archive&&owner!==user.id)fail('Archives privées.',403);
     const stamp=`${access.circle.access_revision}:${access.circle.content_revision}`;
     if(url.searchParams.get('revision')===stamp){await freshAccess(env,access,user);return json({unchanged:true,revision:stamp});}
-    const values=[owner,user.id,access.member?.joined_seq||0];let filter=archive?'AND (e.video_branch IS NULL OR t.kind<>\'creation\')':"AND e.video_branch IS NOT NULL AND t.kind='creation'";const after=url.searchParams.get('after');
+    // Exchanges follow their video: a category shows once both members reached it.
+    const allowed=await viewableBranches(env,user.id,owner);
+    const values=[owner,user.id,access.member?.joined_seq||0];let filter=archive?'AND (e.video_branch IS NULL OR t.kind<>\'creation\')':`AND e.video_branch IN (${branchList(allowed)}) AND t.kind='creation'`;const after=url.searchParams.get('after');
     if(after){if(!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{3})?\|\d+$/.test(after))fail('Page invalide.');const [date,id]=after.split('|');values.push(date,integer(Number(id),1));filter+=' AND (t.updated_at<?4 OR (t.updated_at=?4 AND t.id<?5))';}
     const visibleReply=`m.owner_id=t.owner_id AND m.topic_id=t.id AND m.kind='message' AND m.id>=?3 AND NOT EXISTS(SELECT 1 FROM ace_blocks b WHERE (b.user_id=?2 AND b.blocked_id=m.author_id) OR (b.blocked_id=?2 AND b.user_id=m.author_id))`;
     const rows=(await env.DB.prepare(`SELECT t.*,e.video_branch,COALESCE(e.payload,u.payload) AS source_payload,l.payload AS link_payload,target.payload AS target_payload,
@@ -68,6 +71,7 @@ export async function topicsRoute(request,env,url,user,body,json){
   if(!isVideo&&user.id!==topic.owner_id)fail('Archives privées.',403);
   if(!isVideo&&!['GET'].includes(method))fail('Cette discussion est archivée.',410);
   const access=await accessTo(env,user,topic.owner_id),v=visible(access,user);
+  if(isVideo&&!(await viewableBranches(env,user.id,topic.owner_id)).includes(videoBranchKey(topic.video_branch)))fail('Discussion indisponible.',404);
   if(method==='GET'){
     const after=integer(Number(url.searchParams.get('after')||0)),before=integer(Number(url.searchParams.get('before')||0));if(after&&before)fail('Page invalide.');
     const knownValue=url.searchParams.get('known');let removed=[];

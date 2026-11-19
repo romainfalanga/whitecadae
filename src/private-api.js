@@ -1,8 +1,9 @@
 import {ensureLogeStreamTables} from './loge-stream.js';
 import {sharedPostWithdrawal} from './loge.js';
 import {fail,objectBody,limitWrites,unseal,integer,identifier} from './private-data.js';
-import {NOTICE_VERSION,PRIVATE_NOTICE,requireLevel,storageConsent} from './private-access.js';
-import {GAME_MASTER_BLANC} from './game-master-blanc.js';
+import {NOTICE_VERSION,PRIVATE_NOTICE,requireLevel,storageConsent,levelOf} from './private-access.js';
+import {gameMasterBlancTiers} from './game-master-blanc.js';
+import {gameMasterBlancTier} from '../public/video-model.js';
 import {AS_GRADE} from './as-grade.js';
 import {GAME_MASTER_BLANC_LEVEL,ACE_SQUARE_LEVEL} from './content-access.js';
 import {lifeRoute,ensureSeries} from './life-tree.js';
@@ -15,7 +16,10 @@ export async function handlePrivate(request,env,url,{getUser,json}){
     if(request.method!=='GET')fail('Méthode indisponible.',405);await requireLevel(env,user,7);return json({ok:true});
   }
   if(url.pathname==='/api/game-master-blanc'){
-    if(request.method!=='GET')fail('Méthode indisponible.',405);await requireLevel(env,user,GAME_MASTER_BLANC_LEVEL);return json({ok:true,page:GAME_MASTER_BLANC});
+    if(request.method!=='GET')fail('Méthode indisponible.',405);await requireLevel(env,user,GAME_MASTER_BLANC_LEVEL);
+    // Only the tiers already reached are sent; the page shown first is the latest.
+    const tiers=gameMasterBlancTiers(gameMasterBlancTier(await levelOf(env,user.id)));
+    return json({ok:true,page:tiers.at(-1).page,tier:tiers.length,tiers});
   }
   if(url.pathname==='/api/as'){
     if(request.method!=='GET')fail('Méthode indisponible.',405);await requireLevel(env,user,ACE_SQUARE_LEVEL);return json({ok:true,page:AS_GRADE});

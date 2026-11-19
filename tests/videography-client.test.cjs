@@ -19,12 +19,12 @@ class Element extends EventTarget{
   insertAdjacentHTML(_where,html){this.innerHTML+=html;}
   remove(){this.isConnected=false;}
 }
-function fixture({upload,request}={}){
+function fixture({upload,request,videoBranches=['self','ideas','projects','society']}={}){
   const nodes=new Map(),calls=[],players=[],branches=['self','ideas','projects','society'].map(key=>Object.assign(new Element(),{dataset:{videoBranch:key}}));
   const get=id=>{if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);};
   const form=get('video-form');form.elements={title:{value:'Titre modifié'},video:{files:[],value:''},videoBranch:{value:'self'}};form.submit=new Element();form.reportValidity=()=>true;const header=new Element();
   const document={hidden:false,querySelector:selector=>selector==='.header-controls'?header:({}),querySelectorAll:selector=>selector==='[data-video-branch]'?branches:[],createElement:()=>new Element(),getElementById:get,addEventListener(){},removeEventListener(){}};
-  const ctx={state:{user:{id:19},access:{}},app:new Element(),isCurrent:()=>true,esc:value=>String(value??''),navigate:()=>{},api:async(path,options={})=>{calls.push({path,...options});return request?request(path,options):{events:[],next:null};}};
+  const ctx={state:{user:{id:19},access:{videoBranches}},app:new Element(),isCurrent:()=>true,esc:value=>String(value??''),navigate:()=>{},api:async(path,options={})=>{calls.push({path,...options});return request?request(path,options):{events:[],next:null};}};
   const sandbox=vm.createContext({document,window:{addEventListener(){},removeEventListener(){}},DOMException,AbortController,URLSearchParams,URL,crypto:require('node:crypto').webcrypto,setTimeout,clearTimeout,confirm:()=>true,VIDEO_BRANCHES:[['self','Métacognition'],['ideas','Réflexions'],['projects','Idées et projets'],['society','Ma société harmonieuse']],videoLabel:key=>key==='self'?'Métacognition':key,PRIVATE_HELP:{},youtubeId:url=>url?.includes('youtube')?'M7lc1UVf-VE':null,youtubeEmbed:()=>'',dateFields:()=>'',configureDate(){},readDate:()=> '2026-11-10',validateLogeFile:file=>{if(!file?.size)throw Error('Choisis une vidéo.');},probeLogeFile:async()=>{},ensureLogeUpload:upload||(async()=>{throw Error('Unexpected upload');}),createStreamPlayer:options=>{
     const video=new Element(),element=new Element();let position=0,pauses=0,destroys=0;const player={video,element,getDuration:()=>120,getCurrentTime:()=>position,seekTo:value=>position=value,pauseVideo:()=>pauses++,destroy:()=>destroys++};players.push({options,player,get pauses(){return pauses;},get destroys(){return destroys;}});options.container.append(element);return player;
   }});
@@ -45,6 +45,14 @@ test('the initial Videography fetch is filtered to Métacognition and there is n
   assert.equal(h.client.getSession().videos.branch,'self');h.client.leave();
 });
 
+test('categories open with the echelon: two at Game Master Blanc, Idées et projets at 24, Réflexions at 30',async()=>{
+  for(const [open,expected] of [[['self','society'],['self','society']],[['self','projects','society'],['self','projects','society']]]){
+    const h=fixture({videoBranches:open});await h.client.page('/videographie',h.ctx);const html=h.ctx.app.innerHTML;
+    assert.deepEqual([...html.matchAll(/data-video-branch="(\w+)"/g)].map(m=>m[1]),expected);
+    assert.match(html,new RegExp(`data-count="${expected.length}"`));
+    h.client.videoForm(null,null,'ideas');assert.deepEqual([...h.sandbox.markup.matchAll(/<option value="(\w+)"/g)].map(m=>m[1]),expected);assert.match(h.sandbox.markup,/<option value="self" selected>/);h.client.leave();
+  }
+});
 test('Videography lists four categories and places Add under the current category title',async()=>{
   const h=fixture();await h.client.page('/videographie',h.ctx);const html=h.ctx.app.innerHTML;
   assert.deepEqual([...html.matchAll(/data-video-branch="(\w+)"/g)].map(m=>m[1]),['self','ideas','projects','society']);

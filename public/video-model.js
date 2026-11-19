@@ -5,6 +5,19 @@ export const VIDEO_BRANCHES=[
   ['society','Ma société harmonieuse'],
 ];
 export const videoLabel=key=>VIDEO_BRANCHES.find(([id])=>id===key)?.[1]||'Vidéo';
+// Categories open with the echelon, on every page that shows them: the
+// videography, the Loges virtuelles and an AS's videography. Métacognition and
+// Ma société harmonieuse come with Game Master Blanc; Idées et projets opens
+// at 24 (Game Master Blanc II) and Réflexions at 30 (Game Master Blanc III).
+export const BRANCH_LEVELS={self:15,society:15,projects:24,ideas:30};
+export const branchLevel=key=>BRANCH_LEVELS[key]??Infinity;
+export const branchOpen=(key,level)=>Number(level)>=branchLevel(key);
+export const openBranches=level=>VIDEO_BRANCHES.map(([id])=>id).filter(id=>branchOpen(id,level));
+// An AS's videography shows the categories both members have reached.
+export const sharedBranches=(viewerLevel,ownerLevel)=>openBranches(Math.min(Number(viewerLevel)||0,Number(ownerLevel)||0));
+// Game Master Blanc grows in three tiers, one per opening of a category.
+export const GAME_MASTER_BLANC_TIERS=[15,24,30];
+export const gameMasterBlancTier=level=>GAME_MASTER_BLANC_TIERS.filter(min=>Number(level)>=min).length;
 // « Ma version harmonieuse » now belongs to Métacognition: its retired
 // category was stored under the old 'monthly' value, which nothing uses any
 // more. Stored and public category keys are therefore the same.
@@ -16,6 +29,10 @@ export const videoBranchKey=stored=>Object.keys(STORED_BRANCHES).find(key=>STORE
 // category and live in the first room.
 export const LOGE_ROOMS=['ideas','projects','society'];
 export const logeRoom=category=>LOGE_ROOMS.includes(category)?category:LOGE_ROOMS[0];
+// The loges a member has reached, and the one a visit opens on: the newest
+// category they reached first.
+export const openLogeRooms=level=>LOGE_ROOMS.filter(room=>branchOpen(room,level));
+export const defaultLogeRoom=level=>openLogeRooms(level)[0]||null;
 // A loge gathers every Game Master Blanc's videos: its name is shared, unlike
 // the personal names of the videography categories.
 const LOGE_ROOM_LABELS={ideas:'Réflexions',projects:'Idées et projets',society:'Sociétés harmonieuses'};

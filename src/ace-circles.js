@@ -1,6 +1,7 @@
 import {seal,unseal,fail,text,identifier,integer,limitWrites} from './private-data.js';
 import {NOTICE_VERSION,requireLevel,requireStorage,levelOf,circleAccess,freshAccess,writeGuard,blocked,person} from './private-access.js';
 import {topicsRoute} from './circle-topics.js';
+import {sharedBranches} from '../public/video-model.js';
 import {ACE_SQUARE_LEVEL as LEVEL} from './content-access.js';
 
 const profileSQL='SELECT id,username,avatar_data IS NOT NULL AS has_avatar FROM users WHERE id=?1';
@@ -37,10 +38,12 @@ export async function aceRoute(request,env,url,user,body,json){
       if(row.owner_id!==user.id&&(await levelOf(env,row.owner_id)<LEVEL||await blocked(env,user.id,row.owner_id)))continue;
       // Only one's own square lists its AS: no query for the others.
       const members=row.owner_id!==user.id?[]:(await env.DB.prepare(`SELECT m.id AS membership_id,m.owner_slot,u.id,u.username,u.avatar_data IS NOT NULL AS has_avatar FROM ace_memberships m JOIN users u ON u.id=m.angel_id WHERE m.owner_id=?1 ORDER BY m.owner_slot`).bind(row.owner_id).all()).results;
+      // Each AS's videography shows the categories both members have reached.
+      if(members.length){const mine=await levelOf(env,user.id);for(const m of members)m.branches=sharedBranches(mine,await levelOf(env,m.id));}
       const unread=await env.DB.prepare(`SELECT count(*) AS n FROM ace_messages m WHERE m.owner_id=?1 AND m.id>=?2 AND m.author_id<>?3 AND (m.event_id IS NULL OR ?4=1)
         AND m.kind='message' AND EXISTS(SELECT 1 FROM circle_topics t JOIN life_events e ON e.owner_id=t.owner_id AND e.id=t.event_id WHERE t.id=m.topic_id AND t.kind='creation' AND e.video_branch IS NOT NULL) AND (m.topic_id IS NULL OR ?5=1) AND m.id>COALESCE(CASE WHEN m.topic_id IS NULL THEN (SELECT last_id FROM ace_read_markers WHERE owner_id=?1 AND reader_id=?3) ELSE (SELECT last_id FROM circle_topic_reads WHERE topic_id=m.topic_id AND reader_id=?3) END,0) AND ${invisibleBlocked}`).bind(row.owner_id,row.joined_seq||0,user.id,row.owner_id===user.id||row.content_access?1:0,row.owner_id===user.id||row.content_access?1:0).first();
       // Each member's square is their own: the AS of an AS stay private.
-      circles.push({owner:person({...row,id:row.owner_id}),sharing:row.owner_id===user.id||!!row.content_access,combinedSharing:row.owner_id===user.id||!!row.content_access,membershipId:row.membership_id,members:row.owner_id===user.id?members.map(m=>({...person(m),membershipId:m.membership_id,slot:m.owner_slot})):[],unread:unread.n});
+      circles.push({owner:person({...row,id:row.owner_id}),sharing:row.owner_id===user.id||!!row.content_access,combinedSharing:row.owner_id===user.id||!!row.content_access,membershipId:row.membership_id,members:row.owner_id===user.id?members.map(m=>({...person(m),membershipId:m.membership_id,slot:m.owner_slot,branches:m.branches})):[],unread:unread.n});
     }
     const invitations=(await env.DB.prepare(`SELECT i.*,o.username AS owner_name,a.username AS angel_name FROM ace_invitations i JOIN users o ON o.id=i.owner_id JOIN users a ON a.id=i.angel_id
       WHERE (i.owner_id=?1 OR i.angel_id=?1) AND i.state='pending' AND i.expires_at>datetime('now') ORDER BY i.created_at DESC LIMIT 48`).bind(user.id).all()).results;

@@ -8,10 +8,14 @@ let session=null;
 const drafts=new Map();
 const base='/loge-virtuelle';
 const publishPath=base+'/publier';
-// One loge per shareable videography category; the first keeps the plain address.
-const roomSlugs={ideas:'',projects:'idees-et-projets',society:'societe-harmonieuse'};
-const roomPath=room=>base+(roomSlugs[room]?'?loge='+roomSlugs[room]:'');
-const roomOf=slug=>LOGE_ROOMS.find(room=>roomSlugs[room]===(slug||''))||null;
+// One loge per shareable videography category. Each opens with the echelon of
+// its category; the plain address leads to the most recently reached one.
+const roomSlugs={ideas:'reflexions',projects:'idees-et-projets',society:'societe-harmonieuse'};
+let openRooms=LOGE_ROOMS;
+function setOpenRooms(access){const list=access?.logeRooms;openRooms=Array.isArray(list)?LOGE_ROOMS.filter(room=>list.includes(room)):LOGE_ROOMS;}
+const defaultRoom=()=>openRooms[0]||LOGE_ROOMS.at(-1);
+const roomPath=room=>base+(room!==defaultRoom()?'?loge='+roomSlugs[room]:'');
+const roomOf=slug=>openRooms.find(room=>roomSlugs[room]===slug)||null;
 const memberPath=id=>`${base}/membres/${encodeURIComponent(id)}`;
 const themePath=id=>base+'/theme'+(id?'?theme='+encodeURIComponent(id):'');
 const postPath=id=>`${base}/publications/${encodeURIComponent(id)}`;
@@ -73,7 +77,7 @@ function topbar(view){
   const context=mineOpen?'Mes publications':publishOpen?'Publier':view.kind==='profile'?'Publications de '+view.member.username:view.kind==='theme'?'Thème de la semaine':'';
   return `<header class="loge-bar"><h1 class="loge-bar-title">Loges virtuelles</h1><nav class="loge-bar-actions" aria-label="Mon espace dans les Loges virtuelles">${theme}${item('loge-open-mine',mineOpen,minePath(),'Mes publications','mine')}${item('loge-open-compose',publishOpen,publishPath,'Publier','publish')}</nav></header>${roomsMarkup(view)}${context?`<p class="loge-context"><span>${esc(context)}</span></p>`:''}`;
 }
-function roomsMarkup(view){const active=view.kind==='feed'?view.room:view.kind==='post'?session.room:null;return `<nav class="loge-rooms${active?'':' is-idle'}" aria-label="Les trois loges">${LOGE_ROOMS.map(room=>`<a href="${roomPath(room)}" data-link data-room="${room}" ${active===room?'aria-current="page"':''}>${esc(logeRoomLabel(room))}</a>`).join('')}</nav>`;}
+function roomsMarkup(view){const active=view.kind==='feed'?view.room:view.kind==='post'?session.room:null;return `<nav class="loge-rooms${active?'':' is-idle'}" aria-label="Les loges">${openRooms.map(room=>`<a href="${roomPath(room)}" data-link data-room="${room}" ${active===room?'aria-current="page"':''}>${esc(logeRoomLabel(room))}</a>`).join('')}</nav>`;}
 function clearPending(root){for(const link of root?.querySelectorAll('.is-pending')||[])link.classList.remove('is-pending');}
 function bindRooms(view){
   for(const link of view.root.querySelectorAll('[data-room]')){
@@ -273,8 +277,8 @@ function bindPublishForm(){
   if(root.logeDraft!==draft){root.innerHTML='';root.logeDraft=draft;}
   if(root.innerHTML){syncComposerTheme();updateQuota();return;}
   // Each video is listed under the loge it will join.
-  const groups=LOGE_ROOMS.map(room=>[room,videos.filter(video=>logeRoom(video.category)===room)]).filter(([,items])=>items.length);
-  const roomsText=LOGE_ROOMS.map(room=>videoLabel(room)).join(', ').replace(/, ([^,]*)$/,' ou $1');
+  const groups=openRooms.map(room=>[room,videos.filter(video=>logeRoom(video.category)===room)]).filter(([,items])=>items.length);
+  const roomsText=openRooms.map(room=>videoLabel(room)).join(', ').replace(/, ([^,]*)$/,' ou $1');
   const videoPanel=videos.length?`<legend>Choisis une vidéo de ta vidéographie</legend><div class="loge-video-list">${groups.map(([room,items])=>`<p class="loge-video-group">${esc(logeRoomLabel(room))}</p>${items.map(video=>videoChoiceMarkup(video,draft)).join('')}`).join('')}</div>${view.moreVideoChoices?'<p class="loge-note">Tes 100 vidéos les plus récentes sont proposées.</p>':''}`
     :`<legend class="loge-visually-hidden">Une vidéo</legend><div class="loge-video-empty"><p>Ici, tu publies une vidéo de ta vidéographie classée dans ${roomsText}.</p><a class="loge-button" href="/videographie" data-link>Ouvrir ma vidéographie</a></div>`;
   const seriesPanel=seriesList.length?`<legend>Choisis une sériographie</legend><div class="loge-video-list">${seriesList.map(series=>seriesChoiceMarkup(series,draft)).join('')}</div>`
@@ -537,7 +541,7 @@ function feedPagination(view){
 }
 async function moreFeed(){
   const s=session,view=s.current;if(view.loading||view.next==null)return;view.loading=true;node('loge-feed-more').disabled=true;
-  try{const result=await request('/api/loge?after='+encodeURIComponent(view.next)+(view.room&&view.room!==LOGE_ROOMS[0]?'&loge='+view.room:''));acceptSelf(result);for(const post of result.posts)insertPost(post,node('loge-feed'));view.next=result.next;paginationState(view,'loge-feed-more');feedPagination(view);view.player?.refresh();}
+  try{const result=await request('/api/loge?after='+encodeURIComponent(view.next)+(view.room&&view.room!==defaultRoom()?'&loge='+view.room:''));acceptSelf(result);for(const post of result.posts)insertPost(post,node('loge-feed'));view.next=result.next;paginationState(view,'loge-feed-more');feedPagination(view);view.player?.refresh();}
   catch(error){if(live(s)&&s.current===view&&error.name!=='AbortError')notice('loge-status',error.message,true);}
   finally{view.loading=false;if(live(s)&&s.current===view&&node('loge-feed-more'))node('loge-feed-more').disabled=false;}
 }
@@ -675,7 +679,7 @@ function parseDestination(destination){
   const path=url.pathname.replace(/\/+$/,'')||'/';
   if(path===base+'/theme'){if(!LOGE_THEMES_ENABLED)return null;const id=url.searchParams.get('theme');if(id!==null&&(!/^[1-9]\d*$/.test(id)||!Number.isSafeInteger(Number(id))))return null;return {key:themePath(id),kind:'theme',themeId:id?Number(id):null,endpoint:'/api/loge/themes'};}
   if(path===publishPath||path===base&&url.searchParams.has('publier'))return {key:publishPath,kind:'publish',endpoint:'/api/loge/videos',legacyPublish:path!==publishPath};
-  if(path===base){const room=roomOf(url.searchParams.get('loge'))||LOGE_ROOMS[0];return {key:roomPath(room),kind:'feed',room,endpoint:'/api/loge'+(room===LOGE_ROOMS[0]?'':'?loge='+room)};}
+  if(path===base){const room=roomOf(url.searchParams.get('loge'))||defaultRoom();return {key:roomPath(room),kind:'feed',room,endpoint:'/api/loge'+(room===defaultRoom()?'':'?loge='+room)};}
   const member=/^\/loge-virtuelle\/membres\/([1-9]\d*)$/.exec(path);
   if(member){const tab=['interventions','favoris'].includes(url.searchParams.get('onglet'))?url.searchParams.get('onglet'):'reflexions';return {key:memberPath(member[1])+'?onglet='+tab,kind:'profile',memberId:member[1],tab,endpoint:'/api/loge/membres/'+member[1]+'?tab='+tab};}
   const post=/^\/loge-virtuelle\/publications\/([1-9]\d*)$/.exec(path);
@@ -754,6 +758,7 @@ export function leave(){
 export function clear(){leave();drafts.clear();}
 export async function page(path,ctx){
   leave();if(!ctx.state.user){ctx.navigate('/connexion?retour='+encodeURIComponent(path+location.search),true);return;}
+  setOpenRooms(ctx.state.access);
   if(!parseDestination(path+location.search)){ctx.navigate(base,true);return;}
   if(LOGE_THEMES_ENABLED&&!document.querySelector('link[href="/loge-themes.css"]')){const css=document.createElement('link');css.rel='stylesheet';css.href='/loge-themes.css';document.head.append(css);}
   if(!document.querySelector('link[href="/loge.css"]')){const css=document.createElement('link');css.rel='stylesheet';css.href='/loge.css';document.head.append(css);}
