@@ -36,8 +36,8 @@ test('Loge joins Game Master Blanc only at 15 real levels and existing accounts 
     const text=await(await call('/api/game-master-blanc')).json();
     assert.deepEqual(text.page.sections.at(-1),{title:'Loges virtuelles',paragraphs:[
       'Partage dans les Loges virtuelles tes meilleures pensées aux autres Game Masters Blancs.',
-      'Ces échanges vous permettent de grandir ensemble. Enrichissez mutuellement vos arborescences de réflexion et aidez-vous à les faire grandir de manière harmonieuse.',
-      'Aidez-vous les uns les autres à développer et concrétiser vos idées et vos projets. Quand tu n’es pas d’accord avec un autre Game Master Blanc, fais émerger les inconvénients que tu perçois dans le point de vue de l’autre pour affiner ensemble votre vision.'
+      'Ces échanges vous permettent de grandir ensemble. Confrontez vos visions d’une société harmonieuse et aidez-vous à les faire grandir.',
+      'Quand tu n’es pas d’accord avec un autre Game Master Blanc, fais émerger les inconvénients que tu perçois dans le point de vue de l’autre pour affiner ensemble votre vision.'
     ]});
     // At 15 only Ma société harmonieuse has a loge; the others open at 24 and 30.
     assert.equal((await(await call('/api/loge?loge=society')).json()).loge,'society');

@@ -60,6 +60,15 @@ test('videography, an AS’s videography, the loges and Game Master Blanc follow
     assert.deepEqual(branchesOf(await f.ok('/api/life-tree?videos=1&owner=23',20)),['ideas','projects','self','society']);
     assert.equal((await f.ok('/api/loge?loge=ideas',20)).loge,'ideas');
     const third=await f.ok('/api/game-master-blanc',20);assert.equal(third.tier,3);
+    // Each tier writes its own Loges virtuelles section: helping each other with
+    // ideas and projects comes only with III.
+    const loges=third.tiers.map(t=>t.page.sections.at(-1));
+    assert.ok(loges.every(section=>section.title==='Loges virtuelles'&&section.paragraphs.length===3));
+    assert.deepEqual(loges.map(section=>section.paragraphs.join(' ').includes('Aidez-vous les uns les autres à développer et concrétiser vos idées et vos projets.')),[false,false,true]);
+    assert.match(loges[0].paragraphs[1],/société harmonieuse/);
+    const ideas=third.page.sections.find(section=>section.title==='Tes idées et tes projets'),reflections=third.page.sections.find(section=>section.title==='Tes réflexions');
+    assert.deepEqual(ideas.paragraphs,['Extériorise tes idées et tes projets dans ta vidéographie.','Revisualise tes vidéos pour prendre du recul sur eux et les améliorer.']);
+    assert.doesNotMatch(reflections.paragraphs.join(' '),/version harmonieuse|société harmonieuse/);assert.match(reflections.paragraphs[0],/vidéographie/);
     assert.deepEqual(third.page.sections.map(section=>section.title),['Vidéographie','Métacognition','Ta société harmonieuse','Tes idées et tes projets','Tes réflexions','Loges virtuelles']);
     // An AS below 30 still keeps member 23's Réflexions closed to them, and theirs to 23.
     setEarnedLevel(f,21,24);
