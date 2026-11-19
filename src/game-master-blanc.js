@@ -8,7 +8,7 @@ export const GAME_MASTER_BLANC = {
       'Utilise ta vidéographie pour visualiser tes trajectoires de réflexion et choisir celles que tu veux voir grandir.'
     ]},
     {title:'Métacognition',paragraphs:[
-      'Observe tes propres pensées et extériorise dans ta vidéographie ce que tu comprends de la manière dont elles émergent. Imagine ta version harmonieuse et façonne-la dans ta vidéographie.'
+      'Observe tes propres pensées et extériorise dans ta vidéographie ce que tu comprends de la manière dont elles émergent. Imagine aussi ta version harmonieuse et façonne-la au fil de tes vidéos.'
     ]},
     {title:'Ta société harmonieuse',paragraphs:[
       'Imagine une société harmonieuse et façonne-la dans ta vidéographie.',
