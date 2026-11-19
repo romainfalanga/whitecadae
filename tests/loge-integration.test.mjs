@@ -39,8 +39,10 @@ test('Loge joins Game Master Blanc only at 15 real levels and existing accounts 
       'Ces échanges vous permettent de grandir ensemble. Enrichissez mutuellement vos arborescences de réflexion et aidez-vous à les faire grandir de manière harmonieuse.',
       'Aidez-vous les uns les autres à développer et concrétiser vos idées et vos projets. Quand tu n’es pas d’accord avec un autre Game Master Blanc, fais émerger les inconvénients que tu perçois dans le point de vue de l’autre pour affiner ensemble votre vision.'
     ]});
-    for(const room of ['ideas','projects','society'])assert.equal((await(await call('/api/loge?loge='+room)).json()).loge,room);
-    assert.equal((await(await call('/api/loge')).json()).loge,'ideas');assert.equal((await call('/api/loge?loge=self')).status,404);assert.equal((await call('/api/loge?loge=version')).status,404);
+    // At 15 only Ma société harmonieuse has a loge; the others open at 24 and 30.
+    assert.equal((await(await call('/api/loge?loge=society')).json()).loge,'society');
+    for(const room of ['ideas','projects'])assert.equal((await call('/api/loge?loge='+room)).status,403);
+    const opening=await(await call('/api/loge')).json();assert.equal(opening.loge,'society');assert.deepEqual(opening.loges,['society']);assert.equal((await call('/api/loge?loge=self')).status,404);assert.equal((await call('/api/loge?loge=version')).status,404);
     f.sql.prepare('DELETE FROM riddle_progress WHERE user_id=1 AND riddle_id=?').run(ids[13]);
     assert.equal((await call('/api/loge')).status,403);
     assert.equal((await(await call('/api/me')).json()).access.loge,false);

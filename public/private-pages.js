@@ -80,7 +80,7 @@ export async function page(path,ctx){
   };document.addEventListener('visibilitychange',s.visibility);
   try{
     if(path==='/game-master-orange'){await api('/api/game-master-orange');gameMaster();return;}
-    if(path==='/game-master-blanc'){const content=await api('/api/game-master-blanc');gameMasterBlanc(content.page);return;}
+    if(path==='/game-master-blanc'){const content=await api('/api/game-master-blanc');gameMasterBlanc(content);return;}
     if(path==='/as'){const content=await api('/api/as');asGrade(content.page);return;} if(path==='/signalements'){await reportsPage();return;}
     const helpBase=path.endsWith('/comprendre')?path.slice(0,-11):null;
     if(PRIVATE_HELP[helpBase]){await api('/api/mechanisms');helpPage(helpBase);return;}
@@ -102,14 +102,29 @@ function gameMaster(){
   shell(`<div class="gm-layout"><header class="private-heading gm-heading"><h1 class="gm-title"><span>Game Master</span><span>Orange</span></h1></header><article class="gm-letter"><p class="gm-opening"><span>Avancer ensemble.</span><span>Devenir les Game Masters<br class="gm-desktop-break"> les uns des autres.</span></p><div class="gm-copy"><p>Pour avancer de la meilleure manière dans l’Escape Game Orange, trouve des partenaires dans ton entourage et invite-les à entrer dans le jeu. Au début, tu es leur Game Master : accompagne-les à partir des cheminements qui t’ont permis de comprendre ce que tu as compris et d’en arriver là.</p><p>Réécoutez les musiques, relisez les paroles, propose des parallèles ou des indices subtils. Aide-les à trouver par eux-mêmes, sans leur donner les réponses.</p><p>Le but est de devenir mutuellement les Game Masters les uns des autres. Dès que l’un de vous comprend une énigme qu’un autre cherche encore, il le guide sur cette énigme. Les rôles s’échangent au fil de vos découvertes, sans avoir besoin d’être au même échelon.</p><p>Fais grandir ce cercle de partenaires, chacun peut aider les autres à avancer et à se tirer vers le haut.</p><div class="gm-orbit" aria-hidden="true"></div>${button('Inviter mes partenaires','gm-share','')}</div></article></div>`);
   bind('gm-share',async()=>{const data={title:'Escape Game Orange',url:location.origin+'/'};if(navigator.share){try{await navigator.share(data);}catch(e){if(e.name!=='AbortError')throw e;}}else{await navigator.clipboard.writeText(data.url);status('Le lien est copié.');}});
 }
-function gameMasterBlanc(content){
+// Game Master Blanc grows with the echelon: I from 15, II from 24, III from 30.
+// Once a second tier is reached, Roman numerals under the title let the member
+// look back at each stage of the page; the latest is shown first.
+const ROMAN=['I','II','III'];
+function gameMasterBlanc(response){
+  const tiers=Array.isArray(response.tiers)&&response.tiers.length?response.tiers:[{tier:1,page:response.page}];
   // Keep the last two words together, including on browsers without pretty wrapping.
   const prose=text=>{
     const community=/^(.*\s)(Game Masters Blancs\.)$/.exec(text);
     if(community)return `${esc(community[1])}<span class="gm-community-name">${esc(community[2].replaceAll(' ','\u00a0'))}</span>`;
     return esc(text.replace(/\s+(\S+)$/, '\u00a0$1'));
   };
-  shell(`<div class="gm-layout gm-white"><header class="private-heading gm-heading"><h1 class="gm-title"><span>Game Master</span><span>Blanc</span></h1></header><article class="gm-letter"><p class="gm-opening">${content.opening.map(text=>`<span>${esc(text)}</span>`).join(' ')}</p><div class="gm-copy">${content.sections.map((section,index)=>`<section class="gm-section" aria-labelledby="gm-white-section-${index}"><h2 id="gm-white-section-${index}">${esc(section.title)}</h2>${section.paragraphs.map(text=>`<p>${prose(text)}</p>`).join('')}</section>`).join('')}</div></article></div>`);
+  const copy=content=>`<p class="gm-opening">${content.opening.map(text=>`<span>${esc(text)}</span>`).join(' ')}</p><div class="gm-copy">${content.sections.map((section,index)=>`<section class="gm-section" aria-labelledby="gm-white-section-${index}"><h2 id="gm-white-section-${index}">${esc(section.title)}</h2>${section.paragraphs.map(text=>`<p>${prose(text)}</p>`).join('')}</section>`).join('')}</div>`;
+  const latest=tiers.at(-1);
+  const menu=tiers.length>1?`<nav class="gm-tiers" aria-label="Niveaux de Game Master Blanc">${tiers.map(item=>`<button type="button" data-gm-tier="${item.tier}" aria-pressed="${item===latest}" aria-label="Game Master Blanc ${ROMAN[item.tier-1]}">${ROMAN[item.tier-1]}</button>`).join('')}</nav>`:'';
+  shell(`<div class="gm-layout gm-white"><header class="private-heading gm-heading"><h1 class="gm-title"><span>Game Master</span><span>Blanc</span></h1>${menu}</header><article class="gm-letter" id="gm-letter">${copy(latest.page)}</article></div>`);
+  if(tiers.length<2)return;
+  const controls=[...document.querySelectorAll('[data-gm-tier]')];
+  controls.forEach(control=>control.onclick=()=>{
+    const chosen=tiers.find(item=>String(item.tier)===control.dataset.gmTier);if(!chosen)return;
+    controls.forEach(other=>other.setAttribute('aria-pressed',String(other===control)));
+    el('gm-letter').innerHTML=copy(chosen.page);
+  });
 }
 // The AS grade continues the two Game Master pages, in the same frame.
 function asGrade(content){
@@ -129,9 +144,16 @@ function dateLabel(event){
   if(event.precision==='unknown')return 'Date inconnue';const format=value=>new Date(value+'T12:00:00').toLocaleDateString('fr-FR',{year:'numeric',...(event.precision!=='year'?{month:'long'}:{}),...(['day','period'].includes(event.precision)?{day:'numeric'}:{})});
   return format(event.sort_date)+(event.end_date?' — '+format(event.end_date):'');
 }
+// Categories open with the echelon; an AS's videography shows those both
+// members have reached (the server sends them with each AS).
+function openVideoBranches(keys=session?.ctx?.state?.access?.videoBranches){
+  const list=Array.isArray(keys)&&keys.length?keys:['self','society'];
+  return VIDEO_BRANCHES.filter(([key])=>list.includes(key));
+}
+const branchNav=(label,branches)=>`<nav class="video-branches" style="--branch-count:${branches.length}" data-count="${branches.length}" aria-label="${esc(label)}">${branches.map(([key,name])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${name}</button>`).join('')}</nav>`;
 async function videoPage(){
   session.videos={branch:'self',events:[],next:null,request:0};
-  shell(`${heading('Vidéographie','',`<button type="button" class="series-open" id="series-open"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="13" height="13" rx="2.5"/><path d="M7 4h11.5A2.5 2.5 0 0 1 21 6.5V17"/><path d="m8.5 11 4 2.5-4 2.5Z"/></svg>Mes sériographies</button>`)}<nav class="video-branches" aria-label="Rubriques de ma Vidéographie">${VIDEO_BRANCHES.map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${label}</button>`).join('')}</nav><div class="video-section-heading"><div class="video-section-title"><h2 id="video-section-title">${esc(videoLabel('self'))}</h2><p class="video-section-count" id="video-section-count" aria-live="polite"></p></div><div class="private-actions video-add-action">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter une vidéo','video-add','')}</div></div><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`);
+  shell(`${heading('Vidéographie','',`<button type="button" class="series-open" id="series-open"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="13" height="13" rx="2.5"/><path d="M7 4h11.5A2.5 2.5 0 0 1 21 6.5V17"/><path d="m8.5 11 4 2.5-4 2.5Z"/></svg>Mes sériographies</button>`)}${branchNav('Rubriques de ma Vidéographie',openVideoBranches())}<div class="video-section-heading"><div class="video-section-title"><h2 id="video-section-title">${esc(videoLabel('self'))}</h2><p class="video-section-count" id="video-section-count" aria-live="polite"></p></div><div class="private-actions video-add-action">${button('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter une vidéo','video-add','')}</div></div><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`);
   // While a video is on its way, « Ajouter » shows where it stands instead.
   bind('video-add',()=>currentVideoJob()?.phase&&currentVideoJob().phase!=='done'?videoJobView():videoForm(null,null,session.videos.branch||'self'));
   const s=session;s.offJobOpener=setVideoJobOpener(()=>{if(live(s))videoJobView();});
@@ -301,14 +323,14 @@ async function loadDrafts(){
 function videoForm(event=null,draft=null,branch='self'){
   closeModal();const s=session,d=draft?.payload.event||event||{},id=event?.id||draft?.id||uid();
   let revision=event?.revision||d.revision||0;const draftRevision=draft?.revision||0;
-  branch=d.videoBranch||d.video_branch||branch;if(branch==='monthly')branch='ideas';
+  branch=d.videoBranch||d.video_branch||branch;if(branch==='monthly')branch='ideas';if(!openVideoBranches().some(([key])=>key===branch))branch='self';
   // The date is never typed: a new video takes the day it is added (set by the
   // server, in Paris time) and an edit keeps the date already saved.
   const precision=d.precision==='month'?'month':'day',saved=d.date||d.video_month||d.sort_date||null;
   const date=saved?(precision==='month'?String(saved).slice(0,7):String(saved).slice(0,10)):null,existing=!!event&&(d.creation?.videoProvider==='stream'||!!youtubeId(d.creation?.url));
   // A video published in the Loge keeps its file: commenters answered that one.
   const shared=!!event?.loge_post_id,fileTitle=shared?'Vidéo publiée dans les Loges virtuelles':existing?'Choisir une autre vidéo':'Choisir une vidéo',fileHelp=shared?'Supprime sa publication dans les Loges virtuelles pour remplacer le fichier.':'200 Mo et 30 minutes maximum'+(existing?' · sans nouveau fichier, la vidéo actuelle est conservée':'');
-  const dialog=modal(event?'Modifier la vidéo':'Ajouter une vidéo',`<form id="video-form"><label>Titre<input name="title" required maxlength="140" value="${esc(d.title||'')}"></label><div class="video-file-field"${event?' hidden':''}><span class="video-file-caption" id="video-file-caption">${existing?'Remplacer la vidéo (facultatif)':'Vidéo'}</span><label class="video-file${shared?' is-locked':''}" id="video-file-zone"><input type="file" name="video" accept="video/*" aria-labelledby="video-file-caption video-file-name" aria-describedby="video-file-help" ${existing?'':'required'} ${shared||event?'disabled':''}><span class="video-file-icon" aria-hidden="true"><svg class="video-file-icon-add" viewBox="0 0 24 24"><path d="M12 16V5m0 0-4 4m4-4 4 4M5 19h14"/></svg><svg class="video-file-icon-ready" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><span class="video-file-text"><strong id="video-file-name">${fileTitle}</strong><small id="video-file-help">${fileHelp}</small></span><span class="video-file-action" id="video-file-action" hidden>Changer</span></label></div><p id="video-upload-state" class="private-note" role="status"></p><progress id="video-upload-progress" max="100" value="0" hidden aria-label="Progression de l’envoi"></progress>${button('Annuler l’envoi','video-upload-cancel','subtle','hidden')}${button('Annuler l’envoi précédent et recommencer','video-upload-restart','subtle','hidden')}<label>Catégorie<select name="videoBranch">${VIDEO_BRANCHES.map(([key,label])=>`<option value="${key}" ${branch===key?'selected':''}>${label}</option>`).join('')}</select></label><div class="private-actions form-actions"><button class="private-button" type="submit">Enregistrer la vidéo</button>${event?button('Supprimer','video-delete','subtle'):''}</div><div id="video-conflict" hidden>${button('Comparer la version enregistrée','video-compare','quiet')}<div id="video-current"></div></div></form>`);
+  const dialog=modal(event?'Modifier la vidéo':'Ajouter une vidéo',`<form id="video-form"><label>Titre<input name="title" required maxlength="140" value="${esc(d.title||'')}"></label><div class="video-file-field"${event?' hidden':''}><span class="video-file-caption" id="video-file-caption">${existing?'Remplacer la vidéo (facultatif)':'Vidéo'}</span><label class="video-file${shared?' is-locked':''}" id="video-file-zone"><input type="file" name="video" accept="video/*" aria-labelledby="video-file-caption video-file-name" aria-describedby="video-file-help" ${existing?'':'required'} ${shared||event?'disabled':''}><span class="video-file-icon" aria-hidden="true"><svg class="video-file-icon-add" viewBox="0 0 24 24"><path d="M12 16V5m0 0-4 4m4-4 4 4M5 19h14"/></svg><svg class="video-file-icon-ready" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><span class="video-file-text"><strong id="video-file-name">${fileTitle}</strong><small id="video-file-help">${fileHelp}</small></span><span class="video-file-action" id="video-file-action" hidden>Changer</span></label></div><p id="video-upload-state" class="private-note" role="status"></p><progress id="video-upload-progress" max="100" value="0" hidden aria-label="Progression de l’envoi"></progress>${button('Annuler l’envoi','video-upload-cancel','subtle','hidden')}${button('Annuler l’envoi précédent et recommencer','video-upload-restart','subtle','hidden')}<label>Catégorie<select name="videoBranch">${openVideoBranches().map(([key,label])=>`<option value="${key}" ${branch===key?'selected':''}>${label}</option>`).join('')}</select></label><div class="private-actions form-actions"><button class="private-button" type="submit">Enregistrer la vidéo</button>${event?button('Supprimer','video-delete','subtle'):''}</div><div id="video-conflict" hidden>${button('Comparer la version enregistrée','video-compare','quiet')}<div id="video-current"></div></div></form>`);
   const form=el('video-form'),picker=form.elements.video,upload={file:null,requestId:uid(),abandonedUploads:[]};let active=null,closed=false,committed=false,publishing=false;
   const current=()=>live(s)&&!closed&&s.dialog===dialog;
   const uploadRequest=async(path,options={})=>{
@@ -563,7 +585,7 @@ async function squareView(refresh=true){
 async function memberVideography(){
   const s=session,member=squareMembers().find(m=>m.id===s.selectedOwner),root=el('square-member');if(!member||!root)return;
   clearInlineComments();destroyVideoPlayers(root);root.hidden=false;
-  root.innerHTML=`<header class="square-member-head">${avatar(member)}<div><h2>Vidéographie de ${esc(member.username)}</h2><p class="video-section-count" id="video-section-count" aria-live="polite"></p></div><button type="button" id="square-remove" class="square-remove" aria-label="Retirer ${esc(member.username)} de mes AS">Retirer</button></header><nav class="video-branches" aria-label="Rubriques de la vidéographie de ${esc(member.username)}">${VIDEO_BRANCHES.map(([key,label])=>`<button type="button" data-video-branch="${key}" aria-pressed="${key==='self'}">${label}</button>`).join('')}</nav><div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`;
+  root.innerHTML=`<header class="square-member-head">${avatar(member)}<div><h2>Vidéographie de ${esc(member.username)}</h2><p class="video-section-count" id="video-section-count" aria-live="polite"></p></div><button type="button" id="square-remove" class="square-remove" aria-label="Retirer ${esc(member.username)} de mes AS">Retirer</button></header>${branchNav('Rubriques de la vidéographie de '+member.username,openVideoBranches(member.branches||['self','society']))}<div id="video-list" class="video-grid"></div>${button('Voir la suite','video-more','quiet','hidden')}`;
   s.videos={branch:'self',owner:member.id,events:[],next:null,request:0};
   s.moreObserver?.disconnect();
   if(typeof IntersectionObserver==='function'){s.moreObserver=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting)&&live(s)&&!el('video-more')?.hidden&&!s.videos.loading)el('video-more').click();},{rootMargin:'600px 0px'});s.moreObserver.observe(el('video-more'));}

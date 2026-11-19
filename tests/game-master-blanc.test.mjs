@@ -66,7 +66,7 @@ test('the final page requires 15 real earned levels, including for admins; forge
 test('the private page uses the final API and renders no final text on refusal or anonymous entry',async()=>{
   const f=fixture(),previous={document:globalThis.document,window:globalThis.window};
   const app={innerHTML:'',style:{}},calls=[];
-  globalThis.document={querySelector:()=>({}),title:'',addEventListener(){},removeEventListener(){}};
+  globalThis.document={querySelector:()=>({}),querySelectorAll:()=>[],title:'',addEventListener(){},removeEventListener(){}};
   globalThis.window={addEventListener(){},removeEventListener(){}};
   const ctx={app,state:{user:{id:1}},esc:s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;'),isCurrent:()=>true,accountEntryMarkup:()=>'<a href="/connexion">Se connecter</a>',navigate(){throw Error('Unexpected redirect')},api:async path=>{
     calls.push(path);const response=await request(f,path);const result=await response.json();
@@ -78,13 +78,16 @@ test('the private page uses the final API and renders no final text on refusal o
     add(f,1,ids);await page('/game-master-blanc',ctx);
     assert.equal(document.title,'Game Master Blanc · White Cadae');
     assert.match(app.innerHTML,/gm-layout gm-white/);assert.match(app.innerHTML,/gm-letter/);
-    assert.equal((app.innerHTML.match(/class="gm-section"/g)||[]).length,4);
+    // Every echelon reached: Game Master Blanc III is shown, with I and II in its menu.
+    assert.equal((app.innerHTML.match(/class="gm-section"/g)||[]).length,6);
+    assert.deepEqual([...app.innerHTML.matchAll(/data-gm-tier="(\d)" aria-pressed="(\w+)"[^>]*>([IV]+)</g)].map(m=>[m[1],m[2],m[3]]),[['1','false','I'],['2','false','II'],['3','true','III']]);
+    assert.ok(app.innerHTML.indexOf('gm-tiers')<app.innerHTML.indexOf('gm-letter'),'the numerals sit under the title');
     assert.match(app.innerHTML,/<p class="gm-opening"><span>Façonne ton paradis pour le rejoindre\.<\/span> <span>Deviens ton propre Game Master\.<\/span><\/p>/);
     assert.ok(app.innerHTML.indexOf('gm-opening')<app.innerHTML.indexOf('gm-white-section-0'));
     assert.match(app.innerHTML,/<span class="gm-community-name">Game\u00a0Masters\u00a0Blancs\.<\/span>/);
     assert.doesNotMatch(app.innerHTML,/Ta société harmonieuse IA|Commente leurs vidéos/);
     const paragraphs=[...app.innerHTML.matchAll(/<section class="gm-section"[^>]*>[\s\S]*?<\/section>/g)].flatMap(section=>[...section[0].matchAll(/<p>([\s\S]*?)<\/p>/g)].map(match=>match[1].replace(/<[^>]+>/g,'')));
-    assert.equal(paragraphs.length,8);
+    assert.equal(paragraphs.length,12);
     assert.ok(paragraphs.every(text=>/\S+\u00a0\S+$/.test(text)),'last words stay together without fixed line breaks');
     assert.match(paragraphs[0],/en\u00a0vidéo\.$/);
     assert.doesNotMatch(app.innerHTML,/gm-orbit/);

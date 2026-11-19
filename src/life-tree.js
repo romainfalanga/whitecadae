@@ -2,6 +2,7 @@ import {ensureLogeStreamTables,createLogeUpload,getLogeUpload,deleteLogeUpload,r
 import {seal,unseal,tagHash,fail,text,identifier,integer,lifeEventContext} from './private-data.js';
 import {ensureLogeTables,sharedPostWithdrawal} from './loge.js';
 import {GAME_MASTER_BLANC_LEVEL} from './content-access.js';
+import {viewableBranches,branchList,lockedBranch} from './video-access.js';
 import {circleAccess,freshAccess,requireStorage,requireLevel} from './private-access.js';
 import {recordTopic} from './circle-topics.js';
 import {VIDEO_BRANCHES,LOGE_ROOMS,storedVideoBranch,videoBranchKey} from '../public/video-model.js';
@@ -138,6 +139,8 @@ export async function lifeRoute(request,env,url,user,body,json){
   await requireLevel(env,user,GAME_MASTER_BLANC_LEVEL);
   const owner=url.searchParams.has('owner')?integer(Number(url.searchParams.get('owner')),1):user.id;
   const access=await circleAccess(env,user,owner,true);
+  // Categories open with the echelon, and an AS's only once both reached them.
+  const allowed=await viewableBranches(env,user.id,owner),allowedKey=stored=>allowed.includes(videoBranchKey(stored));
   if(method!=='GET'){if(owner!==user.id)fail('Seul l’auteur peut modifier son arbre.',403);if(!/^\/(?:events\/[a-zA-Z0-9_-]+|uploads(?:\/[0-9a-f-]+)?|series\/[a-zA-Z0-9_-]+)$/i.test(suffix))await requireStorage(env,user.id);}
   if(suffix==='/series'||/^\/series\/[^/]+$/.test(suffix)){if(owner!==user.id)fail('Ces sériographies sont privées.',403);return seriesRoute(env,user,suffix,method,body,json);}
   if(suffix==='/uploads'){
@@ -155,8 +158,8 @@ export async function lifeRoute(request,env,url,user,body,json){
   const playback=/^\/events\/([a-zA-Z0-9_-]+)\/playback$/.exec(suffix);
   if(playback){
     if(method!=='GET')fail('Méthode indisponible.',405);
-    const id=identifier(playback[1]),row=await env.DB.prepare('SELECT id FROM life_events WHERE owner_id=?1 AND id=?2 AND video_branch IS NOT NULL').bind(owner,id).first();
-    const upload=row?await eventUpload(env,owner,id):null;if(!upload)fail('Vidéo introuvable.',404);
+    const id=identifier(playback[1]),row=await env.DB.prepare('SELECT id,video_branch FROM life_events WHERE owner_id=?1 AND id=?2 AND video_branch IS NOT NULL').bind(owner,id).first();
+    const upload=row&&allowedKey(row.video_branch)?await eventUpload(env,owner,id):null;if(!upload)fail('Vidéo introuvable.',404);
     const output=await signedStreamPlayback(env,upload);
     // Recheck membership revision and current attachment after token minting.
     await freshAccess(env,access,user);
@@ -168,9 +171,9 @@ export async function lifeRoute(request,env,url,user,body,json){
     const q=filteredQuery(url,owner),tag=url.searchParams.get('theme'),entryType=url.searchParams.get('entryType');
     if(entryType){if(!['event','creation'].includes(entryType))fail('Filtre invalide.');q.add('e.entry_type=$',entryType);}
     const videos=url.searchParams.get('videos')==='1'||owner!==user.id;
-    if(videos)q.filters.push('e.video_branch IS NOT NULL');
+    if(videos)q.filters.push(`e.video_branch IN (${branchList(allowed)})`);
     if(url.searchParams.get('archive')==='1'){if(owner!==user.id)fail('Archives privées.',403);q.filters.push('e.video_branch IS NULL');}
-    const branch=url.searchParams.get('branch');if(branch){if(!VIDEO_BRANCHES.some(([id])=>id===branch))fail('Rubrique invalide.');q.add('e.video_branch=$',storedVideoBranch(branch));}
+    const branch=url.searchParams.get('branch');if(branch){if(!VIDEO_BRANCHES.some(([id])=>id===branch))fail('Rubrique invalide.');if(!allowed.includes(branch))lockedBranch(branch);q.add('e.video_branch=$',storedVideoBranch(branch));}
     if(tag)q.add('EXISTS(SELECT 1 FROM life_tags t WHERE t.owner_id=e.owner_id AND t.event_id=e.id AND t.tag_hash=$)',await tagHash(env,owner,text(tag,60,true)));
     const after=url.searchParams.get('after');if(after){if(!/^\d{4}-\d{2}-\d{2}\|[a-zA-Z0-9_-]{8,64}$/.test(after))fail('Page invalide.');q.add("(e.sort_date||'|'||e.id)"+(videos?'<':'>')+'$',after);}
     const rows=(await env.DB.prepare(`SELECT e.*,(SELECT id FROM circle_topics WHERE owner_id=e.owner_id AND resource_key='event:'||e.id) AS topic_id FROM life_events e WHERE ${q.filters.join(' AND ')} ORDER BY e.sort_date ${videos?'DESC':'ASC'},e.id ${videos?'DESC':'ASC'} LIMIT 31`).bind(...q.values).all()).results;
@@ -198,7 +201,7 @@ export async function lifeRoute(request,env,url,user,body,json){
     const id=identifier(match[1]);
     const row=await env.DB.prepare("SELECT e.*,(SELECT id FROM circle_topics WHERE owner_id=e.owner_id AND resource_key='event:'||e.id) AS topic_id FROM life_events e WHERE owner_id=?1 AND id=?2").bind(owner,id).first();
     if(method==='GET'){
-      if(!row||owner!==user.id&&!row.video_branch)fail('Contenu indisponible.',404);
+      if(!row||owner!==user.id&&!row.video_branch||row.video_branch&&!allowedKey(row.video_branch))fail('Contenu indisponible.',404);
       const links=owner!==user.id?[]:(await env.DB.prepare("SELECT source_id,target_id,payload FROM life_links WHERE owner_id=?1 AND (source_id=?2 OR target_id=?2) AND (?3=1 OR (SELECT count(*) FROM life_events WHERE owner_id=?1 AND id IN(source_id,target_id) AND entry_type='event')=2) LIMIT 40").bind(owner,id,owner===user.id||access.circle.combined_sharing?1:0).all()).results;
       const output={event:await unpack(env,row),links:await Promise.all(links.map(async l=>({...l,payload:await unseal(env,`link:${owner}:${l.source_id}:${l.target_id}`,l.payload)})))};
       await freshAccess(env,access,user);return json(output);
@@ -211,6 +214,7 @@ export async function lifeRoute(request,env,url,user,body,json){
     }
     if(method==='PUT'){
       if(Object.hasOwn(body,'uploadId')&&!body.videoBranch)fail('Un envoi vidéo doit appartenir à la vidéographie.');
+      if(body.videoBranch&&VIDEO_BRANCHES.some(([key])=>key===body.videoBranch)&&!allowed.includes(body.videoBranch))lockedBranch(body.videoBranch);
       // A new video is dated by the server: the day it is added, in Paris.
       if(body.videoBranch&&!row&&(body.date===undefined||body.date===null||body.date==='')){body.date=parisToday();body.precision='day';}
       if(!body.videoBranch)await requireStorage(env,user.id);

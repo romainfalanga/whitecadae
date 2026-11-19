@@ -121,7 +121,7 @@ body.loge-immersive.loge-comment-keyboard main#app{z-index:70}
 .loge-page .loge-action.is-text{width:auto;padding:0 .7rem;font:500 .74rem/1 var(--sans)}
 .loge-action svg{display:block;width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .loge-action.is-publish svg{width:18px;height:18px;stroke-width:2}
-.loge-rooms{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));flex:none;gap:.2rem;width:calc(100% - 1.5rem);max-width:520px;margin:.4rem auto .45rem;padding:.2rem;border:1px solid #ffffff17;border-radius:15px;background:linear-gradient(180deg,#17171d,#101014);box-shadow:0 6px 24px #0006}
+.loge-rooms{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);flex:none;gap:.2rem;width:calc(100% - 1.5rem);max-width:520px;margin:.4rem auto .45rem;padding:.2rem;border:1px solid #ffffff17;border-radius:15px;background:linear-gradient(180deg,#17171d,#101014);box-shadow:0 6px 24px #0006}
 .loge-page .loge-rooms a{display:flex;align-items:center;justify-content:center;min-width:0;min-height:42px;padding:.35rem .35rem;border-radius:11px;color:#a4a4ae;font:500 clamp(.74rem,3.2vw,.86rem)/1.2 var(--sans);text-align:center;text-wrap:balance;text-decoration:none;transition:color .2s ease,background-color .2s ease,box-shadow .2s ease}
 .loge-page .loge-rooms a:hover{background:#ffffff0a;color:#f5f5f5}
 .loge-page .loge-rooms a[aria-current=page],.loge-page .loge-rooms a.is-pending{background:linear-gradient(135deg,#d8c07a33,#d8c07a14);color:#f3e2ad;box-shadow:inset 0 0 0 1px #d8c07a47}
